@@ -1,0 +1,930 @@
+{
+  "route": {
+    "project_type": "ecommerce",
+    "selected_recipe": "ecommerce-conversion",
+    "confidence": 0.5928571428571429,
+    "logic_priority": 10,
+    "design_priority": 6,
+    "motion_level": 2,
+    "risk_level": "high",
+    "reasons": [
+      "Project type inferred from matching ecommerce signals.",
+      "Selected recipe ecommerce-conversion for the inferred project type and visual/logic signals.",
+      "Logic/workflow/data signals were present, so validation and state checks must stay visible."
+    ],
+    "required_gates": [
+      "Project Type Lock",
+      "Needs Lock",
+      "Scope Contract",
+      "Product Opposition",
+      "Direction Lock",
+      "Implementation Lock",
+      "QA Lock"
+    ],
+    "stop_conditions": [
+      "target_users_missing",
+      "checkout_rules_missing"
+    ],
+    "open_questions": [
+      "target_users_missing"
+    ]
+  },
+  "selected": {
+    "recipes": [
+      {
+        "id": "ecommerce-conversion",
+        "score": 96,
+        "selected": true,
+        "reasons": [
+          "Project type ecommerce is supported.",
+          "Logic/design/motion fit: 8/10/10."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-portal-trust",
+        "score": 60,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 8/9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "dashboard-data-heavy",
+        "score": 60,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 9/8/9."
+        ],
+        "penalties": []
+      }
+    ],
+    "patterns": [
+      {
+        "id": "trust-summary",
+        "score": 93,
+        "selected": true,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "product-detail",
+        "score": 91,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "checkout-steps",
+        "score": 90,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      }
+    ],
+    "assets": [
+      {
+        "id": "checkout-progress-steps",
+        "score": 137,
+        "selected": true,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "sticky-product-purchase-panel",
+        "score": 135,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "commerce-trust-summary-strip",
+        "score": 133,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      }
+    ]
+  },
+  "rejected": {
+    "recipes": [
+      {
+        "id": "internal-ops-clean",
+        "score": 58,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 9/7/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "public-sector-accessible",
+        "score": 56,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 8/8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "marketing-premium",
+        "score": 50,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 5/8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "creative-motion",
+        "score": 40,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 4/7/5."
+        ],
+        "penalties": []
+      }
+    ],
+    "patterns": [
+      {
+        "id": "reviews",
+        "score": 90,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "product-grid",
+        "score": 89,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cart-drawer",
+        "score": 86,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "plain-language-content",
+        "score": 80,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 10/10."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "contact-office-block",
+        "score": 77,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/10."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "service-finder",
+        "score": 76,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 10/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "notice-banner",
+        "score": 75,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "sharp-positioning-hero",
+        "score": 75,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "status-badges",
+        "score": 75,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "account-overview",
+        "score": 73,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "kpi-overview",
+        "score": 72,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "permission-aware-actions",
+        "score": 70,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "accessible-form-flow",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "proof-led-section",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "table-first",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 10/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-task-timeline",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "chart-with-source",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "seo-readable-art-direction",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "secure-document-list",
+        "score": 67,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "support-thread",
+        "score": 67,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "alert-feed",
+        "score": 66,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "filter-bar",
+        "score": 66,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "saved-filters",
+        "score": 66,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "service-demo-link",
+        "score": 66,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "asymmetric-editorial-layout",
+        "score": 63,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "detail-drawer",
+        "score": 63,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "drilldown-table",
+        "score": 62,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-crossed-direction",
+        "score": 62,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "bulk-actions",
+        "score": 59,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/5."
+        ],
+        "penalties": [
+          "High implementation complexity."
+        ]
+      },
+      {
+        "id": "scroll-linked-proof",
+        "score": 50,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "mascot-progressive-guide",
+        "score": 47,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 6/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cursor-responsive-detail",
+        "score": 46,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 6/5."
+        ],
+        "penalties": []
+      }
+    ],
+    "assets": [
+      {
+        "id": "plain-language-info-page",
+        "score": 131,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cart-drawer-minimal",
+        "score": 125,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 3/8/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "ecommerce-product-grid",
+        "score": 125,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 4/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "ops-table-workbench",
+        "score": 123,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "permission-aware-action-row",
+        "score": 122,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "public-service-finder",
+        "score": 122,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "review-proof-module",
+        "score": 121,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 4/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "secure-document-list-panel",
+        "score": 120,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "office-contact-block",
+        "score": 118,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 1/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-account-overview",
+        "score": 116,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "dashboard-kpi-strip",
+        "score": 116,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "proof-strip-case-study",
+        "score": 116,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 6/9/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "accessible-chart-panel",
+        "score": 114,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "accessible-request-form",
+        "score": 114,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "bulk-action-command-bar",
+        "score": 114,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "drilldown-data-table",
+        "score": 114,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "record-detail-drawer",
+        "score": 114,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "asymmetric-service-layout",
+        "score": 113,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 8/7/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "public-notice-banner",
+        "score": 112,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 1/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-calm-prism-grid",
+        "score": 110,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 7/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-written-retro-proof",
+        "score": 110,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 8/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "alert-feed-panel",
+        "score": 106,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-task-timeline-list",
+        "score": 106,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "dashboard-filter-toolbar",
+        "score": 106,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "saved-filter-views",
+        "score": 106,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "workflow-status-badges",
+        "score": 106,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "support-thread-panel",
+        "score": 104,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "scroll-proof-timeline",
+        "score": 100,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 7/8/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "service-demo-cards",
+        "score": 100,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 5/8/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-dopamine-pixel-field",
+        "score": 98,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/3."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cursor-field-highlight",
+        "score": 90,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 8/6/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "open-doodles-cc0-art-cues",
+        "score": 90,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 7/6/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "kenney-cc0-pixel-retro-kit",
+        "score": 88,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 8/6/3."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "editorial-motion-hero",
+        "score": 83,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/7/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "quaternius-cc0-animated-animal",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 8/6/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      }
+    ]
+  },
+  "warnings": [],
+  "formula": "score = purpose_fit*3 + target_fit*3 + logic_fit*3 + usability*3 + taste_match*2 + accessibility*2 + mobile_fit*2 - performance_cost*2 - implementation_complexity - template_risk*4 - style_conflict*3"
+}
+

@@ -1,0 +1,12 @@
+{
+  "note": "Baseline score inputs captured from autopilot-beta HEAD 338f8b8 (pre-F1a). The F1a regression test re-runs scoreProductDesignOs for each input and deep-equals the committed score-N.json report (report_markdown is stripped by the json formatter). Any non-zero diff means F1a changed scoring behavior and must fail.",
+  "inputs": [
+    "",
+    "marketing website for a startup with bold motion",
+    "internal admin dashboard with heavy data tables",
+    "ecommerce checkout conversion store",
+    "accessible public sector portal",
+    "client portal trust login",
+    "creative portfolio animated hero"
+  ]
+}

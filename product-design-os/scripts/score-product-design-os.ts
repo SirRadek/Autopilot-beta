@@ -18,6 +18,8 @@ export interface PdosRecipeCandidate {
   readonly motion_level: number;
   readonly visual_energy?: number;
   readonly allowed_patterns: readonly string[];
+  readonly allowed_pattern_ids?: readonly string[];
+  readonly required_sections?: readonly string[];
   readonly blocked_assets: readonly string[];
   readonly tests_required: readonly string[];
   readonly stop_conditions?: readonly string[];
@@ -132,6 +134,12 @@ export function formatPdosScoreReport(report: PdosScoreReport, format: "json" | 
   }
   const { report_markdown: _reportMarkdown, ...jsonReport } = report;
   return `${JSON.stringify(jsonReport, null, 2)}\n`;
+}
+
+export function resolveAllowedPatternIds(recipe: PdosRecipeCandidate): readonly string[] {
+  const allowedPatterns = Array.isArray(recipe.allowed_patterns) ? recipe.allowed_patterns : [];
+  const allowedPatternIds = Array.isArray(recipe.allowed_pattern_ids) ? recipe.allowed_pattern_ids : [];
+  return [...new Set([...allowedPatterns, ...allowedPatternIds])];
 }
 
 function scoreRecipe(recipe: PdosRecipeCandidate, route: PdosIntakeRoute): PdosScoredItem {
@@ -374,7 +382,7 @@ function isRecipeCandidate(value: unknown): value is PdosRecipeCandidate {
     Number.isInteger(value.logic_priority) &&
     Number.isInteger(value.design_priority) &&
     Number.isInteger(value.motion_level) &&
-    Array.isArray(value.allowed_patterns) &&
+    (Array.isArray(value.allowed_patterns) || Array.isArray(value.allowed_pattern_ids)) &&
     Array.isArray(value.blocked_assets) &&
     Array.isArray(value.tests_required)
   );

@@ -562,8 +562,10 @@ function validateRecipes(recipesRoot: string, repoRoot: string, errors: PdosVali
     return;
   }
 
+  const recipeSchemaFile = join(recipesRoot, "recipe.schema.json");
+  const recipeSchema = readJsonFile(recipeSchemaFile, repoRoot, errors);
   const recipes = readdirSync(recipesRoot)
-    .filter((file) => file.endsWith(".json"))
+    .filter((file) => file.endsWith(".json") && file !== "recipe.schema.json")
     .map((file) => join(recipesRoot, file));
   const recipeIds = new Set<string>();
 
@@ -588,9 +590,18 @@ function validateRecipes(recipesRoot: string, repoRoot: string, errors: PdosVali
     validateRequiredArray(value, "allowed_patterns", recipe, repoRoot, errors);
     validateRequiredArray(value, "blocked_assets", recipe, repoRoot, errors);
     validateRequiredArray(value, "tests_required", recipe, repoRoot, errors);
+    validateOptionalStringArray(value, "allowed_pattern_ids", recipe, repoRoot, errors);
+    validateOptionalStringArray(value, "required_sections", recipe, repoRoot, errors);
     validateNumberRange(value, "logic_priority", 1, 10, recipe, repoRoot, errors);
     validateNumberRange(value, "design_priority", 1, 10, recipe, repoRoot, errors);
     validateNumberRange(value, "motion_level", 0, 10, recipe, repoRoot, errors);
+
+    for (const issue of validateJsonSchema(value, recipeSchema)) {
+      errors.push({
+        file: toRepoPath(repoRoot, recipe),
+        message: `${issue.path}: ${issue.message}`
+      });
+    }
   }
 
   for (const recipeId of REQUIRED_RECIPES) {
@@ -684,7 +695,7 @@ function validateGhostPatterns(pdosRoot: string, repoRoot: string, warnings: Pdo
     }
 
     const recipeId = typeof value.id === "string" && value.id.length > 0 ? value.id : basename(recipe, ".json");
-    for (const patternId of getStringArray(value.allowed_patterns)) {
+    for (const patternId of [...getStringArray(value.allowed_patterns), ...getStringArray(value.allowed_pattern_ids)]) {
       if (!patternIds.has(patternId)) {
         warnings.push({
           file: toRepoPath(repoRoot, recipe),
@@ -733,6 +744,23 @@ function validateRequiredArray(
 ): void {
   if (!Array.isArray(value[key]) || value[key].length === 0) {
     errors.push({ file: toRepoPath(repoRoot, file), message: `Recipe must contain non-empty ${key} array.` });
+  }
+}
+
+function validateOptionalStringArray(
+  value: Record<string, unknown>,
+  key: string,
+  file: string,
+  repoRoot: string,
+  errors: PdosValidationIssue[]
+): void {
+  const candidate = value[key];
+  if (candidate === undefined) {
+    return;
+  }
+
+  if (!Array.isArray(candidate) || candidate.some((item) => typeof item !== "string")) {
+    errors.push({ file: toRepoPath(repoRoot, file), message: `Recipe optional ${key} must be an array of strings.` });
   }
 }
 

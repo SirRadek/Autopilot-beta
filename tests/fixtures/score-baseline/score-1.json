@@ -1,0 +1,928 @@
+{
+  "route": {
+    "project_type": "marketing_web",
+    "selected_recipe": "marketing-premium",
+    "confidence": 0.35,
+    "logic_priority": 5,
+    "design_priority": 8,
+    "motion_level": 4,
+    "risk_level": "low",
+    "reasons": [
+      "Project type inferred from matching marketing_web signals.",
+      "Selected recipe marketing-premium for the inferred project type and visual/logic signals."
+    ],
+    "required_gates": [
+      "Project Type Lock",
+      "Needs Lock",
+      "Scope Contract",
+      "Product Opposition",
+      "Direction Lock",
+      "Implementation Lock",
+      "QA Lock"
+    ],
+    "stop_conditions": [
+      "primary_goal_missing",
+      "target_users_missing",
+      "critical_user_action_missing"
+    ],
+    "open_questions": [
+      "primary_goal_missing",
+      "target_users_missing",
+      "critical_user_action_missing"
+    ]
+  },
+  "selected": {
+    "recipes": [
+      {
+        "id": "marketing-premium",
+        "score": 100,
+        "selected": true,
+        "reasons": [
+          "Project type marketing_web is supported.",
+          "Logic/design/motion fit: 10/10/10."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "creative-motion",
+        "score": 90,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is supported.",
+          "Logic/design/motion fit: 9/9/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "ecommerce-conversion",
+        "score": 54,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is not a primary fit.",
+          "Logic/design/motion fit: 7/8/8."
+        ],
+        "penalties": []
+      }
+    ],
+    "patterns": [
+      {
+        "id": "sharp-positioning-hero",
+        "score": 87,
+        "selected": true,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "trust-summary",
+        "score": 84,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "proof-led-section",
+        "score": 81,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      }
+    ],
+    "assets": [
+      {
+        "id": "asymmetric-service-layout",
+        "score": 137,
+        "selected": true,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 8/7/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "editorial-motion-hero",
+        "score": 137,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 9/7/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-dopamine-pixel-field",
+        "score": 137,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 9/6/3."
+        ],
+        "penalties": []
+      }
+    ]
+  },
+  "rejected": {
+    "recipes": [
+      {
+        "id": "client-portal-trust",
+        "score": 50,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is not a primary fit.",
+          "Logic/design/motion fit: 7/7/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "dashboard-data-heavy",
+        "score": 46,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is not a primary fit.",
+          "Logic/design/motion fit: 6/6/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "public-sector-accessible",
+        "score": 46,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is not a primary fit.",
+          "Logic/design/motion fit: 7/6/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "internal-ops-clean",
+        "score": 44,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is not a primary fit.",
+          "Logic/design/motion fit: 6/5/7."
+        ],
+        "penalties": []
+      }
+    ],
+    "patterns": [
+      {
+        "id": "seo-readable-art-direction",
+        "score": 80,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "service-demo-link",
+        "score": 78,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "asymmetric-editorial-layout",
+        "score": 75,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-crossed-direction",
+        "score": 74,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "plain-language-content",
+        "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 10/10."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "scroll-linked-proof",
+        "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "contact-office-block",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/10."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "mascot-progressive-guide",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 6/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cursor-responsive-detail",
+        "score": 67,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 6/5."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "service-finder",
+        "score": 67,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 10/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "notice-banner",
+        "score": 66,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "status-badges",
+        "score": 66,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "account-overview",
+        "score": 64,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "kpi-overview",
+        "score": 63,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "permission-aware-actions",
+        "score": 61,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "product-detail",
+        "score": 61,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "accessible-form-flow",
+        "score": 60,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "checkout-steps",
+        "score": 60,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "reviews",
+        "score": 60,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "table-first",
+        "score": 60,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 10/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-task-timeline",
+        "score": 59,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "chart-with-source",
+        "score": 59,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "product-grid",
+        "score": 59,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "secure-document-list",
+        "score": 58,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "support-thread",
+        "score": 58,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "alert-feed",
+        "score": 57,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "filter-bar",
+        "score": 57,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "saved-filters",
+        "score": 57,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cart-drawer",
+        "score": 56,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "detail-drawer",
+        "score": 54,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "drilldown-table",
+        "score": 53,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "bulk-actions",
+        "score": 50,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/5."
+        ],
+        "penalties": [
+          "High implementation complexity."
+        ]
+      }
+    ],
+    "assets": [
+      {
+        "id": "theme-written-retro-proof",
+        "score": 137,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 8/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "proof-strip-case-study",
+        "score": 128,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 6/9/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-calm-prism-grid",
+        "score": 128,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 7/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "kenney-cc0-pixel-retro-kit",
+        "score": 127,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 8/6/3."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cursor-field-highlight",
+        "score": 123,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 8/6/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "open-doodles-cc0-art-cues",
+        "score": 123,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 7/6/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "quaternius-cc0-animated-animal",
+        "score": 122,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 8/6/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "scroll-proof-timeline",
+        "score": 118,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 7/8/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "commerce-trust-summary-strip",
+        "score": 115,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "service-demo-cards",
+        "score": 112,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 5/8/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-account-overview",
+        "score": 98,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "dashboard-kpi-strip",
+        "score": 98,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "permission-aware-action-row",
+        "score": 98,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "plain-language-info-page",
+        "score": 98,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "public-service-finder",
+        "score": 98,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "accessible-chart-panel",
+        "score": 96,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "secure-document-list-panel",
+        "score": 96,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "sticky-product-purchase-panel",
+        "score": 96,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "checkout-progress-steps",
+        "score": 95,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "accessible-request-form",
+        "score": 93,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "bulk-action-command-bar",
+        "score": 93,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "drilldown-data-table",
+        "score": 93,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "ops-table-workbench",
+        "score": 93,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "record-detail-drawer",
+        "score": 93,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "ecommerce-product-grid",
+        "score": 92,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 4/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-task-timeline-list",
+        "score": 91,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "office-contact-block",
+        "score": 91,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 1/10/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cart-drawer-minimal",
+        "score": 89,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/8/2."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "support-thread-panel",
+        "score": 89,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "alert-feed-panel",
+        "score": 88,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "dashboard-filter-toolbar",
+        "score": 88,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "public-notice-banner",
+        "score": 88,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 1/9/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "review-proof-module",
+        "score": 88,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 4/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "saved-filter-views",
+        "score": 88,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/0."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "workflow-status-badges",
+        "score": 88,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/8/0."
+        ],
+        "penalties": []
+      }
+    ]
+  },
+  "warnings": [],
+  "formula": "score = purpose_fit*3 + target_fit*3 + logic_fit*3 + usability*3 + taste_match*2 + accessibility*2 + mobile_fit*2 - performance_cost*2 - implementation_complexity - template_risk*4 - style_conflict*3"
+}
+

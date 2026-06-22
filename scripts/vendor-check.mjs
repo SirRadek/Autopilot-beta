@@ -30,6 +30,7 @@ const CANONICAL_SHA = "599785fb710cc01100ae1d5028af433e8fcfabbd";
 // these is provenance-tracked. Beta-only files (package.json, tsconfig,
 // scripts/, vendor-manifest.json, node_modules, .git) are NOT vendored.
 const VENDOR_ROOTS = ["product-design-os", "src"];
+const BETA_AUTHORED_SEED = ["product-design-os/recipes/recipe.schema.json"];
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -64,20 +65,27 @@ function generate() {
   // Preserve baseline hash + patched_by for files a phase already patched:
   // re-generating must NOT re-baseline a patched file to its modified content
   // (that would destroy the merge-back anchor). Pristine/new files are hashed live.
-  const prior = existsSync(MANIFEST_PATH)
-    ? new Map(JSON.parse(readFileSync(MANIFEST_PATH, "utf8")).files.map((e) => [e.source_path, e]))
-    : new Map();
-  const files = collectVendoredFiles().map((source_path) => {
-    const was = prior.get(source_path);
-    if (was?.patched_by) {
-      return { source_path, canonical_sha: CANONICAL_SHA, content_hash: was.content_hash, patched_by: was.patched_by };
-    }
-    return {
-      source_path,
-      canonical_sha: CANONICAL_SHA,
-      content_hash: sha256(readFileSync(join(ROOT, source_path))),
-    };
-  });
+  const priorManifest = existsSync(MANIFEST_PATH)
+    ? JSON.parse(readFileSync(MANIFEST_PATH, "utf8"))
+    : { files: [], beta_authored: [] };
+  const priorFiles = Array.isArray(priorManifest.files) ? priorManifest.files : [];
+  const priorBetaAuthored = Array.isArray(priorManifest.beta_authored) ? priorManifest.beta_authored : [];
+  const prior = new Map(priorFiles.map((e) => [e.source_path, e]));
+  const betaAuthored = [...new Set([...priorBetaAuthored, ...BETA_AUTHORED_SEED])].sort();
+  const betaAuthoredSet = new Set(betaAuthored);
+  const files = collectVendoredFiles()
+    .filter((source_path) => !betaAuthoredSet.has(source_path))
+    .map((source_path) => {
+      const was = prior.get(source_path);
+      if (was?.patched_by) {
+        return { source_path, canonical_sha: CANONICAL_SHA, content_hash: was.content_hash, patched_by: was.patched_by };
+      }
+      return {
+        source_path,
+        canonical_sha: CANONICAL_SHA,
+        content_hash: sha256(readFileSync(join(ROOT, source_path))),
+      };
+    });
   const manifest = {
     schema: "autopilot-beta/vendor-manifest@1",
     canonical_repo: "autopilot",
@@ -86,6 +94,7 @@ function generate() {
       "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. " +
       "No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
     file_count: files.length,
+    beta_authored: betaAuthored,
     files,
   };
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + "\n");
@@ -103,6 +112,7 @@ function verify() {
   // intentionally modified: its content is *expected* to differ from baseline,
   // and `current vs baseline` is precisely the patch that can merge back.
   const expected = new Map(manifest.files.map((e) => [e.source_path, e]));
+  const betaAuthored = new Set([...(Array.isArray(manifest.beta_authored) ? manifest.beta_authored : []), ...BETA_AUTHORED_SEED]);
   const actual = collectVendoredFiles();
 
   const drift = []; // pristine file changed (accidental drift — a real problem)
@@ -126,7 +136,12 @@ function verify() {
     }
   }
   for (const f of actual) {
-    if (!expected.has(f)) untracked.push(f);
+    if (expected.has(f)) continue;
+    if (betaAuthored.has(f)) {
+      console.log(`[vendor-check] AUTHORED  ${f}  (beta-authored, no canonical provenance)`);
+      continue;
+    }
+    untracked.push(f);
   }
 
   // Informational lines (do not fail the gate): intentional phase patches.
