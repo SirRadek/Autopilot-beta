@@ -61,11 +61,23 @@ function collectVendoredFiles() {
 }
 
 function generate() {
-  const files = collectVendoredFiles().map((source_path) => ({
-    source_path,
-    canonical_sha: CANONICAL_SHA,
-    content_hash: sha256(readFileSync(join(ROOT, source_path))),
-  }));
+  // Preserve baseline hash + patched_by for files a phase already patched:
+  // re-generating must NOT re-baseline a patched file to its modified content
+  // (that would destroy the merge-back anchor). Pristine/new files are hashed live.
+  const prior = existsSync(MANIFEST_PATH)
+    ? new Map(JSON.parse(readFileSync(MANIFEST_PATH, "utf8")).files.map((e) => [e.source_path, e]))
+    : new Map();
+  const files = collectVendoredFiles().map((source_path) => {
+    const was = prior.get(source_path);
+    if (was?.patched_by) {
+      return { source_path, canonical_sha: CANONICAL_SHA, content_hash: was.content_hash, patched_by: was.patched_by };
+    }
+    return {
+      source_path,
+      canonical_sha: CANONICAL_SHA,
+      content_hash: sha256(readFileSync(join(ROOT, source_path))),
+    };
+  });
   const manifest = {
     schema: "autopilot-beta/vendor-manifest@1",
     canonical_repo: "autopilot",
@@ -86,35 +98,51 @@ function verify() {
     process.exit(1);
   }
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
-  const expected = new Map(manifest.files.map((e) => [e.source_path, e.content_hash]));
+  // content_hash is the PINNED canonical baseline and never changes — it is the
+  // merge-back anchor. `patched_by` marks a vendored file that a beta phase has
+  // intentionally modified: its content is *expected* to differ from baseline,
+  // and `current vs baseline` is precisely the patch that can merge back.
+  const expected = new Map(manifest.files.map((e) => [e.source_path, e]));
   const actual = collectVendoredFiles();
 
-  const drift = []; // hash mismatch
+  const drift = []; // pristine file changed (accidental drift — a real problem)
   const missing = []; // in manifest, not on disk
   const untracked = []; // on disk under vendor roots, not in manifest
+  const patched = []; // intentionally patched by a phase, differs as expected (OK)
+  const patchReverted = []; // marked patched but matches baseline — patch absent
 
-  for (const [source_path, content_hash] of expected) {
+  for (const [source_path, entry] of expected) {
     const abs = join(ROOT, source_path);
     if (!existsSync(abs)) {
       missing.push(source_path);
       continue;
     }
-    const got = sha256(readFileSync(abs));
-    if (got !== content_hash) drift.push(source_path);
+    const matches = sha256(readFileSync(abs)) === entry.content_hash;
+    if (entry.patched_by) {
+      if (matches) patchReverted.push(`${source_path} (${entry.patched_by})`);
+      else patched.push(`${source_path} (${entry.patched_by})`);
+    } else if (!matches) {
+      drift.push(source_path);
+    }
   }
   for (const f of actual) {
     if (!expected.has(f)) untracked.push(f);
   }
 
+  // Informational lines (do not fail the gate): intentional phase patches.
+  for (const f of patched) console.log(`[vendor-check] PATCHED   ${f}  (intentional phase diff vs baseline — merge-back unit)`);
+  for (const f of patchReverted) console.warn(`[vendor-check] NOTE      ${f}  (marked patched but matches baseline — expected patch absent?)`);
+
   const problems = drift.length + missing.length + untracked.length;
   if (problems === 0) {
+    const pristine = expected.size - patched.length - patchReverted.length;
     console.log(
-      `[vendor-check] OK: ${expected.size} vendored files match manifest (base ${manifest.canonical_sha.slice(0, 12)}).`,
+      `[vendor-check] OK: ${pristine} pristine + ${patched.length} patched vendored files (base ${manifest.canonical_sha.slice(0, 12)}).`,
     );
     return;
   }
   console.error(`[vendor-check] FAIL: ${problems} provenance problem(s) vs autopilot@${manifest.canonical_sha.slice(0, 12)}:`);
-  for (const f of drift) console.error(`  DRIFT     ${f}  (content changed vs pinned baseline)`);
+  for (const f of drift) console.error(`  DRIFT     ${f}  (pristine vendored file changed vs baseline — not marked patched_by)`);
   for (const f of missing) console.error(`  MISSING   ${f}  (in manifest, absent on disk)`);
   for (const f of untracked) console.error(`  UNTRACKED ${f}  (under vendor root, not in manifest — re-run --generate if intentional)`);
   process.exit(1);

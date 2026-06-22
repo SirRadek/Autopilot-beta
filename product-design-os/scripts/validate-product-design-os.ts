@@ -7,6 +7,7 @@ import { validateJsonSchema } from "../../src/lib/delivery-system/validation";
 export interface PdosValidationIssue {
   readonly file: string;
   readonly message: string;
+  readonly code?: string;
 }
 
 export interface PdosValidationReport {
@@ -144,6 +145,9 @@ export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidatio
   validateTasteMemory(pdosRoot, repoRoot, errors);
   validateRecipes(join(pdosRoot, "recipes"), repoRoot, errors);
   validateMarkdown(pdosRoot, repoRoot, errors, warnings);
+  validateEmptyTokens(pdosRoot, repoRoot, warnings);
+  validateGhostPatterns(pdosRoot, repoRoot, warnings);
+  validateAssetRefTagMix(pdosRoot, repoRoot, warnings);
 
   return {
     ok: errors.length === 0,
@@ -625,6 +629,99 @@ function validateMarkdown(
       errors.push({ file: toRepoPath(repoRoot, strictProcess), message: `Strict process missing ${term}.` });
     }
   }
+}
+
+function validateEmptyTokens(pdosRoot: string, repoRoot: string, warnings: PdosValidationIssue[]): void {
+  const tokensRoot = join(pdosRoot, "tokens");
+  if (!existsSync(tokensRoot)) {
+    return;
+  }
+
+  const tokenFiles = readdirSync(tokensRoot)
+    .filter((file) => file.endsWith(".json"))
+    .map((file) => join(tokensRoot, file));
+
+  for (const tokenFile of tokenFiles) {
+    const parseErrors: PdosValidationIssue[] = [];
+    const value = readJsonFile(tokenFile, repoRoot, parseErrors);
+    const tokens = isRecord(value) ? value.tokens : undefined;
+
+    if (!isRecord(tokens) || Object.keys(tokens).length === 0) {
+      warnings.push({
+        file: toRepoPath(repoRoot, tokenFile),
+        message: "Token file has an empty or missing tokens object.",
+        code: "PDOS_EMPTY_TOKENS"
+      });
+    }
+  }
+}
+
+function validateGhostPatterns(pdosRoot: string, repoRoot: string, warnings: PdosValidationIssue[]): void {
+  const patternManifestFile = join(pdosRoot, "patterns/pattern-manifest.json");
+  const recipesRoot = join(pdosRoot, "recipes");
+  const parseErrors: PdosValidationIssue[] = [];
+  const patternManifest = readJsonFile(patternManifestFile, repoRoot, parseErrors);
+  const patterns = getRecordArray(patternManifest, "patterns");
+  const patternIds = new Set(
+    patterns
+      .filter((pattern) => typeof pattern.id === "string")
+      .map((pattern) => String(pattern.id))
+  );
+
+  if (!existsSync(recipesRoot)) {
+    return;
+  }
+
+  const recipes = readdirSync(recipesRoot)
+    .filter((file) => file.endsWith(".json"))
+    .map((file) => join(recipesRoot, file));
+
+  for (const recipe of recipes) {
+    const recipeParseErrors: PdosValidationIssue[] = [];
+    const value = readJsonFile(recipe, repoRoot, recipeParseErrors);
+    if (!isRecord(value)) {
+      continue;
+    }
+
+    const recipeId = typeof value.id === "string" && value.id.length > 0 ? value.id : basename(recipe, ".json");
+    for (const patternId of getStringArray(value.allowed_patterns)) {
+      if (!patternIds.has(patternId)) {
+        warnings.push({
+          file: toRepoPath(repoRoot, recipe),
+          message: `Recipe ${recipeId} allowed_patterns references missing pattern ${patternId}.`,
+          code: "PDOS_GHOST_PATTERN"
+        });
+      }
+    }
+  }
+}
+
+function validateAssetRefTagMix(pdosRoot: string, repoRoot: string, warnings: PdosValidationIssue[]): void {
+  const schemaFile = join(pdosRoot, "assets/asset.schema.json");
+  const parseErrors: PdosValidationIssue[] = [];
+  const schema = readJsonFile(schemaFile, repoRoot, parseErrors);
+  const properties = isRecord(schema) && isRecord(schema.properties) ? schema.properties : {};
+
+  for (const field of ["dependencies", "works_with", "avoid_with"] as const) {
+    if (!isUntypedStringArraySchema(properties[field])) {
+      continue;
+    }
+
+    warnings.push({
+      file: toRepoPath(repoRoot, schemaFile),
+      message: `Asset schema field ${field} is an untyped string array that can mix asset references and tags.`,
+      code: "PDOS_ASSET_REF_TAG_MIX"
+    });
+  }
+}
+
+function isUntypedStringArraySchema(value: unknown): boolean {
+  if (!isRecord(value) || value.type !== "array" || !isRecord(value.items) || value.items.type !== "string") {
+    return false;
+  }
+
+  const items = value.items;
+  return !["$ref", "const", "enum", "oneOf", "anyOf", "allOf", "pattern"].some((key) => key in items);
 }
 
 function validateRequiredArray(
