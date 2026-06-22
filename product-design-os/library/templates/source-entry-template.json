@@ -1,0 +1,20 @@
+{
+  "id": "source-id",
+  "name": "Source Name",
+  "category": "illustration",
+  "status": "candidate_source",
+  "source_url": "https://example.com/",
+  "evidence_urls": ["https://example.com/license"],
+  "license": {
+    "name": "License name",
+    "type": "unknown",
+    "url": "https://example.com/license"
+  },
+  "commercial_use": "unknown",
+  "cost": "unknown",
+  "last_reviewed": "2026-06-05",
+  "allowed_uses": ["research only until verified"],
+  "blocked_uses": ["project adoption before license review"],
+  "adoption_requirements": ["record exact asset URL", "record license", "record local path", "run visual/performance QA"],
+  "notes": "Replace this template before use."
+}

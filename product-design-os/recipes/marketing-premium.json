@@ -1,0 +1,46 @@
+{
+  "id": "marketing-premium",
+  "project_types": ["marketing_web", "landing_page"],
+  "priorities": ["positioning", "trust", "conversion", "visual-hierarchy", "case-proof"],
+  "logic_priority": 5,
+  "design_priority": 8,
+  "seo_priority": 6,
+  "design_seo_tradeoff": "balanced",
+  "motion_level": 4,
+  "visual_energy": 6,
+  "allowed_patterns": [
+    "sharp-positioning-hero",
+    "theme-crossed-positioning",
+    "guided-offer-map",
+    "studio-proof-ledger",
+    "demo-world-hub",
+    "proof-led-section",
+    "case-study-strip",
+    "outcome-cta",
+    "service-demo-link"
+  ],
+  "blocked_assets": [
+    "generic-saas-gradient",
+    "fake-dashboard",
+    "repeated-equal-card-grid",
+    "logo-wall-without-proof",
+    "same-shell-style-variants"
+  ],
+  "minimum_seo_floor": [
+    "clear_offer_in_first_view",
+    "title_and_description",
+    "heading_hierarchy",
+    "indexability_decision",
+    "service_content_as_html",
+    "demo_or_request_cta_as_html"
+  ],
+  "tests_required": ["visual-qa", "copy-clarity", "responsive", "a11y", "performance"],
+  "stop_conditions": [
+    "unclear_offer",
+    "generic_cta",
+    "no_trust_evidence",
+    "palette_only_variants",
+    "variants_share_same_layout_skeleton",
+    "demo_links_without_proof_context"
+  ]
+}

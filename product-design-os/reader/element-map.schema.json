@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/product-design-os/reader/element-map.schema.json",
+  "title": "Product & Design OS Visual Element Map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["vemVersion", "url", "captured_at", "viewports"],
+  "properties": {
+    "vemVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "captured_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "viewports": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/viewport"
+      }
+    }
+  },
+  "$defs": {
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "width", "height", "screenshot_path", "nodes"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "screenshot_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/passport"
+          }
+        }
+      }
+    },
+    "passport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "siteId",
+        "instanceKey",
+        "parentId",
+        "domPath",
+        "role",
+        "accessibleName",
+        "textSnippet",
+        "rect",
+        "zPath",
+        "depth",
+        "visible",
+        "hitTestable",
+        "sourceRef",
+        "styleDigest",
+        "stateFlags",
+        "identityConfidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instanceKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parentId": {
+          "type": ["string", "null"]
+        },
+        "domPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessibleName": {
+          "type": "string"
+        },
+        "textSnippet": {
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/rect"
+        },
+        "zPath": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "hitTestable": {
+          "type": "boolean"
+        },
+        "sourceRef": {
+          "oneOf": [
+            {
+              "const": "unknown"
+            },
+            {
+              "$ref": "#/$defs/sourceRef"
+            }
+          ]
+        },
+        "styleDigest": {
+          "$ref": "#/$defs/styleDigest"
+        },
+        "stateFlags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "identityConfidence": {
+          "enum": ["high", "medium", "low"]
+        }
+      }
+    },
+    "rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "w": {
+          "type": "number",
+          "minimum": 0
+        },
+        "h": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file"],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "component": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "styleDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display",
+        "position",
+        "visibility",
+        "pointerEvents",
+        "opacity",
+        "zIndex",
+        "color",
+        "backgroundColor",
+        "borderColor",
+        "borderWidth",
+        "boxShadow",
+        "fontFamily",
+        "fontSize",
+        "fontWeight",
+        "lineHeight",
+        "padding",
+        "margin",
+        "gap",
+        "hasPaint"
+      ],
+      "properties": {
+        "display": {
+          "type": "string"
+        },
+        "position": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "pointerEvents": {
+          "type": "string"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "zIndex": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "backgroundColor": {
+          "type": "string"
+        },
+        "borderColor": {
+          "type": "string"
+        },
+        "borderWidth": {
+          "type": "string"
+        },
+        "boxShadow": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontSize": {
+          "type": "string"
+        },
+        "fontWeight": {
+          "type": "string"
+        },
+        "lineHeight": {
+          "type": "string"
+        },
+        "padding": {
+          "type": "string"
+        },
+        "margin": {
+          "type": "string"
+        },
+        "gap": {
+          "type": "string"
+        },
+        "hasPaint": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

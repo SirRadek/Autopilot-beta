@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/product-design-os/library/project-entry.schema.json",
+  "title": "Product Design Library Project Entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slug",
+    "name",
+    "status",
+    "status_label",
+    "architecture_path",
+    "work_log_path",
+    "project_mesh_path",
+    "mesh_status",
+    "library_links"
+  ],
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["not_started", "ready", "in_progress", "needs_review", "blocked", "waiting_owner", "waiting_external", "done", "cancelled"]
+    },
+    "status_label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "architecture_path": {
+      "type": "string"
+    },
+    "work_log_path": {
+      "type": "string"
+    },
+    "project_mesh_path": {
+      "type": "string"
+    },
+    "mesh_status": {
+      "type": "string",
+      "enum": ["present", "missing"]
+    },
+    "library_links": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_ids", "reference_ids", "asset_ids", "pattern_ids"],
+      "properties": {
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reference_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asset_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pattern_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

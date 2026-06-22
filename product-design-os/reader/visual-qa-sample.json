@@ -1,0 +1,28 @@
+{
+  "url": "https://example.test",
+  "project_type": "public_sector",
+  "primary_goal": "Help citizens find the right service.",
+  "headings": ["Services", "Contact"],
+  "ctas": ["Find service"],
+  "template_signals": [],
+  "viewports": [
+    {
+      "name": "desktop",
+      "heading_count": 2,
+      "cta_count": 1,
+      "visible_text_characters": 500,
+      "repeated_card_count": 2,
+      "motion_level": 0,
+      "reduced_motion_supported": true
+    },
+    {
+      "name": "mobile",
+      "heading_count": 2,
+      "cta_count": 1,
+      "visible_text_characters": 420,
+      "repeated_card_count": 2,
+      "motion_level": 0,
+      "reduced_motion_supported": true
+    }
+  ]
+}

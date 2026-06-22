@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Dopamine pixel field background</title>
+  <desc id="desc">A colorful modern-retro pixel field for demo-world and playful marketing concepts.</desc>
+  <rect width="1600" height="900" fill="#101014"/>
+  <g shape-rendering="crispEdges">
+    <rect x="0" y="0" width="1600" height="900" fill="#101014"/>
+    <rect x="120" y="120" width="120" height="120" fill="#d7ff3f"/>
+    <rect x="240" y="120" width="120" height="120" fill="#ff5a8a"/>
+    <rect x="360" y="120" width="120" height="120" fill="#42d9ff"/>
+    <rect x="1160" y="160" width="160" height="160" fill="#ffb000"/>
+    <rect x="1320" y="160" width="80" height="80" fill="#d7ff3f"/>
+    <rect x="220" y="500" width="180" height="180" fill="#42d9ff"/>
+    <rect x="400" y="500" width="90" height="90" fill="#ffffff"/>
+    <rect x="940" y="500" width="140" height="140" fill="#8b5cf6"/>
+    <rect x="1080" y="500" width="140" height="140" fill="#ff5a8a"/>
+    <rect x="1220" y="500" width="70" height="70" fill="#d7ff3f"/>
+  </g>
+  <g stroke="#ffffff" stroke-width="2" opacity=".18">
+    <path d="M120 330h1360"/>
+    <path d="M120 420h1360"/>
+    <path d="M120 760h1360"/>
+  </g>
+  <rect x="650" y="250" width="300" height="210" rx="0" fill="#f6f3ea"/>
+  <rect x="690" y="290" width="92" height="28" fill="#101014"/>
+  <rect x="690" y="350" width="210" height="18" fill="#101014" opacity=".62"/>
+  <rect x="690" y="390" width="150" height="18" fill="#101014" opacity=".38"/>
+</svg>

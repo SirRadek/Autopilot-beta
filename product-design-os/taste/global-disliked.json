@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "updated": "2026-06-05",
+  "items": [
+    {
+      "id": "generic_template_feel",
+      "area": "homepage",
+      "problem": "generic_template_feel",
+      "reasons": ["repeated cards", "weak hierarchy", "generic gradients", "no memorable visual mechanism"]
+    },
+    {
+      "id": "palette_only_variants",
+      "area": "design_variants",
+      "problem": "variants are structurally identical and differ only by color",
+      "reasons": ["same layout skeleton", "same content rhythm", "same motion logic"]
+    },
+    {
+      "id": "decorative_motion_without_logic",
+      "area": "motion",
+      "problem": "motion exists only as decoration",
+      "reasons": ["no workflow explanation", "no conversion support", "possible performance cost"]
+    },
+    {
+      "id": "fake_dashboard_hero",
+      "area": "marketing",
+      "problem": "fake dashboard visuals reduce specificity",
+      "reasons": ["does not explain service", "looks interchangeable", "weak trust"]
+    },
+    {
+      "id": "generic_ai_visual_language",
+      "area": "visual_identity",
+      "problem": "dark neon AI gradient look used as default",
+      "reasons": ["overused", "low differentiation", "may reduce trust"]
+    },
+    {
+      "id": "named_variants_same_shell",
+      "area": "design_variants",
+      "problem": "named variants promise different concepts but reuse one component shell",
+      "reasons": ["false differentiation", "weak comparison value", "owner cannot choose a real direction"]
+    }
+  ]
+}

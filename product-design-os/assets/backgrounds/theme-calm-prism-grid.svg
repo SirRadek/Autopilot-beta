@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Calm prism grid background</title>
+  <desc id="desc">A light abstract prism and grid composition for calm, focused, SEO-readable website heroes.</desc>
+  <rect width="1600" height="900" fill="#f6f3ea"/>
+  <path d="M0 750 370 80l210 820H0Z" fill="#c7efe3" opacity=".32"/>
+  <path d="M520 0h350L645 900H250Z" fill="#d8d7ff" opacity=".28"/>
+  <path d="M940 0h360L1600 900h-520Z" fill="#c7f2cf" opacity=".22"/>
+  <g opacity=".22" stroke="#0b201a" stroke-width="1">
+    <path d="M120 160h1360M120 300h1360M120 440h1360M120 580h1360M120 720h1360"/>
+    <path d="M200 90v730M420 90v730M640 90v730M860 90v730M1080 90v730M1300 90v730"/>
+  </g>
+  <circle cx="1260" cy="210" r="118" fill="#d7ff3f" opacity=".28"/>
+  <rect x="930" y="390" width="360" height="180" rx="18" fill="#ffffff" opacity=".62"/>
+  <rect x="960" y="420" width="115" height="32" fill="#33bfa1" opacity=".45"/>
+  <rect x="960" y="480" width="260" height="16" fill="#0b201a" opacity=".16"/>
+  <rect x="960" y="520" width="205" height="16" fill="#0b201a" opacity=".12"/>
+</svg>

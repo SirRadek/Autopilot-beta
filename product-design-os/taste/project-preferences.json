@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "updated": "2026-06-05",
+  "projects": {
+    "radeq": {
+      "preferred": [
+        "professional but playful",
+        "clear for non-technical customers",
+        "light and dark modes",
+        "distinct design directions, not palette swaps",
+        "motion that supports scroll, cursor, proof, or demo understanding",
+        "A/B/C/D directions as separate compositions: Guided Offer Map, Cat Concierge, Studio Proof, Demo Worlds",
+        "Better-like bold agency principles when adapted into original proof-led RadeQ layouts",
+        "controlled theme crossing: lightness/freedom/novelty/modern-retro/art/futurism/pixel/calm/calculated-minimal/dopamine/colorful/3d/motion/written craft balanced against SEO and conversion",
+        "refinement slices that improve proof artifacts, conversion hierarchy, mobile rhythm, and purposeful motion before adding new visual directions"
+      ],
+      "avoid": [
+        "all variants looking the same",
+        "dark-only design",
+        "generic SaaS blocks",
+        "effects that hide the actual service offer",
+        "mascot motion that feels pasted on instead of guiding the buyer",
+        "using every visual theme at once without a clear buyer purpose",
+        "using advisory model output when it ignored the redacted product brief or inspected the wrong workspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "date": "2026-05-31",
+      "project": "radeq",
+      "feedback_type": "negative",
+      "area": "homepage_variants",
+      "problem": "generic_template_feel",
+      "raw_feedback_summary": "The proposed versions looked too similar; they changed colors but not the underlying concept.",
+      "rule_updates": [
+        "For creative or marketing pages, require structurally distinct directions.",
+        "Reject palette-only variants.",
+        "Require a visual concept, motion concept, layout rhythm, and CTA logic for each version."
+      ]
+    },
+    {
+      "date": "2026-06-05",
+      "project": "radeq",
+      "feedback_type": "positive",
+      "area": "homepage_variants",
+      "problem": "accepted_direction_principles",
+      "raw_feedback_summary": "The deployed A/B/C/D proposal slice looked much better after B/C/D became structurally distinct compositions: Cat Concierge, Studio Proof, and Demo Worlds, while A remained Guided Offer Map.",
+      "rule_updates": [
+        "Preserve named directions as separate compositions, not token variants.",
+        "Use Better-like bold agency principles only as adapted inspiration: large type, simple pillars, proof surfaces, and confident CTA rhythm.",
+        "Pair playful mascot and motion with concrete demos, proof artifacts, mobile safety, reduced-motion fallback, and performance checks.",
+        "Treat PR, deploy, commit, screenshots, and test output as reusable evidence in future handoff packets."
+      ]
+    },
+    {
+      "date": "2026-06-05",
+      "project": "radeq",
+      "feedback_type": "positive",
+      "area": "creative_direction_system",
+      "problem": "theme_crossing_needed",
+      "raw_feedback_summary": "Future design directions should cross expressive themes such as lightness, freedom, novelty, distinctiveness, modern retro, art, futurism, pixel vibe, chill, calm, calculated minimalism, focus, dopamine color, artistic 3D/modeling, animation, written craft, and colorful visual language, then find SEO and usability compromises.",
+      "rule_updates": [
+        "Use theme axes intentionally instead of selecting one generic style.",
+        "Pick a primary personality axis, a contrast axis, and a product-proof axis for each direction.",
+        "Keep core offer, headings, proof, and CTAs in static readable HTML.",
+        "Require performance, accessibility, mobile, reduced-motion, and indexability compromises before approving expressive visual directions."
+      ]
+    },
+    {
+      "date": "2026-06-05",
+      "project": "radeq",
+      "feedback_type": "refinement",
+      "area": "preview_polish",
+      "problem": "modernization_without_regressing_to_new_unverified_scope",
+      "raw_feedback_summary": "The current A/B/C/D GitHub preview is materially closer. The next step should refine polish, motion, proof, mobile conversion rhythm, and mascot usefulness without changing runtime architecture or adding unverified assets.",
+      "rule_updates": [
+        "Treat accepted A/B/C/D directions as baseline and improve their clarity before inventing more variants.",
+        "For refinement slices, prefer sharper conversion hierarchy, useful proof artifacts, mobile-first rhythm, and purposeful motion over broad restyling.",
+        "Record public preview evidence and rollback path before claiming a design polish slice is ready.",
+        "Discard advisory model output when it focuses on workspace/process context instead of the redacted product brief."
+      ]
+    }
+  ]
+}

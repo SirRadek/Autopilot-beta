@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "updated": "2026-06-05",
+  "source": "product-design-os/scripts/update-project-library.ts",
+  "projects": [
+    {
+      "slug": "autopilot-control-plane",
+      "name": "Autopilot Control Plane Architecture",
+      "status": "in_progress",
+      "status_label": "active process layer",
+      "architecture_path": "docs/projects/autopilot-control-plane/architecture.md",
+      "work_log_path": "docs/projects/autopilot-control-plane/work-log.md",
+      "project_mesh_path": "docs/projects/autopilot-control-plane/decision-mesh",
+      "mesh_status": "present",
+      "library_links": {
+        "source_ids": [],
+        "reference_ids": [],
+        "asset_ids": [],
+        "pattern_ids": []
+      },
+      "notes": "Generated from docs/projects. Enrich library links during project design work."
+    },
+    {
+      "slug": "multi-agent-autonomous-delivery-system",
+      "name": "Multi-Agent Autonomous Delivery System Architecture",
+      "status": "in_progress",
+      "status_label": "phase-3 read-only Decision Mesh context router",
+      "architecture_path": "docs/projects/multi-agent-autonomous-delivery-system/architecture.md",
+      "work_log_path": "docs/projects/multi-agent-autonomous-delivery-system/work-log.md",
+      "project_mesh_path": "docs/projects/multi-agent-autonomous-delivery-system/decision-mesh",
+      "mesh_status": "present",
+      "library_links": {
+        "source_ids": [],
+        "reference_ids": [],
+        "asset_ids": [],
+        "pattern_ids": []
+      },
+      "notes": "Generated from docs/projects. Enrich library links during project design work."
+    },
+    {
+      "slug": "radeq",
+      "name": "Radeq.cz Website Architecture",
+      "status": "in_progress",
+      "status_label": "active",
+      "architecture_path": "docs/projects/radeq/architecture.md",
+      "work_log_path": "docs/projects/radeq/work-log.md",
+      "project_mesh_path": "docs/projects/radeq/decision-mesh",
+      "mesh_status": "present",
+      "library_links": {
+        "source_ids": [],
+        "reference_ids": [],
+        "asset_ids": [],
+        "pattern_ids": []
+      },
+      "notes": "Generated from docs/projects. Enrich library links during project design work."
+    }
+  ]
+}

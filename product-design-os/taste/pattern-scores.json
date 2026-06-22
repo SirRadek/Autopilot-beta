@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "updated": "2026-06-05",
+  "scores": [
+    {
+      "id": "guided-offer-map",
+      "project": "radeq",
+      "score": 88,
+      "reason": "Strong conversion clarity for non-technical buyers; safe first direction when the goal is demo or qualified request."
+    },
+    {
+      "id": "cat-concierge-guide",
+      "project": "radeq",
+      "score": 84,
+      "reason": "Adds memorability and playfulness when mascot behavior guides attention without becoming primary content."
+    },
+    {
+      "id": "studio-proof-ledger",
+      "project": "radeq",
+      "score": 90,
+      "reason": "Best fit for trust, handoff clarity, demos, checks, and proof-led agency positioning."
+    },
+    {
+      "id": "demo-world-hub",
+      "project": "radeq",
+      "score": 86,
+      "reason": "Strongest structural differentiation when each demo is a distinct miniature product world."
+    }
+  ]
+}

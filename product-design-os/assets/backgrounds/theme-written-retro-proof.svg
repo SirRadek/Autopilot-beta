@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Written retro proof background</title>
+  <desc id="desc">An editorial modern-retro proof surface with paper texture, annotations, and handoff blocks.</desc>
+  <rect width="1600" height="900" fill="#f4ead8"/>
+  <g opacity=".22">
+    <path d="M0 90h1600M0 180h1600M0 270h1600M0 360h1600M0 450h1600M0 540h1600M0 630h1600M0 720h1600M0 810h1600" stroke="#2a1d16"/>
+  </g>
+  <rect x="120" y="120" width="520" height="620" fill="#fffaf0" stroke="#2a1d16" stroke-width="3"/>
+  <rect x="700" y="120" width="360" height="230" fill="#fffaf0" stroke="#2a1d16" stroke-width="3"/>
+  <rect x="700" y="390" width="360" height="350" fill="#fffaf0" stroke="#2a1d16" stroke-width="3"/>
+  <rect x="1120" y="120" width="360" height="620" fill="#101014"/>
+  <g fill="#2a1d16">
+    <rect x="170" y="180" width="360" height="30"/>
+    <rect x="170" y="250" width="300" height="16" opacity=".62"/>
+    <rect x="170" y="290" width="410" height="16" opacity=".48"/>
+    <rect x="170" y="330" width="250" height="16" opacity=".38"/>
+  </g>
+  <g fill="#d9482b">
+    <rect x="170" y="460" width="120" height="34"/>
+    <rect x="320" y="460" width="170" height="34" opacity=".78"/>
+    <rect x="170" y="535" width="260" height="12" opacity=".7"/>
+  </g>
+  <g fill="#f4ead8">
+    <rect x="1170" y="180" width="210" height="24"/>
+    <rect x="1170" y="250" width="250" height="14" opacity=".62"/>
+    <rect x="1170" y="285" width="180" height="14" opacity=".45"/>
+    <rect x="1170" y="560" width="180" height="46"/>
+  </g>
+</svg>

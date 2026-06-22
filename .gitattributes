@@ -1,0 +1,5 @@
+# Vendored contracts are provenance-tracked by sha256 (beta:vendor-check).
+# Disable ALL line-ending/text conversion so bytes survive clone/checkout
+# identically to autopilot@<canonical_sha>. Without this, autocrlf would
+# rewrite line endings on checkout and break the hash gate on a fresh clone.
+* -text

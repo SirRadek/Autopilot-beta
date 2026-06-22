@@ -1,0 +1,16 @@
+{
+  "slug": "project-slug",
+  "name": "Project Name",
+  "status": "unknown",
+  "architecture_path": "docs/projects/project-slug/architecture.md",
+  "work_log_path": "docs/projects/project-slug/work-log.md",
+  "project_mesh_path": "docs/projects/project-slug/decision-mesh",
+  "mesh_status": "missing",
+  "library_links": {
+    "source_ids": [],
+    "reference_ids": [],
+    "asset_ids": [],
+    "pattern_ids": []
+  },
+  "notes": "Generated entries should be enriched by project work-log updates."
+}

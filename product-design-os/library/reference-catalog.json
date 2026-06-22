@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "updated": "2026-06-05",
+  "references": [
+    {
+      "id": "better-cz",
+      "name": "Better.cz",
+      "source_url": "https://better.cz/",
+      "status": "inspiration_only",
+      "capture_allowed": true,
+      "reuse_policy": "clean_room_only",
+      "use_for": ["distinct agency feel", "bold brand composition", "service-positioning inspiration"],
+      "protected_elements": ["brand identity", "copywriting", "section compositions", "source code", "animations", "media assets"],
+      "clean_room_requirements": ["capture screenshots and OCR only as evidence", "extract abstract layout/motion principles", "write a new original RadeQ brief", "do not reuse HTML/CSS/assets/copy"],
+      "notes": "User-provided reference candidate. Treat as inspiration only unless a specific asset/code license is discovered and recorded."
+    },
+    {
+      "id": "radeq-a649c4a-proposal-set",
+      "name": "RadeQ distinct proposal compositions",
+      "source_url": "https://sirradek.github.io/radeq/?v=a649c4a",
+      "status": "analysis_candidate",
+      "capture_allowed": true,
+      "reuse_policy": "source_license_required",
+      "use_for": ["accepted A/B/C/D direction baseline", "future RadeQ theme-crossing comparison"],
+      "protected_elements": ["project-specific brand assets until provenance is recorded", "lead/API behavior", "deployment workflow"],
+      "clean_room_requirements": ["use project repository as source of truth", "preserve SEO-readable content", "compare future variants against accepted A/B/C/D composition differences"],
+      "notes": "Accepted project baseline from PR 2 / commit a649c4a per user handoff."
+    },
+    {
+      "id": "theme-crossing-axis-library",
+      "name": "Theme crossing axis library",
+      "source_url": "product-design-os/rules/theme-crossing.md",
+      "status": "analysis_candidate",
+      "capture_allowed": true,
+      "reuse_policy": "source_license_required",
+      "use_for": ["internal theme mixing", "SEO compromise rules", "visual direction selection"],
+      "protected_elements": ["none; internal governance source"],
+      "clean_room_requirements": ["select one primary personality axis", "select one contrast axis", "select one proof/SEO counterweight", "reject all-themes-at-once designs"],
+      "notes": "Internal source of truth for combining lightness, retro, futurism, pixel, calm, focus, dopamine, and artistic directions."
+    }
+  ]
+}

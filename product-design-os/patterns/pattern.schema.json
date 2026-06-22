@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/product-design-os/patterns/pattern.schema.json",
+  "title": "Product Design OS UX Pattern",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "use_case",
+    "good_for",
+    "bad_for",
+    "complexity",
+    "usability",
+    "mobile_quality",
+    "requires",
+    "risks"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["ux_pattern", "logic_pattern", "layout_pattern", "motion_pattern", "conversion_pattern", "data_pattern"]
+    },
+    "use_case": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "good_for": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "bad_for": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "complexity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "usability": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "mobile_quality": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "accessibility_notes": {
+      "type": "string"
+    },
+    "performance_notes": {
+      "type": "string"
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  }
+}

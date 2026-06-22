@@ -1,0 +1,13 @@
+{
+  "id": "public-sector-accessible",
+  "project_types": ["public_sector"],
+  "priorities": ["accessibility", "findability", "plain-language", "forms", "service-navigation", "trust"],
+  "logic_priority": 8,
+  "design_priority": 4,
+  "motion_level": 0,
+  "visual_energy": 2,
+  "allowed_patterns": ["service-finder", "plain-language-content", "accessible-form-flow", "notice-banner", "contact-office-block"],
+  "blocked_assets": ["heavy-3d", "particles", "scroll-storytelling", "animated-avatar", "canvas-primary-content", "low-contrast-hero"],
+  "tests_required": ["a11y", "keyboard", "responsive", "plain-language", "form-validation", "reduced-motion"],
+  "stop_conditions": ["missing_accessibility_requirements", "unclear_service_owner", "missing_contact_path", "primary_content_hidden_in_canvas"]
+}

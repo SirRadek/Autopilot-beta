@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "allowJs": false,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "product-design-os/scripts/validate-product-design-os.ts",
+    "product-design-os/scripts/score-product-design-os.ts",
+    "product-design-os/scripts/visual-qa-product-design-os.ts",
+    "product-design-os/scripts/route-product-design-os.ts"
+  ]
+}

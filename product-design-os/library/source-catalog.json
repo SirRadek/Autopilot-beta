@@ -1,0 +1,251 @@
+{
+  "version": 1,
+  "updated": "2026-06-05",
+  "policy": {
+    "default": "A source entry approves only research and source-pool eligibility. Concrete project adoption still requires exact asset URL, license, local path, performance, fallback, and QA evidence.",
+    "preferred_licenses": ["CC0", "MIT", "ISC", "BSD", "Apache-2.0", "SIL OFL"],
+    "blocked_licenses": ["NC", "ND", "personal-use-only", "editorial-only", "unknown", "paid-credit-required"]
+  },
+  "sources": [
+    {
+      "id": "open-doodles",
+      "name": "Open Doodles",
+      "category": "illustration",
+      "status": "approved_source",
+      "source_url": "https://www.opendoodles.com/",
+      "evidence_urls": ["https://www.opendoodles.com/"],
+      "license": {
+        "name": "CC0 / free commercial and personal use per source page",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["custom illustration accents", "storyboard inspiration", "lightweight SVG/PNG/GIF references"],
+      "blocked_uses": ["redistributing as a competing standalone pack", "using without exact asset record"],
+      "adoption_requirements": ["record exact asset URL or local path", "modify or restyle for project fit", "keep SEO text outside illustration"],
+      "notes": "Good source for written, artistic, calm, and playful accents."
+    },
+    {
+      "id": "open-peeps",
+      "name": "Open Peeps",
+      "category": "avatar",
+      "status": "approved_source",
+      "source_url": "https://openpeeps.com/",
+      "evidence_urls": ["https://openpeeps.com/"],
+      "license": {
+        "name": "CC0 License per source page",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["avatar studies", "persona/storyboard visuals", "custom remixed people illustrations"],
+      "blocked_uses": ["using default peeps as final brand identity without restyling", "image-only explanations"],
+      "adoption_requirements": ["record exact asset URL or local path", "preserve accessible text outside image", "avoid stock-like sameness"],
+      "notes": "Useful for human-friendly flows and non-technical customer guidance."
+    },
+    {
+      "id": "kenney-assets",
+      "name": "Kenney Assets",
+      "category": "ui_template",
+      "status": "candidate_source",
+      "source_url": "https://kenney.nl/assets",
+      "evidence_urls": ["https://kenney.nl/assets/background-elements"],
+      "license": {
+        "name": "Creative Commons CC0 on checked packs",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["pixel vibe", "demo-world prototypes", "UI/game-like visual seeds", "placeholder 2D/3D assets"],
+      "blocked_uses": ["assuming every pack without checking its page", "shipping uncompressed game assets into marketing pages"],
+      "adoption_requirements": ["check per-pack license page", "record exact pack and downloaded files", "compress and budget before web use"],
+      "notes": "Best for playful, retro, pixel, and demo-world directions."
+    },
+    {
+      "id": "quaternius-stylized-nature",
+      "name": "Quaternius Stylized Nature MegaKit",
+      "category": "3d_model",
+      "status": "candidate_source",
+      "source_url": "https://quaternius.itch.io/stylized-nature-megakit",
+      "evidence_urls": ["https://quaternius.itch.io/stylized-nature-megakit"],
+      "license": {
+        "name": "Creative Commons Zero v1.0 Universal per itch page",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["stylized 3D environment studies", "mascot/world prototypes", "Blender/Three.js experiments"],
+      "blocked_uses": ["large model bundles without byte budget", "primary content hidden in WebGL", "assuming all Quaternius packs without per-pack record"],
+      "adoption_requirements": ["record exact pack and file", "prepare GLB/web fallback", "verify mobile and reduced-motion behavior"],
+      "notes": "Use only after model optimization and canvas fallback plan."
+    },
+    {
+      "id": "quaternius-animated-animals",
+      "name": "Quaternius Ultimate Animated Animals",
+      "category": "3d_model",
+      "status": "candidate_source",
+      "source_url": "https://quaternius.com/packs/ultimateanimatedanimals.html",
+      "evidence_urls": ["https://quaternius.com/packs/ultimateanimatedanimals.html"],
+      "license": {
+        "name": "Creative Commons Zero v1.0 Universal per source page",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-10",
+      "allowed_uses": ["animated 3D mascot prototypes", "static mascot fallback renders", "Three.js experiments"],
+      "blocked_uses": ["primary content hidden in WebGL", "shipping unoptimized GLB assets", "using without fallback and nonblank canvas evidence"],
+      "adoption_requirements": ["record exact model file", "optimize GLB for web", "verify mobile, reduced-motion, and static fallback"],
+      "notes": "Exact source for the current animated animal candidate; project adoption still needs per-file evidence."
+    },
+    {
+      "id": "polyhaven",
+      "name": "Poly Haven",
+      "category": "texture",
+      "status": "approved_source",
+      "source_url": "https://polyhaven.com/license",
+      "evidence_urls": ["https://polyhaven.com/license"],
+      "license": {
+        "name": "CC0",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["HDRI lighting", "texture/material studies", "3D background materials"],
+      "blocked_uses": ["copying site text, thumbnails, logos, or metadata beyond license scope", "heavy textures without compression"],
+      "adoption_requirements": ["record exact asset URL", "compress for web", "keep material decorative unless DOM text mirrors meaning"],
+      "notes": "Good for lighting/material quality when 3D is justified."
+    },
+    {
+      "id": "ambientcg",
+      "name": "ambientCG",
+      "category": "texture",
+      "status": "approved_source",
+      "source_url": "https://ambientcg.com/",
+      "evidence_urls": ["https://docs.ambientcg.com/license/"],
+      "license": {
+        "name": "Creative Commons CC0 1.0 Universal",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["PBR material studies", "texture references", "3D surface tests"],
+      "blocked_uses": ["shipping large texture sets without budget", "using textures as text backgrounds without contrast checks"],
+      "adoption_requirements": ["record exact asset id", "compress and lazy-load", "verify contrast and mobile cost"],
+      "notes": "Useful for real material feel when a flat SVG is not enough."
+    },
+    {
+      "id": "lucide-icons",
+      "name": "Lucide Icons",
+      "category": "icon",
+      "status": "approved_source",
+      "source_url": "https://lucide.dev/",
+      "evidence_urls": ["https://lucide.dev/license"],
+      "license": {
+        "name": "ISC with MIT-derived Feather icons noted by source",
+        "type": "isc",
+        "url": "https://lucide.dev/license"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["UI icons", "tool buttons", "navigation symbols"],
+      "blocked_uses": ["using icons as brand logos", "unlabeled icon-only controls without accessible names"],
+      "adoption_requirements": ["preserve license notice when bundling", "provide accessible labels/tooltips where needed"],
+      "notes": "Preferred icon source when available in a frontend project."
+    },
+    {
+      "id": "heroicons",
+      "name": "Heroicons",
+      "category": "icon",
+      "status": "approved_source",
+      "source_url": "https://github.com/tailwindlabs/heroicons",
+      "evidence_urls": ["https://github.com/tailwindlabs/heroicons/blob/master/LICENSE"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/tailwindlabs/heroicons/blob/master/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["UI icons", "navigation symbols", "simple line/solid icon systems"],
+      "blocked_uses": ["using as brand marks", "mixing with incompatible icon stroke systems"],
+      "adoption_requirements": ["preserve license notice when bundling", "keep icon set visually consistent"],
+      "notes": "Good fallback when a Tailwind-style icon set is already present."
+    },
+    {
+      "id": "sil-ofl-fonts",
+      "name": "SIL Open Font License",
+      "category": "license_reference",
+      "status": "approved_source",
+      "source_url": "https://openfontlicense.org/",
+      "evidence_urls": ["https://openfontlicense.org/"],
+      "license": {
+        "name": "SIL OFL 1.1",
+        "type": "ofl",
+        "url": "https://openfontlicense.org/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["font licensing reference", "font adoption checklist"],
+      "blocked_uses": ["assuming every free font is OFL", "modifying reserved font names without review"],
+      "adoption_requirements": ["check each font license", "preserve license files when bundling", "respect reserved font names"],
+      "notes": "Use as the font license standard; each font family still needs its own source record."
+    },
+    {
+      "id": "haikei",
+      "name": "Haikei",
+      "category": "svg_generator",
+      "status": "inspiration_only",
+      "source_url": "https://haikei.app/",
+      "evidence_urls": ["https://haikei.app/"],
+      "license": {
+        "name": "To be checked before generated output adoption",
+        "type": "unknown",
+        "url": "https://haikei.app/"
+      },
+      "commercial_use": "unknown",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["inspiration for SVG background generation", "custom internal recreation"],
+      "blocked_uses": ["using exported output without terms check", "treating generator output as source-of-truth asset"],
+      "adoption_requirements": ["verify current terms", "save generated SVG locally", "record generation settings and modifications"],
+      "notes": "Useful as a technique reference. Production use requires terms capture."
+    },
+    {
+      "id": "astrowind",
+      "name": "AstroWind",
+      "category": "ui_template",
+      "status": "inspiration_only",
+      "source_url": "https://github.com/arthelokyo/astrowind",
+      "evidence_urls": ["https://github.com/arthelokyo/astrowind"],
+      "license": {
+        "name": "Check repository license before adoption",
+        "type": "unknown",
+        "url": "https://github.com/arthelokyo/astrowind"
+      },
+      "commercial_use": "unknown",
+      "cost": "free",
+      "last_reviewed": "2026-06-05",
+      "allowed_uses": ["SEO-friendly Astro structure reference", "content architecture inspiration"],
+      "blocked_uses": ["copying template sections blindly", "adding template dependency without architecture decision"],
+      "adoption_requirements": ["check repository license and activity", "use as structure inspiration unless license is captured", "preserve RadeQ/project-specific architecture"],
+      "notes": "Good reference for Astro site organization, but not an approved runtime dependency here."
+    }
+  ]
+}

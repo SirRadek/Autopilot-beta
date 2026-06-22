@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/product-design-os/assets/asset.schema.json",
+  "title": "Product Design OS Asset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "style",
+    "use_case",
+    "target",
+    "creativity",
+    "trust",
+    "motion_level",
+    "performance_cost",
+    "mobile_safe",
+    "template_risk",
+    "license",
+    "source",
+    "provenance_status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["component", "section", "background", "typography", "motion", "3d", "avatar", "icon", "layout", "hero", "media"]
+    },
+    "style": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "use_case": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "target": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "creativity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "trust": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "motion_level": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "performance_cost": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "mobile_safe": {
+      "type": "boolean"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "works_with": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "avoid_with": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "template_risk": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "license": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "library_source_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "reference_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "default": []
+    },
+    "provenance_status": {
+      "type": "string",
+      "enum": ["internal", "source-recorded", "candidate", "inspiration-only", "blocked"]
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

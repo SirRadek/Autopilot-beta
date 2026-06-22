@@ -1,0 +1,13 @@
+{
+  "id": "ecommerce-conversion",
+  "project_types": ["ecommerce"],
+  "priorities": ["product-clarity", "trust", "conversion", "mobile-checkout", "performance"],
+  "logic_priority": 8,
+  "design_priority": 6,
+  "motion_level": 2,
+  "visual_energy": 4,
+  "allowed_patterns": ["product-grid", "product-detail", "cart-drawer", "checkout-steps", "reviews", "trust-summary"],
+  "blocked_assets": ["checkout-3d-avatar", "heavy-particles", "unclear-cta", "motion-in-payment-step"],
+  "tests_required": ["checkout-flow", "cart-calculation", "responsive", "performance", "a11y"],
+  "stop_conditions": ["unverified_price_logic", "missing_payment_state", "missing_shipping_rule", "weak_mobile_checkout"]
+}

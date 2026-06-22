@@ -1,0 +1,24 @@
+{
+  "name": "autopilot-beta",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Clean-install beta of the autopilot product-design-os floor (vendored from autopilot@<base-sha>). Separate product line; no shared git history with canonical.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pdos:validate": "tsx product-design-os/scripts/validate-product-design-os.ts",
+    "pdos:score": "tsx product-design-os/scripts/score-product-design-os.ts",
+    "pdos:visual-qa": "tsx product-design-os/scripts/visual-qa-product-design-os.ts",
+    "beta:vendor-check": "node scripts/vendor-check.mjs",
+    "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
+    "test": "vitest run",
+    "verify": "npm run beta:vendor-check && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.3",
+    "node-pty": "^1.1.0",
+    "tsx": "^4.22.4",
+    "typescript": "6.0.3",
+    "vitest": "4.1.8"
+  }
+}

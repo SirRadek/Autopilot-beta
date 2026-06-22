@@ -1,0 +1,13 @@
+{
+  "id": "dashboard-data-heavy",
+  "project_types": ["dashboard", "data_tool", "admin_panel"],
+  "priorities": ["data-clarity", "filters", "decision-support", "export", "readable-charts"],
+  "logic_priority": 9,
+  "design_priority": 4,
+  "motion_level": 1,
+  "visual_energy": 3,
+  "allowed_patterns": ["kpi-overview", "filter-bar", "drilldown-table", "chart-with-source", "alert-feed"],
+  "blocked_assets": ["decorative-3d", "scroll-storytelling", "fake-metrics", "ambiguous-chart-color"],
+  "tests_required": ["logic", "data-states", "responsive", "a11y", "performance"],
+  "stop_conditions": ["unclear_metric_definition", "missing_data_freshness", "chart_without_decision"]
+}

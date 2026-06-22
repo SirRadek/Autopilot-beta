@@ -1,0 +1,13 @@
+{
+  "id": "client-portal-trust",
+  "project_types": ["client_portal"],
+  "priorities": ["trust", "account-clarity", "documents", "secure-actions", "support", "mobile-access"],
+  "logic_priority": 8,
+  "design_priority": 5,
+  "motion_level": 1,
+  "visual_energy": 3,
+  "allowed_patterns": ["account-overview", "secure-document-list", "support-thread", "client-task-timeline", "permission-aware-actions"],
+  "blocked_assets": ["heavy-3d", "particles", "decorative-video-bg", "unclear-account-state", "hidden-security-state"],
+  "tests_required": ["auth", "permissions", "a11y", "responsive", "document-access", "error-states"],
+  "stop_conditions": ["missing_auth_model", "missing_permissions", "unclear_document_access", "missing_empty_error_states"]
+}

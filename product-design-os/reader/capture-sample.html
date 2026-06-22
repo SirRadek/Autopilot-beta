@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product & Design OS Capture Sample</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: #172033;
+        background: #f7fafc;
+      }
+
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 48px 24px;
+      }
+
+      h1 {
+        font-size: 40px;
+        line-height: 1.1;
+      }
+
+      a,
+      button {
+        min-height: 44px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 32px;
+      }
+
+      .card {
+        border: 1px solid #ccd5e1;
+        border-radius: 6px;
+        padding: 16px;
+        background: #ffffff;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      @media (max-width: 640px) {
+        h1 {
+          font-size: 30px;
+        }
+
+        .card-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Service finder</h1>
+      <p>
+        This sample page gives the Design Reader a stable public-service style
+        layout with real text, actions, and cards for local capture tests.
+      </p>
+      <div class="actions">
+        <a href="#services">Find service</a>
+        <button type="button">Contact office</button>
+      </div>
+      <section id="services" class="card-grid" aria-label="Services">
+        <article class="card">
+          <h2>Permits</h2>
+          <p>Find requirements, deadlines, and office contacts.</p>
+        </article>
+        <article class="card">
+          <h2>Payments</h2>
+          <p>Review available payment methods and support options.</p>
+        </article>
+        <article class="card">
+          <h2>Appointments</h2>
+          <p>Book a visit or check current opening hours.</p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

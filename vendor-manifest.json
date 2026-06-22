@@ -1,0 +1,609 @@
+{
+  "schema": "autopilot-beta/vendor-manifest@1",
+  "canonical_repo": "autopilot",
+  "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+  "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
+  "file_count": 120,
+  "files": [
+    {
+      "source_path": "product-design-os/README.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "ff3775b3aa4e19bb1cc3a2047977f6c0b4eecbfbaba770c5696e84ee5f889674"
+    },
+    {
+      "source_path": "product-design-os/agents/agent-task-template.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "08bb95d3938333c9f55eebc4d5cec49dcb4c837bffac18e9933e519c5813f49d"
+    },
+    {
+      "source_path": "product-design-os/agents/design-critic.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "ec9fadcfa54e80cf30d4cf8700fae05a6cb73f1d7de53a051de0dd9465f523da"
+    },
+    {
+      "source_path": "product-design-os/agents/gemini-reviewer.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "e8a3adc8f863a304503b9f168989da315fc460bcdd65c0a25a2903f8d307398d"
+    },
+    {
+      "source_path": "product-design-os/agents/qwen-worker.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "ee74c2220a60e474cd2911338f84d79450d7044b536ed711dadab48e80ee76db"
+    },
+    {
+      "source_path": "product-design-os/agents/strict-opponent.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "1d5823136a7a991a4c6878a8bb258bf416472f87e93b5e6e32262949b0a23ef8"
+    },
+    {
+      "source_path": "product-design-os/assets/3d/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/asset-manifest.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "3e453ba2536bb03e683a44b5913d7454360eb95587a788c8bd4398f4f8559c04"
+    },
+    {
+      "source_path": "product-design-os/assets/asset.schema.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "8dc1bec8870450040de6e8638eaec8f95aa8e4ffa215045c024fad05cb7e9e92"
+    },
+    {
+      "source_path": "product-design-os/assets/avatars/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/backgrounds/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/backgrounds/theme-calm-prism-grid.svg",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "32993ac42c7a2332fadf55c8199f3df6a0725032c1331b13f2c8d1872d3506ad"
+    },
+    {
+      "source_path": "product-design-os/assets/backgrounds/theme-dopamine-pixel-field.svg",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "32150fce341e876850096bebd54a03cc093e19340f87411aee6a02479f62ba66"
+    },
+    {
+      "source_path": "product-design-os/assets/backgrounds/theme-written-retro-proof.svg",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "4ed7a15dcf58e429924daa02947dd65dea448c349e03fa86b9971fcf3d885b26"
+    },
+    {
+      "source_path": "product-design-os/assets/components/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/icons/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/layouts/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/motion/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/sections/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/theme-crossing-reference-pack.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "8d60b9a7163f434b71a2ada2ed3a97c3a26f3d5ba0ed703311b72387d5e19ed8"
+    },
+    {
+      "source_path": "product-design-os/assets/typography/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/briefs/brief-template.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "8109199c2a76f25349eeb599c54639a325646e0549339e71d784ed0ab6c97717"
+    },
+    {
+      "source_path": "product-design-os/briefs/project-brief.schema.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "4d5dff848376c3fcf1d1c126159b798939ddf5d138b48c2890e0953c6c3fe81b"
+    },
+    {
+      "source_path": "product-design-os/library/README.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "1a43e3c3dcfa0510569d425961344184e96d6262beb30573d304002582eba5a8"
+    },
+    {
+      "source_path": "product-design-os/library/project-entry.schema.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "50700921d0b0bc6403f26e1f4705968d13805486e1f08907db47bffc16f51f10"
+    },
+    {
+      "source_path": "product-design-os/library/project-index.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "468e4ee0ec5c5208f0566bd271764ada4b63581345c01ea684d1d61a7133a619"
+    },
+    {
+      "source_path": "product-design-os/library/reference-catalog.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "d404b2230edeb2b41fdac688fece5178c2e654b7b23108dbeff2378f77264666"
+    },
+    {
+      "source_path": "product-design-os/library/reference.schema.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "69b5e5d1d4ce62412b612417b048a2c07b66a5eee7ab5008720d44a90b7aff47"
+    },
+    {
+      "source_path": "product-design-os/library/source-catalog.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "98e7fb12e83b24b50a4761f907f1b9728537b3ad6b7234fd2c8c03a4fc32d8ac"
+    },
+    {
+      "source_path": "product-design-os/library/source.schema.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "60ff71d246cb233ed77bb6cf7742cd16a1a87cb527e97645a82cd6c45fb6c27e"
+    },
+    {
+      "source_path": "product-design-os/library/templates/project-library-entry-template.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "a2858eea48cc7cfcdff31e4ebce8ff3d22f1daa4288d00635372fb83489b8017"
+    },
+    {
+      "source_path": "product-design-os/library/templates/reference-analysis-template.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "d13292451be972176b465df64791569b5a959f102b1ccda4bee1cfd5acef9b4e"
+    },
+    {
+      "source_path": "product-design-os/library/templates/source-entry-template.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "313ce44c9d671ac453bd910334c51f1e3e8d5002c93449cfdd38363657abfaa7"
+    },
+    {
+      "source_path": "product-design-os/logic/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/admin-crud/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/auth/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/chat-interface/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/checkout/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/client-portal/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/dashboard/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/file-upload/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/filters/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/forms/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/notifications/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/pattern-manifest.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "d7e90b0ae4971a53b27cd32cac6b11bd495dc69b36d1ec5921db6e8333019333"
+    },
+    {
+      "source_path": "product-design-os/patterns/pattern.schema.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "9ee7abc42e2c2a56f4afae6a9b5a2f55945d044dc9ecd0defd436ff1e177d6c6"
+    },
+    {
+      "source_path": "product-design-os/patterns/product-detail/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/search/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/tables/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/patterns/workflow-review/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/qa/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reader/README.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "910342a7d97152fb9d7fc8d290cec2868e6e4352b12f476ec83e49b5a20d5de4"
+    },
+    {
+      "source_path": "product-design-os/reader/capture-sample.html",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "5beaf25b08ca7e43286df75a16eb8aff4e831ae2944d4257a81d7343531e10f2"
+    },
+    {
+      "source_path": "product-design-os/reader/document-reader-adapter.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2389d245c29e9c907d839b69e15d81134324dfca26d39944df1bf52d7da4d659"
+    },
+    {
+      "source_path": "product-design-os/reader/element-map.schema.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "81dd40906b7a132262393e71ab3829fcefdf5633701485db702b933ee6d5f873"
+    },
+    {
+      "source_path": "product-design-os/reader/pdf-supervisor-adapter.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "05002671cc74551894e634e5f731b9a51aeb212cf4b6e0a57704dd2453f902bf"
+    },
+    {
+      "source_path": "product-design-os/reader/visual-qa-sample.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "6776467d550adb7757a6412c1c1d54b62fce2a93908bf9c171ef66fe5e6b6fb2"
+    },
+    {
+      "source_path": "product-design-os/recipes/client-portal-trust.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "4d920931f1717b300bf69633e2ee5e5400d083c4e110e4fc48ddd4b29e00d375"
+    },
+    {
+      "source_path": "product-design-os/recipes/creative-motion.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "20136039e0885f89baa0630beeae3639fdc592bd51bca898b8ac2c8807e296e7"
+    },
+    {
+      "source_path": "product-design-os/recipes/dashboard-data-heavy.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "47fe3193e45be31d0824f002888a9c4126a2533cfd8761aa49a33f8334a68449"
+    },
+    {
+      "source_path": "product-design-os/recipes/ecommerce-conversion.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "22cd76ec5d7b79778df6cc65b09eda501a4dcedc4ec7642c7ddbb8d4b7529317"
+    },
+    {
+      "source_path": "product-design-os/recipes/internal-ops-clean.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "e8e179badc26c9d58250cebdebc7047507ec6bdb812caf153780452ce9d0a2b9"
+    },
+    {
+      "source_path": "product-design-os/recipes/marketing-premium.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "5c74a3239736a368435d00b179234246402ccd4d53837db431733fb208d9369f"
+    },
+    {
+      "source_path": "product-design-os/recipes/public-sector-accessible.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "143a1a60eb3faa286b849604c03f6b2f8f94914a525c59d91491adaee8039f5d"
+    },
+    {
+      "source_path": "product-design-os/reports/accessibility/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reports/decisions/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reports/design/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reports/logic/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reports/needs/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reports/performance/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reports/process-mesh-audit-2026-05-31.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "a047e50c5eec21bcfda9946acd4ca838ecc9e82787a7cd7feaf171e97c0ac0fd"
+    },
+    {
+      "source_path": "product-design-os/reports/product-design-os-foundation-report.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "891c97fd630b4f0c7237da632f0259eb88a8a114016a779422727aaff04bdfbf"
+    },
+    {
+      "source_path": "product-design-os/reports/qa/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/reports/visual/.gitkeep",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/rules/accessibility.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "c18db648be64b6e323ef447272d06e7501c5fb3df2c189163821b2c5d9a8fa31"
+    },
+    {
+      "source_path": "product-design-os/rules/anti-ai-slop.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "4ced7d80c820146b547c8bd1e10ed9752af8eca07d487f5682bc67ed9f82576a"
+    },
+    {
+      "source_path": "product-design-os/rules/change-request-rules.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "0468569874d7445a579176731cd6c60a40875fbe8f6d12f35066691ece74ec04"
+    },
+    {
+      "source_path": "product-design-os/rules/clean-room-reference-workflow.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2996eeeab7c8aff1aabea260b01dd6541ac4f299f2bba8b769b79a14b71110c2"
+    },
+    {
+      "source_path": "product-design-os/rules/design-seo-tradeoff.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "b7f698637f1778f697ce2ca1da9c01160c550b4245a19bf4c0da8659dfc0641a"
+    },
+    {
+      "source_path": "product-design-os/rules/logic-first.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "7bd0b8250b0be1376e502d984e40466d7949d5fcf0528519153e337ad8309ad6"
+    },
+    {
+      "source_path": "product-design-os/rules/multi-agent-routing.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "fb77f95266eae10c8127450958df0f067f3c33c26f99b9ab46e6e353b1516e7a"
+    },
+    {
+      "source_path": "product-design-os/rules/performance.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "3ab7564ca200deef2aa1b7631a3d55c13b5abdb21c41d09a2c153547bf27ab97"
+    },
+    {
+      "source_path": "product-design-os/rules/source-and-license-gates.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "e8588bb193f65cad08ab816fbcf64a400fd66e9ed945de6547da510c92aa7c0e"
+    },
+    {
+      "source_path": "product-design-os/rules/strict-process.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "419cb56bfc174e7aace87b86d678ce168b2ff45f1f4447d7aa80184ddfb9c485"
+    },
+    {
+      "source_path": "product-design-os/rules/theme-crossing.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "1e8397cd3e70da5518925910af48f28176c930129e076e1488aac7ad76fa410d"
+    },
+    {
+      "source_path": "product-design-os/scope/CHANGE_REQUESTS.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2e5a3788c3a4fff1d1f0c9f9ff435a84af24a0b2336063bc6509bb2251e95866"
+    },
+    {
+      "source_path": "product-design-os/scope/DECISIONS.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "d12364740d66317f918046c250b4da65c8768afbe7d824fefc8e6c4661a7ca5c"
+    },
+    {
+      "source_path": "product-design-os/scope/OUT_OF_SCOPE.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "df84fb86f28f6ba2789d733db9dcdd82107e97365b72bf8353487f6196951f7a"
+    },
+    {
+      "source_path": "product-design-os/scope/PROJECT_SCOPE.md",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "1221454f06a01b1cd506949b38bb097662dc476704a59e017984cd7eadd24a7c"
+    },
+    {
+      "source_path": "product-design-os/scripts/capture-design-reader.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "fdabd1fe29443b980f9e1830945d5a5ce06d010bb645563d83ca1363c2f3b14e"
+    },
+    {
+      "source_path": "product-design-os/scripts/capture-element-map.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "dec3d112ace111c16cfe59faa8482c84966358df03b1dea337ef68fe1df2970c"
+    },
+    {
+      "source_path": "product-design-os/scripts/route-product-design-os.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "f398e981affe0cbb550ab77c98b715e96aa2ac4d68586f17d4ce5dc3a3482287"
+    },
+    {
+      "source_path": "product-design-os/scripts/score-product-design-os.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "50f2946b2865d50ae2d42a57ab1e3976483bce6d5abbcc30fb1d068e3d21bb93"
+    },
+    {
+      "source_path": "product-design-os/scripts/update-project-library.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "d76f389fdf0b3517a47a0e1aaa0eee5bb0c80a5664dec25b1ca2f320c0c30d0b"
+    },
+    {
+      "source_path": "product-design-os/scripts/validate-product-design-os.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "c94c00466099919931a0e2be1478537e724453217ba4e81e584e616c01620ae8"
+    },
+    {
+      "source_path": "product-design-os/scripts/visual-qa-product-design-os.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "aed5bbd4b1619cf0e53d4c3e676ed3b2d39eb017e1ef5168b135a40ee7afc1f6"
+    },
+    {
+      "source_path": "product-design-os/taste/feedback-log.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "a60a209fa9ec30610c95509f009cf6ba7f0f756703579be438ef690e1d982eaa"
+    },
+    {
+      "source_path": "product-design-os/taste/global-disliked.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "912f123f6c4955ce4eaf2837dc657f73b7bb4ff5c814c7bf677efc3a66a2676c"
+    },
+    {
+      "source_path": "product-design-os/taste/global-liked.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "f815e21c7b222245080fea23caf0af91c12fdb28b4b4d79ca3683fdd97786fb4"
+    },
+    {
+      "source_path": "product-design-os/taste/pattern-scores.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "e2fa5e8ea6d2095b3eb38b1a641eba72e907b3809bd3f8393ef7b0c13e4697e5"
+    },
+    {
+      "source_path": "product-design-os/taste/project-preferences.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "c0d945475c80c25637a9a3cd2d2cf9d63915cc589732b3a915d645e4006280e2"
+    },
+    {
+      "source_path": "product-design-os/tokens/color.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+    },
+    {
+      "source_path": "product-design-os/tokens/motion.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+    },
+    {
+      "source_path": "product-design-os/tokens/radius.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+    },
+    {
+      "source_path": "product-design-os/tokens/shadow.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+    },
+    {
+      "source_path": "product-design-os/tokens/spacing.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+    },
+    {
+      "source_path": "product-design-os/tokens/typography.json",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+    },
+    {
+      "source_path": "src/data/delivery-system/checkCompletionMatrix.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "815e71a7528595aaa3513c8b68a90b01647b9fb522c852927dda534edc09cb5b"
+    },
+    {
+      "source_path": "src/data/delivery-system/cliWorker.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "987031d73c09f6bcd4b93c5d3e5b525c72a7ce5148db387ca4ce41c8fd9d34ab"
+    },
+    {
+      "source_path": "src/data/delivery-system/cliWorkerCapture.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "9b58d9996322ef3a6f98f85b6a534b90b2ac9e117fbd5d6dc0bfdae5d31f8ca1"
+    },
+    {
+      "source_path": "src/data/delivery-system/fallbackChains.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "e883f7d3cf258a15661e2e816eb81603f2c9b5d5b4a931099f65be8a53bcf682"
+    },
+    {
+      "source_path": "src/data/delivery-system/modelOutputEvaluation.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "ab721253c76f7fc6a6dfc4a8031b898d6a3f5e567d4f2d0e197bbdb61959428d"
+    },
+    {
+      "source_path": "src/data/delivery-system/modelPolicy.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "a19a13f60cbe00101908f5fb197785aa6e86caf9cf91be4f8d814a2e285036d6"
+    },
+    {
+      "source_path": "src/data/delivery-system/sessionState.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "e1932d2242dee0761b80a43e4e51e5a02bddc14d91fefb8be45e7309d34b25fe"
+    },
+    {
+      "source_path": "src/data/delivery-system/subagentEvidence.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "d7646b92e25b3c4712ce4c8de58e9ca5f18c68ac34253336d8018b50214f1b30"
+    },
+    {
+      "source_path": "src/data/delivery-system/subscriptionBudget.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "f80a4dab37e8f48fbf13407f1af621decc9a74fdb6e3c567c9a41693ed6f08a1"
+    },
+    {
+      "source_path": "src/data/delivery-system/supervisorAlerts.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "343511d8560d3671ae9846cee0ab8831efa9daa22f48ab5d01267974f1688def"
+    },
+    {
+      "source_path": "src/data/delivery-system/tokenEfficiency.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "36693c3b3cc9671c70dacc97a38f801e36d318b2c5fdda3cdbe36e492e7cf9de"
+    },
+    {
+      "source_path": "src/data/delivery-system/workflows.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "133e2969e624dc7516a7d51c87a4d8dce0a265f61403e04cb1eb9f8cfc907068"
+    },
+    {
+      "source_path": "src/lib/delivery-system/validation.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "8ea9c546759eb49b4170b296ceaec17c9bf6d3f3070414b18ae37ff6dd835bb7"
+    }
+  ]
+}

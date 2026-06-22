@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "updated": "2026-06-05",
+  "items": [
+    {
+      "id": "logic_first_process",
+      "area": "process",
+      "rule": "Prefer purpose, workflow, data, roles, validation, usability, performance, and then design unless the project is explicitly creative or brand-led."
+    },
+    {
+      "id": "strong_visual_anchor",
+      "area": "marketing_portfolio",
+      "rule": "Creative and portfolio projects need one memorable visual mechanism, not four palette variants of the same structure."
+    },
+    {
+      "id": "motion_with_product_value",
+      "area": "motion",
+      "rule": "Use motion to explain, guide, confirm, or make a workflow tangible."
+    },
+    {
+      "id": "asymmetric_editorial_when_creative",
+      "area": "layout",
+      "rule": "When design priority is high, consider asymmetric editorial composition before default card grids."
+    },
+    {
+      "id": "verified_external_research",
+      "area": "research",
+      "rule": "Use Context7 when available; otherwise use official docs, canonical GitHub repos, local files, tests, and controlled browser evidence."
+    },
+    {
+      "id": "named_directions_own_composition",
+      "area": "marketing_portfolio",
+      "rule": "Named variants such as Guided Offer Map, Cat Concierge, Studio Proof, and Demo Worlds must be separate compositions with different first viewport structure, proof rhythm, CTA logic, motion concept, and mobile behavior."
+    },
+    {
+      "id": "playful_but_proof_led",
+      "area": "brand_motion",
+      "rule": "Playful mascot or motion work is strongest when paired with concrete demos, proof artifacts, handoff evidence, and clear buyer outcomes."
+    },
+    {
+      "id": "theme_crossing_with_counterweight",
+      "area": "creative_direction",
+      "rule": "Cross expressive themes such as lightness, freedom, modern retro, art, futurism, pixel vibe, calm minimalism, dopamine color, 3D, motion, and written/editorial craft, but require a clarity, SEO, performance, and conversion counterweight for each direction."
+    }
+  ]
+}

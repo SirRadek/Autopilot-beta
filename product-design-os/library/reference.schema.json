@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/product-design-os/library/reference.schema.json",
+  "title": "Product Design Library Reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "source_url",
+    "status",
+    "capture_allowed",
+    "reuse_policy",
+    "use_for",
+    "protected_elements",
+    "clean_room_requirements"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["inspiration_only", "analysis_candidate", "blocked"]
+    },
+    "capture_allowed": {
+      "type": "boolean"
+    },
+    "reuse_policy": {
+      "type": "string",
+      "enum": ["clean_room_only", "source_license_required", "blocked"]
+    },
+    "use_for": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "protected_elements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "clean_room_requirements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

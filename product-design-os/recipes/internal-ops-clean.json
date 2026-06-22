@@ -1,0 +1,13 @@
+{
+  "id": "internal-ops-clean",
+  "project_types": ["internal_system", "crm", "admin_panel", "automation_ui"],
+  "priorities": ["clarity", "speed", "low-cognitive-load", "data-entry", "auditability"],
+  "logic_priority": 9,
+  "design_priority": 3,
+  "motion_level": 1,
+  "visual_energy": 2,
+  "allowed_patterns": ["table-first", "detail-drawer", "status-badges", "bulk-actions", "saved-filters"],
+  "blocked_assets": ["heavy-3d", "particles", "scroll-storytelling", "animated-avatar", "decorative-video-bg"],
+  "tests_required": ["logic", "a11y", "keyboard", "responsive", "form-validation"],
+  "stop_conditions": ["missing_roles", "missing_permissions", "missing_state_model", "unverified_bulk_action"]
+}

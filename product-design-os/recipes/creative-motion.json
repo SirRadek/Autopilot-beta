@@ -1,0 +1,46 @@
+{
+  "id": "creative-motion",
+  "project_types": ["portfolio", "marketing_web", "landing_page", "experimental"],
+  "priorities": ["memorability", "visual-identity", "motion-quality", "case-studies", "originality"],
+  "logic_priority": 4,
+  "design_priority": 9,
+  "seo_priority": 4,
+  "design_seo_tradeoff": "brand_led",
+  "motion_level": 7,
+  "visual_energy": 8,
+  "allowed_patterns": [
+    "animated-hero",
+    "theme-crossed-motion",
+    "cat-concierge-guide",
+    "cursor-responsive-detail",
+    "scroll-linked-proof",
+    "section-aware-mascot",
+    "demo-world-hub",
+    "mask-reveal",
+    "motion-background"
+  ],
+  "blocked_assets": [
+    "generic-saas-grid",
+    "fake-dashboard",
+    "plain-card-stack",
+    "motion-without-purpose",
+    "mascot-as-decoration-only"
+  ],
+  "minimum_seo_floor": [
+    "visible_static_page_purpose",
+    "title_and_description",
+    "indexability_decision",
+    "primary_cta_as_html_link_or_button",
+    "essential_offer_text_outside_canvas",
+    "mobile_and_reduced_motion_fallback"
+  ],
+  "tests_required": ["visual-qa", "performance", "responsive", "reduced-motion", "copy-clarity"],
+  "stop_conditions": [
+    "no_reduced_motion",
+    "poor_mobile_performance",
+    "concept_only_color_change",
+    "primary_content_inside_canvas",
+    "mascot_blocks_cta_or_copy",
+    "webgl_without_static_equivalent"
+  ]
+}
