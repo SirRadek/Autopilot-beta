@@ -10,6 +10,7 @@
     "pdos:score": "tsx product-design-os/scripts/score-product-design-os.ts",
     "pdos:visual-qa": "tsx product-design-os/scripts/visual-qa-product-design-os.ts",
     "pdos:renderability": "tsx product-design-os/scripts/check-renderability-product-design-os.ts",
+    "pdos:buildability-floor": "tsx product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "test": "vitest run",

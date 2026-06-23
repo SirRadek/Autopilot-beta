@@ -73,3 +73,33 @@ required. Asset `avoid_with_tags` stay on the F3 legacy string path (no asset ta
 buildSubagentTree:
 └─ cli-codex-hp-20260623-beta-f6-design  agent_type: codex_cli-external  exit: 0
 ```
+
+---
+
+# F6 IMPLEMENTED — record (2026-06-23)
+
+Built per this ADR by real `codex_cli` (write-mode, 2 passes); Opus reviewed + verified independently.
+**Pass A (taxonomy):** `pattern.schema.json` +optional `requires_codes` (inline enum, 91 codes; first 6 =
+F3 invariant codes) + `pattern-manifest.json` `requires_codes` on ALL 42 patterns + new beta-authored
+`scripts/pattern-requirement-taxonomy.ts` (`PATTERN_REQUIREMENT_CODES`, `HARD_BUILDABILITY_CODES`, aliases,
+`mapRequiresToCodes`). Verified: `requires` strings + all existing fields **byte-identical** (F3
+`source_floors` safe), 42/42 populated, schema enum == module (91), validate 0/0, score 7/7 identical.
+**Pass B (floor):** new beta-authored `qa/buildability-floor/check-buildability-floor-product-design-os.ts`
+(`analyzeBuildabilityFloor` + CLI `pdos:buildability-floor`): F4→F3 adapter on F6's side (F3 FROZEN —
+`check-renderability` untouched), `build_floor_passed = (F3 structural errors minus VISUAL_QA_ERROR) empty
+AND taxonomy-floor empty`; taxonomy codes `TAXONOMY_CODES_MISSING`/`TAXONOMY_UNKNOWN_CODE`/
+`TAXONOMY_INVARIANT_UNGROUNDED`; visual-qa a SEPARATE reported axis (not in the verdict). New F6 test +
+`tests/`. No `requires_codes` reconciliation needed (buildable spec passed as-is).
+
+**Verified (Opus-run):** buildable-marketing spec → `build_floor_passed: true` (0 structural / 0
+taxonomy); nonbuildable-motion fixture → `false` (CONTRACT_MISSING + SLOT_MISSING). report-only exit 0.
+**Baseline preserved:** validate 0/0, score 7/7 byte-identical, F3/F4/F5 tests unchanged.
+**Gates:** typecheck ✅ · vendor-check ✅ (100 pristine + 20 patched; floor+taxonomy beta-authored) ·
+vitest **31/31** (27 + 4 F6). pattern.schema+manifest `patched_by += F6`.
+
+```
+buildSubagentTree:
+└─ cli-codex-hp-20260623-beta-f6-design + f6a + f6b  agent_type: codex_cli-external
+```
+**Next:** F7 (single "počet variant" knob + sample_select N>1 behind the floor; CreativityProfile
+vector / band-judge OFF until held-out eval).
