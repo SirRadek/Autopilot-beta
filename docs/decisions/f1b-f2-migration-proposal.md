@@ -276,22 +276,3 @@ the top-3 selected, pushing `proof-led-section` to rejected. Verified as correct
 errors / 9 warnings. **Remaining:** batch 4 (taste/pattern-scores cleanup — not dereferenced by
 validate/score, low-risk), then **F1c** (remove legacy untyped asset fields + legacy allowed_patterns
 where typed mirrors exist → `PDOS_ASSET_REF_TAG_MIX` drops to 0).
-
----
-
-# F2 BATCH 4 (taste/pattern-scores) EXECUTED — record (2026-06-23) — F2 COMPLETE
-
-Final cleanup. `taste/pattern-scores.json` had 4 entries; after F2 b1–b3, three were already valid
-pattern ids (guided-offer-map, studio-proof-ledger, demo-world-hub). The lone remaining ghost
-`cat-concierge-guide` → renamed to canonical **`mascot-progressive-guide`** (the F1c-decided mapping;
-the cat-concierge mascot asset is registered separately). This file is not dereferenced by
-validate/score (no gate impact) — a single reviewer-level id rename, landed inline. `patched_by: F2`.
-
-**Verified:** all 4 taste ids are now valid pattern-manifest ids. Gates: vendor-check ✅ (106 pristine
-+ 14 patched) · typecheck ✅ · vitest 7/7 ✅.
-
-**F1/F2 ARC COMPLETE.** F0 inventory (22 warnings) → **6** (only `PDOS_EMPTY_TOKENS`). All 13 ghosts
-resolved + registered; asset/recipe fields fully typed (legacy removed); every recipe uses
-`allowed_pattern_ids`. Remaining warning class `PDOS_EMPTY_TOKENS:6` = the token-floor milestone,
-a deliberately later phase (plan F4). Next architectural phases per plan: F3 (component/renderer
-contract), F4 (composition.schema + token floor), F5 (scorer gating), F6/F7.
