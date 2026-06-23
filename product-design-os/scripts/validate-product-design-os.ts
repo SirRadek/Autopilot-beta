@@ -108,6 +108,12 @@ const PROJECT_STATUSES = [
   "cancelled"
 ] as const;
 
+interface CompositionSpecRegistries {
+  readonly recipesById: ReadonlyMap<string, Record<string, unknown>>;
+  readonly patternIds: ReadonlySet<string>;
+  readonly assetIds: ReadonlySet<string>;
+}
+
 export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidationReport {
   const pdosRoot = join(repoRoot, "product-design-os");
   const errors: PdosValidationIssue[] = [];
@@ -144,6 +150,7 @@ export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidatio
   validateLibraryRelationships(pdosRoot, repoRoot, errors);
   validateTasteMemory(pdosRoot, repoRoot, errors);
   validateRecipes(join(pdosRoot, "recipes"), repoRoot, errors);
+  validateCompositionSpecs(pdosRoot, repoRoot, errors);
   validateMarkdown(pdosRoot, repoRoot, errors, warnings);
   validateEmptyTokens(pdosRoot, repoRoot, warnings);
   validateGhostPatterns(pdosRoot, repoRoot, warnings);
@@ -606,6 +613,330 @@ function validateRecipes(recipesRoot: string, repoRoot: string, errors: PdosVali
   for (const recipeId of REQUIRED_RECIPES) {
     if (!recipeIds.has(recipeId)) {
       errors.push({ file: toRepoPath(repoRoot, recipesRoot), message: `Missing required recipe ${recipeId}.` });
+    }
+  }
+}
+
+export function validateCompositionSpecs(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const specsRoot = join(pdosRoot, "specs");
+  if (!existsSync(specsRoot)) {
+    return;
+  }
+
+  const schemaFile = join(specsRoot, "composition.schema.json");
+  const compositionSchema = readJsonFile(schemaFile, repoRoot, errors);
+  const registries = loadCompositionSpecRegistries(pdosRoot, repoRoot, errors);
+  const specFiles = listFiles(specsRoot)
+    .filter((file) => file.endsWith(".json") && basename(file) !== "composition.schema.json")
+    .sort();
+
+  for (const specFile of specFiles) {
+    const value = readJsonFile(specFile, repoRoot, errors);
+
+    for (const issue of validateJsonSchema(value, compositionSchema)) {
+      errors.push({
+        file: toRepoPath(repoRoot, specFile),
+        message: `PDOS_SPEC_SCHEMA_INVALID: ${issue.path}: ${issue.message}`
+      });
+    }
+
+    if (!isRecord(value)) {
+      continue;
+    }
+
+    validateCompositionSpecIntegrity(specFile, repoRoot, value, registries, errors);
+  }
+}
+
+function loadCompositionSpecRegistries(
+  pdosRoot: string,
+  repoRoot: string,
+  errors: PdosValidationIssue[]
+): CompositionSpecRegistries {
+  const recipesById = new Map<string, Record<string, unknown>>();
+  const recipesRoot = join(pdosRoot, "recipes");
+
+  if (existsSync(recipesRoot)) {
+    const recipeFiles = readdirSync(recipesRoot)
+      .filter((file) => file.endsWith(".json") && file !== "recipe.schema.json")
+      .map((file) => join(recipesRoot, file));
+
+    for (const recipeFile of recipeFiles) {
+      const value = readJsonFile(recipeFile, repoRoot, errors);
+      if (isRecord(value) && typeof value.id === "string") {
+        recipesById.set(value.id, value);
+      }
+    }
+  }
+
+  const patternManifest = readJsonFile(join(pdosRoot, "patterns/pattern-manifest.json"), repoRoot, errors);
+  const assetManifest = readJsonFile(join(pdosRoot, "assets/asset-manifest.json"), repoRoot, errors);
+  const patternIds = new Set<string>();
+  const assetIds = new Set<string>();
+
+  for (const pattern of getRecordArray(patternManifest, "patterns")) {
+    if (typeof pattern.id === "string") {
+      patternIds.add(pattern.id);
+    }
+  }
+
+  for (const asset of getRecordArray(assetManifest, "assets")) {
+    if (typeof asset.id === "string") {
+      assetIds.add(asset.id);
+    }
+  }
+
+  return { recipesById, patternIds, assetIds };
+}
+
+function validateCompositionSpecIntegrity(
+  file: string,
+  repoRoot: string,
+  spec: Record<string, unknown>,
+  registries: CompositionSpecRegistries,
+  errors: PdosValidationIssue[]
+): void {
+  const reportFile = toRepoPath(repoRoot, file);
+  const specId = typeof spec.id === "string" ? spec.id : basename(file, ".json");
+  const recipeId = typeof spec.recipe_id === "string" ? spec.recipe_id : "";
+  const recipe = recipeId ? registries.recipesById.get(recipeId) : undefined;
+
+  if (recipeId && recipe === undefined) {
+    errors.push({
+      file: reportFile,
+      message: `PDOS_SPEC_UNKNOWN_RECIPE: Spec ${specId} references unknown recipe ${recipeId}.`
+    });
+  }
+
+  const allowedPatternIds = recipe === undefined ? new Set<string>() : collectRecipeAllowedPatternIds(recipe);
+
+  for (const patternId of collectCompositionPatternIds(spec)) {
+    if (!registries.patternIds.has(patternId)) {
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_UNKNOWN_PATTERN: Spec ${specId} references unknown pattern ${patternId}.`
+      });
+      continue;
+    }
+
+    if (recipe !== undefined && !allowedPatternIds.has(patternId)) {
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_PATTERN_NOT_ALLOWED: Spec ${specId} pattern ${patternId} is not allowed by recipe ${recipeId}.`
+      });
+    }
+  }
+
+  for (const assetId of collectCompositionAssetIds(spec)) {
+    if (!registries.assetIds.has(assetId)) {
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_UNKNOWN_ASSET: Spec ${specId} references unknown asset ${assetId}.`
+      });
+    }
+  }
+
+  const sections = getRecordArray(spec, "sections");
+  const nodes = getRecordArray(spec, "nodes");
+  const evidence: Record<string, unknown> = isRecord(spec.evidence) ? spec.evidence : {};
+  const evidenceItems = getRecordArray(evidence, "items");
+  const requiredSectionEvidence = getRecordArray(evidence, "required_section_evidence");
+  const sectionIds = collectLocalIds(reportFile, sections, "section_id", errors);
+  const nodeIds = collectLocalIds(reportFile, nodes, "node_id", errors);
+  const evidenceIds = collectLocalIds(reportFile, evidenceItems, "id", errors);
+
+  for (const node of nodes) {
+    const sectionId = node.section_id;
+    if (typeof sectionId === "string" && !sectionIds.has(sectionId)) {
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_UNKNOWN_SECTION: Node ${String(node.node_id)} references unknown section ${sectionId}.`
+      });
+    }
+  }
+
+  for (const section of sections) {
+    const sectionId = typeof section.section_id === "string" ? section.section_id : "unknown";
+    for (const nodeId of getStringArray(section.node_ids)) {
+      if (!nodeIds.has(nodeId)) {
+        errors.push({
+          file: reportFile,
+          message: `PDOS_SPEC_UNKNOWN_NODE: Section ${sectionId} references unknown node ${nodeId}.`
+        });
+      }
+    }
+  }
+
+  const evidenceByRequiredSection = new Map<string, readonly string[]>();
+  for (const entry of requiredSectionEvidence) {
+    if (typeof entry.section_id === "string") {
+      evidenceByRequiredSection.set(entry.section_id, getStringArray(entry.evidence_ids));
+    }
+  }
+
+  for (const sectionId of getStringArray(spec.required_sections)) {
+    if (!sectionIds.has(sectionId)) {
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_REQUIRED_SECTION_MISSING: Required section ${sectionId} is not declared in sections.`
+      });
+    }
+
+    if ((evidenceByRequiredSection.get(sectionId) ?? []).length === 0) {
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_REQUIRED_SECTION_EVIDENCE_MISSING: Required section ${sectionId} has no evidence mapping.`
+      });
+    }
+  }
+
+  for (const section of sections) {
+    validateEvidenceReferences(
+      reportFile,
+      `Section ${String(section.section_id)}`,
+      getStringArray(section.evidence_ids),
+      evidenceIds,
+      errors
+    );
+  }
+
+  for (const node of nodes) {
+    validateEvidenceReferences(reportFile, `Node ${String(node.node_id)}`, getStringArray(node.evidence_ids), evidenceIds, errors);
+  }
+
+  for (const entry of requiredSectionEvidence) {
+    validateEvidenceReferences(
+      reportFile,
+      `Required section evidence ${String(entry.section_id)}`,
+      getStringArray(entry.evidence_ids),
+      evidenceIds,
+      errors
+    );
+  }
+
+  const tokenOverrides: Record<string, unknown> = isRecord(spec.token_overrides) ? spec.token_overrides : {};
+  for (const tokenValue of getRecordArray(tokenOverrides, "values")) {
+    if (typeof tokenValue.evidence_id === "string") {
+      validateEvidenceReferences(
+        reportFile,
+        `Token override ${String(tokenValue.token_key)}`,
+        [tokenValue.evidence_id],
+        evidenceIds,
+        errors
+      );
+    }
+  }
+
+  if (tokenOverrides.enabled === true) {
+    errors.push({
+      file: reportFile,
+      message: `PDOS_SPEC_TOKEN_OVERRIDES_BEFORE_FLOOR: Spec ${specId} enables token overrides before the token floor is filled.`
+    });
+  }
+}
+
+function collectRecipeAllowedPatternIds(recipe: Record<string, unknown>): Set<string> {
+  return new Set([...getStringArray(recipe.allowed_patterns), ...getStringArray(recipe.allowed_pattern_ids)]);
+}
+
+function collectCompositionPatternIds(spec: Record<string, unknown>): Set<string> {
+  const patternIds = new Set<string>(getStringArray(spec.pattern_ids));
+  const evidence: Record<string, unknown> = isRecord(spec.evidence) ? spec.evidence : {};
+
+  for (const node of getRecordArray(spec, "nodes")) {
+    if (node.target_kind === "pattern" && typeof node.target_id === "string") {
+      patternIds.add(node.target_id);
+    }
+
+    for (const patternId of getStringArray(node.pattern_ids)) {
+      patternIds.add(patternId);
+    }
+
+    for (const slotFill of getRecordArray(node, "slot_fills")) {
+      for (const fill of getRecordArray(slotFill, "fills")) {
+        if (fill.target_kind === "pattern" && typeof fill.target_id === "string") {
+          patternIds.add(fill.target_id);
+        }
+      }
+    }
+  }
+
+  for (const item of getRecordArray(evidence, "items")) {
+    for (const patternId of getStringArray(item.pattern_ids)) {
+      patternIds.add(patternId);
+    }
+  }
+
+  return patternIds;
+}
+
+function collectCompositionAssetIds(spec: Record<string, unknown>): Set<string> {
+  const assetIds = new Set<string>(getStringArray(spec.asset_ids));
+  const evidence: Record<string, unknown> = isRecord(spec.evidence) ? spec.evidence : {};
+
+  for (const node of getRecordArray(spec, "nodes")) {
+    if (node.target_kind === "asset" && typeof node.target_id === "string") {
+      assetIds.add(node.target_id);
+    }
+
+    for (const slotFill of getRecordArray(node, "slot_fills")) {
+      for (const fill of getRecordArray(slotFill, "fills")) {
+        if (fill.target_kind === "asset" && typeof fill.target_id === "string") {
+          assetIds.add(fill.target_id);
+        }
+      }
+    }
+  }
+
+  for (const item of getRecordArray(evidence, "items")) {
+    for (const assetId of getStringArray(item.asset_ids)) {
+      assetIds.add(assetId);
+    }
+  }
+
+  return assetIds;
+}
+
+function collectLocalIds(
+  file: string,
+  records: readonly Record<string, unknown>[],
+  key: string,
+  errors: PdosValidationIssue[]
+): Set<string> {
+  const ids = new Set<string>();
+
+  for (const record of records) {
+    const value = record[key];
+    if (typeof value !== "string") {
+      continue;
+    }
+
+    if (ids.has(value)) {
+      errors.push({
+        file,
+        message: `PDOS_SPEC_DUPLICATE_LOCAL_ID: Duplicate ${key} ${value}.`
+      });
+    }
+
+    ids.add(value);
+  }
+
+  return ids;
+}
+
+function validateEvidenceReferences(
+  file: string,
+  owner: string,
+  evidenceIds: readonly string[],
+  knownEvidenceIds: ReadonlySet<string>,
+  errors: PdosValidationIssue[]
+): void {
+  for (const evidenceId of evidenceIds) {
+    if (!knownEvidenceIds.has(evidenceId)) {
+      errors.push({
+        file,
+        message: `PDOS_SPEC_UNKNOWN_EVIDENCE: ${owner} references unknown evidence ${evidenceId}.`
+      });
     }
   }
 }

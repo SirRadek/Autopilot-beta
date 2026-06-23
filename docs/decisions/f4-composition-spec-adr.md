@@ -64,3 +64,34 @@ default-OFF. F4 must not become a buildability/renderer gate (that's F3 harness 
 buildSubagentTree:
 └─ cli-codex-hp-20260623-beta-f4-design  agent_type: codex_cli-external  exit: 0  282 s
 ```
+
+---
+
+# F4 IMPLEMENTED — record (2026-06-23)
+
+Built per this ADR by real `codex_cli` (write-mode; harness reported false "empty_output" on the summary
+capture but the files were written — verified on disk). Opus reviewed the `validate.ts` diff + gated.
+- **NEW** `specs/composition.schema.json` (superset of F3 composition-target; +spec_kind/evidence/
+  token_overrides; no $ref/anyOf/oneOf) + `specs/examples/buildable-marketing.composition.json` (valid;
+  token_overrides OFF) — both beta-authored.
+- **EDIT** `validate.ts`: `validateCompositionSpecs()` wired after recipes, before tokens; no-op if
+  `specs/` absent; excludes the schema file; emits 12 `PDOS_SPEC_*` error codes (in message text, since
+  validate errors carry no `code`); `validateGhostPatterns` untouched. `patched_by += F4`.
+- **NEW** `tokens/TOKEN_FLOOR.md` (governance, Opus-authored): minimal floor + fill condition;
+  `token_overrides` stays OFF; `PDOS_EMPTY_TOKENS:6` is the accepted pre-floor state. NO token values
+  seeded (deferred to owner-gated F4b).
+- **NEW** `tests/.../product-design-os-f4-composition-spec.test.ts`: baseline {EMPTY_TOKENS:6}, example
+  validates (0 issues), negative cases (UNKNOWN_RECIPE/PATTERN, PATTERN_NOT_ALLOWED,
+  TOKEN_OVERRIDES_BEFORE_FLOOR), F3/F4 field-alignment drift guard.
+
+**Baseline preserved (verified):** validate **0 errors / {PDOS_EMPTY_TOKENS:6}**; score fixtures
+byte-identical (validate-only change). **Gates:** typecheck ✅ · vendor-check ✅ (106 pristine + 14
+patched; 11 beta-authored) · vitest **17/17** (7 + 3 F3 + 7 F4).
+
+```
+buildSubagentTree:
+└─ cli-codex-hp-20260623-beta-f4-impl  agent_type: codex_cli-external  (write-mode; files on disk)
+```
+**Next:** F4b (owner-gated token-floor fill → `PDOS_EMPTY_TOKENS` 6→0 rebaseline), F5 (scorer gating
+behind `PDOS_ENFORCE_ALLOWED_PATTERNS`, default-OFF), F6 (wire F3 harness into the QA floor +
+`pattern.requires` taxonomy), F7.
