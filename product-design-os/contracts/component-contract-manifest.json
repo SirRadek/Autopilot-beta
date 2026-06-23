@@ -1,0 +1,517 @@
+{
+  "schema_version": "1.0.0",
+  "contracts": [
+    {
+      "id": "asset-editorial-motion-hero",
+      "schema_version": "1.0.0",
+      "target_kind": "asset",
+      "target_id": "editorial-motion-hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "required": true,
+          "min_length": 8,
+          "expected_source": "project primary goal"
+        },
+        {
+          "name": "supporting_copy",
+          "value_type": "text",
+          "required": true,
+          "min_length": 20,
+          "expected_source": "offer summary"
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "primary action"
+        },
+        {
+          "name": "trust_cue",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "proof source"
+        }
+      ],
+      "slots": [],
+      "output_invariants": [
+        {
+          "code": "dom_text_cta",
+          "required": true,
+          "severity": "error",
+          "description": "The hero CTA stays as readable DOM text, not as decorative dashboard imagery.",
+          "source_floors": ["fake-dashboard"],
+          "visual_qa_issue_codes": ["missing_primary_action"]
+        },
+        {
+          "code": "visible_h1",
+          "required": true,
+          "severity": "error",
+          "description": "The first viewport keeps a readable headline over the motion direction.",
+          "source_floors": ["dark-neon-default"],
+          "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"]
+        },
+        {
+          "code": "performance_budget",
+          "required": true,
+          "severity": "error",
+          "description": "Hero motion avoids particle-heavy treatment that would block the first view.",
+          "source_floors": ["heavy-particles"]
+        }
+      ],
+      "notes": "Seed contract for the editorial motion hero asset."
+    },
+    {
+      "id": "asset-theme-calm-prism-grid",
+      "schema_version": "1.0.0",
+      "target_kind": "asset",
+      "target_id": "theme-calm-prism-grid",
+      "props": [
+        {
+          "name": "background_name",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "selected visual direction"
+        },
+        {
+          "name": "accent_strategy",
+          "value_type": "text",
+          "required": true,
+          "min_length": 12,
+          "expected_source": "theme rationale"
+        }
+      ],
+      "slots": [],
+      "output_invariants": [
+        {
+          "code": "no_primary_content_in_canvas",
+          "required": true,
+          "severity": "error",
+          "description": "Primary text is not baked into the background image.",
+          "source_floors": ["text-inside-image"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
+        },
+        {
+          "code": "visible_h1",
+          "required": true,
+          "severity": "error",
+          "description": "The background cannot reduce headline readability.",
+          "source_floors": ["low-contrast-glass"],
+          "visual_qa_issue_codes": ["low_contrast", "weak_heading_hierarchy"]
+        },
+        {
+          "code": "performance_budget",
+          "required": false,
+          "severity": "warning",
+          "description": "Heavy blur should stay out of the first viewport budget.",
+          "source_floors": ["heavy-blur"]
+        }
+      ],
+      "notes": "Seed contract for the calm prism background asset."
+    },
+    {
+      "id": "asset-proof-strip-case-study",
+      "schema_version": "1.0.0",
+      "target_kind": "asset",
+      "target_id": "proof-strip-case-study",
+      "props": [
+        {
+          "name": "case_title",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "case reference"
+        },
+        {
+          "name": "outcome_summary",
+          "value_type": "text",
+          "required": true,
+          "min_length": 12,
+          "expected_source": "case outcome"
+        },
+        {
+          "name": "evidence_source",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "proof source"
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "proof continuation action"
+        }
+      ],
+      "slots": [],
+      "output_invariants": [
+        {
+          "code": "proof_adjacency",
+          "required": true,
+          "severity": "error",
+          "description": "Proof claims stay adjacent to sourced case evidence and avoid fake metrics.",
+          "source_floors": ["logo-wall-without-proof", "fake-metrics"]
+        }
+      ],
+      "notes": "Seed contract for case-study proof strips."
+    },
+    {
+      "id": "pattern-sharp-positioning-hero",
+      "schema_version": "1.0.0",
+      "target_kind": "pattern",
+      "target_id": "sharp-positioning-hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "required": true,
+          "min_length": 8,
+          "expected_source": "specific headline"
+        },
+        {
+          "name": "primary_cta",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "primary CTA"
+        },
+        {
+          "name": "trust_cue",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "trust cue"
+        }
+      ],
+      "slots": [
+        {
+          "name": "hero_asset",
+          "required": true,
+          "min_items": 1,
+          "max_items": 1,
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["hero"],
+          "allowed_asset_ids": ["editorial-motion-hero"],
+          "description": "Primary first-viewport hero asset."
+        },
+        {
+          "name": "theme_background",
+          "required": true,
+          "min_items": 1,
+          "max_items": 1,
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["background"],
+          "allowed_asset_ids": ["theme-calm-prism-grid"],
+          "description": "Background direction that supports the offer."
+        }
+      ],
+      "output_invariants": [
+        {
+          "code": "visible_h1",
+          "required": true,
+          "severity": "error",
+          "description": "The positioning headline is visible in the first viewport.",
+          "source_floors": ["specific headline"],
+          "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"]
+        },
+        {
+          "code": "dom_text_cta",
+          "required": true,
+          "severity": "error",
+          "description": "The CTA is visible, readable text.",
+          "source_floors": ["visible CTA"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
+        },
+        {
+          "code": "proof_adjacency",
+          "required": false,
+          "severity": "warning",
+          "description": "The hero should carry a nearby trust cue.",
+          "source_floors": ["trust cue"]
+        }
+      ],
+      "notes": "Seed contract for clear offer-led hero sections."
+    },
+    {
+      "id": "pattern-theme-crossed-direction",
+      "schema_version": "1.0.0",
+      "target_kind": "pattern",
+      "target_id": "theme-crossed-direction",
+      "props": [
+        {
+          "name": "primary_axis",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "primary personality axis"
+        },
+        {
+          "name": "contrast_axis",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "contrast axis"
+        },
+        {
+          "name": "product_proof_axis",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "product-proof axis"
+        }
+      ],
+      "slots": [
+        {
+          "name": "theme_asset",
+          "required": true,
+          "min_items": 1,
+          "max_items": 1,
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["background"],
+          "allowed_asset_ids": ["theme-calm-prism-grid"],
+          "description": "The static theme asset that carries the crossed direction."
+        }
+      ],
+      "output_invariants": [
+        {
+          "code": "no_primary_content_in_canvas",
+          "required": true,
+          "severity": "error",
+          "description": "Theme direction preserves SEO-readable content outside media layers.",
+          "source_floors": ["SEO-readable content"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
+        },
+        {
+          "code": "reduced_motion_fallback",
+          "required": true,
+          "severity": "error",
+          "description": "Crossed visual direction has a mobile/static fallback path.",
+          "source_floors": ["mobile fallback"],
+          "visual_qa_issue_codes": ["missing_reduced_motion_fallback"]
+        },
+        {
+          "code": "proof_adjacency",
+          "required": false,
+          "severity": "warning",
+          "description": "The visual direction should remain tied to product proof.",
+          "source_floors": ["product-proof axis"]
+        }
+      ],
+      "notes": "Seed contract for crossed visual directions."
+    },
+    {
+      "id": "pattern-proof-led-section",
+      "schema_version": "1.0.0",
+      "target_kind": "pattern",
+      "target_id": "proof-led-section",
+      "props": [
+        {
+          "name": "proof_item",
+          "value_type": "text",
+          "required": true,
+          "min_length": 8,
+          "expected_source": "proof item"
+        },
+        {
+          "name": "outcome_statement",
+          "value_type": "text",
+          "required": true,
+          "min_length": 8,
+          "expected_source": "outcome statement"
+        },
+        {
+          "name": "source_reference",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "source or case reference"
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "CTA continuation"
+        }
+      ],
+      "slots": [
+        {
+          "name": "proof_asset",
+          "required": true,
+          "min_items": 1,
+          "max_items": 1,
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["section"],
+          "allowed_asset_ids": ["proof-strip-case-study"],
+          "description": "A concrete proof strip or case-study section."
+        }
+      ],
+      "output_invariants": [
+        {
+          "code": "proof_adjacency",
+          "required": true,
+          "severity": "error",
+          "description": "The proof item stays paired with its source or case reference.",
+          "source_floors": ["proof item", "source or case reference"]
+        },
+        {
+          "code": "dom_text_cta",
+          "required": true,
+          "severity": "error",
+          "description": "The proof section provides a readable CTA continuation.",
+          "source_floors": ["CTA continuation"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
+        }
+      ],
+      "notes": "Seed contract for proof-led marketing sections."
+    },
+    {
+      "id": "pattern-outcome-cta",
+      "schema_version": "1.0.0",
+      "target_kind": "pattern",
+      "target_id": "outcome-cta",
+      "props": [
+        {
+          "name": "outcome_statement",
+          "value_type": "text",
+          "required": true,
+          "min_length": 8,
+          "expected_source": "outcome statement"
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "CTA"
+        }
+      ],
+      "slots": [
+        {
+          "name": "proof_context",
+          "required": true,
+          "min_items": 1,
+          "max_items": 1,
+          "accepts_target_kinds": ["pattern"],
+          "accepts_pattern_types": ["conversion_pattern"],
+          "allowed_pattern_ids": ["proof-led-section"],
+          "description": "Proof-led section that supports the closing outcome CTA."
+        }
+      ],
+      "output_invariants": [
+        {
+          "code": "dom_text_cta",
+          "required": true,
+          "severity": "error",
+          "description": "The outcome CTA is an accessible DOM action.",
+          "source_floors": ["CTA"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
+        },
+        {
+          "code": "proof_adjacency",
+          "required": true,
+          "severity": "error",
+          "description": "The CTA remains adjacent to proof for the outcome claim.",
+          "source_floors": ["proof adjacency"]
+        }
+      ],
+      "notes": "Seed contract for proof-adjacent closing CTAs."
+    },
+    {
+      "id": "pattern-animated-hero",
+      "schema_version": "1.0.0",
+      "target_kind": "pattern",
+      "target_id": "animated-hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "required": true,
+          "min_length": 8,
+          "expected_source": "content-first hero"
+        },
+        {
+          "name": "primary_cta",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "DOM-text CTA"
+        },
+        {
+          "name": "motion_intensity",
+          "value_type": "integer",
+          "required": true,
+          "description": "Declared motion intensity on a 0-10 scale."
+        },
+        {
+          "name": "static_fallback_label",
+          "value_type": "string",
+          "required": true,
+          "min_length": 3,
+          "expected_source": "static fallback"
+        }
+      ],
+      "slots": [
+        {
+          "name": "hero_content",
+          "required": true,
+          "min_items": 1,
+          "max_items": 2,
+          "accepts_target_kinds": ["asset", "pattern"],
+          "accepts_asset_types": ["hero", "section"],
+          "accepts_pattern_types": ["conversion_pattern"],
+          "allowed_asset_ids": ["editorial-motion-hero"],
+          "allowed_pattern_ids": ["sharp-positioning-hero"],
+          "description": "DOM-first content that remains available before and without motion."
+        }
+      ],
+      "output_invariants": [
+        {
+          "code": "visible_h1",
+          "required": true,
+          "severity": "error",
+          "description": "Animated hero still starts from content-first visible copy.",
+          "source_floors": ["content-first hero"],
+          "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"]
+        },
+        {
+          "code": "dom_text_cta",
+          "required": true,
+          "severity": "error",
+          "description": "The hero CTA remains DOM text above motion layers.",
+          "source_floors": ["DOM-text CTA"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
+        },
+        {
+          "code": "no_primary_content_in_canvas",
+          "required": true,
+          "severity": "error",
+          "description": "Primary hero content is not trapped inside canvas or media.",
+          "source_floors": ["content-first hero"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
+        },
+        {
+          "code": "reduced_motion_fallback",
+          "required": true,
+          "severity": "error",
+          "description": "High-motion hero has reduced-motion and static fallback coverage.",
+          "source_floors": ["reduced-motion fallback", "static fallback"],
+          "visual_qa_issue_codes": ["missing_reduced_motion_fallback"]
+        },
+        {
+          "code": "performance_budget",
+          "required": true,
+          "severity": "error",
+          "description": "Animated hero declares a performance budget for motion assets.",
+          "source_floors": ["performance budget"]
+        }
+      ],
+      "notes": "Seed contract for motion-enhanced hero sections. The hero_content slot and reduced_motion_fallback invariant are intentionally required."
+    }
+  ]
+}

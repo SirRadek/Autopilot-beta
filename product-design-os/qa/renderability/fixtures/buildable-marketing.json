@@ -1,0 +1,314 @@
+{
+  "id": "buildable-marketing",
+  "schema_version": "1.0.0",
+  "recipe_id": "marketing-premium",
+  "pattern_ids": [
+    "sharp-positioning-hero",
+    "theme-crossed-direction",
+    "proof-led-section",
+    "outcome-cta"
+  ],
+  "asset_ids": [
+    "editorial-motion-hero",
+    "theme-calm-prism-grid",
+    "proof-strip-case-study"
+  ],
+  "required_sections": ["hero", "proof", "cta"],
+  "sections": [
+    {
+      "section_id": "hero",
+      "role": "first viewport offer and CTA",
+      "node_ids": [
+        "theme-background",
+        "editorial-hero",
+        "positioning-hero",
+        "crossed-theme"
+      ]
+    },
+    {
+      "section_id": "proof",
+      "role": "case evidence and outcome proof",
+      "node_ids": ["proof-strip", "proof-section"]
+    },
+    {
+      "section_id": "cta",
+      "role": "proof-adjacent closing action",
+      "node_ids": ["outcome-cta-node"]
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "theme-background",
+      "target_kind": "asset",
+      "target_id": "theme-calm-prism-grid",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "background_name",
+          "value_type": "string",
+          "string_value": "Calm prism grid"
+        },
+        {
+          "name": "accent_strategy",
+          "value_type": "text",
+          "string_value": "Light geometric accents stay behind readable offer copy and proof cues."
+        }
+      ],
+      "slot_fills": [],
+      "declared_invariants": ["no_primary_content_in_canvas", "visible_h1"]
+    },
+    {
+      "node_id": "editorial-hero",
+      "target_kind": "asset",
+      "target_id": "editorial-motion-hero",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "string_value": "Launch a sharper service page in two weeks"
+        },
+        {
+          "name": "supporting_copy",
+          "value_type": "text",
+          "string_value": "A focused marketing build that combines a clear offer, visible proof, and a practical request path."
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "string_value": "Request a plan"
+        },
+        {
+          "name": "trust_cue",
+          "value_type": "string",
+          "string_value": "Case-backed process"
+        }
+      ],
+      "slot_fills": [],
+      "declared_invariants": ["dom_text_cta", "visible_h1", "performance_budget"]
+    },
+    {
+      "node_id": "positioning-hero",
+      "target_kind": "pattern",
+      "target_id": "sharp-positioning-hero",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "string_value": "A premium launch page with clear proof before polish"
+        },
+        {
+          "name": "primary_cta",
+          "value_type": "string",
+          "string_value": "Request a plan"
+        },
+        {
+          "name": "trust_cue",
+          "value_type": "string",
+          "string_value": "Three recent service launches"
+        }
+      ],
+      "slot_fills": [
+        {
+          "slot": "hero_asset",
+          "fills": [
+            {
+              "target_kind": "asset",
+              "target_id": "editorial-motion-hero"
+            }
+          ]
+        },
+        {
+          "slot": "theme_background",
+          "fills": [
+            {
+              "target_kind": "asset",
+              "target_id": "theme-calm-prism-grid"
+            }
+          ]
+        }
+      ],
+      "declared_invariants": ["visible_h1", "dom_text_cta"]
+    },
+    {
+      "node_id": "crossed-theme",
+      "target_kind": "pattern",
+      "target_id": "theme-crossed-direction",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "primary_axis",
+          "value_type": "string",
+          "string_value": "calm"
+        },
+        {
+          "name": "contrast_axis",
+          "value_type": "string",
+          "string_value": "prism"
+        },
+        {
+          "name": "product_proof_axis",
+          "value_type": "string",
+          "string_value": "case evidence"
+        }
+      ],
+      "slot_fills": [
+        {
+          "slot": "theme_asset",
+          "fills": [
+            {
+              "target_kind": "asset",
+              "target_id": "theme-calm-prism-grid"
+            }
+          ]
+        }
+      ],
+      "declared_invariants": ["no_primary_content_in_canvas", "reduced_motion_fallback"]
+    },
+    {
+      "node_id": "proof-strip",
+      "target_kind": "asset",
+      "target_id": "proof-strip-case-study",
+      "section_id": "proof",
+      "props": [
+        {
+          "name": "case_title",
+          "value_type": "string",
+          "string_value": "Studio launch"
+        },
+        {
+          "name": "outcome_summary",
+          "value_type": "text",
+          "string_value": "Reduced vague service copy into a proof-led request flow."
+        },
+        {
+          "name": "evidence_source",
+          "value_type": "string",
+          "string_value": "Case study"
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "string_value": "View the case"
+        }
+      ],
+      "slot_fills": [],
+      "declared_invariants": ["proof_adjacency"]
+    },
+    {
+      "node_id": "proof-section",
+      "target_kind": "pattern",
+      "target_id": "proof-led-section",
+      "section_id": "proof",
+      "props": [
+        {
+          "name": "proof_item",
+          "value_type": "text",
+          "string_value": "A real case strip explains the before and after."
+        },
+        {
+          "name": "outcome_statement",
+          "value_type": "text",
+          "string_value": "Visitors see the result before the closing request."
+        },
+        {
+          "name": "source_reference",
+          "value_type": "string",
+          "string_value": "Case study"
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "string_value": "View the case"
+        }
+      ],
+      "slot_fills": [
+        {
+          "slot": "proof_asset",
+          "fills": [
+            {
+              "target_kind": "asset",
+              "target_id": "proof-strip-case-study"
+            }
+          ]
+        }
+      ],
+      "declared_invariants": ["proof_adjacency", "dom_text_cta"]
+    },
+    {
+      "node_id": "outcome-cta-node",
+      "target_kind": "pattern",
+      "target_id": "outcome-cta",
+      "section_id": "cta",
+      "props": [
+        {
+          "name": "outcome_statement",
+          "value_type": "text",
+          "string_value": "Turn the offer into a request-ready launch page."
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "string_value": "Request a plan"
+        }
+      ],
+      "slot_fills": [
+        {
+          "slot": "proof_context",
+          "fills": [
+            {
+              "target_kind": "pattern",
+              "target_id": "proof-led-section"
+            }
+          ]
+        }
+      ],
+      "declared_invariants": ["dom_text_cta", "proof_adjacency"]
+    }
+  ],
+  "visual_qa_probe": {
+    "url": "fixture://buildable-marketing",
+    "project_type": "marketing_web",
+    "primary_goal": "Generate qualified requests for a premium service launch.",
+    "target_users": ["founder", "small-business", "b2b-buyer"],
+    "viewports": [
+      {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 1000,
+        "heading_count": 3,
+        "cta_count": 3,
+        "visible_text_characters": 780,
+        "repeated_card_count": 3,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 4,
+        "reduced_motion_supported": true
+      },
+      {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "heading_count": 2,
+        "cta_count": 2,
+        "visible_text_characters": 430,
+        "repeated_card_count": 2,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 3,
+        "reduced_motion_supported": true
+      }
+    ],
+    "headings": [
+      "Launch a sharper service page in two weeks",
+      "Proof before polish"
+    ],
+    "ctas": ["Request a plan", "View the case"],
+    "template_signals": []
+  }
+}

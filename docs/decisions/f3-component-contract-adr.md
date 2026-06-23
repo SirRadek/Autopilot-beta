@@ -86,3 +86,39 @@ needs the future renderer). Fixture coverage is a SEED, not the full registry co
 buildSubagentTree:
 └─ cli-codex-hp-20260623-beta-f3-design  agent_type: codex_cli-external  exit: 0  394 s
 ```
+
+---
+
+# F3 IMPLEMENTED — record (2026-06-23)
+
+Built per this ADR by real `codex_cli` across 3 worker passes; Opus reviewed each against the repo +
+schemas and verified the harness independently.
+- **A1** (structured-output) — `contracts/component-contract.schema.json` +
+  `composition/composition-target.schema.json` (visual_qa_probe mirrors `PdosVisualQaInput`).
+- **A2w** (write-mode — structured output timed out on the large multi-file emit) — seed
+  `component-contract-manifest.json` + fixture manifest (omits `motion-background`) + `buildable-
+  marketing.json` + `nonbuildable-motion.json`. Opus independently re-validated: 8 contracts each
+  with **0 schema issues + 0 bad source_floors** (every `source_floor` is a real current
+  `pattern.requires`/`asset.avoid_with_tags` string); both targets schema-valid.
+- **B** (write-mode) — `scripts/check-renderability-product-design-os.ts`
+  (`analyzeProductDesignRenderability`, 15 reason codes, reuses `analyzeProductDesignVisualQa`,
+  report-only CLI exit 0) + `tests/.../product-design-os-f3-renderability.test.ts`.
+
+**Harness verified (Opus-run):** `buildable-marketing` → buildable=true (0 issues);
+`nonbuildable-motion` → buildable=false with EXACTLY `CONTRACT_MISSING`, `SLOT_MISSING`,
+`INVARIANT_UNDECLARED`, `VISUAL_QA_ERROR`; CLI exits 0 (report-only).
+
+**Wiring:** 7 new `product-design-os/` files added to `vendor-manifest.beta_authored`; `tsconfig`
+includes the harness; `package.json` gains `pdos:renderability`. **Baselines untouched** (F3 is a new
+report-only layer): validate 0 errors / `{PDOS_EMPTY_TOKENS:6}`; score fixtures byte-identical.
+
+**Gates:** typecheck ✅ · vendor-check ✅ (8 beta-authored; 106 pristine + 14 patched) · vitest
+**10/10** (7 prior + 3 F3) · harness exit 0.
+
+**Process note:** the 6-file structured-output pass timed out twice (no `-o` flush). Switched to
+write-mode (codex `danger-full-access` writes files directly; no giant-JSON bottleneck) — reliable for
+file-heavy generation. Opus reviews the diff + validates + gates before commit (model ≠ source-of-truth).
+
+**Next (plan):** F4 (`specs/composition.schema.json` extends this composition-target; token-floor →
+addresses `PDOS_EMPTY_TOKENS`), F5 (scorer gating), F6 (buildability floor wires this harness into the
+QA gate + `pattern.requires` taxonomy), F7.

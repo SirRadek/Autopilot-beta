@@ -1,0 +1,102 @@
+{
+  "id": "nonbuildable-motion",
+  "schema_version": "1.0.0",
+  "recipe_id": "creative-motion",
+  "pattern_ids": ["animated-hero"],
+  "asset_ids": ["motion-background"],
+  "required_sections": ["hero"],
+  "sections": [
+    {
+      "section_id": "hero",
+      "role": "motion-heavy hero that intentionally fails buildability",
+      "node_ids": ["motion-background-node", "animated-hero-node"]
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "motion-background-node",
+      "target_kind": "asset",
+      "target_id": "motion-background",
+      "section_id": "hero",
+      "props": [],
+      "slot_fills": [],
+      "declared_invariants": []
+    },
+    {
+      "node_id": "animated-hero-node",
+      "target_kind": "pattern",
+      "target_id": "animated-hero",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "string_value": "Motion-first portfolio opener with a static promise"
+        },
+        {
+          "name": "primary_cta",
+          "value_type": "string",
+          "string_value": "See the work"
+        },
+        {
+          "name": "motion_intensity",
+          "value_type": "integer",
+          "integer_value": 7
+        },
+        {
+          "name": "static_fallback_label",
+          "value_type": "string",
+          "string_value": "Static hero"
+        }
+      ],
+      "slot_fills": [],
+      "declared_invariants": [
+        "visible_h1",
+        "dom_text_cta",
+        "no_primary_content_in_canvas",
+        "performance_budget"
+      ]
+    }
+  ],
+  "visual_qa_probe": {
+    "url": "fixture://nonbuildable-motion",
+    "project_type": "portfolio",
+    "primary_goal": "Show a memorable motion-led portfolio opener.",
+    "target_users": ["founder", "tech-curious-customer"],
+    "viewports": [
+      {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 1000,
+        "heading_count": 1,
+        "cta_count": 1,
+        "visible_text_characters": 260,
+        "repeated_card_count": 1,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 7,
+        "reduced_motion_supported": false
+      },
+      {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "heading_count": 1,
+        "cta_count": 1,
+        "visible_text_characters": 180,
+        "repeated_card_count": 1,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 4,
+        "reduced_motion_supported": false
+      }
+    ],
+    "headings": ["Motion-first portfolio opener"],
+    "ctas": ["See the work"],
+    "template_signals": []
+  }
+}

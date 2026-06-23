@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/product-design-os/contracts/component-contract.schema.json",
+  "title": "Product Design OS Component Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "target_kind",
+    "target_id",
+    "props",
+    "slots",
+    "output_invariants"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "target_kind": {
+      "type": "string",
+      "enum": [
+        "asset",
+        "pattern"
+      ]
+    },
+    "target_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "props": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "value_type",
+          "required"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value_type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "url",
+              "boolean",
+              "integer",
+              "number",
+              "text",
+              "data_ref",
+              "asset_ref",
+              "pattern_ref",
+              "list_ref",
+              "object_ref"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "min_length": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "min_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "allowed_values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "expected_source": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "slots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "required"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "min_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "accepts_target_kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "asset",
+                "pattern"
+              ]
+            }
+          },
+          "accepts_asset_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "component",
+                "section",
+                "background",
+                "typography",
+                "motion",
+                "3d",
+                "avatar",
+                "icon",
+                "layout",
+                "hero",
+                "media"
+              ]
+            }
+          },
+          "accepts_pattern_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ux_pattern",
+                "logic_pattern",
+                "layout_pattern",
+                "motion_pattern",
+                "conversion_pattern",
+                "data_pattern"
+              ]
+            }
+          },
+          "allowed_asset_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          },
+          "allowed_pattern_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "output_invariants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "required",
+          "severity",
+          "source_floors"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "visible_h1",
+              "dom_text_cta",
+              "no_primary_content_in_canvas",
+              "reduced_motion_fallback",
+              "performance_budget",
+              "proof_adjacency"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "source_floors": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "visual_qa_issue_codes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}
