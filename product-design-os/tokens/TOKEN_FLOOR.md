@@ -1,6 +1,10 @@
-# Token Floor — milestone (F4)
+# Token Floor — milestone (F4) + FILLED (F4b)
 
-**Status:** defined 2026-06-23 (F4). Tokens are intentionally EMPTY today; `token_overrides` is OFF.
+**Status:** ✅ FILLED 2026-06-23 (F4b, owner-approved). All six token files now carry the floor keys
+with **neutral, accessible baseline** values (override per project spec). `validateTokenFloor()` enforces
+floor-key presence; `isTokenFloorComplete()` gates `token_overrides` (a spec may now set
+`token_overrides.enabled: true` because the floor is complete). `PDOS_EMPTY_TOKENS` is now 0 →
+`pdos:validate` is 0 errors / 0 warnings. (Defined in F4 below; the F4 text is kept for the audit trail.)
 
 ## Why this exists
 All six `tokens/*.json` are `{ "version": 1, "tokens": {}, ... }` → `pdos:validate` reports

@@ -1,5 +1,14 @@
 {
   "version": 1,
-  "tokens": {},
-  "notes": "Draft placeholder. Token generation is a later phase."
+  "tokens": {
+    "space_1": "0.25rem",
+    "space_2": "0.5rem",
+    "space_3": "0.75rem",
+    "space_4": "1rem",
+    "space_5": "1.25rem",
+    "space_6": "1.5rem",
+    "space_7": "1.75rem",
+    "space_8": "2rem"
+  },
+  "notes": "F4b neutral floor defaults. Override per project spec."
 }

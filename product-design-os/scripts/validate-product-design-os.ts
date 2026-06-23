@@ -108,6 +108,23 @@ const PROJECT_STATUSES = [
   "cancelled"
 ] as const;
 
+export const TOKEN_FLOOR = {
+  "color.json": ["background", "surface", "text", "muted_text", "border", "accent", "accent_text", "focus_ring"],
+  "typography.json": [
+    "font_body",
+    "font_heading",
+    "size_body",
+    "size_heading",
+    "line_height_body",
+    "weight_regular",
+    "weight_bold"
+  ],
+  "spacing.json": ["space_1", "space_2", "space_3", "space_4", "space_6", "space_8"],
+  "radius.json": ["none", "sm", "md", "lg"],
+  "shadow.json": ["none", "sm", "md"],
+  "motion.json": ["duration_fast", "duration_base", "duration_slow", "easing_standard", "reduced_motion"]
+} as const;
+
 interface CompositionSpecRegistries {
   readonly recipesById: ReadonlyMap<string, Record<string, unknown>>;
   readonly patternIds: ReadonlySet<string>;
@@ -152,6 +169,7 @@ export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidatio
   validateRecipes(join(pdosRoot, "recipes"), repoRoot, errors);
   validateCompositionSpecs(pdosRoot, repoRoot, errors);
   validateMarkdown(pdosRoot, repoRoot, errors, warnings);
+  validateTokenFloor(pdosRoot, repoRoot, errors);
   validateEmptyTokens(pdosRoot, repoRoot, warnings);
   validateGhostPatterns(pdosRoot, repoRoot, warnings);
   validateAssetRefTagMix(pdosRoot, repoRoot, warnings);
@@ -626,6 +644,7 @@ export function validateCompositionSpecs(pdosRoot: string, repoRoot: string, err
   const schemaFile = join(specsRoot, "composition.schema.json");
   const compositionSchema = readJsonFile(schemaFile, repoRoot, errors);
   const registries = loadCompositionSpecRegistries(pdosRoot, repoRoot, errors);
+  const tokenFloorComplete = isTokenFloorComplete(pdosRoot);
   const specFiles = listFiles(specsRoot)
     .filter((file) => file.endsWith(".json") && basename(file) !== "composition.schema.json")
     .sort();
@@ -644,7 +663,7 @@ export function validateCompositionSpecs(pdosRoot: string, repoRoot: string, err
       continue;
     }
 
-    validateCompositionSpecIntegrity(specFile, repoRoot, value, registries, errors);
+    validateCompositionSpecIntegrity(specFile, repoRoot, value, registries, tokenFloorComplete, errors);
   }
 }
 
@@ -694,6 +713,7 @@ function validateCompositionSpecIntegrity(
   repoRoot: string,
   spec: Record<string, unknown>,
   registries: CompositionSpecRegistries,
+  tokenFloorComplete: boolean,
   errors: PdosValidationIssue[]
 ): void {
   const reportFile = toRepoPath(repoRoot, file);
@@ -827,7 +847,7 @@ function validateCompositionSpecIntegrity(
     }
   }
 
-  if (tokenOverrides.enabled === true) {
+  if (tokenOverrides.enabled === true && !tokenFloorComplete) {
     errors.push({
       file: reportFile,
       message: `PDOS_SPEC_TOKEN_OVERRIDES_BEFORE_FLOOR: Spec ${specId} enables token overrides before the token floor is filled.`
@@ -970,6 +990,53 @@ function validateMarkdown(
       errors.push({ file: toRepoPath(repoRoot, strictProcess), message: `Strict process missing ${term}.` });
     }
   }
+}
+
+export function validateTokenFloor(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const tokensRoot = join(pdosRoot, "tokens");
+
+  for (const [fileName, requiredKeys] of Object.entries(TOKEN_FLOOR)) {
+    const tokenFile = join(tokensRoot, fileName);
+    const parseErrors: PdosValidationIssue[] = [];
+    const value = readJsonFile(tokenFile, repoRoot, parseErrors);
+    const tokens = isRecord(value) ? value.tokens : undefined;
+
+    for (const requiredKey of requiredKeys) {
+      if (!isRecord(tokens) || !hasOwnKey(tokens, requiredKey)) {
+        errors.push({
+          file: toRepoPath(repoRoot, tokenFile),
+          message: `PDOS_TOKEN_FLOOR_INCOMPLETE: ${fileName} missing ${requiredKey}`
+        });
+      }
+    }
+  }
+}
+
+export function isTokenFloorComplete(pdosRoot: string): boolean {
+  const tokensRoot = join(pdosRoot, "tokens");
+
+  for (const [fileName, requiredKeys] of Object.entries(TOKEN_FLOOR)) {
+    let value: unknown;
+
+    try {
+      value = JSON.parse(readFileSync(join(tokensRoot, fileName), "utf8")) as unknown;
+    } catch {
+      return false;
+    }
+
+    const tokens = isRecord(value) ? value.tokens : undefined;
+    if (!isRecord(tokens)) {
+      return false;
+    }
+
+    for (const requiredKey of requiredKeys) {
+      if (!hasOwnKey(tokens, requiredKey)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 function validateEmptyTokens(pdosRoot: string, repoRoot: string, warnings: PdosValidationIssue[]): void {
@@ -1138,6 +1205,10 @@ function listFiles(directory: string): string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOwnKey(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function getNestedArray(value: Record<string, unknown>, path: readonly string[]): readonly unknown[] {

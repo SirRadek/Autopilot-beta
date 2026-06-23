@@ -51,12 +51,7 @@ describe("Product Design OS F1a contracts", () => {
 
     expect(report.ok).toBe(true);
     expect(report.errors).toEqual([]);
-    expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
-      // F2 resolved all 13 ghosts → PDOS_GHOST_PATTERN gone.
-      // F1c removed the legacy untyped asset fields → PDOS_ASSET_REF_TAG_MIX gone.
-      // Only empty-token warnings remain (the token-floor milestone is a later phase).
-      PDOS_EMPTY_TOKENS: 6
-    });
+    expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({});
   });
 
   it("validates all committed recipes against recipe.schema.json", () => {

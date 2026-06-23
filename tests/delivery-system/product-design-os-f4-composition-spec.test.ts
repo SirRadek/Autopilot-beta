@@ -104,9 +104,7 @@ describe("Product Design OS F4 composition specs", () => {
 
     expect(report.ok).toBe(true);
     expect(report.errors).toEqual([]);
-    expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
-      PDOS_EMPTY_TOKENS: 6
-    });
+    expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({});
   });
 
   it("validates the buildable marketing example against composition.schema", () => {

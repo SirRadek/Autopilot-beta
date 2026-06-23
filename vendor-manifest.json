@@ -504,7 +504,7 @@
       "source_path": "product-design-os/scripts/validate-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "c94c00466099919931a0e2be1478537e724453217ba4e81e584e616c01620ae8",
-      "patched_by": "F0,F1a,F1c,F4"
+      "patched_by": "F0,F1a,F1c,F4,F4b"
     },
     {
       "source_path": "product-design-os/scripts/visual-qa-product-design-os.ts",
@@ -540,32 +540,38 @@
     {
       "source_path": "product-design-os/tokens/color.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
+      "patched_by": "F4b"
     },
     {
       "source_path": "product-design-os/tokens/motion.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
+      "patched_by": "F4b"
     },
     {
       "source_path": "product-design-os/tokens/radius.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
+      "patched_by": "F4b"
     },
     {
       "source_path": "product-design-os/tokens/shadow.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
+      "patched_by": "F4b"
     },
     {
       "source_path": "product-design-os/tokens/spacing.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
+      "patched_by": "F4b"
     },
     {
       "source_path": "product-design-os/tokens/typography.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6"
+      "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
+      "patched_by": "F4b"
     },
     {
       "source_path": "src/data/delivery-system/checkCompletionMatrix.ts",

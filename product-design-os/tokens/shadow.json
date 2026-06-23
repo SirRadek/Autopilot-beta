@@ -1,5 +1,9 @@
 {
   "version": 1,
-  "tokens": {},
-  "notes": "Draft placeholder. Token generation is a later phase."
+  "tokens": {
+    "none": "none",
+    "sm": "0 1px 2px rgb(0 0 0 / 0.08)",
+    "md": "0 4px 12px rgb(15 23 42 / 0.12)"
+  },
+  "notes": "F4b neutral floor defaults. Override per project spec."
 }

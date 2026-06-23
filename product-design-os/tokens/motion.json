@@ -1,5 +1,11 @@
 {
   "version": 1,
-  "tokens": {},
-  "notes": "Draft placeholder. Token generation is a later phase."
+  "tokens": {
+    "duration_fast": "120ms",
+    "duration_base": "200ms",
+    "duration_slow": "320ms",
+    "easing_standard": "cubic-bezier(0.2, 0, 0, 1)",
+    "reduced_motion": "respect-prefers-reduced-motion"
+  },
+  "notes": "F4b neutral floor defaults. Override per project spec."
 }

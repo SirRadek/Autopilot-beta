@@ -1,5 +1,13 @@
 {
   "version": 1,
-  "tokens": {},
-  "notes": "Draft placeholder. Token generation is a later phase."
+  "tokens": {
+    "font_body": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "font_heading": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "size_body": "1rem",
+    "size_heading": "1.5rem",
+    "line_height_body": 1.5,
+    "weight_regular": 400,
+    "weight_bold": 700
+  },
+  "notes": "F4b neutral floor defaults. Override per project spec."
 }

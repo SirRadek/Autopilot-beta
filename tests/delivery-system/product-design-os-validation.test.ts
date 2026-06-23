@@ -16,11 +16,7 @@ describe("validateProductDesignOs", () => {
       countsByCode.set(code, (countsByCode.get(code) ?? 0) + 1);
     }
 
-    expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
-      // F2 resolved all 13 ghosts; F1c removed the legacy untyped asset fields.
-      // Only empty-token warnings remain.
-      PDOS_EMPTY_TOKENS: 6
-    });
+    expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({});
     expect(report.ok).toBe(true);
     expect(report.errors).toEqual([]);
   });

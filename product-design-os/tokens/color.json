@@ -1,5 +1,14 @@
 {
   "version": 1,
-  "tokens": {},
-  "notes": "Draft placeholder. Token generation is a later phase."
+  "tokens": {
+    "background": "#FFFFFF",
+    "surface": "#F8FAFC",
+    "text": "#111827",
+    "muted_text": "#4B5563",
+    "border": "#D1D5DB",
+    "accent": "#1D4ED8",
+    "accent_text": "#FFFFFF",
+    "focus_ring": "#0F766E"
+  },
+  "notes": "F4b neutral floor defaults. Override per project spec."
 }
