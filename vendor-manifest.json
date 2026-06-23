@@ -519,7 +519,8 @@
     {
       "source_path": "product-design-os/taste/pattern-scores.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "e2fa5e8ea6d2095b3eb38b1a641eba72e907b3809bd3f8393ef7b0c13e4697e5"
+      "content_hash": "e2fa5e8ea6d2095b3eb38b1a641eba72e907b3809bd3f8393ef7b0c13e4697e5",
+      "patched_by": "F2"
     },
     {
       "source_path": "product-design-os/taste/project-preferences.json",
