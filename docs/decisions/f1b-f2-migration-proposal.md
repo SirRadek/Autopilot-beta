@@ -1,6 +1,8 @@
 # F1b/F2 — Data-migration proposal (OWNER SIGN-OFF GATE)
 
-**Status:** ⏳ PENDING owner sign-off. NO data mutated. This is the gate artifact (mirrors F0.5).
+**Status:** ✅ SIGNED OFF 2026-06-23 (owner: A4=alias, B3=distinct, F2 rebaseline=yes per-domain,
+run F1b now). **F1b EXECUTED** (see record at bottom). **F2 remains PENDING** per-domain approval.
+Original proposal text kept for audit trail.
 **Base:** beta HEAD `4a86165` (post-F1a). **Author of analysis:** real `codex_cli` worker
 (tech-opponent), **reviewed + synthesized by Opus** against the repo (model ≠ source-of-truth).
 Creative-opponent lane (`agy`) = MISSING (WORKER-CLI-001) → 2-source (Opus + real Codex).
@@ -129,3 +131,39 @@ parent_session_hash: autopilot-beta-f1b-20260623
    handoff_id: hp-20260623-beta-f1b-proposal   role: author/tech-opponent (advisory)
 ```
 agy_cli MISSING (WORKER-CLI-001). Opus verified all citations against the repo before recording.
+
+---
+
+# F1b EXECUTED — record (2026-06-23, commit pending)
+
+**Implementation worker:** real `codex_cli` via `runCliWorker` (buildSubagentTree below). Opus
+cross-checked Codex's asset classification against an independent registry-membership scan
+(**38/38 assets, 0 mismatches**) and verified each recipe adds only `allowed_pattern_ids` = exact
+copy of `allowed_patterns` (rest byte-unchanged) before applying.
+
+**Applied (additive, +81/-0):**
+- `asset-manifest.json` (38 assets): `works_with_ids` (37 assets; registry pattern+asset ids),
+  `avoid_with_tags` (38), `dependency_tags` (1 = quaternius `three.js-or-static-fallback`).
+  The 5 F2 ghosts stay ONLY in legacy `works_with` (held on 6 assets) — not in `*_ids`/`*_tags`.
+- 5 clean recipes: `allowed_pattern_ids` = copy of `allowed_patterns`. `creative-motion` /
+  `marketing-premium` untouched (ghost-bearing → F2).
+- `vendor-manifest.json`: 6 data files marked `patched_by:"F1b"` by hand (canonical `content_hash`
+  preserved as merge-back anchor; never `--generate` over an edited file).
+
+**Gates (all green):** typecheck ✅ · vendor-check ✅ (111 pristine + 9 patched) · vitest 7/7 ✅ ·
+**baseline score 7/7 byte-identical** to pre-F1a capture · validate passed, 0 errors, 22 warnings
+`{ASSET_REF_TAG_MIX:3, EMPTY_TOKENS:6, GHOST_PATTERN:13}` unchanged.
+
+```
+buildSubagentTree:
+parent_session_hash: autopilot-beta-f1b-20260623
+└─ cli-codex-hp-20260623-beta-f1b-exec-20260623T074858
+   agent_type: codex_cli-external   exit: 0   duration: 273 s
+   handoff_id: hp-20260623-beta-f1b-exec   role: data migration (emit); Opus review vs registry + land
+```
+Note: two prior attempts failed fast (≈18s, empty) due to an Opus-side output-schema bug — OpenAI
+structured-output strict mode requires every property listed in `required` + `additionalProperties:
+false`. Fixed (all asset fields required, `[]` for empties), then exit 0. agy_cli MISSING.
+
+**Next:** F2 per-domain (owner-approved rebaseline), then F1c (remove legacy fields; baseline-unchanged
+gate already satisfied → `PDOS_ASSET_REF_TAG_MIX` then drops).
