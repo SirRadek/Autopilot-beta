@@ -63,3 +63,33 @@ normal tests).
 buildSubagentTree:
 └─ cli-codex-hp-20260623-beta-f7-design  agent_type: codex_cli-external  exit: 0
 ```
+
+---
+
+# F7 IMPLEMENTED — record (2026-06-23) — PLAN COMPLETE
+
+Built per this ADR by real `codex_cli` (write-mode); Opus reviewed + verified. NEW beta-authored
+`qa/variants/sample-product-design-variants.ts` (`sampleProductDesignVariants` + `formatVariantsReport` +
+report-only CLI `pdos:variants`) + `tests/.../product-design-os-f7-variants.test.ts`. Deterministic
+pattern-swap candidate enumeration from one `scoreProductDesignOs` report; each candidate → temp F4 spec
+(modelled on `buildable-marketing.composition.json` to satisfy contracts) → F6 `analyzeBuildabilityFloor`;
+only `build_floor_passed` kept, pre-filter ordinal ids, `<N` pass → `shortfall` (never fabricated). N=1 =
+today's top selection; default-OFF (no CreativityProfile/band-judge/creative-director/random). Score + F6
++ F3 UNCHANGED.
+
+**Verified (Opus-run):** default score path byte-identical (7 fixtures deep-equal; `--variants 1` prints
+the score JSON, modulo a trailing newline); N>1 on a contracted bundle → ≥1 distinct floor-passing variant
+(every returned `build_floor_passed===true`); a no-contract route → 0 returned + shortfall (honest, the
+seed-contract limitation). **Gates:** typecheck ✅ · vendor-check ✅ (100 pristine + 20 patched; sampler
+beta-authored) · vitest **36/36** (31 + 5 F7) · validate 0/0.
+
+```
+buildSubagentTree:
+└─ cli-codex-hp-20260623-beta-f7-design + f7-impl  agent_type: codex_cli-external
+```
+
+**PLAN COMPLETE.** Phase0 → F0 → F0.5 → F1a/b/c → F2(b1–b4) → F3 → F4 → F4b → F5 → scorer-intent-prior →
+F6 → F7. The 4 floor axes are real (registry-integrity error, scorer gating flag + soft intent-prior,
+buildability contract+harness+floor, independent visual-qa) and the minimal creative axis (variant knob)
+sits behind the floor. Default-OFF held throughout: CreativityProfile vector, band-judge, creative-director,
+provider-switch, token_overrides, hard pattern-enforcement — all OFF pending held-out eval.

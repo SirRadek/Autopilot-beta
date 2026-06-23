@@ -12,6 +12,7 @@
     "product-design-os/qa/renderability/fixtures/buildable-marketing.json",
     "product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json",
     "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json",
+    "product-design-os/qa/variants/sample-product-design-variants.ts",
     "product-design-os/recipes/recipe.schema.json",
     "product-design-os/scripts/check-renderability-product-design-os.ts",
     "product-design-os/scripts/pattern-requirement-taxonomy.ts",
