@@ -98,6 +98,10 @@ export interface PdosAllowedPatternShadowDiff {
 
 const SCORE_FORMULA =
   "score = purpose_fit*3 + target_fit*3 + logic_fit*3 + usability*3 + taste_match*2 + accessibility*2 + mobile_fit*2 - performance_cost*2 - implementation_complexity - template_risk*4 - style_conflict*3";
+const ALLOWED_PATTERN_BONUS = 18;
+const MOTION_INTENT_WEIGHT = 1.5;
+const HIGH_DESIGN_PRIORITY = 7;
+const COMPLEXITY_RELIEF_HIGH_DESIGN = 0.5;
 
 export function scoreProductDesignOs(input: PdosScoreInput | string, repoRoot = process.cwd()): PdosScoreReport {
   const normalizedInput = typeof input === "string" ? { text: input } : input;
@@ -108,13 +112,14 @@ export function scoreProductDesignOs(input: PdosScoreInput | string, repoRoot = 
   const limit = clampLimit(normalizedInput.limit);
 
   const scoredRecipes = rankItems(recipes.map((recipe) => scoreRecipe(recipe, route)));
-  const scoredPatterns = rankItems(patterns.map((pattern) => scorePattern(pattern, route, scoredRecipes)));
+  const topRecipe = recipes.find((recipe) => recipe.id === scoredRecipes[0]?.id);
+  const allowedPatternIds = new Set(topRecipe ? resolveAllowedPatternIds(topRecipe) : []);
+  const scoredPatterns = rankItems(patterns.map((pattern) => scorePattern(pattern, route, scoredRecipes, allowedPatternIds)));
   const scoredAssets = rankItems(assets.map((asset) => scoreAsset(asset, route, scoredRecipes)));
   const warnings = [
     ...(patterns.length === 0 ? ["pattern_manifest_empty"] : []),
     ...(assets.length === 0 ? ["asset_manifest_empty"] : [])
   ];
-  const topRecipe = findRecipeById(recipes, scoredRecipes[0]?.id);
   const reportWithoutMarkdown =
     isAllowedPatternEnforcementEnabled() && topRecipe !== undefined
       ? buildAllowedPatternEnforcedReport({
@@ -124,7 +129,7 @@ export function scoreProductDesignOs(input: PdosScoreInput | string, repoRoot = 
           scoredAssets,
           warnings,
           limit,
-          allowedPatternIds: resolveAllowedPatternIds(topRecipe)
+          allowedPatternIds
         })
       : {
           route,
@@ -159,10 +164,10 @@ export function computeAllowedPatternShadowDiff(
   const limit = clampLimit(normalizedInput.limit);
 
   const scoredRecipes = rankItems(recipes.map((recipe) => scoreRecipe(recipe, route)));
-  const scoredPatterns = rankItems(patterns.map((pattern) => scorePattern(pattern, route, scoredRecipes)));
+  const topRecipe = recipes.find((recipe) => recipe.id === scoredRecipes[0]?.id);
+  const allowedPatternIds = new Set(topRecipe ? resolveAllowedPatternIds(topRecipe) : []);
+  const scoredPatterns = rankItems(patterns.map((pattern) => scorePattern(pattern, route, scoredRecipes, allowedPatternIds)));
   const currentSelected = scoredPatterns.slice(0, limit).map((pattern) => pattern.id);
-  const topRecipe = findRecipeById(recipes, scoredRecipes[0]?.id);
-  const allowedPatternIds = topRecipe === undefined ? [] : resolveAllowedPatternIds(topRecipe);
   const gatedSelected =
     topRecipe === undefined
       ? currentSelected
@@ -170,7 +175,7 @@ export function computeAllowedPatternShadowDiff(
 
   return {
     recipe_id: topRecipe?.id ?? "",
-    allowed_pattern_ids: allowedPatternIds,
+    allowed_pattern_ids: [...allowedPatternIds],
     current_selected: currentSelected,
     gated_selected: gatedSelected,
     added: gatedSelected.filter((patternId) => !currentSelected.includes(patternId)),
@@ -199,7 +204,7 @@ function buildAllowedPatternEnforcedReport(input: {
   readonly scoredAssets: readonly PdosScoredItem[];
   readonly warnings: readonly string[];
   readonly limit: number;
-  readonly allowedPatternIds: readonly string[];
+  readonly allowedPatternIds: ReadonlySet<string>;
 }): Omit<PdosScoreReport, "report_markdown"> {
   const gatedPatterns = applyAllowedPatternGate(input.scoredPatterns, input.allowedPatternIds, input.limit);
   const gatedPatternIds = new Set(gatedPatterns.map((pattern) => pattern.id));
@@ -225,13 +230,11 @@ function buildAllowedPatternEnforcedReport(input: {
 
 function applyAllowedPatternGate(
   rankedPatterns: readonly PdosScoredItem[],
-  allowedIds: readonly string[],
+  allowedIds: ReadonlySet<string>,
   limit: number
 ): readonly PdosScoredItem[] {
-  const allowedIdSet = new Set(allowedIds);
-
   return rankedPatterns
-    .filter((pattern) => allowedIdSet.has(pattern.id))
+    .filter((pattern) => allowedIds.has(pattern.id))
     .slice(0, limit)
     .map((pattern, index) => ({ ...pattern, selected: index === 0 }));
 }
@@ -278,23 +281,36 @@ function scoreRecipe(recipe: PdosRecipeCandidate, route: PdosIntakeRoute): PdosS
 function scorePattern(
   pattern: PdosPatternCandidate,
   route: PdosIntakeRoute,
-  scoredRecipes: readonly PdosScoredItem[]
+  scoredRecipes: readonly PdosScoredItem[],
+  allowedPatternIds: ReadonlySet<string>
 ): PdosScoredItem {
   const topRecipeId = scoredRecipes[0]?.id ?? route.selected_recipe;
   const purposeFit = pattern.use_case.includes(route.project_type) ? 10 : 3;
   const blockedByUseCase = pattern.bad_for.includes(route.project_type);
   const logicFit = route.logic_priority >= 7 && pattern.type !== "motion_pattern" ? 8 : 5;
+  const allowedPatternBonus = allowedPatternIds.has(pattern.id) ? ALLOWED_PATTERN_BONUS : 0;
+  const motionIntentBonus =
+    pattern.type === "motion_pattern" ? Math.round(route.motion_level * MOTION_INTENT_WEIGHT) : 0;
+  const complexityRelief =
+    route.design_priority >= HIGH_DESIGN_PRIORITY
+      ? Math.round(pattern.complexity * COMPLEXITY_RELIEF_HIGH_DESIGN)
+      : 0;
   const score =
     purposeFit * 3 +
     logicFit * 3 +
     pattern.usability * 3 +
     pattern.mobile_quality * 2 -
     pattern.complexity -
-    (blockedByUseCase ? 30 : 0);
+    (blockedByUseCase ? 30 : 0) +
+    allowedPatternBonus +
+    motionIntentBonus +
+    complexityRelief;
   const reasons = [
     `Compared against route ${route.project_type} and recipe ${topRecipeId}.`,
     pattern.use_case.includes(route.project_type) ? "Pattern use_case matches project type." : "Pattern use_case is not an exact match.",
-    `Usability/mobile quality: ${pattern.usability}/${pattern.mobile_quality}.`
+    `Usability/mobile quality: ${pattern.usability}/${pattern.mobile_quality}.`,
+    ...(allowedPatternBonus > 0 ? ["Pattern is preferred by the top recipe."] : []),
+    ...(motionIntentBonus > 0 ? ["Motion intent prior applied."] : [])
   ];
   const penalties = [
     ...(blockedByUseCase ? ["Pattern bad_for includes the route project type."] : []),

@@ -67,34 +67,37 @@
     "patterns": [
       {
         "id": "plain-language-content",
-        "score": 101,
+        "score": 119,
         "selected": true,
         "reasons": [
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 10/10."
+          "Usability/mobile quality: 10/10.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "contact-office-block",
-        "score": 98,
+        "score": 116,
         "selected": false,
         "reasons": [
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/10."
+          "Usability/mobile quality: 9/10.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "service-finder",
-        "score": 97,
+        "score": 115,
         "selected": false,
         "reasons": [
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 10/9."
+          "Usability/mobile quality: 10/9.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       }
@@ -181,23 +184,25 @@
     "patterns": [
       {
         "id": "notice-banner",
-        "score": 96,
+        "score": 114,
         "selected": false,
         "reasons": [
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/9."
+          "Usability/mobile quality: 9/9.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "accessible-form-flow",
-        "score": 90,
+        "score": 108,
         "selected": false,
         "reasons": [
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/8."
+          "Usability/mobile quality: 9/8.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },

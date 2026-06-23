@@ -67,35 +67,41 @@
     ],
     "patterns": [
       {
-        "id": "outcome-cta",
-        "score": 87,
+        "id": "animated-hero",
+        "score": 107,
         "selected": true,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/9."
+          "Usability/mobile quality: 7/6.",
+          "Pattern is preferred by the top recipe.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
-        "id": "proof-led-section",
-        "score": 81,
+        "id": "scroll-linked-proof",
+        "score": 107,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
+          "Usability/mobile quality: 7/6.",
+          "Pattern is preferred by the top recipe.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
-        "id": "studio-proof-ledger",
-        "score": 81,
+        "id": "mascot-progressive-guide",
+        "score": 104,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
+          "Usability/mobile quality: 6/6.",
+          "Pattern is preferred by the top recipe.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       }
@@ -181,8 +187,80 @@
     ],
     "patterns": [
       {
+        "id": "mask-reveal",
+        "score": 104,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 6/6.",
+          "Pattern is preferred by the top recipe.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cursor-responsive-detail",
+        "score": 102,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 6/5.",
+          "Pattern is preferred by the top recipe.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "theme-crossed-direction",
+        "score": 95,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/7.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "demo-world-hub",
+        "score": 93,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "outcome-cta",
+        "score": 89,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
         "id": "guided-offer-map",
-        "score": 80,
+        "score": 83,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "proof-led-section",
+        "score": 83,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -193,7 +271,18 @@
       },
       {
         "id": "seo-readable-art-direction",
-        "score": 80,
+        "score": 83,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "studio-proof-ledger",
+        "score": 83,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -204,7 +293,7 @@
       },
       {
         "id": "case-study-strip",
-        "score": 79,
+        "score": 81,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -215,7 +304,7 @@
       },
       {
         "id": "service-demo-link",
-        "score": 78,
+        "score": 81,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -226,51 +315,18 @@
       },
       {
         "id": "asymmetric-editorial-layout",
-        "score": 75,
+        "score": 78,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case matches project type.",
           "Usability/mobile quality: 7/7."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "theme-crossed-direction",
-        "score": 74,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/7."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "animated-hero",
-        "score": 71,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/6."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "demo-world-hub",
-        "score": 71,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/6."
         ],
         "penalties": []
       },
       {
         "id": "plain-language-content",
-        "score": 71,
+        "score": 73,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -280,30 +336,8 @@
         "penalties": []
       },
       {
-        "id": "scroll-linked-proof",
-        "score": 71,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/6."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "mask-reveal",
-        "score": 69,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 6/6."
-        ],
-        "penalties": []
-      },
-      {
         "id": "contact-office-block",
-        "score": 68,
+        "score": 70,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -313,30 +347,8 @@
         "penalties": []
       },
       {
-        "id": "mascot-progressive-guide",
-        "score": 68,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 6/6."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "cursor-responsive-detail",
-        "score": 67,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 6/5."
-        ],
-        "penalties": []
-      },
-      {
         "id": "service-finder",
-        "score": 67,
+        "score": 70,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -347,7 +359,7 @@
       },
       {
         "id": "notice-banner",
-        "score": 66,
+        "score": 68,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -358,7 +370,7 @@
       },
       {
         "id": "sharp-positioning-hero",
-        "score": 66,
+        "score": 68,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -369,7 +381,7 @@
       },
       {
         "id": "status-badges",
-        "score": 66,
+        "score": 68,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -380,7 +392,7 @@
       },
       {
         "id": "account-overview",
-        "score": 64,
+        "score": 67,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -391,7 +403,7 @@
       },
       {
         "id": "kpi-overview",
-        "score": 63,
+        "score": 65,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -402,7 +414,7 @@
       },
       {
         "id": "trust-summary",
-        "score": 63,
+        "score": 65,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -412,30 +424,8 @@
         "penalties": []
       },
       {
-        "id": "permission-aware-actions",
-        "score": 61,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 9/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "product-detail",
-        "score": 61,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 9/8."
-        ],
-        "penalties": []
-      },
-      {
         "id": "accessible-form-flow",
-        "score": 60,
+        "score": 64,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -446,7 +436,7 @@
       },
       {
         "id": "checkout-steps",
-        "score": 60,
+        "score": 64,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -456,19 +446,30 @@
         "penalties": []
       },
       {
-        "id": "reviews",
-        "score": 60,
+        "id": "permission-aware-actions",
+        "score": 64,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 8/8."
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "product-detail",
+        "score": 64,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
         ],
         "penalties": []
       },
       {
         "id": "table-first",
-        "score": 60,
+        "score": 63,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -479,7 +480,7 @@
       },
       {
         "id": "client-task-timeline",
-        "score": 59,
+        "score": 62,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -490,7 +491,7 @@
       },
       {
         "id": "chart-with-source",
-        "score": 59,
+        "score": 62,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -501,7 +502,18 @@
       },
       {
         "id": "product-grid",
-        "score": 59,
+        "score": 62,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "reviews",
+        "score": 62,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -512,7 +524,7 @@
       },
       {
         "id": "secure-document-list",
-        "score": 58,
+        "score": 61,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -523,7 +535,7 @@
       },
       {
         "id": "support-thread",
-        "score": 58,
+        "score": 61,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -534,7 +546,7 @@
       },
       {
         "id": "alert-feed",
-        "score": 57,
+        "score": 60,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -545,7 +557,7 @@
       },
       {
         "id": "filter-bar",
-        "score": 57,
+        "score": 60,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -556,7 +568,7 @@
       },
       {
         "id": "saved-filters",
-        "score": 57,
+        "score": 60,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -567,7 +579,7 @@
       },
       {
         "id": "cart-drawer",
-        "score": 56,
+        "score": 59,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -578,7 +590,7 @@
       },
       {
         "id": "detail-drawer",
-        "score": 54,
+        "score": 57,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -589,7 +601,7 @@
       },
       {
         "id": "drilldown-table",
-        "score": 53,
+        "score": 57,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -600,7 +612,7 @@
       },
       {
         "id": "bulk-actions",
-        "score": 50,
+        "score": 54,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",

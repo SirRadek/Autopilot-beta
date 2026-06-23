@@ -67,34 +67,37 @@
     "patterns": [
       {
         "id": "outcome-cta",
-        "score": 87,
+        "score": 107,
         "selected": true,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/9."
+          "Usability/mobile quality: 9/9.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "sharp-positioning-hero",
-        "score": 87,
+        "score": 107,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/9."
+          "Usability/mobile quality: 9/9.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
-        "id": "trust-summary",
-        "score": 84,
+        "id": "guided-offer-map",
+        "score": 101,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/9."
+          "Usability/mobile quality: 8/8.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       }
@@ -181,84 +184,125 @@
     "patterns": [
       {
         "id": "proof-led-section",
-        "score": 81,
+        "score": 101,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
+          "Usability/mobile quality: 8/8.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "studio-proof-ledger",
-        "score": 81,
+        "score": 101,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "guided-offer-map",
-        "score": 80,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "seo-readable-art-direction",
-        "score": 80,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
+          "Usability/mobile quality: 8/8.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "case-study-strip",
-        "score": 79,
+        "score": 99,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/7."
+          "Usability/mobile quality: 8/7.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "service-demo-link",
-        "score": 78,
+        "score": 99,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/7."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "asymmetric-editorial-layout",
-        "score": 75,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/7."
+          "Usability/mobile quality: 8/7.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "theme-crossed-direction",
-        "score": 74,
+        "score": 95,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/7.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "demo-world-hub",
+        "score": 93,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "trust-summary",
+        "score": 86,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "seo-readable-art-direction",
+        "score": 83,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "animated-hero",
+        "score": 81,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "scroll-linked-proof",
+        "score": 81,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "asymmetric-editorial-layout",
+        "score": 78,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -268,30 +312,44 @@
         "penalties": []
       },
       {
-        "id": "animated-hero",
-        "score": 71,
+        "id": "mascot-progressive-guide",
+        "score": 78,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/6."
+          "Usability/mobile quality: 6/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
-        "id": "demo-world-hub",
-        "score": 71,
+        "id": "mask-reveal",
+        "score": 78,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/6."
+          "Usability/mobile quality: 6/6.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cursor-responsive-detail",
+        "score": 76,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 6/5.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "plain-language-content",
-        "score": 71,
+        "score": 73,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -301,30 +359,8 @@
         "penalties": []
       },
       {
-        "id": "scroll-linked-proof",
-        "score": 71,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/6."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "mask-reveal",
-        "score": 69,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 6/6."
-        ],
-        "penalties": []
-      },
-      {
         "id": "contact-office-block",
-        "score": 68,
+        "score": 70,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -334,30 +370,8 @@
         "penalties": []
       },
       {
-        "id": "mascot-progressive-guide",
-        "score": 68,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 6/6."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "cursor-responsive-detail",
-        "score": 67,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 6/5."
-        ],
-        "penalties": []
-      },
-      {
         "id": "service-finder",
-        "score": 67,
+        "score": 70,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -368,7 +382,7 @@
       },
       {
         "id": "notice-banner",
-        "score": 66,
+        "score": 68,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -379,7 +393,7 @@
       },
       {
         "id": "status-badges",
-        "score": 66,
+        "score": 68,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -390,7 +404,7 @@
       },
       {
         "id": "account-overview",
-        "score": 64,
+        "score": 67,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -401,29 +415,7 @@
       },
       {
         "id": "kpi-overview",
-        "score": 63,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 9/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "permission-aware-actions",
-        "score": 61,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 9/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "product-detail",
-        "score": 61,
+        "score": 65,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -434,7 +426,7 @@
       },
       {
         "id": "accessible-form-flow",
-        "score": 60,
+        "score": 64,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -445,7 +437,7 @@
       },
       {
         "id": "checkout-steps",
-        "score": 60,
+        "score": 64,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -455,19 +447,30 @@
         "penalties": []
       },
       {
-        "id": "reviews",
-        "score": 60,
+        "id": "permission-aware-actions",
+        "score": 64,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 8/8."
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "product-detail",
+        "score": 64,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/8."
         ],
         "penalties": []
       },
       {
         "id": "table-first",
-        "score": 60,
+        "score": 63,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -478,7 +481,7 @@
       },
       {
         "id": "client-task-timeline",
-        "score": 59,
+        "score": 62,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -489,7 +492,7 @@
       },
       {
         "id": "chart-with-source",
-        "score": 59,
+        "score": 62,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -500,7 +503,18 @@
       },
       {
         "id": "product-grid",
-        "score": 59,
+        "score": 62,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "reviews",
+        "score": 62,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -511,7 +525,7 @@
       },
       {
         "id": "secure-document-list",
-        "score": 58,
+        "score": 61,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -522,7 +536,7 @@
       },
       {
         "id": "support-thread",
-        "score": 58,
+        "score": 61,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -533,7 +547,7 @@
       },
       {
         "id": "alert-feed",
-        "score": 57,
+        "score": 60,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -544,7 +558,7 @@
       },
       {
         "id": "filter-bar",
-        "score": 57,
+        "score": 60,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -555,7 +569,7 @@
       },
       {
         "id": "saved-filters",
-        "score": 57,
+        "score": 60,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -566,7 +580,7 @@
       },
       {
         "id": "cart-drawer",
-        "score": 56,
+        "score": 59,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -577,7 +591,7 @@
       },
       {
         "id": "detail-drawer",
-        "score": 54,
+        "score": 57,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -588,7 +602,7 @@
       },
       {
         "id": "drilldown-table",
-        "score": 53,
+        "score": 57,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
@@ -599,7 +613,7 @@
       },
       {
         "id": "bulk-actions",
-        "score": 50,
+        "score": 54,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",

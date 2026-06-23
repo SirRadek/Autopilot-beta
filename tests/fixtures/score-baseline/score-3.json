@@ -69,34 +69,37 @@
     "patterns": [
       {
         "id": "status-badges",
-        "score": 96,
+        "score": 114,
         "selected": true,
         "reasons": [
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/9."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "permission-aware-actions",
-        "score": 91,
-        "selected": false,
-        "reasons": [
-          "Compared against route admin_panel and recipe internal-ops-clean.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/8."
+          "Usability/mobile quality: 9/9.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
         "id": "table-first",
-        "score": 90,
+        "score": 108,
         "selected": false,
         "reasons": [
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 10/6."
+          "Usability/mobile quality: 10/6.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "saved-filters",
+        "score": 105,
+        "selected": false,
+        "reasons": [
+          "Compared against route admin_panel and recipe internal-ops-clean.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/7.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       }
@@ -182,6 +185,43 @@
     ],
     "patterns": [
       {
+        "id": "detail-drawer",
+        "score": 102,
+        "selected": false,
+        "reasons": [
+          "Compared against route admin_panel and recipe internal-ops-clean.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/6.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "bulk-actions",
+        "score": 98,
+        "selected": false,
+        "reasons": [
+          "Compared against route admin_panel and recipe internal-ops-clean.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/5.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": [
+          "High implementation complexity."
+        ]
+      },
+      {
+        "id": "permission-aware-actions",
+        "score": 91,
+        "selected": false,
+        "reasons": [
+          "Compared against route admin_panel and recipe internal-ops-clean.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 9/8."
+        ],
+        "penalties": []
+      },
+      {
         "id": "filter-bar",
         "score": 87,
         "selected": false,
@@ -189,28 +229,6 @@
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case matches project type.",
           "Usability/mobile quality: 8/7."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "saved-filters",
-        "score": 87,
-        "selected": false,
-        "reasons": [
-          "Compared against route admin_panel and recipe internal-ops-clean.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/7."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "detail-drawer",
-        "score": 84,
-        "selected": false,
-        "reasons": [
-          "Compared against route admin_panel and recipe internal-ops-clean.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/6."
         ],
         "penalties": []
       },
@@ -224,19 +242,6 @@
           "Usability/mobile quality: 8/6."
         ],
         "penalties": []
-      },
-      {
-        "id": "bulk-actions",
-        "score": 80,
-        "selected": false,
-        "reasons": [
-          "Compared against route admin_panel and recipe internal-ops-clean.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/5."
-        ],
-        "penalties": [
-          "High implementation complexity."
-        ]
       },
       {
         "id": "plain-language-content",
@@ -548,56 +553,61 @@
       },
       {
         "id": "animated-hero",
-        "score": 50,
+        "score": 52,
         "selected": false,
         "reasons": [
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 7/6."
+          "Usability/mobile quality: 7/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "scroll-linked-proof",
-        "score": 50,
+        "score": 52,
         "selected": false,
         "reasons": [
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 7/6."
+          "Usability/mobile quality: 7/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "mask-reveal",
-        "score": 48,
+        "score": 50,
         "selected": false,
         "reasons": [
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 6/6."
+          "Usability/mobile quality: 6/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "mascot-progressive-guide",
-        "score": 47,
+        "score": 49,
         "selected": false,
         "reasons": [
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 6/6."
+          "Usability/mobile quality: 6/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "cursor-responsive-detail",
-        "score": 46,
+        "score": 48,
         "selected": false,
         "reasons": [
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 6/5."
+          "Usability/mobile quality: 6/5.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },

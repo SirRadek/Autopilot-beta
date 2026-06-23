@@ -66,35 +66,38 @@
     ],
     "patterns": [
       {
-        "id": "plain-language-content",
-        "score": 101,
+        "id": "account-overview",
+        "score": 112,
         "selected": true,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 10/10."
+          "Usability/mobile quality: 9/9.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
-        "id": "notice-banner",
-        "score": 96,
+        "id": "permission-aware-actions",
+        "score": 109,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/9."
+          "Usability/mobile quality: 9/8.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       },
       {
-        "id": "account-overview",
-        "score": 94,
+        "id": "client-task-timeline",
+        "score": 107,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/9."
+          "Usability/mobile quality: 8/8.",
+          "Pattern is preferred by the top recipe."
         ],
         "penalties": []
       }
@@ -180,13 +183,48 @@
     ],
     "patterns": [
       {
-        "id": "permission-aware-actions",
-        "score": 91,
+        "id": "secure-document-list",
+        "score": 106,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 9/8."
+          "Usability/mobile quality: 8/8.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "support-thread",
+        "score": 106,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8.",
+          "Pattern is preferred by the top recipe."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "plain-language-content",
+        "score": 101,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 10/10."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "notice-banner",
+        "score": 96,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 9/9."
         ],
         "penalties": []
       },
@@ -198,39 +236,6 @@
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case matches project type.",
           "Usability/mobile quality: 9/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "client-task-timeline",
-        "score": 89,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "secure-document-list",
-        "score": 88,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "support-thread",
-        "score": 88,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
         ],
         "penalties": []
       },
@@ -557,56 +562,61 @@
       },
       {
         "id": "animated-hero",
-        "score": 50,
+        "score": 52,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 7/6."
+          "Usability/mobile quality: 7/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "scroll-linked-proof",
-        "score": 50,
+        "score": 52,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 7/6."
+          "Usability/mobile quality: 7/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "mask-reveal",
-        "score": 48,
+        "score": 50,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 6/6."
+          "Usability/mobile quality: 6/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "mascot-progressive-guide",
-        "score": 47,
+        "score": 49,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 6/6."
+          "Usability/mobile quality: 6/6.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
         "id": "cursor-responsive-detail",
-        "score": 46,
+        "score": 48,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 6/5."
+          "Usability/mobile quality: 6/5.",
+          "Motion intent prior applied."
         ],
         "penalties": []
       }
