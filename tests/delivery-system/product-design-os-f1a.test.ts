@@ -52,9 +52,9 @@ describe("Product Design OS F1a contracts", () => {
     expect(report.ok).toBe(true);
     expect(report.errors).toEqual([]);
     expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
-      // F2 b1+b2+b3 resolved all 13 ghost occurrences → PDOS_GHOST_PATTERN absent.
-      // PDOS_ASSET_REF_TAG_MIX (3) drops at F1c when the legacy untyped fields are removed.
-      PDOS_ASSET_REF_TAG_MIX: 3,
+      // F2 resolved all 13 ghosts → PDOS_GHOST_PATTERN gone.
+      // F1c removed the legacy untyped asset fields → PDOS_ASSET_REF_TAG_MIX gone.
+      // Only empty-token warnings remain (the token-floor milestone is a later phase).
       PDOS_EMPTY_TOKENS: 6
     });
   });
@@ -106,9 +106,6 @@ describe("Product Design OS F1a contracts", () => {
       motion_level: 1,
       performance_cost: 2,
       mobile_safe: true,
-      dependencies: [],
-      works_with: [],
-      avoid_with: [],
       dependency_ids: ["theme-calm-prism-grid"],
       works_with_tags: ["checkout"],
       template_risk: 1,

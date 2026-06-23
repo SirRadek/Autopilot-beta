@@ -12,7 +12,7 @@
     "logic_priority",
     "design_priority",
     "motion_level",
-    "allowed_patterns",
+    "allowed_pattern_ids",
     "blocked_assets",
     "tests_required"
   ],

@@ -47,13 +47,13 @@
       "source_path": "product-design-os/assets/asset-manifest.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "3e453ba2536bb03e683a44b5913d7454360eb95587a788c8bd4398f4f8559c04",
-      "patched_by": "F1b,F2"
+      "patched_by": "F1b,F2,F1c"
     },
     {
       "source_path": "product-design-os/assets/asset.schema.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "8dc1bec8870450040de6e8638eaec8f95aa8e4ffa215045c024fad05cb7e9e92",
-      "patched_by": "F1a"
+      "patched_by": "F1a,F1c"
     },
     {
       "source_path": "product-design-os/assets/avatars/.gitkeep",
@@ -301,43 +301,43 @@
       "source_path": "product-design-os/recipes/client-portal-trust.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "4d920931f1717b300bf69633e2ee5e5400d083c4e110e4fc48ddd4b29e00d375",
-      "patched_by": "F1b"
+      "patched_by": "F1b,F1c"
     },
     {
       "source_path": "product-design-os/recipes/creative-motion.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "20136039e0885f89baa0630beeae3639fdc592bd51bca898b8ac2c8807e296e7",
-      "patched_by": "F2"
+      "patched_by": "F2,F1c"
     },
     {
       "source_path": "product-design-os/recipes/dashboard-data-heavy.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "47fe3193e45be31d0824f002888a9c4126a2533cfd8761aa49a33f8334a68449",
-      "patched_by": "F1b"
+      "patched_by": "F1b,F1c"
     },
     {
       "source_path": "product-design-os/recipes/ecommerce-conversion.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "22cd76ec5d7b79778df6cc65b09eda501a4dcedc4ec7642c7ddbb8d4b7529317",
-      "patched_by": "F1b"
+      "patched_by": "F1b,F1c"
     },
     {
       "source_path": "product-design-os/recipes/internal-ops-clean.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "e8e179badc26c9d58250cebdebc7047507ec6bdb812caf153780452ce9d0a2b9",
-      "patched_by": "F1b"
+      "patched_by": "F1b,F1c"
     },
     {
       "source_path": "product-design-os/recipes/marketing-premium.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "5c74a3239736a368435d00b179234246402ccd4d53837db431733fb208d9369f",
-      "patched_by": "F2"
+      "patched_by": "F2,F1c"
     },
     {
       "source_path": "product-design-os/recipes/public-sector-accessible.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "143a1a60eb3faa286b849604c03f6b2f8f94914a525c59d91491adaee8039f5d",
-      "patched_by": "F1b"
+      "patched_by": "F1b,F1c"
     },
     {
       "source_path": "product-design-os/reports/accessibility/.gitkeep",
@@ -483,7 +483,7 @@
       "source_path": "product-design-os/scripts/score-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "50f2946b2865d50ae2d42a57ab1e3976483bce6d5abbcc30fb1d068e3d21bb93",
-      "patched_by": "F1a"
+      "patched_by": "F1a,F1c"
     },
     {
       "source_path": "product-design-os/scripts/update-project-library.ts",
@@ -494,7 +494,7 @@
       "source_path": "product-design-os/scripts/validate-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "c94c00466099919931a0e2be1478537e724453217ba4e81e584e616c01620ae8",
-      "patched_by": "F0,F1a"
+      "patched_by": "F0,F1a,F1c"
     },
     {
       "source_path": "product-design-os/scripts/visual-qa-product-design-os.ts",

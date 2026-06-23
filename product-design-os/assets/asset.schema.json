@@ -73,30 +73,6 @@
     "mobile_safe": {
       "type": "boolean"
     },
-    "dependencies": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "default": []
-    },
-    "works_with": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "default": []
-    },
-    "avoid_with": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "default": []
-    },
     "dependency_ids": {
       "type": "array",
       "items": {

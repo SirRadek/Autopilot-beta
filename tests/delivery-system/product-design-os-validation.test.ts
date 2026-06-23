@@ -17,9 +17,8 @@ describe("validateProductDesignOs", () => {
     }
 
     expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
-      // F2 b1+b2+b3 resolved all 13 ghost occurrences → PDOS_GHOST_PATTERN absent.
-      // PDOS_ASSET_REF_TAG_MIX (3) drops at F1c when the legacy untyped fields are removed.
-      PDOS_ASSET_REF_TAG_MIX: 3,
+      // F2 resolved all 13 ghosts; F1c removed the legacy untyped asset fields.
+      // Only empty-token warnings remain.
       PDOS_EMPTY_TOKENS: 6
     });
     expect(report.ok).toBe(true);

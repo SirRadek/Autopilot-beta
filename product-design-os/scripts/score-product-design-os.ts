@@ -17,7 +17,7 @@ export interface PdosRecipeCandidate {
   readonly design_priority: number;
   readonly motion_level: number;
   readonly visual_energy?: number;
-  readonly allowed_patterns: readonly string[];
+  readonly allowed_patterns?: readonly string[];
   readonly allowed_pattern_ids?: readonly string[];
   readonly required_sections?: readonly string[];
   readonly blocked_assets: readonly string[];
@@ -49,9 +49,8 @@ export interface PdosAssetCandidate {
   readonly motion_level: number;
   readonly performance_cost: number;
   readonly mobile_safe: boolean;
-  readonly dependencies?: readonly string[];
-  readonly works_with?: readonly string[];
-  readonly avoid_with?: readonly string[];
+  readonly dependency_ids?: readonly string[];
+  readonly dependency_tags?: readonly string[];
   readonly template_risk: number;
 }
 
@@ -282,7 +281,8 @@ function inferStyleConflict(asset: PdosAssetCandidate, route: PdosIntakeRoute): 
 }
 
 function inferImplementationComplexity(asset: PdosAssetCandidate): number {
-  return (asset.dependencies?.length ?? 0) + (asset.type === "3d" ? 5 : 0) + (asset.motion_level >= 7 ? 2 : 0);
+  const dependencyCount = (asset.dependency_ids?.length ?? 0) + (asset.dependency_tags?.length ?? 0);
+  return dependencyCount + (asset.type === "3d" ? 5 : 0) + (asset.motion_level >= 7 ? 2 : 0);
 }
 
 function sharedCount(first: readonly string[], second: readonly string[]): number {

@@ -6,7 +6,6 @@
   "design_priority": 5,
   "motion_level": 1,
   "visual_energy": 3,
-  "allowed_patterns": ["account-overview", "secure-document-list", "support-thread", "client-task-timeline", "permission-aware-actions"],
   "allowed_pattern_ids": ["account-overview", "secure-document-list", "support-thread", "client-task-timeline", "permission-aware-actions"],
   "blocked_assets": ["heavy-3d", "particles", "decorative-video-bg", "unclear-account-state", "hidden-security-state"],
   "tests_required": ["auth", "permissions", "a11y", "responsive", "document-access", "error-states"],

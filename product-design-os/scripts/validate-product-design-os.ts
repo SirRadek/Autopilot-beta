@@ -587,10 +587,9 @@ function validateRecipes(recipesRoot: string, repoRoot: string, errors: PdosVali
 
     validateRequiredArray(value, "project_types", recipe, repoRoot, errors);
     validateRequiredArray(value, "priorities", recipe, repoRoot, errors);
-    validateRequiredArray(value, "allowed_patterns", recipe, repoRoot, errors);
+    validateRequiredArray(value, "allowed_pattern_ids", recipe, repoRoot, errors);
     validateRequiredArray(value, "blocked_assets", recipe, repoRoot, errors);
     validateRequiredArray(value, "tests_required", recipe, repoRoot, errors);
-    validateOptionalStringArray(value, "allowed_pattern_ids", recipe, repoRoot, errors);
     validateOptionalStringArray(value, "required_sections", recipe, repoRoot, errors);
     validateNumberRange(value, "logic_priority", 1, 10, recipe, repoRoot, errors);
     validateNumberRange(value, "design_priority", 1, 10, recipe, repoRoot, errors);

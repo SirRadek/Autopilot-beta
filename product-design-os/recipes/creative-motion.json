@@ -8,15 +8,6 @@
   "design_seo_tradeoff": "brand_led",
   "motion_level": 7,
   "visual_energy": 8,
-  "allowed_patterns": [
-    "animated-hero",
-    "theme-crossed-direction",
-    "mascot-progressive-guide",
-    "cursor-responsive-detail",
-    "scroll-linked-proof",
-    "demo-world-hub",
-    "mask-reveal"
-  ],
   "allowed_pattern_ids": [
     "animated-hero",
     "theme-crossed-direction",

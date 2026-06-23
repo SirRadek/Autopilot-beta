@@ -8,17 +8,6 @@
   "design_seo_tradeoff": "balanced",
   "motion_level": 4,
   "visual_energy": 6,
-  "allowed_patterns": [
-    "sharp-positioning-hero",
-    "theme-crossed-direction",
-    "guided-offer-map",
-    "studio-proof-ledger",
-    "demo-world-hub",
-    "proof-led-section",
-    "case-study-strip",
-    "outcome-cta",
-    "service-demo-link"
-  ],
   "allowed_pattern_ids": [
     "sharp-positioning-hero",
     "theme-crossed-direction",

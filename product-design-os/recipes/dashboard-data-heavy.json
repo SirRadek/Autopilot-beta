@@ -6,7 +6,6 @@
   "design_priority": 4,
   "motion_level": 1,
   "visual_energy": 3,
-  "allowed_patterns": ["kpi-overview", "filter-bar", "drilldown-table", "chart-with-source", "alert-feed"],
   "allowed_pattern_ids": ["kpi-overview", "filter-bar", "drilldown-table", "chart-with-source", "alert-feed"],
   "blocked_assets": ["decorative-3d", "scroll-storytelling", "fake-metrics", "ambiguous-chart-color"],
   "tests_required": ["logic", "data-states", "responsive", "a11y", "performance"],

@@ -6,7 +6,6 @@
   "design_priority": 6,
   "motion_level": 2,
   "visual_energy": 4,
-  "allowed_patterns": ["product-grid", "product-detail", "cart-drawer", "checkout-steps", "reviews", "trust-summary"],
   "allowed_pattern_ids": ["product-grid", "product-detail", "cart-drawer", "checkout-steps", "reviews", "trust-summary"],
   "blocked_assets": ["checkout-3d-avatar", "heavy-particles", "unclear-cta", "motion-in-payment-step"],
   "tests_required": ["checkout-flow", "cart-calculation", "responsive", "performance", "a11y"],
