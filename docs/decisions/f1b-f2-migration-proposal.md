@@ -167,3 +167,52 @@ false`. Fixed (all asset fields required, `[]` for empties), then exit 0. agy_cl
 
 **Next:** F2 per-domain (owner-approved rebaseline), then F1c (remove legacy fields; baseline-unchanged
 gate already satisfied → `PDOS_ASSET_REF_TAG_MIX` then drops).
+
+---
+
+# Open questions RESOLVED (2026-06-23, owner: "podle doporučení", grounded via context7)
+
+- **D1 modifier storage → optional `modifiers` enum array on `pattern.schema.json`.** Add
+  `"modifiers": { "type":"array","items":{ "type":"string","enum":["motion","positioning"] },"default":[] }`
+  (optional → existing patterns stay valid under additionalProperties:false; enum → constrained set).
+  `theme-crossed-direction` gets `modifiers: ["motion","positioning"]`. Structured > burying in notes;
+  honors D1 (no new type/`direction_ids`). Confirmed idiomatic via context7 (JSON Schema: optional
+  property + items.enum is the non-breaking way to add a constrained field).
+- **Recipe `allowed_asset_ids` → NOT added.** Recipes stay pattern-scoped; assets are scored from
+  `asset-manifest` by fit, not pinned per recipe. Recipe→asset pinning is a separate capability
+  outside F1/F2. `motion-background` registers as an asset (batch 2) linked to patterns via its own
+  `works_with_ids`; it drops out of `creative-motion` typed pattern list (it was never a pattern).
+
+---
+
+# F2 BATCH 1 (shared/core) EXECUTED — record (2026-06-23)
+
+**Implementation worker:** real `codex_cli` via `runCliWorker` (hp-20260623-beta-f2-batch1, exit 0,
+244 s). Opus reviewed every edit against `pattern.schema`/`asset.schema` + verified anchors verbatim
+before applying.
+
+**Applied (3 vendored files → `patched_by` += "F2"):**
+- `pattern.schema.json`: optional `modifiers` enum array (`["motion","positioning"]`) — D1 storage.
+- `pattern-manifest.json`: `theme-crossed-direction.modifiers = ["motion","positioning"]` (records D1
+  collapse); NEW pattern `demo-world-hub` (ux_pattern) — resolves its 2 ghost occurrences.
+- `asset-manifest.json`: NEW asset `cat-concierge` (avatar, internal provenance, `works_with_ids`
+  =[mascot-progressive-guide]) — D2 mascot asset half.
+
+**Owner-approved rebaseline (deliberate, documented):**
+- `PDOS_GHOST_PATTERN` 13 → **11** (demo-world-hub ×2 resolved); total warnings 22 → **20**. Tests
+  `product-design-os-validation` + `product-design-os-f1a` ghost assertions updated 13→11.
+- Score fixtures regenerated. **Diff is pure insertion**: across all 7 inputs the only change is
+  `demo-world-hub` (pattern) + `cat-concierge` (asset) appearing as `selected:false` rejected
+  candidates — **zero change to any existing item's score or selection** (verified by raw diff).
+
+**Gates:** typecheck ✅ · vendor-check ✅ (109 pristine + 11 patched) · vitest 7/7 ✅ · validate 0
+errors / 20 warnings.
+
+```
+buildSubagentTree:
+└─ cli-codex-hp-20260623-beta-f2-batch1-20260623T083103  agent_type: codex_cli-external  exit: 0  244 s
+```
+**Remaining F2:** batch 2 (creative-motion: animated-hero, mask-reveal, motion-background, cat-concierge
+recipe rewrite), batch 3 (marketing-premium: guided-offer-map, studio-proof-ledger, case-study-strip,
+outcome-cta), batch 4 (cleanup: rewrite ghost recipes to canonical ids → remaining ghosts→0,
+taste/pattern-scores). Each its own owner-approved rebaseline. Then F1c.

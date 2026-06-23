@@ -136,6 +136,26 @@
       "notes": "Use only after recording exact downloaded asset path/URL. Good for hand-drawn accents and lightweight GIF/SVG fallback."
     },
     {
+      "id": "cat-concierge",
+      "type": "avatar",
+      "style": ["mascot", "cat", "concierge", "playful", "guided"],
+      "use_case": ["marketing_web", "portfolio", "experimental"],
+      "target": ["founder", "small-business", "non-technical-customer", "tech-curious-customer"],
+      "creativity": 8,
+      "trust": 6,
+      "motion_level": 4,
+      "performance_cost": 2,
+      "mobile_safe": true,
+      "dependencies": [],
+      "works_with_ids": ["mascot-progressive-guide"],
+      "avoid_with_tags": ["primary-content-inside-canvas", "checkout", "critical-form"],
+      "template_risk": 3,
+      "license": "internal-metadata",
+      "source": "product-design-os",
+      "provenance_status": "internal",
+      "notes": "Internal concept mascot for progressive guidance. Use as an enhancement with a static fallback; never make page comprehension depend on the avatar."
+    },
+    {
       "id": "quaternius-cc0-animated-animal",
       "type": "avatar",
       "style": ["3d", "animated", "playful", "mascot", "low-poly"],

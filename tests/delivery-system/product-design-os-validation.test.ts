@@ -19,7 +19,8 @@ describe("validateProductDesignOs", () => {
     expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
       PDOS_ASSET_REF_TAG_MIX: 3,
       PDOS_EMPTY_TOKENS: 6,
-      PDOS_GHOST_PATTERN: 13
+      // F2 batch 1 registered demo-world-hub → its 2 ghost occurrences resolved (13 → 11).
+      PDOS_GHOST_PATTERN: 11
     });
     expect(report.ok).toBe(true);
     expect(report.errors).toEqual([]);

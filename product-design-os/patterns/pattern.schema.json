@@ -87,6 +87,7 @@
         "type": "string"
       },
       "default": []
-    }
+    },
+    "modifiers": { "type": "array", "items": { "type": "string", "enum": ["motion", "positioning"] }, "default": [] }
   }
 }

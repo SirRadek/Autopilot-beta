@@ -45,7 +45,8 @@
       "risks": ["too many moods", "weak offer clarity", "visual style overpowering CTA", "performance budget missing"],
       "accessibility_notes": "Theme crossing must preserve readable text, heading order, contrast, focus states, and non-motion fallbacks.",
       "performance_notes": "Use static SVG/CSS first; add canvas/3D only after a performance budget and reduced-motion plan.",
-      "examples": ["calm prism focus", "written retro proof", "dopamine demo worlds"]
+      "examples": ["calm prism focus", "written retro proof", "dopamine demo worlds"],
+      "modifiers": ["motion", "positioning"]
     },
     {
       "id": "seo-readable-art-direction",
@@ -91,6 +92,21 @@
       "accessibility_notes": "Link text must describe the demo target; do not rely on icon-only links.",
       "performance_notes": "Keep heavy demos outside the main marketing page and load them on demand.",
       "examples": ["service card with demo route", "AI tool preview link"]
+    },
+    {
+      "id": "demo-world-hub",
+      "type": "ux_pattern",
+      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
+      "good_for": ["interactive demo navigation", "service capability exploration", "creative portfolio hubs", "separating playful demos from core offer"],
+      "bad_for": ["checkout", "serious public-sector context", "critical form", "public benefits application"],
+      "complexity": 7,
+      "usability": 7,
+      "mobile_quality": 6,
+      "requires": ["fallback summary or screenshot", "clear route back to main page", "primary content and SEO text outside demo canvas", "accessible text links for each demo", "reduced-motion fallback"],
+      "risks": ["primary content trapped in canvas", "unclear demo route", "mobile performance issues", "demo novelty overpowering offer"],
+      "accessibility_notes": "Each demo entry needs a text label and keyboard reachable link; the hub must remain navigable without canvas, pointer motion, or audio.",
+      "performance_notes": "Load heavyweight demos on demand and keep a static summary or screenshot visible before any canvas or WebGL code runs.",
+      "examples": ["demo world hub", "interactive service demo launcher"]
     },
     {
       "id": "cursor-responsive-detail",

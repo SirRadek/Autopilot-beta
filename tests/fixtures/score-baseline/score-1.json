@@ -224,6 +224,17 @@
         "penalties": []
       },
       {
+        "id": "demo-world-hub",
+        "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
         "id": "plain-language-content",
         "score": 71,
         "selected": false,
@@ -543,6 +554,17 @@
           "Compared against route marketing_web and recipe marketing-premium.",
           "Asset use_case matches project type.",
           "Creativity/trust/motion: 8/8/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cat-concierge",
+        "score": 131,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 8/6/4."
         ],
         "penalties": []
       },

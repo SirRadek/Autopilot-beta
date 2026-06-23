@@ -47,7 +47,7 @@
       "source_path": "product-design-os/assets/asset-manifest.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "3e453ba2536bb03e683a44b5913d7454360eb95587a788c8bd4398f4f8559c04",
-      "patched_by": "F1b"
+      "patched_by": "F1b,F2"
     },
     {
       "source_path": "product-design-os/assets/asset.schema.json",
@@ -233,12 +233,14 @@
     {
       "source_path": "product-design-os/patterns/pattern-manifest.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "d7e90b0ae4971a53b27cd32cac6b11bd495dc69b36d1ec5921db6e8333019333"
+      "content_hash": "d7e90b0ae4971a53b27cd32cac6b11bd495dc69b36d1ec5921db6e8333019333",
+      "patched_by": "F2"
     },
     {
       "source_path": "product-design-os/patterns/pattern.schema.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "9ee7abc42e2c2a56f4afae6a9b5a2f55945d044dc9ecd0defd436ff1e177d6c6"
+      "content_hash": "9ee7abc42e2c2a56f4afae6a9b5a2f55945d044dc9ecd0defd436ff1e177d6c6",
+      "patched_by": "F2"
     },
     {
       "source_path": "product-design-os/patterns/product-detail/.gitkeep",

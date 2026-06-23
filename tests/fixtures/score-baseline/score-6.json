@@ -501,6 +501,17 @@
         ]
       },
       {
+        "id": "demo-world-hub",
+        "score": 59,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
         "id": "scroll-linked-proof",
         "score": 50,
         "selected": false,
@@ -862,6 +873,17 @@
           "Compared against route client_portal and recipe client-portal-trust.",
           "Asset use_case is not an exact match.",
           "Creativity/trust/motion: 9/6/3."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "cat-concierge",
+        "score": 92,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 8/6/4."
         ],
         "penalties": []
       },
