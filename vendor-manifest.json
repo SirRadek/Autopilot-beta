@@ -493,7 +493,7 @@
       "source_path": "product-design-os/scripts/score-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "50f2946b2865d50ae2d42a57ab1e3976483bce6d5abbcc30fb1d068e3d21bb93",
-      "patched_by": "F1a,F1c"
+      "patched_by": "F1a,F1c,F5"
     },
     {
       "source_path": "product-design-os/scripts/update-project-library.ts",
@@ -504,7 +504,7 @@
       "source_path": "product-design-os/scripts/validate-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "c94c00466099919931a0e2be1478537e724453217ba4e81e584e616c01620ae8",
-      "patched_by": "F0,F1a,F1c,F4,F4b"
+      "patched_by": "F0,F1a,F1c,F4,F4b,F5"
     },
     {
       "source_path": "product-design-os/scripts/visual-qa-product-design-os.ts",

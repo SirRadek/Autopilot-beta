@@ -171,7 +171,7 @@ export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidatio
   validateMarkdown(pdosRoot, repoRoot, errors, warnings);
   validateTokenFloor(pdosRoot, repoRoot, errors);
   validateEmptyTokens(pdosRoot, repoRoot, warnings);
-  validateGhostPatterns(pdosRoot, repoRoot, warnings);
+  validateGhostPatterns(pdosRoot, repoRoot, errors);
   validateAssetRefTagMix(pdosRoot, repoRoot, warnings);
 
   return {
@@ -1064,7 +1064,7 @@ function validateEmptyTokens(pdosRoot: string, repoRoot: string, warnings: PdosV
   }
 }
 
-function validateGhostPatterns(pdosRoot: string, repoRoot: string, warnings: PdosValidationIssue[]): void {
+function validateGhostPatterns(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
   const patternManifestFile = join(pdosRoot, "patterns/pattern-manifest.json");
   const recipesRoot = join(pdosRoot, "recipes");
   const parseErrors: PdosValidationIssue[] = [];
@@ -1094,10 +1094,9 @@ function validateGhostPatterns(pdosRoot: string, repoRoot: string, warnings: Pdo
     const recipeId = typeof value.id === "string" && value.id.length > 0 ? value.id : basename(recipe, ".json");
     for (const patternId of [...getStringArray(value.allowed_patterns), ...getStringArray(value.allowed_pattern_ids)]) {
       if (!patternIds.has(patternId)) {
-        warnings.push({
+        errors.push({
           file: toRepoPath(repoRoot, recipe),
-          message: `Recipe ${recipeId} allowed_patterns references missing pattern ${patternId}.`,
-          code: "PDOS_GHOST_PATTERN"
+          message: `PDOS_GHOST_PATTERN: Recipe ${recipeId} allowed_patterns references missing pattern ${patternId}.`
         });
       }
     }

@@ -64,3 +64,34 @@ booleans so no disallowed pattern stays `selected:true`. Keep the default branch
 buildSubagentTree:
 └─ cli-codex-hp-20260623-beta-f5-design  agent_type: codex_cli-external  exit: 0  342 s
 ```
+
+---
+
+# F5 IMPLEMENTED — record (2026-06-23)
+
+Built per this ADR by real `codex_cli` (write-mode); Opus reviewed the `score.ts` diff (default branch
+mechanically unchanged) + gated.
+- **F5a** `validate.ts`: `validateGhostPatterns` now pushes ERRORS (`PDOS_GHOST_PATTERN:` in message, no
+  code). 0 ghosts → 0 errors.
+- **F5b** `score.ts`: exported `computeAllowedPatternShadowDiff` + `PdosAllowedPatternShadowDiff`
+  (separate; NOT in `PdosScoreReport`) + `--shadow-allowed-patterns` CLI mode.
+- **F5c** `score.ts`: `scoreProductDesignOs` reads `PDOS_ENFORCE_ALLOWED_PATTERNS` at call time
+  (`isAllowedPatternEnforcementEnabled`, truthy "1"/"true"); flag-unset returns the EXACT original slices
+  (else-branch is mechanically identical), flag-on gates `selected.patterns`/`rejected.patterns` via the
+  shared `applyAllowedPatternGate` (exclusion vs top recipe `allowed_pattern_ids`, `selected` booleans
+  recomputed). Recipes/assets/route/scores/etc unchanged.
+- NEW `tests/.../product-design-os-f5-allowed-patterns.test.ts` (env save/restore): default identity,
+  shadow-diff shape, flag-ON gating, truthy parsing, F5a ghost error via temp PDOS tree.
+
+**Verified (Opus-run):** validate **0 errors / 0 warnings**; **7/7 score fixtures byte-identical with the
+flag unset**; flag-ON (`PDOS_ENFORCE_ALLOWED_PATTERNS=1`) changes the marketing selection (gating active).
+**Gates:** typecheck ✅ · vendor-check ✅ (100 pristine + 20 patched) · vitest **27/27** (22 + 5 F5).
+validate+score `patched_by += F5`.
+
+```
+buildSubagentTree:
+└─ cli-codex-hp-20260623-beta-f5-impl  agent_type: codex_cli-external  (write-mode; files on disk)
+```
+**Default-OFF preserved.** Enabling `PDOS_ENFORCE_ALLOWED_PATTERNS` is a conscious owner-gate (review the
+`--shadow-allowed-patterns` diff first). **Next:** F6 (wire F3 renderability harness into a QA floor +
+`pattern.requires` taxonomy), F7.

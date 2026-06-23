@@ -87,6 +87,15 @@ export interface PdosScoreReport {
   readonly report_markdown: string;
 }
 
+export interface PdosAllowedPatternShadowDiff {
+  readonly recipe_id: string;
+  readonly allowed_pattern_ids: readonly string[];
+  readonly current_selected: readonly string[];
+  readonly gated_selected: readonly string[];
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+}
+
 const SCORE_FORMULA =
   "score = purpose_fit*3 + target_fit*3 + logic_fit*3 + usability*3 + taste_match*2 + accessibility*2 + mobile_fit*2 - performance_cost*2 - implementation_complexity - template_risk*4 - style_conflict*3";
 
@@ -105,25 +114,67 @@ export function scoreProductDesignOs(input: PdosScoreInput | string, repoRoot = 
     ...(patterns.length === 0 ? ["pattern_manifest_empty"] : []),
     ...(assets.length === 0 ? ["asset_manifest_empty"] : [])
   ];
-  const reportWithoutMarkdown = {
-    route,
-    selected: {
-      recipes: scoredRecipes.slice(0, limit),
-      patterns: scoredPatterns.slice(0, limit),
-      assets: scoredAssets.slice(0, limit)
-    },
-    rejected: {
-      recipes: scoredRecipes.slice(limit),
-      patterns: scoredPatterns.slice(limit),
-      assets: scoredAssets.slice(limit)
-    },
-    warnings,
-    formula: SCORE_FORMULA
-  };
+  const topRecipe = findRecipeById(recipes, scoredRecipes[0]?.id);
+  const reportWithoutMarkdown =
+    isAllowedPatternEnforcementEnabled() && topRecipe !== undefined
+      ? buildAllowedPatternEnforcedReport({
+          route,
+          scoredRecipes,
+          scoredPatterns,
+          scoredAssets,
+          warnings,
+          limit,
+          allowedPatternIds: resolveAllowedPatternIds(topRecipe)
+        })
+      : {
+          route,
+          selected: {
+            recipes: scoredRecipes.slice(0, limit),
+            patterns: scoredPatterns.slice(0, limit),
+            assets: scoredAssets.slice(0, limit)
+          },
+          rejected: {
+            recipes: scoredRecipes.slice(limit),
+            patterns: scoredPatterns.slice(limit),
+            assets: scoredAssets.slice(limit)
+          },
+          warnings,
+          formula: SCORE_FORMULA
+        };
 
   return {
     ...reportWithoutMarkdown,
     report_markdown: buildScoreMarkdown(reportWithoutMarkdown)
+  };
+}
+
+export function computeAllowedPatternShadowDiff(
+  input: PdosScoreInput | string,
+  repoRoot = process.cwd()
+): PdosAllowedPatternShadowDiff {
+  const normalizedInput = typeof input === "string" ? { text: input } : input;
+  const route = normalizedInput.route ?? classifyProjectIntake(normalizedInput);
+  const recipes = normalizedInput.recipes ?? loadRecipes(repoRoot);
+  const patterns = normalizedInput.patterns ?? loadPatternManifest(repoRoot);
+  const limit = clampLimit(normalizedInput.limit);
+
+  const scoredRecipes = rankItems(recipes.map((recipe) => scoreRecipe(recipe, route)));
+  const scoredPatterns = rankItems(patterns.map((pattern) => scorePattern(pattern, route, scoredRecipes)));
+  const currentSelected = scoredPatterns.slice(0, limit).map((pattern) => pattern.id);
+  const topRecipe = findRecipeById(recipes, scoredRecipes[0]?.id);
+  const allowedPatternIds = topRecipe === undefined ? [] : resolveAllowedPatternIds(topRecipe);
+  const gatedSelected =
+    topRecipe === undefined
+      ? currentSelected
+      : applyAllowedPatternGate(scoredPatterns, allowedPatternIds, limit).map((pattern) => pattern.id);
+
+  return {
+    recipe_id: topRecipe?.id ?? "",
+    allowed_pattern_ids: allowedPatternIds,
+    current_selected: currentSelected,
+    gated_selected: gatedSelected,
+    added: gatedSelected.filter((patternId) => !currentSelected.includes(patternId)),
+    removed: currentSelected.filter((patternId) => !gatedSelected.includes(patternId))
   };
 }
 
@@ -139,6 +190,65 @@ export function resolveAllowedPatternIds(recipe: PdosRecipeCandidate): readonly 
   const allowedPatterns = Array.isArray(recipe.allowed_patterns) ? recipe.allowed_patterns : [];
   const allowedPatternIds = Array.isArray(recipe.allowed_pattern_ids) ? recipe.allowed_pattern_ids : [];
   return [...new Set([...allowedPatterns, ...allowedPatternIds])];
+}
+
+function buildAllowedPatternEnforcedReport(input: {
+  readonly route: PdosIntakeRoute;
+  readonly scoredRecipes: readonly PdosScoredItem[];
+  readonly scoredPatterns: readonly PdosScoredItem[];
+  readonly scoredAssets: readonly PdosScoredItem[];
+  readonly warnings: readonly string[];
+  readonly limit: number;
+  readonly allowedPatternIds: readonly string[];
+}): Omit<PdosScoreReport, "report_markdown"> {
+  const gatedPatterns = applyAllowedPatternGate(input.scoredPatterns, input.allowedPatternIds, input.limit);
+  const gatedPatternIds = new Set(gatedPatterns.map((pattern) => pattern.id));
+
+  return {
+    route: input.route,
+    selected: {
+      recipes: input.scoredRecipes.slice(0, input.limit),
+      patterns: gatedPatterns,
+      assets: input.scoredAssets.slice(0, input.limit)
+    },
+    rejected: {
+      recipes: input.scoredRecipes.slice(input.limit),
+      patterns: input.scoredPatterns
+        .filter((pattern) => !gatedPatternIds.has(pattern.id))
+        .map((pattern) => ({ ...pattern, selected: false })),
+      assets: input.scoredAssets.slice(input.limit)
+    },
+    warnings: input.warnings,
+    formula: SCORE_FORMULA
+  };
+}
+
+function applyAllowedPatternGate(
+  rankedPatterns: readonly PdosScoredItem[],
+  allowedIds: readonly string[],
+  limit: number
+): readonly PdosScoredItem[] {
+  const allowedIdSet = new Set(allowedIds);
+
+  return rankedPatterns
+    .filter((pattern) => allowedIdSet.has(pattern.id))
+    .slice(0, limit)
+    .map((pattern, index) => ({ ...pattern, selected: index === 0 }));
+}
+
+function findRecipeById(
+  recipes: readonly PdosRecipeCandidate[],
+  recipeId: string | undefined
+): PdosRecipeCandidate | undefined {
+  if (recipeId === undefined) {
+    return undefined;
+  }
+  return recipes.find((recipe) => recipe.id === recipeId);
+}
+
+function isAllowedPatternEnforcementEnabled(): boolean {
+  const value = process.env.PDOS_ENFORCE_ALLOWED_PATTERNS;
+  return value?.trim().toLowerCase() === "1" || value?.trim().toLowerCase() === "true";
 }
 
 function scoreRecipe(recipe: PdosRecipeCandidate, route: PdosIntakeRoute): PdosScoredItem {
@@ -436,10 +546,17 @@ function parseArgs(args: readonly string[]): {
   text?: string;
   format?: "json" | "markdown";
   limit?: number;
+  shadowAllowedPatterns: boolean;
 } {
-  const result: { text?: string; format?: "json" | "markdown"; limit?: number } = {};
+  const result: { text?: string; format?: "json" | "markdown"; limit?: number; shadowAllowedPatterns: boolean } = {
+    shadowAllowedPatterns: false
+  };
   for (let index = 0; index < args.length; index += 1) {
     const key = args[index];
+    if (key === "--shadow-allowed-patterns") {
+      result.shadowAllowedPatterns = true;
+      continue;
+    }
     const value = args[index + 1];
     if (!value) {
       continue;
@@ -463,6 +580,10 @@ function runCli(): void {
   const input: { text: string; limit?: number } = { text: args.text ?? "" };
   if (args.limit !== undefined) {
     input.limit = args.limit;
+  }
+  if (args.shadowAllowedPatterns) {
+    console.log(JSON.stringify(computeAllowedPatternShadowDiff(input), null, 2));
+    return;
   }
   const report = scoreProductDesignOs(input);
   console.log(formatPdosScoreReport(report, args.format));
