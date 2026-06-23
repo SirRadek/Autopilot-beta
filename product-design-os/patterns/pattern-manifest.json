@@ -18,6 +18,21 @@
       "examples": ["offer-led homepage hero", "service landing hero"]
     },
     {
+      "id": "outcome-cta",
+      "type": "conversion_pattern",
+      "use_case": ["marketing_web", "landing_page", "portfolio"],
+      "good_for": ["closing conversion", "lead generation", "outcome clarity", "proof-adjacent CTA"],
+      "bad_for": ["unsupported promise", "checkout", "critical public-sector flow"],
+      "complexity": 3,
+      "usability": 9,
+      "mobile_quality": 9,
+      "requires": ["outcome statement", "CTA", "proof adjacency", "accessible copy"],
+      "risks": ["generic/unsupported outcome claims"],
+      "accessibility_notes": "CTA copy must describe the action and outcome without relying on visual emphasis alone.",
+      "performance_notes": "Keep the closing CTA lightweight and avoid blocking it behind animation or media.",
+      "examples": ["outcome-led closing CTA", "proof-adjacent CTA band"]
+    },
+    {
       "id": "animated-hero",
       "type": "motion_pattern",
       "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
@@ -46,6 +61,21 @@
       "accessibility_notes": "Do not encode proof only in images; keep outcomes and labels as readable text.",
       "performance_notes": "Prefer compact media and lazy-load secondary proof visuals.",
       "examples": ["case strip", "outcome cards", "before-after proof row"]
+    },
+    {
+      "id": "studio-proof-ledger",
+      "type": "conversion_pattern",
+      "use_case": ["marketing_web", "portfolio", "landing_page"],
+      "good_for": ["auditable proof lists", "case outcomes", "studio credibility", "handoff clarity"],
+      "bad_for": ["unsupported claims", "logo-only proof", "pure art direction page"],
+      "complexity": 4,
+      "usability": 8,
+      "mobile_quality": 8,
+      "requires": ["auditable proof items", "source/case references", "outcomes", "handoff clarity"],
+      "risks": ["fake metrics", "unsupported claims"],
+      "accessibility_notes": "Ledger rows must be readable text with source/case references; use proof-led-section for broader narrative proof, not as a substitute for auditable items.",
+      "performance_notes": "Prefer compact text-first entries and lazy-load optional case media.",
+      "examples": ["auditable outcomes ledger", "case evidence list"]
     },
     {
       "id": "theme-crossed-direction",
@@ -109,6 +139,21 @@
       "examples": ["service card with demo route", "AI tool preview link"]
     },
     {
+      "id": "guided-offer-map",
+      "type": "ux_pattern",
+      "use_case": ["marketing_web", "landing_page", "portfolio"],
+      "good_for": ["service choice navigation", "offer comparison", "demo/request routing", "CTA clarity"],
+      "bad_for": ["single-offer page", "checkout", "dense internal system"],
+      "complexity": 5,
+      "usability": 8,
+      "mobile_quality": 8,
+      "requires": ["clear choice model", "CTA path", "mobile behavior", "SEO-readable labels"],
+      "risks": ["unclear demo/request routing", "choice overload"],
+      "accessibility_notes": "Choice labels and CTA text must be readable DOM text with clear focus order and 44px touch targets.",
+      "performance_notes": "Use CSS layout and text labels; avoid heavy interactive navigation before the offer path is understandable.",
+      "examples": ["offer map section", "service chooser with CTA routes"]
+    },
+    {
       "id": "demo-world-hub",
       "type": "ux_pattern",
       "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
@@ -152,6 +197,21 @@
       "accessibility_notes": "Respect prefers-reduced-motion and keep all content readable without scroll animation.",
       "performance_notes": "Avoid scroll event loops; prefer CSS timeline or intersection-driven class changes when available.",
       "examples": ["step-by-step process reveal", "case proof progression"]
+    },
+    {
+      "id": "case-study-strip",
+      "type": "layout_pattern",
+      "use_case": ["marketing_web", "portfolio", "landing_page"],
+      "good_for": ["compact proof", "case scanning", "portfolio credibility", "CTA continuation"],
+      "bad_for": ["long-form case narrative", "logo wall", "dense dashboard"],
+      "complexity": 4,
+      "usability": 8,
+      "mobile_quality": 7,
+      "requires": ["compact case evidence", "mobile stacking", "proof source", "CTA continuation"],
+      "risks": ["logo-wall/fake proof"],
+      "accessibility_notes": "Keep case titles, outcomes, and CTA text in DOM order; horizontal layouts need keyboard and touch-safe access.",
+      "performance_notes": "Use responsive layout and lazy-load secondary logos or thumbnails.",
+      "examples": ["horizontal case-study strip", "compact proof row"]
     },
     {
       "id": "mask-reveal",

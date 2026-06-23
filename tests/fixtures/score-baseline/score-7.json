@@ -67,19 +67,19 @@
     ],
     "patterns": [
       {
-        "id": "proof-led-section",
-        "score": 81,
+        "id": "outcome-cta",
+        "score": 87,
         "selected": true,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
+          "Usability/mobile quality: 9/9."
         ],
         "penalties": []
       },
       {
-        "id": "seo-readable-art-direction",
-        "score": 80,
+        "id": "proof-led-section",
+        "score": 81,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
@@ -89,13 +89,13 @@
         "penalties": []
       },
       {
-        "id": "service-demo-link",
-        "score": 78,
+        "id": "studio-proof-ledger",
+        "score": 81,
         "selected": false,
         "reasons": [
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/7."
+          "Usability/mobile quality: 8/8."
         ],
         "penalties": []
       }
@@ -180,6 +180,50 @@
       }
     ],
     "patterns": [
+      {
+        "id": "guided-offer-map",
+        "score": 80,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "seo-readable-art-direction",
+        "score": 80,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "case-study-strip",
+        "score": 79,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "service-demo-link",
+        "score": 78,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/7."
+        ],
+        "penalties": []
+      },
       {
         "id": "asymmetric-editorial-layout",
         "score": 75,

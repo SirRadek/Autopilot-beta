@@ -66,9 +66,20 @@
     ],
     "patterns": [
       {
-        "id": "sharp-positioning-hero",
+        "id": "outcome-cta",
         "score": 87,
         "selected": true,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "sharp-positioning-hero",
+        "score": 87,
+        "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
@@ -84,17 +95,6 @@
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
           "Usability/mobile quality: 8/9."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "proof-led-section",
-        "score": 81,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case matches project type.",
-          "Usability/mobile quality: 8/8."
         ],
         "penalties": []
       }
@@ -180,6 +180,39 @@
     ],
     "patterns": [
       {
+        "id": "proof-led-section",
+        "score": 81,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "studio-proof-ledger",
+        "score": 81,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "guided-offer-map",
+        "score": 80,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
         "id": "seo-readable-art-direction",
         "score": 80,
         "selected": false,
@@ -187,6 +220,17 @@
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case matches project type.",
           "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "case-study-strip",
+        "score": 79,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 8/7."
         ],
         "penalties": []
       },

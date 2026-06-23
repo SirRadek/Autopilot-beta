@@ -202,6 +202,17 @@
         "penalties": []
       },
       {
+        "id": "outcome-cta",
+        "score": 75,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/9."
+        ],
+        "penalties": []
+      },
+      {
         "id": "sharp-positioning-hero",
         "score": 75,
         "selected": false,
@@ -312,6 +323,17 @@
         "penalties": []
       },
       {
+        "id": "studio-proof-ledger",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
         "id": "table-first",
         "score": 69,
         "selected": false,
@@ -324,6 +346,17 @@
       },
       {
         "id": "client-task-timeline",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "guided-offer-map",
         "score": 68,
         "selected": false,
         "reasons": [
@@ -363,6 +396,17 @@
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 8/8."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "case-study-strip",
+        "score": 67,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/7."
         ],
         "penalties": []
       },

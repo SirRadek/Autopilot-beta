@@ -244,3 +244,35 @@ as candidates; zero change to existing items).
 **Gates:** typecheck ✅ · vendor-check ✅ (108 pristine + 12 patched) · vitest 7/7 ✅ · validate 0
 errors / 14 warnings. **Remaining:** batch 3 (marketing-premium: 5 ghosts), batch 4 (cleanup →
 ghosts 0, taste/pattern-scores), then F1c.
+
+---
+
+# F2 BATCH 3 (marketing-premium) EXECUTED — record (2026-06-23) — GHOSTS → 0 🎯
+
+**Worker:** real `codex_cli` (hp-20260623-beta-f2-batch3, exit 0, 284 s). Opus reviewed every edit vs
+pattern.schema + verified the canonical 9-id list before applying.
+
+**Applied:**
+- `pattern-manifest.json`: NEW `guided-offer-map` (ux_pattern), `studio-proof-ledger`
+  (conversion_pattern — B3 distinct, cross-ref proof-led-section), `case-study-strip` (layout_pattern),
+  `outcome-cta` (conversion_pattern).
+- `recipes/marketing-premium.json`: `allowed_patterns` → canonical 9-id list (theme-crossed-positioning
+  → theme-crossed-direction D1; the 4 new patterns now valid) + mirrored `allowed_pattern_ids`.
+  `patched_by: F2`.
+
+**Milestone — F0 ghost inventory fully resolved:** `PDOS_GHOST_PATTERN` 5 → **0** (all 13 original
+occurrences across batches 1–3 resolved). Total warnings 14 → **9** (only `PDOS_EMPTY_TOKENS:6` +
+`PDOS_ASSET_REF_TAG_MIX:3` remain — the latter drops at F1c). Ghost assertions in both tests now
+omit the `PDOS_GHOST_PATTERN` key.
+
+**Rebaseline (owner-approved):** fixtures regenerated. Unlike b1/b2 this batch caused **selection
+changes** in the marketing/portfolio fixtures (1,2,7), not just insertion: `outcome-cta` scores 87 —
+**ties `sharp-positioning-hero` and wins the alphabetical id tiebreak** — so it legitimately enters
+the top-3 selected, pushing `proof-led-section` to rejected. Verified as correct deterministic scoring
+(the new marketing/portfolio patterns genuinely fit those routes), not corruption. Other routes
+(internal/ecommerce/public-sector/client-portal) see pure insertion of the 4 as rejected candidates.
+
+**Gates:** typecheck ✅ · vendor-check ✅ (107 pristine + 13 patched) · vitest 7/7 ✅ · validate 0
+errors / 9 warnings. **Remaining:** batch 4 (taste/pattern-scores cleanup — not dereferenced by
+validate/score, low-risk), then **F1c** (remove legacy untyped asset fields + legacy allowed_patterns
+where typed mirrors exist → `PDOS_ASSET_REF_TAG_MIX` drops to 0).

@@ -17,10 +17,10 @@ describe("validateProductDesignOs", () => {
     }
 
     expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
+      // F2 b1+b2+b3 resolved all 13 ghost occurrences → PDOS_GHOST_PATTERN absent.
+      // PDOS_ASSET_REF_TAG_MIX (3) drops at F1c when the legacy untyped fields are removed.
       PDOS_ASSET_REF_TAG_MIX: 3,
-      PDOS_EMPTY_TOKENS: 6,
-      // F2 b1 resolved demo-world-hub (13→11); b2 resolved creative-motion's 6 ghosts (11→5).
-      PDOS_GHOST_PATTERN: 5
+      PDOS_EMPTY_TOKENS: 6
     });
     expect(report.ok).toBe(true);
     expect(report.errors).toEqual([]);
