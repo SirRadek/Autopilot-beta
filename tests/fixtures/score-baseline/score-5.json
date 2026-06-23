@@ -512,6 +512,17 @@
         "penalties": []
       },
       {
+        "id": "animated-hero",
+        "score": 50,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
         "id": "scroll-linked-proof",
         "score": 50,
         "selected": false,
@@ -519,6 +530,17 @@
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "mask-reveal",
+        "score": 48,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 6/6."
         ],
         "penalties": []
       },
@@ -932,6 +954,19 @@
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Asset use_case is not an exact match.",
           "Creativity/trust/motion: 9/7/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "motion-background",
+        "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/7."
         ],
         "penalties": [
           "Asset style conflicts with route priorities."

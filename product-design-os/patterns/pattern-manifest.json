@@ -18,6 +18,21 @@
       "examples": ["offer-led homepage hero", "service landing hero"]
     },
     {
+      "id": "animated-hero",
+      "type": "motion_pattern",
+      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
+      "good_for": ["content-first hero", "memorable brand opener", "motion-enhanced CTA", "creative positioning"],
+      "bad_for": ["checkout", "dense internal system", "public-sector critical flow"],
+      "complexity": 7,
+      "usability": 7,
+      "mobile_quality": 6,
+      "requires": ["content-first hero", "DOM-text CTA", "reduced-motion fallback", "static fallback", "performance budget"],
+      "risks": ["animation delaying page purpose", "CTA hidden by motion", "low-end mobile jank", "hero content trapped in canvas"],
+      "accessibility_notes": "Hero copy and CTA must remain DOM text with readable contrast, focus states, and equivalent static presentation for reduced motion.",
+      "performance_notes": "Render text and CTA before motion; cap animation asset weight and avoid blocking LCP with canvas, video, or large script bundles.",
+      "examples": ["motion-enhanced landing hero", "animated portfolio opener"]
+    },
+    {
       "id": "proof-led-section",
       "type": "conversion_pattern",
       "use_case": ["marketing_web", "portfolio", "landing_page"],
@@ -137,6 +152,21 @@
       "accessibility_notes": "Respect prefers-reduced-motion and keep all content readable without scroll animation.",
       "performance_notes": "Avoid scroll event loops; prefer CSS timeline or intersection-driven class changes when available.",
       "examples": ["step-by-step process reveal", "case proof progression"]
+    },
+    {
+      "id": "mask-reveal",
+      "type": "motion_pattern",
+      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
+      "good_for": ["guided emphasis", "progressive proof reveal", "editorial transitions", "content hierarchy"],
+      "bad_for": ["essential instructions", "checkout", "public-sector critical flow", "dense internal system"],
+      "complexity": 6,
+      "usability": 6,
+      "mobile_quality": 6,
+      "requires": ["effect/modifier, not standalone section", "content purpose", "reduced-motion fallback", "content readable without the effect", "no decoration-only reveal"],
+      "risks": ["motion-without-purpose", "content hidden by reveal", "reveal timing blocks reading", "reduced-motion mismatch"],
+      "accessibility_notes": "Use reveal only as enhancement; DOM order, visible text, focusable controls, and reduced-motion views must expose the same content.",
+      "performance_notes": "Prefer CSS mask/clip-path/opacity transforms and avoid per-frame layout work; keep reveal effects optional on low-power devices.",
+      "examples": ["proof quote mask reveal", "section headline reveal modifier"]
     },
     {
       "id": "asymmetric-editorial-layout",

@@ -216,3 +216,31 @@ buildSubagentTree:
 recipe rewrite), batch 3 (marketing-premium: guided-offer-map, studio-proof-ledger, case-study-strip,
 outcome-cta), batch 4 (cleanup: rewrite ghost recipes to canonical ids → remaining ghosts→0,
 taste/pattern-scores). Each its own owner-approved rebaseline. Then F1c.
+
+---
+
+# F2 BATCH 2 (creative-motion) EXECUTED — record (2026-06-23)
+
+**Worker:** real `codex_cli` (hp-20260623-beta-f2-batch2, exit 0, 277 s). Opus reviewed every edit vs
+pattern/asset schema + verified the canonical rewrite list before applying.
+
+**Applied:**
+- `pattern-manifest.json`: NEW `animated-hero` (motion_pattern) + `mask-reveal` (motion_pattern,
+  effect/modifier encoded in requires per F0.5).
+- `asset-manifest.json`: NEW `motion-background` (background, internal provenance, works_with_ids
+  =[animated-hero, theme-crossed-direction, demo-world-hub, mask-reveal]).
+- `recipes/creative-motion.json`: `allowed_patterns` rewritten to canonical deduped 7-id list
+  `[animated-hero, theme-crossed-direction, mascot-progressive-guide, cursor-responsive-detail,
+  scroll-linked-proof, demo-world-hub, mask-reveal]` + mirrored `allowed_pattern_ids`. Mappings:
+  theme-crossed-motion→theme-crossed-direction (D1), cat-concierge-guide & section-aware-mascot→
+  mascot-progressive-guide (D2 + A4 alias, deduped), motion-background dropped (asset; no
+  allowed_asset_ids). `patched_by: F2`.
+
+**Owner-approved rebaseline:** `PDOS_GHOST_PATTERN` 11 → **5** (creative-motion's 6 ghosts resolved);
+total warnings 20 → **14**. Ghost assertions updated 11→5. Score fixtures regenerated — **pure
+insertion** (−0 removed lines across all 7; only animated-hero + mask-reveal + motion-background added
+as candidates; zero change to existing items).
+
+**Gates:** typecheck ✅ · vendor-check ✅ (108 pristine + 12 patched) · vitest 7/7 ✅ · validate 0
+errors / 14 warnings. **Remaining:** batch 3 (marketing-premium: 5 ghosts), batch 4 (cleanup →
+ghosts 0, taste/pattern-scores), then F1c.

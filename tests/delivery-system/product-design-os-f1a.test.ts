@@ -54,8 +54,8 @@ describe("Product Design OS F1a contracts", () => {
     expect(Object.fromEntries([...countsByCode.entries()].sort())).toEqual({
       PDOS_ASSET_REF_TAG_MIX: 3,
       PDOS_EMPTY_TOKENS: 6,
-      // F2 batch 1 registered demo-world-hub → its 2 ghost occurrences resolved (13 → 11).
-      PDOS_GHOST_PATTERN: 11
+      // F2 b1 resolved demo-world-hub (13→11); b2 resolved creative-motion's 6 ghosts (11→5).
+      PDOS_GHOST_PATTERN: 5
     });
   });
 

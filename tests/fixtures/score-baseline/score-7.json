@@ -203,6 +203,17 @@
         "penalties": []
       },
       {
+        "id": "animated-hero",
+        "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
         "id": "demo-world-hub",
         "score": 71,
         "selected": false,
@@ -232,6 +243,17 @@
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case matches project type.",
           "Usability/mobile quality: 7/6."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "mask-reveal",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 6/6."
         ],
         "penalties": []
       },
@@ -566,6 +588,17 @@
           "Compared against route portfolio and recipe creative-motion.",
           "Asset use_case matches project type.",
           "Creativity/trust/motion: 8/6/4."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "motion-background",
+        "score": 131,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 9/6/7."
         ],
         "penalties": []
       },

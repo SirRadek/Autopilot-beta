@@ -113,6 +113,26 @@
       "notes": "Static SVG seed for written/editorial proof directions. Use as background only; proof remains readable text."
     },
     {
+      "id": "motion-background",
+      "type": "background",
+      "style": ["motion", "immersive", "brand-atmosphere", "interactive-light"],
+      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
+      "target": ["founder", "small-business", "tech-curious-customer"],
+      "creativity": 9,
+      "trust": 6,
+      "motion_level": 7,
+      "performance_cost": 4,
+      "mobile_safe": true,
+      "dependencies": [],
+      "works_with_ids": ["animated-hero", "theme-crossed-direction", "demo-world-hub", "mask-reveal"],
+      "avoid_with_tags": ["primary-content-inside-canvas", "checkout", "critical-form", "reduced-motion-missing"],
+      "template_risk": 3,
+      "license": "internal-metadata",
+      "source": "product-design-os",
+      "provenance_status": "internal",
+      "notes": "Internal concept backdrop for motion-rich creative pages. Use as background only with DOM content above it, reduced-motion handling, and a static mobile fallback."
+    },
+    {
       "id": "open-doodles-cc0-art-cues",
       "type": "media",
       "style": ["artistic", "written", "playful", "human", "light"],
