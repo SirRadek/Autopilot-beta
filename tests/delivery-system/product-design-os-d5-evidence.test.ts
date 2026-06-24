@@ -44,13 +44,22 @@ function validEvidenceRecord(id = "synthetic-context7-evidence"): Record<string,
   };
 }
 
-function validateTempEvidence(records: readonly Record<string, unknown>[]): readonly string[] {
+function validateTempEvidence(
+  records: readonly Record<string, unknown>[],
+  options: { readonly claimedEvidenceIds?: readonly string[] } = {}
+): readonly string[] {
   const tempRoot = mkdtempSync(join(tmpdir(), "pdos-d5-evidence-"));
   const tempPdosRoot = join(tempRoot, "product-design-os");
 
   try {
     mkdirSync(join(tempPdosRoot, "evidence", "records"), { recursive: true });
+    mkdirSync(join(tempPdosRoot, "tokens"), { recursive: true });
     writeJson(join(tempPdosRoot, "evidence", "evidence.schema.json"), readJson(evidenceSchemaFile));
+    writeJson(join(tempPdosRoot, "tokens", "color.json"), {
+      version: 1,
+      tokens: {},
+      governance_evidence_ids: options.claimedEvidenceIds ?? records.map((record) => record.id).filter((id): id is string => typeof id === "string")
+    });
 
     records.forEach((record, index) => {
       writeJson(join(tempPdosRoot, "evidence", "records", `record-${index}.json`), record);
@@ -188,6 +197,35 @@ describe("Product Design OS D5 governance evidence", () => {
     ]);
 
     expect(messages).toEqual(expect.arrayContaining([expect.stringContaining("PDOS_EVIDENCE_DUPLICATE_ID")]));
+  });
+
+  it("rejects shape-valid evidence records that no governed artifact claims", () => {
+    const messages = validateTempEvidence([validEvidenceRecord("unclaimed-context7-evidence")], {
+      claimedEvidenceIds: []
+    });
+
+    expect(messages).toEqual(expect.arrayContaining([expect.stringContaining("PDOS_EVIDENCE_UNCLAIMED_RECORD")]));
+  });
+
+  it("rejects governed artifacts that claim missing evidence records", () => {
+    const messages = validateTempEvidence([validEvidenceRecord("claimed-context7-evidence")], {
+      claimedEvidenceIds: ["claimed-context7-evidence", "missing-context7-evidence"]
+    });
+
+    expect(messages).toEqual(expect.arrayContaining([expect.stringContaining("PDOS_EVIDENCE_UNKNOWN_CLAIM")]));
+  });
+
+  it("rejects malformed governed artifact evidence claim fields", () => {
+    const messages = validateTempEvidenceSetup(({ tempPdosRoot }) => {
+      mkdirSync(join(tempPdosRoot, "tokens"), { recursive: true });
+      writeJson(join(tempPdosRoot, "tokens", "color.json"), {
+        version: 1,
+        tokens: {},
+        governance_evidence_ids: "not-an-array"
+      });
+    });
+
+    expect(messages).toEqual(expect.arrayContaining([expect.stringContaining("PDOS_EVIDENCE_CLAIM_INVALID")]));
   });
 
   it("rejects symlinked evidence record paths before reading records", () => {

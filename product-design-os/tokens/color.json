@@ -10,5 +10,6 @@
     "accent_text": "#FFFFFF",
     "focus_ring": "#0F766E"
   },
+  "governance_evidence_ids": ["example-context7-token-evidence"],
   "notes": "F4b neutral floor defaults. Override per project spec."
 }

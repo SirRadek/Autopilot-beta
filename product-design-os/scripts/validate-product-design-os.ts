@@ -110,6 +110,8 @@ const PROJECT_STATUSES = [
 
 const MAX_EVIDENCE_RECORD_FILES = 500;
 const MAX_EVIDENCE_RECORD_BYTES = 256 * 1024;
+const EVIDENCE_CLAIM_FIELDS = ["governance_evidence_ids", "evidence_record_ids"] as const;
+const EVIDENCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 export const TOKEN_FLOOR = {
   "color.json": ["background", "surface", "text", "muted_text", "border", "accent", "accent_text", "focus_ring"],
@@ -132,6 +134,11 @@ interface CompositionSpecRegistries {
   readonly recipesById: ReadonlyMap<string, Record<string, unknown>>;
   readonly patternIds: ReadonlySet<string>;
   readonly assetIds: ReadonlySet<string>;
+}
+
+interface EvidenceRecordClaimants {
+  readonly claimantsByEvidenceId: ReadonlyMap<string, readonly string[]>;
+  readonly claimedEvidenceIds: ReadonlySet<string>;
 }
 
 export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidationReport {
@@ -673,48 +680,172 @@ export function validateCompositionSpecs(pdosRoot: string, repoRoot: string, err
 
 export function validateEvidenceRecords(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
   const evidenceRoot = join(pdosRoot, "evidence");
-  if (!existsSync(evidenceRoot)) {
-    return;
-  }
-
   const recordsRoot = join(evidenceRoot, "records");
   const recordFiles = listEvidenceRecordFiles(recordsRoot, repoRoot, errors);
-  if (recordFiles.length === 0) {
-    return;
-  }
-
-  const schemaFile = join(evidenceRoot, "evidence.schema.json");
-  const evidenceSchema = readJsonFile(schemaFile, repoRoot, errors);
-  if (!isRecord(evidenceSchema)) {
-    return;
-  }
-
   const idsByRecord = new Map<string, string>();
 
-  for (const recordFile of recordFiles) {
-    const value = readJsonFile(recordFile, repoRoot, errors);
-
-    for (const issue of validateJsonSchema(value, evidenceSchema)) {
-      errors.push({
-        file: toRepoPath(repoRoot, recordFile),
-        message: `PDOS_EVIDENCE_SCHEMA_INVALID: ${issue.path}: ${issue.message}`
-      });
+  if (recordFiles.length > 0) {
+    const schemaFile = join(evidenceRoot, "evidence.schema.json");
+    const evidenceSchema = readJsonFile(schemaFile, repoRoot, errors);
+    if (!isRecord(evidenceSchema)) {
+      return;
     }
 
-    if (!isRecord(value) || typeof value.id !== "string") {
+    for (const recordFile of recordFiles) {
+      const value = readJsonFile(recordFile, repoRoot, errors);
+
+      for (const issue of validateJsonSchema(value, evidenceSchema)) {
+        errors.push({
+          file: toRepoPath(repoRoot, recordFile),
+          message: `PDOS_EVIDENCE_SCHEMA_INVALID: ${issue.path}: ${issue.message}`
+        });
+      }
+
+      if (!isRecord(value) || typeof value.id !== "string") {
+        continue;
+      }
+
+      const existingFile = idsByRecord.get(value.id);
+      if (existingFile !== undefined) {
+        errors.push({
+          file: toRepoPath(repoRoot, recordFile),
+          message: `PDOS_EVIDENCE_DUPLICATE_ID: Duplicate evidence id ${value.id}; first declared in ${toRepoPath(repoRoot, existingFile)}.`
+        });
+        continue;
+      }
+
+      idsByRecord.set(value.id, recordFile);
+    }
+  }
+
+  const evidenceClaimants = collectEvidenceRecordClaimants(pdosRoot, repoRoot, errors);
+  for (const evidenceId of evidenceClaimants.claimedEvidenceIds) {
+    if (!idsByRecord.has(evidenceId)) {
+      errors.push({
+        file: evidenceClaimants.claimantsByEvidenceId.get(evidenceId)?.[0] ?? toRepoPath(repoRoot, pdosRoot),
+        message: `PDOS_EVIDENCE_UNKNOWN_CLAIM: Artifact claims missing evidence id ${evidenceId}.`
+      });
+    }
+  }
+
+  for (const [evidenceId, recordFile] of idsByRecord.entries()) {
+    if (!evidenceClaimants.claimedEvidenceIds.has(evidenceId)) {
+      errors.push({
+        file: toRepoPath(repoRoot, recordFile),
+        message: `PDOS_EVIDENCE_UNCLAIMED_RECORD: Evidence id ${evidenceId} is not claimed by any governed artifact. Add governance_evidence_ids to the token, asset, pattern, contract, or library entry that depends on it.`
+      });
+    }
+  }
+}
+
+function collectEvidenceRecordClaimants(
+  pdosRoot: string,
+  repoRoot: string,
+  errors: PdosValidationIssue[]
+): EvidenceRecordClaimants {
+  const claimantsByEvidenceId = new Map<string, string[]>();
+  const claimantFiles = listEvidenceClaimantFiles(pdosRoot);
+
+  for (const file of claimantFiles) {
+    const value = readJsonFile(file, repoRoot, errors);
+    if (value === undefined) {
       continue;
     }
 
-    const existingFile = idsByRecord.get(value.id);
-    if (existingFile !== undefined) {
-      errors.push({
-        file: toRepoPath(repoRoot, recordFile),
-        message: `PDOS_EVIDENCE_DUPLICATE_ID: Duplicate evidence id ${value.id}; first declared in ${toRepoPath(repoRoot, existingFile)}.`
+    collectEvidenceClaimsFromValue({
+      value,
+      reportFile: toRepoPath(repoRoot, file),
+      path: "$",
+      claimantsByEvidenceId,
+      errors
+    });
+  }
+
+  return {
+    claimantsByEvidenceId,
+    claimedEvidenceIds: new Set(claimantsByEvidenceId.keys())
+  };
+}
+
+function listEvidenceClaimantFiles(pdosRoot: string): readonly string[] {
+  const files = [
+    ...listJsonFilesIfPresent(join(pdosRoot, "tokens")),
+    join(pdosRoot, "assets", "asset-manifest.json"),
+    join(pdosRoot, "patterns", "pattern-manifest.json"),
+    join(pdosRoot, "contracts", "component-contract-manifest.json"),
+    join(pdosRoot, "library", "source-catalog.json"),
+    join(pdosRoot, "library", "reference-catalog.json"),
+    join(pdosRoot, "library", "project-index.json")
+  ];
+
+  return files.filter((file) => existsSync(file)).sort(compareStrings);
+}
+
+function listJsonFilesIfPresent(directory: string): readonly string[] {
+  if (!existsSync(directory)) {
+    return [];
+  }
+
+  return listFiles(directory).filter((file) => file.endsWith(".json"));
+}
+
+function collectEvidenceClaimsFromValue(input: {
+  readonly value: unknown;
+  readonly reportFile: string;
+  readonly path: string;
+  readonly claimantsByEvidenceId: Map<string, string[]>;
+  readonly errors: PdosValidationIssue[];
+}): void {
+  if (Array.isArray(input.value)) {
+    input.value.forEach((item, index) => {
+      collectEvidenceClaimsFromValue({
+        ...input,
+        value: item,
+        path: `${input.path}[${index}]`
+      });
+    });
+    return;
+  }
+
+  if (!isRecord(input.value)) {
+    return;
+  }
+
+  for (const field of EVIDENCE_CLAIM_FIELDS) {
+    if (!hasOwnKey(input.value, field)) {
+      continue;
+    }
+
+    const claimValue = input.value[field];
+    if (!Array.isArray(claimValue)) {
+      input.errors.push({
+        file: input.reportFile,
+        message: `PDOS_EVIDENCE_CLAIM_INVALID: ${input.path}.${field} must be an array of evidence ids.`
       });
       continue;
     }
 
-    idsByRecord.set(value.id, recordFile);
+    claimValue.forEach((evidenceId, index) => {
+      if (typeof evidenceId !== "string" || !EVIDENCE_ID_PATTERN.test(evidenceId)) {
+        input.errors.push({
+          file: input.reportFile,
+          message: `PDOS_EVIDENCE_CLAIM_INVALID: ${input.path}.${field}[${index}] must be a valid evidence id.`
+        });
+        return;
+      }
+
+      const claimant = `${input.reportFile}:${input.path}.${field}[${index}]`;
+      const claimants = input.claimantsByEvidenceId.get(evidenceId) ?? [];
+      input.claimantsByEvidenceId.set(evidenceId, [...claimants, claimant]);
+    });
+  }
+
+  for (const [key, value] of Object.entries(input.value)) {
+    collectEvidenceClaimsFromValue({
+      ...input,
+      value,
+      path: `${input.path}.${key}`
+    });
   }
 }
 

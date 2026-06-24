@@ -129,7 +129,21 @@ Keep the OTHER OFF axes as **documented-not-built** (they're docs, not code — 
 (D3) licenses an owner decision. Low effort; reduces "is this on?" confusion.
 **Depends:** none. Effort: low.
 
-## D9 — Evidence: shape gate → TRUTH gate (surfaced by the D5 codex+agy audit, DEFERRED to owner)
+## D9 — Evidence: shape gate → referential integrity — DECIDED + IMPLEMENTED (owner, 2026-06-24)
+**RESOLUTION:** Owner chose **(A) referential integrity** and implemented it directly (Opus-verified +
+landed). The shape gate now may not stand alone: `validateProductDesignOs` walks a whitelist of governed
+artifacts (token files, asset/pattern/contract manifests, library source/reference/project catalogs) for
+`governance_evidence_ids` / `evidence_record_ids`, and enforces bidirectionally — `PDOS_EVIDENCE_UNCLAIMED_
+RECORD` (a shape-valid record no governed artifact claims → kills the dummy-JSON theater class),
+`PDOS_EVIDENCE_UNKNOWN_CLAIM` (artifact references a missing record), `PDOS_EVIDENCE_CLAIM_INVALID`
+(malformed claim field). The D5 example record is now bound to `tokens/color.json`. Opus live-verified both
+negative cases bite; validate stays 0/0 (76), suite 52 tests. **Boundary (still open):** this is not yet an
+online TRUTH oracle — it proves an artifact *depends on* a record, not that the record's *claim is true*.
+The real truth gate (records auto-produced/signed by the retrieval/build/render step — directions (B)
+telemetry / (C) evidence-as-test) still belongs to a later layer, post-renderer (D1). Below = the original
+options, kept for that later decision.
+
+
 **Q:** D5 ships an enforceable evidence **shape** gate. Both auditors (codex tech-opponent + agy strategic)
 converged that a shape gate is **evidence-theater**: it checks record *structure*, not *truth*. Do we invest
 in a truth gate, and in which design?
