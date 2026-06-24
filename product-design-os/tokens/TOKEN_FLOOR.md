@@ -14,17 +14,18 @@ empty-token warnings are the **accepted pre-floor state** — they are not a def
 the visible signal that the floor is not yet filled.
 
 ## The minimal token floor
-`token_overrides.enabled` may become `true` (and the 6 warnings may drop to 0) only after ALL six token
+`token_overrides.enabled` may become `true` only after all token
 files carry non-empty, **owner-approved** `tokens` with at least these semantic keys:
 
 | file | required keys (minimum) |
 |---|---|
-| `color.json` | background, surface, text, muted_text, border, accent, accent_text, focus_ring |
+| `color.json` | background, surface, text, muted_text, border, accent, accent_secondary, accent_soft, accent_text, focus_ring |
 | `typography.json` | font_body, font_heading, size_body, size_heading, line_height_body, weight_regular, weight_bold |
 | `spacing.json` | space_1, space_2, space_3, space_4, space_6, space_8 |
 | `radius.json` | none, sm, md, lg |
 | `shadow.json` | none, sm, md |
 | `motion.json` | duration_fast, duration_base, duration_slow, easing_standard, reduced_motion |
+| `style.json` | decoration_intensity, accent_angle_deg, corner_style, heading_case, surface_treatment |
 
 ## Fill condition (gating)
 1. **Owner approval** of the actual token VALUES, units, and the per-file `tokens` object shape (still

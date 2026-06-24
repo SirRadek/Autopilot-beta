@@ -18,7 +18,18 @@ const compositionSchemaFile = join(pdosRoot, "specs", "composition.schema.json")
 const compositionExampleFile = join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json");
 
 const expectedTokenFloor = {
-  "color.json": ["background", "surface", "text", "muted_text", "border", "accent", "accent_text", "focus_ring"],
+  "color.json": [
+    "background",
+    "surface",
+    "text",
+    "muted_text",
+    "border",
+    "accent",
+    "accent_secondary",
+    "accent_soft",
+    "accent_text",
+    "focus_ring"
+  ],
   "typography.json": [
     "font_body",
     "font_heading",
@@ -31,7 +42,8 @@ const expectedTokenFloor = {
   "spacing.json": ["space_1", "space_2", "space_3", "space_4", "space_6", "space_8"],
   "radius.json": ["none", "sm", "md", "lg"],
   "shadow.json": ["none", "sm", "md"],
-  "motion.json": ["duration_fast", "duration_base", "duration_slow", "easing_standard", "reduced_motion"]
+  "motion.json": ["duration_fast", "duration_base", "duration_slow", "easing_standard", "reduced_motion"],
+  "style.json": ["decoration_intensity", "accent_angle_deg", "corner_style", "heading_case", "surface_treatment"]
 } as const;
 
 function readJson(file: string): unknown {
@@ -66,7 +78,7 @@ function writeTempTokenFloor(
   mkdirSync(tokensRoot, { recursive: true });
 
   for (const [fileName, requiredKeys] of Object.entries(TOKEN_FLOOR)) {
-    const tokens = Object.fromEntries(requiredKeys.map((key) => [key, `temp-${key}`]));
+    const tokens = Object.fromEntries(requiredKeys.map((key) => [key, tempTokenValue(fileName, key)]));
     mutateTokens?.(fileName, tokens);
     writeJson(join(tokensRoot, fileName), {
       version: 1,
@@ -74,6 +86,39 @@ function writeTempTokenFloor(
       notes: "Temp F4b token floor fixture."
     });
   }
+}
+
+function tempTokenValue(fileName: string, key: string): unknown {
+  if (fileName === "color.json") {
+    return (
+      {
+        background: "#FFFFFF",
+        surface: "#F8FAFC",
+        text: "#111827",
+        muted_text: "#4B5563",
+        border: "#D1D5DB",
+        accent: "#1D4ED8",
+        accent_secondary: "#0F766E",
+        accent_soft: "#DBEAFE",
+        accent_text: "#FFFFFF",
+        focus_ring: "#0F766E"
+      } as Record<string, string>
+    )[key];
+  }
+
+  if (fileName === "style.json") {
+    return (
+      {
+        decoration_intensity: "bold",
+        accent_angle_deg: "-8deg",
+        corner_style: "sharp",
+        heading_case: "none",
+        surface_treatment: "gradient"
+      } as Record<string, string>
+    )[key];
+  }
+
+  return `temp-${key}`;
 }
 
 function specWithTokenOverridesEnabled(): Record<string, unknown> {

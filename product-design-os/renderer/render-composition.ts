@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { checkRenderedContract } from "./check-render-contract";
 import { mapTokensToCss } from "./map-tokens";
 import { getPatternComponent } from "./pattern-component-registry";
+import { assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
 import type {
   AssetManifestEntry,
   ComponentContract,
@@ -109,6 +110,7 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
   const assetManifest = readAssetManifest(pdosRoot);
   const slots = resolveSlots(patternData.slotFills, assetManifest, pdosRoot, contract);
   const tokenCss = mapTokensToCss(pdosRoot, patternData.tokenOverrides);
+  assertTokenColorContrast(tokenCss);
 
   const fragment = component.render({
     props: patternData.props,
@@ -169,6 +171,17 @@ body {
   background: var(--color-background);
 }
 `.trim();
+
+function assertTokenColorContrast(tokenCss: string): void {
+  try {
+    assertRootColorContrastWcagAA(tokenCss);
+  } catch (error) {
+    if (error instanceof WcagContrastError) {
+      throw new RenderCompositionSpecError("token_color_contrast_below_aa", error.message);
+    }
+    throw error;
+  }
+}
 
 function resolvePatternData(input: unknown): RenderPatternData {
   if (input === undefined || input === null) {

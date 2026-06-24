@@ -14,6 +14,7 @@
     "pdos:variants": "tsx product-design-os/qa/variants/sample-product-design-variants.ts",
     "pdos:evidence-freshness": "tsx product-design-os/scripts/check-evidence-freshness-product-design-os.ts",
     "pdos:render": "tsx product-design-os/renderer/render-composition.ts",
+    "pdos:render:brands": "tsx product-design-os/renderer/render-brand-examples.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "test": "vitest run",

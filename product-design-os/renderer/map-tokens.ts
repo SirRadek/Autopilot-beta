@@ -26,11 +26,18 @@ const tokenPrefixByFile: Readonly<Record<string, string>> = {
   spacing: "space",
   radius: "radius",
   shadow: "shadow",
-  motion: "motion"
+  motion: "motion",
+  style: "style"
 };
 
 const tokenFileOrder = Object.keys(tokenPrefixByFile);
 const allowedCssValueFunctions = new Set(["rgb", "rgba", "hsl", "hsla", "cubic-bezier"]);
+const styleTokenValues = {
+  decoration_intensity: new Set(["none", "subtle", "bold"]),
+  corner_style: new Set(["sharp", "rounded", "pill"]),
+  heading_case: new Set(["none", "upper"]),
+  surface_treatment: new Set(["flat", "gradient"])
+} as const;
 
 interface TokenFile {
   readonly tokens?: Record<string, unknown>;
@@ -62,7 +69,7 @@ export function mapTokensToCss(pdosRoot: string, overrides: TokenOverrideMap = {
     const prefix = tokenPrefixByFile[tokenFile] ?? toKebabCase(tokenFile);
     const parsed = readTokenFile(path.join(tokensDir, fileName));
     const baseTokens = parsed.tokens ?? {};
-    const flattened = stringifyFlattenedTokens(flattenTokens(baseTokens));
+    const flattened = normalizeFlattenedTokens(tokenFile, stringifyFlattenedTokens(flattenTokens(baseTokens)), issues);
     const overridesForFile = normalizedOverrides[tokenFile] ?? {};
     const canonicalTokenKeyByCandidate = tokenKeyCandidates(flattened);
 
@@ -78,7 +85,7 @@ export function mapTokensToCss(pdosRoot: string, overrides: TokenOverrideMap = {
         continue;
       }
 
-      const safeValue = normalizeCssTokenOverrideValue(overrideValue);
+      const safeValue = normalizeTokenValueForCss(tokenFile, canonicalTokenKey, overrideValue);
       if (safeValue === undefined) {
         issues.push({
           code: "unsafe_token_value",
@@ -94,6 +101,10 @@ export function mapTokensToCss(pdosRoot: string, overrides: TokenOverrideMap = {
 
     for (const [tokenKey, value] of Object.entries(flattened).sort(([left], [right]) => left.localeCompare(right))) {
       declarations.push(`  ${cssCustomPropertyName(prefix, tokenKey)}: ${value};`);
+    }
+
+    if (tokenFile === "style") {
+      declarations.push(...styleDerivedDeclarations(flattened));
     }
   }
 
@@ -176,6 +187,70 @@ function stringifyFlattenedTokens(tokens: Record<string, TokenPrimitive>): Recor
   return stringified;
 }
 
+function normalizeFlattenedTokens(
+  tokenFile: string,
+  tokens: Record<string, string>,
+  issues: TokenOverrideValidationIssue[]
+): Record<string, string> {
+  const normalized: Record<string, string> = {};
+
+  for (const [tokenKey, tokenValue] of Object.entries(tokens)) {
+    const safeValue = normalizeTokenValueForCss(tokenFile, tokenKey, tokenValue);
+    if (safeValue === undefined) {
+      issues.push({
+        code: "unsafe_base_token_value",
+        tokenFile,
+        tokenKey,
+        message: `Unsafe CSS base token value for "${tokenFile}.${tokenKey}".`
+      });
+      continue;
+    }
+
+    normalized[tokenKey] = safeValue;
+  }
+
+  return normalized;
+}
+
+function normalizeTokenValueForCss(tokenFile: string, tokenKey: string, value: TokenPrimitive): string | undefined {
+  if (tokenFile === "style") {
+    return normalizeStyleTokenOverrideValue(tokenKey, value);
+  }
+
+  const safeValue = normalizeCssTokenOverrideValue(value);
+  if (safeValue === undefined) {
+    return undefined;
+  }
+
+  if (tokenFile === "color" && !isHexColor(safeValue)) {
+    return undefined;
+  }
+
+  return safeValue;
+}
+
+function normalizeStyleTokenOverrideValue(tokenKey: string, value: TokenPrimitive): string | undefined {
+  if (tokenKey === "accent_angle_deg") {
+    const angle = normalizeDegreeAngle(value);
+    if (angle === undefined) {
+      return undefined;
+    }
+    return normalizeCssTokenOverrideValue(angle);
+  }
+
+  if (!isKnownStyleEnumKey(tokenKey)) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  const allowedValues: ReadonlySet<string> = styleTokenValues[tokenKey];
+  return allowedValues.has(trimmed) ? trimmed : undefined;
+}
+
 function tokenKeyCandidates(flattenedTokens: Record<string, string>): Map<string, string> {
   const candidates = new Map<string, string>();
   for (const tokenKey of Object.keys(flattenedTokens)) {
@@ -183,6 +258,75 @@ function tokenKeyCandidates(flattenedTokens: Record<string, string>): Map<string
     candidates.set(toKebabCase(tokenKey), tokenKey);
   }
   return candidates;
+}
+
+function styleDerivedDeclarations(styleTokens: Record<string, string>): readonly string[] {
+  const decoration = styleTokens.decoration_intensity ?? "bold";
+  const accentAngle = styleTokens.accent_angle_deg ?? "-8deg";
+  const corner = styleTokens.corner_style ?? "sharp";
+  const headingCase = styleTokens.heading_case ?? "none";
+  const surface = styleTokens.surface_treatment ?? "gradient";
+
+  return [
+    `  --style-accent-angle-inverse-deg: ${invertDegreeAngle(accentAngle)};`,
+    `  --style-corner-radius: ${cornerRadiusForStyle(corner)};`,
+    `  --style-decoration-border-width: ${decorationBorderWidth(decoration)};`,
+    `  --style-decoration-opacity: ${decorationOpacity(decoration)};`,
+    `  --style-heading-transform: ${headingCase === "upper" ? "uppercase" : "none"};`,
+    `  --style-surface-background: ${surfaceBackground(surface)};`
+  ];
+}
+
+function invertDegreeAngle(value: string): string {
+  const match = /^(-?(?:\d+|\d*\.\d+))deg$/.exec(value.trim());
+  if (match === null) {
+    return "8deg";
+  }
+
+  return `${formatCssNumber(Number(match[1]) * -1)}deg`;
+}
+
+function cornerRadiusForStyle(value: string): string {
+  if (value === "pill") {
+    return "999px";
+  }
+  if (value === "rounded") {
+    return "var(--radius-lg)";
+  }
+  return "var(--radius-none)";
+}
+
+function decorationBorderWidth(value: string): string {
+  if (value === "none") {
+    return "0px";
+  }
+  if (value === "subtle") {
+    return "2px";
+  }
+  return "3px";
+}
+
+function decorationOpacity(value: string): string {
+  if (value === "none") {
+    return "0";
+  }
+  if (value === "subtle") {
+    return "0.52";
+  }
+  return "1";
+}
+
+function surfaceBackground(value: string): string {
+  if (value === "flat") {
+    return "var(--color-background)";
+  }
+
+  return [
+    "linear-gradient(105deg,",
+    "var(--color-background) 0%,",
+    "color-mix(in srgb, var(--color-background) 86%, var(--color-surface)) 47%,",
+    "color-mix(in srgb, var(--color-surface) 72%, var(--color-background)) 100%)"
+  ].join(" ");
 }
 
 function normalizeCssTokenOverrideValue(value: TokenPrimitive): string | undefined {
@@ -221,6 +365,36 @@ function normalizeCssTokenOverrideValue(value: TokenPrimitive): string | undefin
   }
 
   return trimmed;
+}
+
+function normalizeDegreeAngle(value: TokenPrimitive): string | undefined {
+  const raw = typeof value === "number" ? `${value}deg` : typeof value === "string" ? value.trim() : "";
+  const match = /^(-?(?:\d+|\d*\.\d+))deg$/.exec(raw);
+  if (match === null) {
+    return undefined;
+  }
+
+  const numeric = Number(match[1]);
+  if (!Number.isFinite(numeric) || numeric < -24 || numeric > 24) {
+    return undefined;
+  }
+
+  return `${formatCssNumber(numeric)}deg`;
+}
+
+function formatCssNumber(value: number): string {
+  if (Object.is(value, -0)) {
+    return "0";
+  }
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(3)));
+}
+
+function isHexColor(value: string): boolean {
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
+}
+
+function isKnownStyleEnumKey(value: string): value is keyof typeof styleTokenValues {
+  return Object.prototype.hasOwnProperty.call(styleTokenValues, value);
 }
 
 function cssCustomPropertyName(prefix: string, rawTokenKey: string): string {

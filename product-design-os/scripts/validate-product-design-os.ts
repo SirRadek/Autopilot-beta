@@ -3,6 +3,8 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validateJsonSchema } from "../../src/lib/delivery-system/validation";
+import { mapTokensToCss, TokenOverrideValidationError } from "../renderer/map-tokens";
+import type { TokenOverrideMap, TokenPrimitive } from "../renderer/types";
 
 export interface PdosValidationIssue {
   readonly file: string;
@@ -114,7 +116,18 @@ const EVIDENCE_CLAIM_FIELDS = ["governance_evidence_ids", "evidence_record_ids"]
 const EVIDENCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 export const TOKEN_FLOOR = {
-  "color.json": ["background", "surface", "text", "muted_text", "border", "accent", "accent_text", "focus_ring"],
+  "color.json": [
+    "background",
+    "surface",
+    "text",
+    "muted_text",
+    "border",
+    "accent",
+    "accent_secondary",
+    "accent_soft",
+    "accent_text",
+    "focus_ring"
+  ],
   "typography.json": [
     "font_body",
     "font_heading",
@@ -127,7 +140,16 @@ export const TOKEN_FLOOR = {
   "spacing.json": ["space_1", "space_2", "space_3", "space_4", "space_6", "space_8"],
   "radius.json": ["none", "sm", "md", "lg"],
   "shadow.json": ["none", "sm", "md"],
-  "motion.json": ["duration_fast", "duration_base", "duration_slow", "easing_standard", "reduced_motion"]
+  "motion.json": ["duration_fast", "duration_base", "duration_slow", "easing_standard", "reduced_motion"],
+  "style.json": ["decoration_intensity", "accent_angle_deg", "corner_style", "heading_case", "surface_treatment"]
+} as const;
+
+const TOKEN_FLOOR_MIN_CONTRAST_RATIO = 4.5;
+const STYLE_TOKEN_ALLOWED_VALUES = {
+  decoration_intensity: new Set(["none", "subtle", "bold"]),
+  corner_style: new Set(["sharp", "rounded", "pill"]),
+  heading_case: new Set(["none", "upper"]),
+  surface_treatment: new Set(["flat", "gradient"])
 } as const;
 
 interface CompositionSpecRegistries {
@@ -1197,12 +1219,68 @@ function validateCompositionSpecIntegrity(
       );
     }
   }
+  validateCompositionTokenOverrides(join(repoRoot, "product-design-os"), reportFile, tokenOverrides, errors);
 
   if (tokenOverrides.enabled === true && !tokenFloorComplete) {
     errors.push({
       file: reportFile,
       message: `PDOS_SPEC_TOKEN_OVERRIDES_BEFORE_FLOOR: Spec ${specId} enables token overrides before the token floor is filled.`
     });
+  }
+}
+
+function validateCompositionTokenOverrides(
+  pdosRoot: string,
+  reportFile: string,
+  tokenOverrides: Record<string, unknown>,
+  errors: PdosValidationIssue[]
+): void {
+  const values = getRecordArray(tokenOverrides, "values");
+  if (values.length === 0) {
+    return;
+  }
+
+  const overrideMap: TokenOverrideMap = {};
+  let malformed = false;
+
+  for (const tokenValue of values) {
+    const tokenFile = tokenValue.token_file;
+    const tokenKey = tokenValue.token_key;
+    const value = tokenValue.value;
+
+    if (typeof tokenFile !== "string" || typeof tokenKey !== "string" || !isTokenPrimitive(value)) {
+      malformed = true;
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_TOKEN_OVERRIDE_INVALID: token_overrides.values entries require string token_file, string token_key, and primitive value.`
+      });
+      continue;
+    }
+
+    const normalizedTokenFile = tokenFile.replace(/\.json$/i, "");
+    overrideMap[normalizedTokenFile] = {
+      ...(overrideMap[normalizedTokenFile] ?? {}),
+      [tokenKey]: value
+    };
+  }
+
+  if (malformed) {
+    return;
+  }
+
+  try {
+    mapTokensToCss(pdosRoot, overrideMap);
+  } catch (error) {
+    if (!(error instanceof TokenOverrideValidationError)) {
+      throw error;
+    }
+
+    for (const issue of error.issues) {
+      errors.push({
+        file: reportFile,
+        message: `PDOS_SPEC_TOKEN_OVERRIDE_INVALID: ${issue.message}`
+      });
+    }
   }
 }
 
@@ -1359,6 +1437,88 @@ export function validateTokenFloor(pdosRoot: string, repoRoot: string, errors: P
           message: `PDOS_TOKEN_FLOOR_INCOMPLETE: ${fileName} missing ${requiredKey}`
         });
       }
+    }
+
+    if (isRecord(tokens)) {
+      validateTokenFloorValues(fileName, tokenFile, repoRoot, tokens, errors);
+    }
+  }
+}
+
+function validateTokenFloorValues(
+  fileName: string,
+  tokenFile: string,
+  repoRoot: string,
+  tokens: Record<string, unknown>,
+  errors: PdosValidationIssue[]
+): void {
+  if (fileName === "color.json") {
+    validateColorTokenFloor(tokenFile, repoRoot, tokens, errors);
+    return;
+  }
+
+  if (fileName === "style.json") {
+    validateStyleTokenFloor(tokenFile, repoRoot, tokens, errors);
+  }
+}
+
+function validateColorTokenFloor(
+  tokenFile: string,
+  repoRoot: string,
+  tokens: Record<string, unknown>,
+  errors: PdosValidationIssue[]
+): void {
+  for (const key of TOKEN_FLOOR["color.json"]) {
+    const value = tokens[key];
+    if (value === undefined) {
+      continue; // absent keys are reported by the incomplete-floor check; don't double-report.
+    }
+    if (typeof value !== "string" || !isHexColor(value)) {
+      errors.push({
+        file: toRepoPath(repoRoot, tokenFile),
+        message: `PDOS_TOKEN_FLOOR_INVALID_VALUE: color.json ${key} must be a hex color.`
+      });
+    }
+  }
+
+  validateTokenContrastPair(tokenFile, repoRoot, tokens, "background", "text", errors);
+  validateTokenContrastPair(tokenFile, repoRoot, tokens, "accent", "accent_text", errors);
+  validateTokenContrastPair(tokenFile, repoRoot, tokens, "accent_secondary", "accent_text", errors);
+}
+
+function validateStyleTokenFloor(
+  tokenFile: string,
+  repoRoot: string,
+  tokens: Record<string, unknown>,
+  errors: PdosValidationIssue[]
+): void {
+  for (const key of TOKEN_FLOOR["style.json"]) {
+    const value = tokens[key];
+    if (value === undefined) {
+      continue; // absent keys are reported by the incomplete-floor check; don't double-report.
+    }
+    if (key === "accent_angle_deg") {
+      if (!isValidDegreeAngle(value)) {
+        errors.push({
+          file: toRepoPath(repoRoot, tokenFile),
+          message: `PDOS_TOKEN_FLOOR_INVALID_VALUE: style.json ${key} must be a degree angle from -24deg to 24deg.`
+        });
+      }
+      continue;
+    }
+
+    if (!isKnownStyleTokenKey(key)) {
+      continue;
+    }
+
+    const allowedValues: ReadonlySet<string> = STYLE_TOKEN_ALLOWED_VALUES[key];
+    if (typeof value !== "string" || !allowedValues.has(value)) {
+      errors.push({
+        file: toRepoPath(repoRoot, tokenFile),
+        message: `PDOS_TOKEN_FLOOR_INVALID_VALUE: style.json ${key} must be one of: ${[
+          ...allowedValues
+        ].join(", ")}.`
+      });
     }
   }
 }
@@ -1559,6 +1719,83 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function hasOwnKey(value: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function validateTokenContrastPair(
+  tokenFile: string,
+  repoRoot: string,
+  tokens: Record<string, unknown>,
+  backgroundKey: string,
+  foregroundKey: string,
+  errors: PdosValidationIssue[]
+): void {
+  const background = tokens[backgroundKey];
+  const foreground = tokens[foregroundKey];
+  if (typeof background !== "string" || typeof foreground !== "string" || !isHexColor(background) || !isHexColor(foreground)) {
+    return;
+  }
+
+  const ratio = contrastRatio(parseHexColor(background), parseHexColor(foreground));
+  if (ratio < TOKEN_FLOOR_MIN_CONTRAST_RATIO) {
+    errors.push({
+      file: toRepoPath(repoRoot, tokenFile),
+      message: `PDOS_TOKEN_FLOOR_CONTRAST: color.json ${backgroundKey}/${foregroundKey} contrast ${ratio.toFixed(
+        2
+      )} is below ${TOKEN_FLOOR_MIN_CONTRAST_RATIO}.`
+    });
+  }
+}
+
+function contrastRatio(first: readonly [number, number, number], second: readonly [number, number, number]): number {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  const lighter = Math.max(firstLuminance, secondLuminance);
+  const darker = Math.min(firstLuminance, secondLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function relativeLuminance(color: readonly [number, number, number]): number {
+  const [red, green, blue] = color.map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+
+  return 0.2126 * (red ?? 0) + 0.7152 * (green ?? 0) + 0.0722 * (blue ?? 0);
+}
+
+function parseHexColor(value: string): readonly [number, number, number] {
+  const normalized = value.length === 4 ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}` : value;
+  return [
+    Number.parseInt(normalized.slice(1, 3), 16),
+    Number.parseInt(normalized.slice(3, 5), 16),
+    Number.parseInt(normalized.slice(5, 7), 16)
+  ];
+}
+
+function isHexColor(value: string): boolean {
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
+}
+
+function isValidDegreeAngle(value: unknown): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const match = /^-?(?:\d+|\d*\.\d+)deg$/.exec(value.trim());
+  if (match === null) {
+    return false;
+  }
+
+  const numeric = Number(value.trim().slice(0, -"deg".length));
+  return Number.isFinite(numeric) && numeric >= -24 && numeric <= 24;
+}
+
+function isKnownStyleTokenKey(value: string): value is keyof typeof STYLE_TOKEN_ALLOWED_VALUES {
+  return Object.prototype.hasOwnProperty.call(STYLE_TOKEN_ALLOWED_VALUES, value);
+}
+
+function isTokenPrimitive(value: unknown): value is TokenPrimitive {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 
 function getNestedArray(value: Record<string, unknown>, path: readonly string[]): readonly unknown[] {

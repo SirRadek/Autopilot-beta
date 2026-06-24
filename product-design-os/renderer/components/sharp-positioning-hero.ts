@@ -73,11 +73,7 @@ export const sharpPositioningHeroCss = `
   position: absolute;
   inset: 0;
   z-index: -2;
-  background:
-    linear-gradient(105deg,
-      var(--color-background) 0%,
-      color-mix(in srgb, var(--color-background) 86%, var(--color-surface)) 47%,
-      color-mix(in srgb, var(--color-surface) 72%, var(--color-background)) 100%);
+  background: var(--style-surface-background);
 }
 
 .sharp-positioning-hero__layout {
@@ -99,11 +95,23 @@ export const sharpPositioningHeroCss = `
   max-width: 52rem;
 }
 
+.sharp-positioning-hero__copy::before {
+  content: "";
+  width: clamp(5rem, 18cqi, 14rem);
+  height: var(--style-decoration-border-width);
+  background: var(--color-accent-secondary);
+  opacity: var(--style-decoration-opacity);
+  transform: rotate(var(--style-accent-angle-deg));
+  transform-origin: left center;
+}
+
 .sharp-positioning-hero__eyebrow {
   display: inline-flex;
   width: fit-content;
   align-items: center;
   min-height: 2rem;
+  padding-block-end: calc(var(--style-decoration-border-width) + 0.125rem);
+  border-block-end: var(--style-decoration-border-width) solid var(--color-accent-soft);
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
   font-size: 0.84rem;
@@ -119,6 +127,7 @@ export const sharpPositioningHeroCss = `
   line-height: 0.9;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
+  text-transform: var(--style-heading-transform);
 }
 
 .sharp-positioning-hero__action-row {
@@ -136,6 +145,7 @@ export const sharpPositioningHeroCss = `
   justify-content: center;
   padding: var(--space-4) var(--space-6);
   border: 1px solid var(--color-accent);
+  border-radius: var(--style-corner-radius);
   color: var(--color-accent-text);
   background: var(--color-accent);
   font-family: var(--type-font-body);
@@ -151,6 +161,8 @@ export const sharpPositioningHeroCss = `
 
 .sharp-positioning-hero .cta:hover {
   transform: translateY(-1px);
+  border-color: var(--color-accent-secondary);
+  background: var(--color-accent-secondary);
 }
 
 .sharp-positioning-hero .cta:focus-visible {
@@ -162,7 +174,8 @@ export const sharpPositioningHeroCss = `
   max-width: 26rem;
   margin: 0;
   padding-inline-start: var(--space-4);
-  border-inline-start: 3px solid var(--color-accent);
+  border-inline-start: var(--style-decoration-border-width) solid var(--color-accent);
+  border-radius: var(--style-corner-radius);
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
   font-size: var(--type-size-body);
@@ -172,6 +185,9 @@ export const sharpPositioningHeroCss = `
 .sharp-positioning-hero__asset-wrap {
   position: relative;
   min-height: clamp(22rem, 56cqi, 38rem);
+  border-radius: var(--style-corner-radius);
+  transform: skewX(var(--style-accent-angle-deg));
+  transform-origin: center;
 }
 
 .sharp-positioning-hero__asset {
@@ -180,6 +196,8 @@ export const sharpPositioningHeroCss = `
   width: 100%;
   height: 100%;
   overflow: visible;
+  transform: skewX(var(--style-accent-angle-inverse-deg));
+  transform-origin: center;
 }
 
 .sharp-positioning-hero__asset-panel {
@@ -195,11 +213,11 @@ export const sharpPositioningHeroCss = `
 }
 
 .sharp-positioning-hero__asset-accent {
-  fill: var(--color-accent);
+  fill: var(--color-accent-secondary);
 }
 
 .sharp-positioning-hero__asset-muted {
-  fill: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
+  fill: var(--color-accent-soft);
 }
 
 .sharp-positioning-hero__asset-surface {

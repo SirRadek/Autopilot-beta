@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "tokens": {
+    "decoration_intensity": "bold",
+    "accent_angle_deg": "-8deg",
+    "corner_style": "sharp",
+    "heading_case": "none",
+    "surface_treatment": "gradient"
+  },
+  "notes": "D7 beta-authored style-control tokens. Override per project spec after key/value validation."
+}

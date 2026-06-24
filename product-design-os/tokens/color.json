@@ -7,6 +7,8 @@
     "muted_text": "#4B5563",
     "border": "#D1D5DB",
     "accent": "#1D4ED8",
+    "accent_secondary": "#0F766E",
+    "accent_soft": "#DBEAFE",
     "accent_text": "#FFFFFF",
     "focus_ring": "#0F766E"
   },
