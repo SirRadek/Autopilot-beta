@@ -1,17 +1,17 @@
-import type { ComponentContract, ResolvedAsset } from "../types";
+import type { ComponentContract, PatternRenderInput, PatternSlotMap, ResolvedAsset, ResolvedSlotTarget } from "../types";
 import { isSafeHref } from "../safe-url";
 
-export interface SharpPositioningHeroInput {
+export interface SharpPositioningHeroInput extends PatternRenderInput {
   readonly props: {
     readonly headline?: string;
     readonly primary_cta?: string;
     readonly trust_cue?: string;
     readonly cta_href?: string;
-  };
+  } & PatternRenderInput["props"];
   readonly slots: {
     readonly hero_asset?: readonly ResolvedAsset[];
     readonly theme_background?: readonly ResolvedAsset[];
-  };
+  } & PatternSlotMap;
   readonly contract: ComponentContract;
 }
 
@@ -259,15 +259,15 @@ export const sharpPositioningHeroCss = `
 }
 `.trim();
 
-export function renderSharpPositioningHero(input: SharpPositioningHeroInput): string {
+export function renderSharpPositioningHero(input: PatternRenderInput): string {
   const issues = validateSharpPositioningHeroInput(input);
   if (issues.length > 0) {
     throw new SharpPositioningHeroContractError(issues);
   }
 
   const props = normalizeProps(input.props);
-  const heroAsset = input.slots.hero_asset?.[0];
-  const themeBackground = input.slots.theme_background?.[0];
+  const heroAsset = firstAsset(input.slots.hero_asset);
+  const themeBackground = firstAsset(input.slots.theme_background);
 
   return `
 <section class="sharp-positioning-hero" data-pattern-id="sharp-positioning-hero" data-contract-id="${escapeAttribute(input.contract.id)}" data-hero-asset-id="${escapeAttribute(heroAsset?.id ?? "")}" data-theme-background-id="${escapeAttribute(themeBackground?.id ?? "")}" aria-labelledby="sharp-positioning-hero-title">
@@ -288,7 +288,11 @@ export function renderSharpPositioningHero(input: SharpPositioningHeroInput): st
 </section>`.trim();
 }
 
-function validateSharpPositioningHeroInput(input: SharpPositioningHeroInput): SharpPositioningHeroContractIssue[] {
+function firstAsset(slotTargets: readonly ResolvedSlotTarget[] | undefined): ResolvedAsset | undefined {
+  return slotTargets?.find((slotTarget): slotTarget is ResolvedAsset => slotTarget.targetKind === "asset");
+}
+
+function validateSharpPositioningHeroInput(input: PatternRenderInput): SharpPositioningHeroContractIssue[] {
   const issues: SharpPositioningHeroContractIssue[] = [];
 
   if (input.contract.target_kind !== "pattern" || input.contract.target_id !== "sharp-positioning-hero") {
@@ -309,7 +313,7 @@ function validateSharpPositioningHeroInput(input: SharpPositioningHeroInput): Sh
 }
 
 function validateCtaHref(
-  input: SharpPositioningHeroInput,
+  input: PatternRenderInput,
   issues: SharpPositioningHeroContractIssue[]
 ): void {
   const rawHref = input.props.cta_href;
@@ -327,8 +331,8 @@ function validateCtaHref(
 }
 
 function validateRequiredTextProp(
-  input: SharpPositioningHeroInput,
-  propName: keyof SharpPositioningHeroInput["props"],
+  input: PatternRenderInput,
+  propName: string,
   invariantCode: string,
   issues: SharpPositioningHeroContractIssue[]
 ): void {
@@ -356,14 +360,15 @@ function validateRequiredTextProp(
 }
 
 function validateRequiredAssetSlot(
-  input: SharpPositioningHeroInput,
-  slotName: keyof SharpPositioningHeroInput["slots"],
+  input: PatternRenderInput,
+  slotName: string,
   issues: SharpPositioningHeroContractIssue[]
 ): void {
   const contractSlot = input.contract.slots.find((slot) => slot.name === slotName);
-  const assets = input.slots[slotName] ?? [];
+  const slotTargets = input.slots[slotName] ?? [];
+  const assets = slotTargets.filter((slotTarget): slotTarget is ResolvedAsset => slotTarget.targetKind === "asset");
 
-  if (contractSlot?.required === true && assets.length === 0) {
+  if (contractSlot?.required === true && slotTargets.length === 0) {
     issues.push({
       code: "slot_missing",
       message: `${slotName} must be filled by ${input.contract.id}.`
@@ -372,7 +377,7 @@ function validateRequiredAssetSlot(
   }
 
   const minItems = contractSlot?.min_items;
-  if (minItems !== undefined && assets.length < minItems) {
+  if (minItems !== undefined && slotTargets.length < minItems) {
     issues.push({
       code: "slot_missing",
       message: `${slotName} must include at least ${minItems} asset(s).`
@@ -380,11 +385,20 @@ function validateRequiredAssetSlot(
   }
 
   const maxItems = contractSlot?.max_items;
-  if (maxItems !== undefined && assets.length > maxItems) {
+  if (maxItems !== undefined && slotTargets.length > maxItems) {
     issues.push({
       code: "slot_overfilled",
       message: `${slotName} must include no more than ${maxItems} asset(s).`
     });
+  }
+
+  for (const slotTarget of slotTargets) {
+    if (slotTarget.targetKind !== "asset") {
+      issues.push({
+        code: "slot_target_kind_mismatch",
+        message: `${slotName} accepts assets, received ${slotTarget.targetKind} ${slotTarget.id}.`
+      });
+    }
   }
 
   const allowedIds = new Set(contractSlot?.allowed_asset_ids ?? []);
@@ -416,7 +430,7 @@ function validateRequiredAssetSlot(
   }
 }
 
-function normalizeProps(props: SharpPositioningHeroInput["props"]): ValidSharpPositioningHeroProps {
+function normalizeProps(props: PatternRenderInput["props"]): ValidSharpPositioningHeroProps {
   const href = props.cta_href?.trim() || "#request";
   return {
     headline: props.headline?.trim() ?? "",
@@ -438,7 +452,7 @@ function renderThemeBackground(asset: ResolvedAsset | undefined): string {
   return `<div class="sharp-positioning-hero__theme" aria-hidden="true" data-asset-id="${escapeAttribute(asset.id)}" data-asset-source="${escapeAttribute(asset.source)}"></div>`;
 }
 
-function isFileBackedAsset(asset: ResolvedAsset): boolean {
+export function isFileBackedAsset(asset: ResolvedAsset): boolean {
   return /\.(?:svg|png|jpe?g|webp|gif)$/i.test(asset.source);
 }
 
@@ -457,7 +471,7 @@ function renderEditorialMotionHeroSvg(asset: ResolvedAsset | undefined): string 
 </svg>`.trim();
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -466,6 +480,6 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function escapeAttribute(value: string): string {
+export function escapeAttribute(value: string): string {
   return escapeHtml(value);
 }

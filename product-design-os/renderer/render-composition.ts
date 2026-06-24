@@ -4,13 +4,16 @@ import { fileURLToPath } from "node:url";
 
 import { checkRenderedContract } from "./check-render-contract";
 import { mapTokensToCss } from "./map-tokens";
-import { getPatternComponent } from "./pattern-component-registry";
+import { getPatternComponent, hasPatternComponent } from "./pattern-component-registry";
 import { assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
 import type {
   AssetManifestEntry,
   ComponentContract,
+  PatternSlotMap,
   QaTarget,
   ResolvedAsset,
+  ResolvedPatternReference,
+  ResolvedSlotTarget,
   TokenOverrideMap,
   TokenPrimitive
 } from "./types";
@@ -105,6 +108,12 @@ const defaultHeroData: RenderPatternData = {
 
 export function renderComposition(specOrPattern: unknown, pdosRoot: string): RenderCompositionResult {
   const patternData = resolvePatternData(specOrPattern);
+  if (!hasPatternComponent(patternData.patternId)) {
+    throw new RenderCompositionSpecError(
+      "unsupported_pattern_id",
+      `No renderer registered for pattern ${patternData.patternId}.`
+    );
+  }
   const component = getPatternComponent(patternData.patternId);
   const contract = readPatternContract(pdosRoot, patternData.patternId);
   const assetManifest = readAssetManifest(pdosRoot);
@@ -118,7 +127,7 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
     contract
   });
 
-  const title = patternData.props.headline ?? "Sharp positioning hero";
+  const title = patternData.props.headline ?? patternData.props.outcome_statement ?? patternData.patternId;
   const html = [
     "<!doctype html>",
     '<html lang="en">',
@@ -146,9 +155,9 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
         contractId: contract.id,
         invariants: contract.output_invariants.map((invariant) => invariant.code),
         selectors: {
-          h1: 'h1[data-contract-prop="headline"]',
-          cta: 'a[data-contract-prop="primary_cta"]',
-          trustCue: '[data-contract-prop="trust_cue"]'
+          h1: selectorForFirstContractProp(contract, ["headline", "outcome_statement"]),
+          cta: selectorForFirstContractProp(contract, ["primary_cta", "cta_label"], "a.cta"),
+          trustCue: selectorForFirstContractProp(contract, ["trust_cue", "proof_item", "source_reference"], "[data-contract-slot]")
         }
       }
     ]
@@ -172,6 +181,14 @@ body {
 }
 `.trim();
 
+function selectorForFirstContractProp(contract: ComponentContract, propNames: readonly string[], fallback = "[data-contract-prop]"): string {
+  const propName = propNames.find((candidate) => contract.props.some((prop) => prop.name === candidate));
+  if (propName === undefined) {
+    return fallback;
+  }
+  return `[data-contract-prop="${propName}"]`;
+}
+
 function assertTokenColorContrast(tokenCss: string): void {
   try {
     assertRootColorContrastWcagAA(tokenCss);
@@ -189,15 +206,22 @@ function resolvePatternData(input: unknown): RenderPatternData {
   }
 
   if (isRecord(input) && "pattern_id" in input) {
-    if (input.pattern_id !== "sharp-positioning-hero") {
+    if (typeof input.pattern_id !== "string") {
+      throw new RenderCompositionSpecError(
+        "malformed_pattern_id",
+        `Direct pattern input must include a string pattern_id.`
+      );
+    }
+
+    if (!hasPatternComponent(input.pattern_id)) {
       throw new RenderCompositionSpecError(
         "unsupported_pattern_id",
-        `Unsupported pattern id "${String(input.pattern_id)}" for slice renderer.`
+        `No renderer registered for pattern ${input.pattern_id}.`
       );
     }
 
     return {
-      patternId: "sharp-positioning-hero",
+      patternId: input.pattern_id,
       nodeId: typeof input.node_id === "string" ? input.node_id : "direct-pattern",
       props: readDirectProps(input.props),
       slotFills: readSlotFills(input.slot_fills),
@@ -207,23 +231,24 @@ function resolvePatternData(input: unknown): RenderPatternData {
 
   if (isRecord(input) && "nodes" in input) {
     const spec = readCompositionSpec(input);
-    const node = spec.nodes.find(
-      (candidate) => candidate.target_kind === "pattern" && candidate.target_id === "sharp-positioning-hero"
-    );
+    const node = spec.nodes.find((candidate) => {
+      return candidate.target_kind === "pattern" && typeof candidate.target_id === "string" && hasPatternComponent(candidate.target_id);
+    });
 
     if (node === undefined) {
       const renderedPatternIds = spec.nodes
         .filter((candidate) => candidate.target_kind === "pattern")
         .map((candidate) => candidate.target_id ?? "<missing>");
+      const code = renderedPatternIds.length === 0 ? "pattern_node_missing" : "unsupported_pattern_id";
       throw new RenderCompositionSpecError(
-        "pattern_node_missing",
-        `Composition spec does not contain a renderable sharp-positioning-hero node. Pattern nodes: ${renderedPatternIds.join(", ")}.`
+        code,
+        `Composition spec does not contain a registered renderable pattern node. Pattern nodes: ${renderedPatternIds.join(", ")}.`
       );
     }
 
     return {
-      patternId: "sharp-positioning-hero",
-      nodeId: node.node_id ?? "positioning-hero",
+      patternId: node.target_id ?? "",
+      nodeId: node.node_id ?? "rendered-pattern",
       props: readCompositionProps(node.props),
       slotFills: readSlotFills(node.slot_fills),
       tokenOverrides: readTokenOverrides(spec)
@@ -441,8 +466,8 @@ function resolveSlots(
   assetManifest: AssetManifest,
   pdosRoot: string,
   contract: ComponentContract
-): { readonly hero_asset?: readonly ResolvedAsset[]; readonly theme_background?: readonly ResolvedAsset[] } {
-  const slots: Record<string, ResolvedAsset[]> = {};
+): PatternSlotMap {
+  const slots: Record<string, ResolvedSlotTarget[]> = {};
 
   for (const slotFill of slotFills) {
     if (slotFill.slot === undefined) {
@@ -450,31 +475,38 @@ function resolveSlots(
     }
 
     const contractSlot = contract.slots.find((slot) => slot.name === slotFill.slot);
-    const resolvedAssets: ResolvedAsset[] = [];
+    const resolvedTargets: ResolvedSlotTarget[] = [];
     for (const fill of slotFill.fills ?? []) {
-      if (fill.target_kind !== "asset" || fill.target_id === undefined) {
+      if (fill.target_id === undefined) {
         continue;
       }
 
-      resolvedAssets.push(
-        resolveAsset(fill.target_id, assetManifest, pdosRoot, {
-          required: contractSlot?.required === true,
-          slotName: slotFill.slot
-        })
-      );
+      if (fill.target_kind === "asset") {
+        resolvedTargets.push(
+          resolveAsset(fill.target_id, assetManifest, pdosRoot, {
+            required: contractSlot?.required === true,
+            slotName: slotFill.slot
+          })
+        );
+        continue;
+      }
+
+      if (fill.target_kind === "pattern") {
+        resolvedTargets.push(resolvePatternReference(fill.target_id));
+      }
     }
 
-    slots[slotFill.slot] = resolvedAssets;
+    slots[slotFill.slot] = resolvedTargets;
   }
 
-  const result: { hero_asset?: readonly ResolvedAsset[]; theme_background?: readonly ResolvedAsset[] } = {};
-  if (slots.hero_asset !== undefined) {
-    result.hero_asset = slots.hero_asset;
-  }
-  if (slots.theme_background !== undefined) {
-    result.theme_background = slots.theme_background;
-  }
-  return result;
+  return slots;
+}
+
+function resolvePatternReference(patternId: string): ResolvedPatternReference {
+  return {
+    id: patternId,
+    targetKind: "pattern"
+  };
 }
 
 function resolveAsset(
