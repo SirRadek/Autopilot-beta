@@ -8,12 +8,15 @@
     "product-design-os/composition/composition-target.schema.json",
     "product-design-os/contracts/component-contract-manifest.json",
     "product-design-os/contracts/component-contract.schema.json",
+    "product-design-os/evidence/evidence.schema.json",
+    "product-design-os/evidence/records/example-context7-evidence.json",
     "product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
     "product-design-os/qa/renderability/fixtures/buildable-marketing.json",
     "product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json",
     "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json",
     "product-design-os/qa/variants/sample-product-design-variants.ts",
     "product-design-os/recipes/recipe.schema.json",
+    "product-design-os/scripts/check-evidence-freshness-product-design-os.ts",
     "product-design-os/scripts/check-renderability-product-design-os.ts",
     "product-design-os/scripts/pattern-requirement-taxonomy.ts",
     "product-design-os/specs/composition.schema.json",
@@ -509,7 +512,7 @@
       "source_path": "product-design-os/scripts/validate-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "c94c00466099919931a0e2be1478537e724453217ba4e81e584e616c01620ae8",
-      "patched_by": "F0,F1a,F1c,F4,F4b,F5"
+      "patched_by": "F0,F1a,F1c,F4,F4b,F5,D5"
     },
     {
       "source_path": "product-design-os/scripts/visual-qa-product-design-os.ts",

@@ -18,6 +18,7 @@
     "src/**/*.ts",
     "tests/**/*.ts",
     "product-design-os/scripts/validate-product-design-os.ts",
+    "product-design-os/scripts/check-evidence-freshness-product-design-os.ts",
     "product-design-os/scripts/score-product-design-os.ts",
     "product-design-os/scripts/visual-qa-product-design-os.ts",
     "product-design-os/scripts/route-product-design-os.ts",

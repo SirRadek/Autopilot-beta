@@ -1,0 +1,14 @@
+{
+  "id": "example-context7-token-evidence",
+  "schema_version": "1.0.0",
+  "claim": "Context7 documentation was checked before treating Radix Colors as a library input for token research.",
+  "claim_kind": "library_doc",
+  "library": "Radix Colors",
+  "query": "Radix Colors token documentation",
+  "source": "context7:/radix-ui/colors",
+  "source_date": "2026-06-24",
+  "freshness_ttl_days": 90,
+  "covered_claim": "Library documentation can inform token-value research, but project-authored tokens remain the governed output.",
+  "fallback": "Use official Radix Colors documentation before adoption if Context7 data is unavailable or stale.",
+  "notes": "Example governance evidence record for the D5 schema gate."
+}

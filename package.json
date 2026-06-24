@@ -12,6 +12,7 @@
     "pdos:renderability": "tsx product-design-os/scripts/check-renderability-product-design-os.ts",
     "pdos:buildability-floor": "tsx product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
     "pdos:variants": "tsx product-design-os/qa/variants/sample-product-design-variants.ts",
+    "pdos:evidence-freshness": "tsx product-design-os/scripts/check-evidence-freshness-product-design-os.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "test": "vitest run",

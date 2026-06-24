@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validateJsonSchema } from "../../src/lib/delivery-system/validation";
@@ -108,6 +108,9 @@ const PROJECT_STATUSES = [
   "cancelled"
 ] as const;
 
+const MAX_EVIDENCE_RECORD_FILES = 500;
+const MAX_EVIDENCE_RECORD_BYTES = 256 * 1024;
+
 export const TOKEN_FLOOR = {
   "color.json": ["background", "surface", "text", "muted_text", "border", "accent", "accent_text", "focus_ring"],
   "typography.json": [
@@ -168,6 +171,7 @@ export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidatio
   validateTasteMemory(pdosRoot, repoRoot, errors);
   validateRecipes(join(pdosRoot, "recipes"), repoRoot, errors);
   validateCompositionSpecs(pdosRoot, repoRoot, errors);
+  validateEvidenceRecords(pdosRoot, repoRoot, errors);
   validateMarkdown(pdosRoot, repoRoot, errors, warnings);
   validateTokenFloor(pdosRoot, repoRoot, errors);
   validateEmptyTokens(pdosRoot, repoRoot, warnings);
@@ -665,6 +669,222 @@ export function validateCompositionSpecs(pdosRoot: string, repoRoot: string, err
 
     validateCompositionSpecIntegrity(specFile, repoRoot, value, registries, tokenFloorComplete, errors);
   }
+}
+
+export function validateEvidenceRecords(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const evidenceRoot = join(pdosRoot, "evidence");
+  if (!existsSync(evidenceRoot)) {
+    return;
+  }
+
+  const recordsRoot = join(evidenceRoot, "records");
+  const recordFiles = listEvidenceRecordFiles(recordsRoot, repoRoot, errors);
+  if (recordFiles.length === 0) {
+    return;
+  }
+
+  const schemaFile = join(evidenceRoot, "evidence.schema.json");
+  const evidenceSchema = readJsonFile(schemaFile, repoRoot, errors);
+  if (!isRecord(evidenceSchema)) {
+    return;
+  }
+
+  const idsByRecord = new Map<string, string>();
+
+  for (const recordFile of recordFiles) {
+    const value = readJsonFile(recordFile, repoRoot, errors);
+
+    for (const issue of validateJsonSchema(value, evidenceSchema)) {
+      errors.push({
+        file: toRepoPath(repoRoot, recordFile),
+        message: `PDOS_EVIDENCE_SCHEMA_INVALID: ${issue.path}: ${issue.message}`
+      });
+    }
+
+    if (!isRecord(value) || typeof value.id !== "string") {
+      continue;
+    }
+
+    const existingFile = idsByRecord.get(value.id);
+    if (existingFile !== undefined) {
+      errors.push({
+        file: toRepoPath(repoRoot, recordFile),
+        message: `PDOS_EVIDENCE_DUPLICATE_ID: Duplicate evidence id ${value.id}; first declared in ${toRepoPath(repoRoot, existingFile)}.`
+      });
+      continue;
+    }
+
+    idsByRecord.set(value.id, recordFile);
+  }
+}
+
+interface EvidenceRecordScanState {
+  readonly root: string;
+  readonly repoRoot: string;
+  readonly errors: PdosValidationIssue[];
+  readonly files: string[];
+  limitExceeded: boolean;
+}
+
+function listEvidenceRecordFiles(recordsRoot: string, repoRoot: string, errors: PdosValidationIssue[]): readonly string[] {
+  const root = resolve(recordsRoot);
+  if (!existsSync(root)) {
+    return [];
+  }
+
+  let rootStats;
+  try {
+    rootStats = lstatSync(root);
+  } catch (error) {
+    pushEvidenceScanError(errors, repoRoot, root, "PDOS_EVIDENCE_READ_ERROR", errorMessage(error));
+    return [];
+  }
+
+  if (rootStats.isSymbolicLink()) {
+    pushEvidenceScanError(errors, repoRoot, root, "PDOS_EVIDENCE_SYMLINK_REJECTED", "Symlinked evidence records directory is not allowed.");
+    return [];
+  }
+
+  if (!rootStats.isDirectory()) {
+    return [];
+  }
+
+  const state: EvidenceRecordScanState = {
+    root,
+    repoRoot,
+    errors,
+    files: [],
+    limitExceeded: false
+  };
+
+  scanEvidenceRecordDirectory(root, state);
+  return state.files.sort(compareStrings);
+}
+
+function scanEvidenceRecordDirectory(directory: string, state: EvidenceRecordScanState): void {
+  if (state.limitExceeded) {
+    return;
+  }
+
+  const resolvedDirectory = resolve(directory);
+  if (!isPathContained(state.root, resolvedDirectory)) {
+    pushEvidenceScanError(
+      state.errors,
+      state.repoRoot,
+      resolvedDirectory,
+      "PDOS_EVIDENCE_PATH_ESCAPE",
+      "Evidence record path resolves outside evidence/records."
+    );
+    return;
+  }
+
+  let entries: string[];
+  try {
+    entries = readdirSync(resolvedDirectory).sort(compareStrings);
+  } catch (error) {
+    pushEvidenceScanError(state.errors, state.repoRoot, resolvedDirectory, "PDOS_EVIDENCE_READ_ERROR", errorMessage(error));
+    return;
+  }
+
+  for (const entry of entries) {
+    if (state.limitExceeded) {
+      return;
+    }
+
+    const path = resolve(resolvedDirectory, entry);
+    if (!isPathContained(state.root, path)) {
+      pushEvidenceScanError(
+        state.errors,
+        state.repoRoot,
+        path,
+        "PDOS_EVIDENCE_PATH_ESCAPE",
+        "Evidence record path resolves outside evidence/records."
+      );
+      continue;
+    }
+
+    let stats;
+    try {
+      stats = lstatSync(path);
+    } catch (error) {
+      pushEvidenceScanError(state.errors, state.repoRoot, path, "PDOS_EVIDENCE_READ_ERROR", errorMessage(error));
+      continue;
+    }
+
+    if (stats.isSymbolicLink()) {
+      pushEvidenceScanError(state.errors, state.repoRoot, path, "PDOS_EVIDENCE_SYMLINK_REJECTED", "Symlinked evidence record paths are not allowed.");
+      continue;
+    }
+
+    if (stats.isDirectory()) {
+      scanEvidenceRecordDirectory(path, state);
+      continue;
+    }
+
+    if (!stats.isFile() || !path.endsWith(".json")) {
+      continue;
+    }
+
+    if (stats.size > MAX_EVIDENCE_RECORD_BYTES) {
+      pushEvidenceScanError(
+        state.errors,
+        state.repoRoot,
+        path,
+        "PDOS_EVIDENCE_FILE_TOO_LARGE",
+        `Evidence record file is ${stats.size} bytes; maximum is ${MAX_EVIDENCE_RECORD_BYTES} bytes.`
+      );
+      continue;
+    }
+
+    if (state.files.length >= MAX_EVIDENCE_RECORD_FILES) {
+      state.limitExceeded = true;
+      pushEvidenceScanError(
+        state.errors,
+        state.repoRoot,
+        state.root,
+        "PDOS_EVIDENCE_RECORD_LIMIT_EXCEEDED",
+        `Evidence record scan is capped at ${MAX_EVIDENCE_RECORD_FILES} JSON files.`
+      );
+      return;
+    }
+
+    state.files.push(path);
+  }
+}
+
+function pushEvidenceScanError(
+  errors: PdosValidationIssue[],
+  repoRoot: string,
+  file: string,
+  code: string,
+  detail: string
+): void {
+  errors.push({
+    file: toRepoPath(repoRoot, file),
+    message: `${code}: ${detail}`,
+    code
+  });
+}
+
+function isPathContained(root: string, candidate: string): boolean {
+  const relativePath = relative(root, candidate);
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown file system failure.";
 }
 
 function loadCompositionSpecRegistries(
