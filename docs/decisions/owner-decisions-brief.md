@@ -90,16 +90,27 @@ covered_claim, fallback }`) + a `source_freshness_ttl`, validated in `verify`; S
 governance-as-doc and governance-as-gate, and it's cheap.
 **Depends:** none — do early. Effort: low / high trust-value.
 
-## D6 — Validator: keep the homemade subset, or adopt Ajv — codex
-**Q:** The repo validator implements **0** of `$ref`/`oneOf`/`anyOf`; `element-map.schema.json` already uses
-them **6×** (so it's effectively un-validated), and every ADR has paid a "no $ref/anyOf/oneOf" tax. Adopt
-**Ajv v8 + ajv-formats**?
-**Fork:** Homemade = zero-dep but already insufficient and a recurring design constraint; Ajv = full
-JSON-Schema + formats but a dependency + migrating the 8 schemas/call-sites.
-**Rec:** **Adopt Ajv.** It removes a constraint that has taxed F3–F7 and un-blocks element-map + richer
-contract/composition schemas. Migrate via codex worker behind a hard gate: existing `validate` output must
-stay **0 errors / 0 warnings** for the current schemas (byte-baseline discipline as always).
-**Depends:** coordinate with any schema redesign. Effort: medium.
+## D6 — Validator: keep the homemade subset, or adopt Ajv — codex (REVISED after reading the code)
+**Q:** Adopt **Ajv v8 + ajv-formats** to replace the homemade `validateJsonSchema`?
+**Verified correction (Opus read `src/lib/delivery-system/validation.ts`):** the validator is NOT
+"implements 0 of everything" — it's a deliberate, fairly capable **subset**: `type`, `enum`, `const`,
+`allOf`, `if/then/else`, `not`, `required`, `additionalProperties`, `properties`, `items`, `minItems`,
+`uniqueItems`, `minLength`, `pattern`, `format:date|date-time`, `minimum`, `maximum`. What it **silently
+ignores** (no error, no enforcement) is specifically **`$ref` / `oneOf` / `anyOf`** (+ `maxLength`,
+`maxItems`, `multipleOf`, `patternProperties`, object-valued `enum`). The **only** schema using `$ref`/
+`oneOf` is `reader/element-map.schema.json` (6×) — which belongs to the reader **parked NOT WIRED in D4b**.
+**Fork:** Ajv removes the `$ref`/`oneOf` blind spot and the "no $ref" authoring tax; but it's a dep + a
+migration that must map Ajv's error `{instancePath,message,params}` back to the repo's `{path,message}`
+shape AND keep the repo's exact message TEXT (`"is required"`, `"must be one of: …"`) so no invalid-case
+test drifts. Real, test-sensitive.
+**Rec:** **DEFER — do NOT adopt now.** The migration's only current beneficiary (element-map enforcement)
+is parked; adopting Ajv today is enforcement-substrate for a non-existent live consumer (the trap the
+brainstorm critique named). **Adopt Ajv when we legalize the reader (D4b-legalize) OR a live schema in the
+deterministic `validate` path genuinely needs `$ref`/`oneOf`** — then the migration earns its
+test-drift risk. Until then the subset is fine for the subset-authored schemas. (If/when adopted: codex
+worker, behind a hard gate — `validate` 0/0 + identical issue `{path,message}` text on the existing
+invalid-case tests.)
+**Depends:** D4b-legalize or a new live schema need. Effort: medium + test-sensitive.
 
 ## D7 — Token floor: enable overrides + override semantics
 **Q:** The floor is filled with NEUTRAL values. Enable `token_overrides` now, and with what format?
@@ -120,12 +131,13 @@ Keep the OTHER OFF axes as **documented-not-built** (they're docs, not code — 
 
 ---
 
-## Recommended sequence (beta-only)
-1. **D4b-now + D5 + D6** — kill false-green, make evidence enforceable, adopt Ajv. Cheap, no renderer
-   needed, makes the green HONEST (the highest-trust, lowest-cost wins; codex's forensic findings).
+## Recommended sequence (beta-only) — REVISED
+1. **D4b-now (DONE, `7e3fc69`) + D5 (in progress)** — kill false-green, make evidence enforceable. Cheap, no
+   renderer needed, makes the green HONEST (the highest-trust, lowest-cost wins; codex's forensic findings).
+   **D6 (Ajv) is DEFERRED** out of step 1 — its only consumer (element-map) is parked (see D6 revised).
 2. **D7** — token fill from an open set → real substrate.
 3. **D1 (Option C) minimal renderer slice** + **D2 (Option C) lazy contracts** for that slice → first real
-   IS artifacts. (codex worker, Opus architect.)
+   IS artifacts. (codex worker, Opus architect.) → unblocks D4b-legalize + (then) D6.
 4. **D3 + D4a** — held-out eval on those artifacts; promote objective QA to blocking.
 5. **D8** — prune dark axes; harden the harness in parallel (agy heartbeat fix, kill silent fallbacks).
 
