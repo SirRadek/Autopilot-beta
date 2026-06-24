@@ -43,10 +43,14 @@ npm.cmd run pdos:route -- --change "add 3d avatar to checkout"
 npm.cmd run pdos:report -- --text "marketing website for leads with motion"
 npm.cmd run pdos:score -- --text "marketing website for leads with motion" --format markdown
 npm.cmd run pdos:visual-qa -- --file visual-snapshot.json --format markdown
-npm.cmd run pdos:reader:capture -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os
-npm.cmd run pdos:reader:document -- --check-only --supervisor-root C:\path\pdf-supervisor
+npm.cmd run pdos:reader:capture -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os   # NOT WIRED in beta (see reader/README.md)
+npm.cmd run pdos:reader:document -- --check-only --supervisor-root C:\path\pdf-supervisor   # NOT WIRED in beta
 npm.cmd run pdos:library:projects
 ```
+
+> ⚠️ `pdos:reader:*` are vendored-from-canonical but **not wired in beta** (no `@playwright/test` dep / npm
+> script / tsconfig entry). Planned for legalization with the visual-QA/renderer work — see
+> `reader/README.md` and `docs/decisions/owner-decisions-brief.md` (D4).
 
 ## Process Gates
 

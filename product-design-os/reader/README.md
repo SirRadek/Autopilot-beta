@@ -2,14 +2,19 @@
 
 Status: phase-2 local capture plus structured snapshot analyzer
 
-This folder tracks the Product & Design OS Design Reader direction. The current
-implemented layers are deterministic and local:
+> ⚠️ **Beta wiring status (D4b, 2026-06-24):** in `autopilot-beta` only `pdos:visual-qa` is wired. The
+> `pdos:reader:capture` / `:element-map` / `:document` commands and the `capture-design-reader.ts` /
+> `capture-element-map.ts` scripts are **vendored from canonical but NOT yet wired here** — there is no
+> `@playwright/test` dependency, no `pdos:reader:*` npm script, and the files are not in `tsconfig`, so
+> those commands **do not run in beta yet**. They are planned to be legalized alongside the real
+> visual-QA / renderer work (see `docs/decisions/owner-decisions-brief.md` D4). Until then, treat the
+> reader commands below as **design intent, not a working path**.
 
 ```powershell
 npm.cmd run pdos:visual-qa -- --file product-design-os/reader/visual-qa-sample.json --format markdown
-npm.cmd run pdos:reader:capture -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os
-npm.cmd run pdos:reader:element-map -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os
-npm.cmd run pdos:reader:document -- --check-only --supervisor-root C:\path\pdf-supervisor
+npm.cmd run pdos:reader:capture -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os   # NOT WIRED in beta
+npm.cmd run pdos:reader:element-map -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os   # NOT WIRED in beta
+npm.cmd run pdos:reader:document -- --check-only --supervisor-root C:\path\pdf-supervisor   # NOT WIRED in beta
 ```
 
 The Visual QA analyzer accepts structured viewport evidence and produces a

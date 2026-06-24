@@ -24,7 +24,8 @@
     {
       "source_path": "product-design-os/README.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "ff3775b3aa4e19bb1cc3a2047977f6c0b4eecbfbaba770c5696e84ee5f889674"
+      "content_hash": "ff3775b3aa4e19bb1cc3a2047977f6c0b4eecbfbaba770c5696e84ee5f889674",
+      "patched_by": "D4b"
     },
     {
       "source_path": "product-design-os/agents/agent-task-template.md",
@@ -283,7 +284,8 @@
     {
       "source_path": "product-design-os/reader/README.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "910342a7d97152fb9d7fc8d290cec2868e6e4352b12f476ec83e49b5a20d5de4"
+      "content_hash": "910342a7d97152fb9d7fc8d290cec2868e6e4352b12f476ec83e49b5a20d5de4",
+      "patched_by": "D4b"
     },
     {
       "source_path": "product-design-os/reader/capture-sample.html",
