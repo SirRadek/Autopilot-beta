@@ -129,6 +129,30 @@ Keep the OTHER OFF axes as **documented-not-built** (they're docs, not code — 
 (D3) licenses an owner decision. Low effort; reduces "is this on?" confusion.
 **Depends:** none. Effort: low.
 
+## D9 — Evidence: shape gate → TRUTH gate (surfaced by the D5 codex+agy audit, DEFERRED to owner)
+**Q:** D5 ships an enforceable evidence **shape** gate. Both auditors (codex tech-opponent + agy strategic)
+converged that a shape gate is **evidence-theater**: it checks record *structure*, not *truth*. Do we invest
+in a truth gate, and in which design?
+**The sharp finding (agy):** *the primary writer of this codebase is an AI agent* — it treats a static
+schema gate as a constraint-satisfaction puzzle and will emit valid dummy records to pass. So the gate
+"annoys humans, transparent to agents." codex independently flagged the same abuse surface (arbitrary
+`source`, future date, unbounded TTL — the TTL/future/calendar holes are being closed in D5-hardening, but
+the *truth* gap remains by design).
+**Design directions (not yet chosen):**
+- **(A) Referential integrity** — bind each evidence record to the artifact it licenses (declare an evidence
+  `id` in a token file / asset / contract / decision), so the build can **prune unevidenced code paths**.
+  Evidence stops being a free-floating `records/` folder.
+- **(B) Evidence-as-byproduct (telemetry)** — tooling auto-records + signs the retrieval query/license during
+  the actual context7/source fetch, so the record is a *side-effect of doing the work*, not a hand-written
+  chore an agent can fabricate. The strongest anti-gaming lever.
+- **(C) Evidence-as-test** — CI actively re-queries the source (license compatibility, doc existence) rather
+  than trusting the stored claim; stale → dev-loop visual warning, not a hard block.
+**Rec:** **Defer — owner decision.** It reshapes the primitive (and partly depends on the renderer/build
+step existing, D1). D5-hardened stands as an honest **v1 shape gate** in the meantime (it raises the floor
+and is byte-safe). When taken up: (B) is the highest-leverage anti-gaming move; (A) gives the build real
+pruning power; route implementation through codex, Opus review.
+**Depends:** partly D1 (a build step to prune against). Effort: medium–high; strategic.
+
 ---
 
 ## Recommended sequence (beta-only) — REVISED
