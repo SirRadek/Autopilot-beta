@@ -164,3 +164,41 @@ codex_cli:                 empty_output this run (reported, not faked) — retry
 ```
 agy recovered after owner re-auth; codex empty this run is exactly the "silent failure" harness risk theme
 (f) names. Opus reconciled + corrected the critique's repo-confusion against verified ground truth (§0).
+
+---
+
+# UPDATE (2026-06-24) — codex lane recovered (4 sources) + topology RESOLVED
+
+**codex_cli lane** actually completed (the `empty_output` was the harness false-negative; owner supplied
+the real output). It was the most FORENSIC lane — found concrete rot the strategic lanes missed, **all
+verified by Opus against the repo**:
+- **FALSE-GREEN / orphaned Playwright reader (verified):** `scripts/capture-design-reader.ts` +
+  `capture-element-map.ts` import `@playwright/test` — but it's NOT in `package.json`, there are NO
+  `pdos:reader:*` scripts, and the files are NOT in `tsconfig`. Yet `reader/README.md`,
+  `product-design-os/README.md` + the foundation report present `pdos:reader:capture`/`:element-map` as a
+  working path. `verify` is green but doesn't cover this surface → docs read as done; code is dead.
+- **Validator subset (verified):** `src/lib/delivery-system/validation.ts` implements 0 of `$ref`/`oneOf`/
+  `anyOf`, while `reader/element-map.schema.json` uses them **6×** → that schema is effectively un-validated;
+  every ADR has paid a "no $ref/anyOf/oneOf" tax. → adopt **Ajv v8 + ajv-formats**.
+- **Governance without enforceable evidence:** rules mandate Context7/license/clean-room, but without an
+  evidence SCHEMA + source-freshness TTL, "verified" is just text. → add an evidence schema (library,
+  version, query, source, date, covered_claim, fallback) + TTL, gated in `verify`.
+- **"Cosmetic substitution" warning:** adding CC0 catalogs / Playwright does nothing unless WIRED into
+  `verify`, manifests, project-index links, and release gates. (CC0 pool: Open Doodles, Open Peeps, Kenney,
+  Poly Haven, ambientCG, Quaternius — but don't confuse `approved_source` with a production-adopted asset.)
+- codex priority: 1) legalize the reader surface, 2) evidence schema + TTL, 3) Ajv, 4) promote Visual-QA/
+  headless from report-only to explicit gate where it should block.
+
+**#0 RESOLVED (owner, 2026-06-24): only autopilot-beta matters → it is the STANDALONE product line.** The
+merge-back-to-canonical theme (e) is **dropped** (moot); the topology blocker is gone. Re-prioritized for
+beta-only:
+1. **Kill the false-green NOW** (codex, cheap, no renderer needed): legalize-or-quarantine the orphaned
+   reader; add the evidence-schema + TTL; adopt Ajv. Makes the green HONEST — the cheapest credibility win.
+2. **Token fill from an open set** (W3C format + open-props/Radix, axe-AA) → real substrate.
+3. **Minimal renderer SLICE** (Astro shell + project-authored components from contracts+tokens) via the
+   codex worker → first real IS artifacts.
+4. **Held-out eval** on those artifacts (objective gates + advisory on-brand rubric).
+5. **Lazy contract expansion** per slice. 6. **Harden harness** (agy heartbeat + kill silent fallbacks —
+   codex's own empty-run proves the risk). 7. **Prune dark OFF axes.**
+
+See `docs/decisions/owner-decisions-brief.md` for the thorough per-decision analysis.
