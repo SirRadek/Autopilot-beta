@@ -78,6 +78,7 @@ export function checkRenderedContract(html: string, contract: ComponentContract)
 
   checkCanvasTextDomTwin(root, pushIssue);
   checkNoStoredFrames(root, html, pushIssue);
+  checkReducedMotionFallback(root, html, pushIssue);
 
   return { errors, warnings };
 }
@@ -141,6 +142,27 @@ function checkNoStoredFrames(root: HTMLElement, rawHtml: string, pushIssue: Push
       "no_stored_frames",
       "error",
       "Procedural dot-stage must not embed stored frames (img/video/picture/source/object/embed/svg image/use/input[type=image] elements or data: URIs)."
+    );
+  }
+}
+
+/**
+ * Self-scoping reduced-motion guard. A [data-dot-stage] canvas animates, so the
+ * output must reference a prefers-reduced-motion guard (in the engine script and/or
+ * CSS). Scans the raw HTML because the engine's matchMedia guard lives in a <script>
+ * that is stripped before parsing. This proves the guard EXISTS, not its runtime
+ * behaviour — behaviour is covered by the buildability-floor visual-qa probe.
+ */
+function checkReducedMotionFallback(root: HTMLElement, rawHtml: string, pushIssue: PushIssue): void {
+  if (root.querySelectorAll("[data-dot-stage]").length === 0) {
+    return;
+  }
+
+  if (!/prefers-reduced-motion/i.test(rawHtml)) {
+    pushIssue(
+      "reduced_motion_fallback",
+      "error",
+      "Procedural dot-stage must guard its animation with a prefers-reduced-motion check (none found in script or CSS)."
     );
   }
 }

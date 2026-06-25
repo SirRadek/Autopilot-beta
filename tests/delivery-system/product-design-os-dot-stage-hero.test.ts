@@ -172,6 +172,11 @@ describe("dot-stage-hero renderer + render contract", () => {
     expect(errorCodes(withObject, dotStageContract)).toContain("no_stored_frames");
   });
 
+  it("FAILS reduced_motion_fallback when no prefers-reduced-motion guard is present", () => {
+    const html = renderDotStageHero(validDotStageInput()).replace(/prefers-reduced-motion/g, "prefers-color-scheme");
+    expect(errorCodes(html, dotStageContract)).toContain("reduced_motion_fallback");
+  });
+
   it("renders the dot-stage-hero composition end-to-end through renderComposition", () => {
     const pdosRoot = join(process.cwd(), "product-design-os");
     const spec = JSON.parse(
@@ -182,6 +187,29 @@ describe("dot-stage-hero renderer + render contract", () => {
     expect(result.qaTargets[0]?.patternId).toBe("dot-stage-hero");
     expect(result.html).toContain('data-dot-word="RadeQ"');
     expect(result.html).toContain('data-dot-twin="RadeQ">RadeQ</span>');
+
+    const manifest = JSON.parse(
+      readFileSync(join(pdosRoot, "contracts", "component-contract-manifest.json"), "utf8")
+    ) as { contracts: ComponentContract[] };
+    const contract = manifest.contracts.find(
+      (candidate) => candidate.target_kind === "pattern" && candidate.target_id === "dot-stage-hero"
+    );
+    if (contract === undefined) {
+      throw new Error("Missing dot-stage-hero contract.");
+    }
+    expect(checkRenderedContract(result.html, contract).errors).toEqual([]);
+  });
+
+  it("renders the noise-to-order scene_preset variant end-to-end (same renderer, scene-data only)", () => {
+    const pdosRoot = join(process.cwd(), "product-design-os");
+    const spec = JSON.parse(
+      readFileSync(join(pdosRoot, "specs", "examples", "dot-stage-hero-noise.composition.json"), "utf8")
+    ) as unknown;
+    const result = renderComposition(spec, pdosRoot);
+
+    expect(result.qaTargets[0]?.patternId).toBe("dot-stage-hero");
+    expect(result.html).toContain('data-scene-preset="noise-to-order"');
+    expect(result.html).toContain('data-dot-word="DATA"');
 
     const manifest = JSON.parse(
       readFileSync(join(pdosRoot, "contracts", "component-contract-manifest.json"), "utf8")
