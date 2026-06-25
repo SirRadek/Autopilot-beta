@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  applyProductDesignRenderabilityCliExitCode,
   analyzeProductDesignRenderability,
+  createProductDesignRenderabilityCliRun,
+  getDefaultPdosCompositionSpecPaths,
   type PdosRenderabilityReport
 } from "../../product-design-os/scripts/check-renderability-product-design-os";
 
@@ -91,6 +94,65 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 describe("Product Design OS F3 renderability", () => {
+  it("defaults the no-arg CLI to all committed composition examples", () => {
+    const defaultSpecPaths = getDefaultPdosCompositionSpecPaths(repoRoot);
+    const previousExitCode = process.exitCode;
+
+    try {
+      const cliRun = createProductDesignRenderabilityCliRun([], repoRoot);
+      const compositionIds = cliRun.report.compositions.map((composition) => composition.id);
+
+      expect(defaultSpecPaths).toEqual([...defaultSpecPaths].sort());
+      expect(defaultSpecPaths.length).toBeGreaterThan(0);
+      expect(defaultSpecPaths.every((specPath) => specPath.startsWith("product-design-os/specs/examples/"))).toBe(true);
+      expect(defaultSpecPaths.every((specPath) => specPath.endsWith(".composition.json"))).toBe(true);
+      expect(cliRun.report.ok).toBe(true);
+      expect(cliRun.report.summary.target_count).toBe(defaultSpecPaths.length);
+      expect(compositionIds).toContain("buildable-marketing");
+      expect(compositionIds).toContain("zednik");
+      expect(cliRun.exitCode).toBe(0);
+      expect(applyProductDesignRenderabilityCliExitCode(cliRun.report)).toBe(0);
+      expect(process.exitCode).toBe(0);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it("lets explicit --targets override the committed-example default", () => {
+    const cliRun = createProductDesignRenderabilityCliRun(["--targets", buildableSpecPath], repoRoot);
+
+    expect(cliRun.report.ok).toBe(true);
+    expect(cliRun.report.summary.target_count).toBe(1);
+    expect(cliRun.report.compositions.map((composition) => composition.id)).toEqual(["buildable-marketing"]);
+    expect(cliRun.exitCode).toBe(0);
+  });
+
+  it("maps a synthetic non-buildable composition spec to CLI exit code 1", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "pdos-f3-cli-gate-"));
+    const tempSpec = join(tempRoot, "missing-proof-asset.composition.json");
+    const previousExitCode = process.exitCode;
+
+    try {
+      const spec = cloneRecord(readJsonRecord(join(repoRoot, buildableSpecPath)));
+      replaceProofAssetFills(spec, [{ target_kind: "asset" }]);
+      writeJson(tempSpec, spec);
+
+      const cliRun = createProductDesignRenderabilityCliRun(["--target", tempSpec], repoRoot);
+      const composition = byId(cliRun.report, "buildable-marketing");
+      const codes = composition.non_buildable.map((issue) => issue.code);
+
+      expect(cliRun.report.ok).toBe(false);
+      expect(cliRun.report.summary.target_count).toBe(1);
+      expect(codes).toContain("SLOT_MISSING");
+      expect(cliRun.exitCode).toBe(1);
+      expect(applyProductDesignRenderabilityCliExitCode(cliRun.report)).toBe(1);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("keeps the fixture report shape stable and does not throw", () => {
     let report: PdosRenderabilityReport | undefined;
 

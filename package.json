@@ -18,7 +18,7 @@
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "test": "vitest run",
-    "verify": "npm run beta:vendor-check && npm run typecheck && npm run test"
+    "verify": "npm run beta:vendor-check && npm run typecheck && npm run test && npm run pdos:validate && npm run pdos:renderability && npm run pdos:buildability-floor"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

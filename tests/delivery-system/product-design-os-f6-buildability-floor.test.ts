@@ -5,9 +5,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  applyBuildabilityFloorCliExitCode,
   analyzeBuildabilityFloor,
+  createBuildabilityFloorCliRun,
   type PdosBuildabilityFloorReport
 } from "../../product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os";
+import { getDefaultPdosCompositionSpecPaths } from "../../product-design-os/scripts/check-renderability-product-design-os";
 import {
   isKnownRequirementCode,
   PATTERN_REQUIREMENT_CODES
@@ -89,6 +92,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 describe("Product Design OS F6 buildability floor", () => {
+  it("defaults the no-arg CLI to all committed composition examples", () => {
+    const defaultSpecPaths = getDefaultPdosCompositionSpecPaths(repoRoot);
+    const previousExitCode = process.exitCode;
+
+    try {
+      const cliRun = createBuildabilityFloorCliRun([], repoRoot);
+      const compositionIds = cliRun.report.compositions.map((composition) => composition.id);
+
+      expect(defaultSpecPaths.length).toBeGreaterThan(0);
+      expect(cliRun.report.ok).toBe(true);
+      expect(cliRun.report.summary.composition_count).toBe(defaultSpecPaths.length);
+      expect(compositionIds).toContain("buildable-marketing");
+      expect(compositionIds).toContain("zednik");
+      expect(cliRun.exitCode).toBe(0);
+      expect(applyBuildabilityFloorCliExitCode(cliRun.report)).toBe(0);
+      expect(process.exitCode).toBe(0);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it("lets explicit --spec override the committed-example default", () => {
+    const cliRun = createBuildabilityFloorCliRun(["--spec", zednikSpecPath], repoRoot);
+
+    expect(cliRun.report.ok).toBe(true);
+    expect(cliRun.report.summary.composition_count).toBe(1);
+    expect(cliRun.report.compositions.map((composition) => composition.id)).toEqual(["zednik"]);
+    expect(cliRun.exitCode).toBe(0);
+  });
+
   it("passes the committed F4 buildable marketing composition", () => {
     const report = analyzeBuildabilityFloor({ specPaths: [buildableSpecPath] }, repoRoot);
     const composition = byId(report, "buildable-marketing");
@@ -124,20 +157,27 @@ describe("Product Design OS F6 buildability floor", () => {
   it("fails a required slot fill with neither target_id nor inline content", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "pdos-f6-slot-"));
     const tempSpec = join(tempRoot, "missing-proof-asset.composition.json");
+    const previousExitCode = process.exitCode;
 
     try {
       const spec = cloneRecord(readJsonRecord(join(repoRoot, buildableSpecPath)));
       replaceProofAssetFills(spec, [{ target_kind: "asset" }]);
       writeJson(tempSpec, spec);
 
-      const report = analyzeBuildabilityFloor({ specPaths: [tempSpec] }, repoRoot);
+      const cliRun = createBuildabilityFloorCliRun(["--spec", tempSpec], repoRoot);
+      const report = cliRun.report;
       const composition = byId(report, "buildable-marketing");
       const structuralCodes = composition.structural_non_buildable.map((issue) => issue.code);
 
       expect(report.ok).toBe(false);
+      expect(report.summary.composition_count).toBe(1);
       expect(composition.build_floor_passed).toBe(false);
       expect(structuralCodes).toContain("SLOT_MISSING");
+      expect(cliRun.exitCode).toBe(1);
+      expect(applyBuildabilityFloorCliExitCode(report)).toBe(1);
+      expect(process.exitCode).toBe(1);
     } finally {
+      process.exitCode = previousExitCode;
       rmSync(tempRoot, { recursive: true, force: true });
     }
   });

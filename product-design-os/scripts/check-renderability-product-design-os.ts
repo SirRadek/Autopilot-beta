@@ -64,6 +64,12 @@ export interface PdosRenderabilityReport {
   readonly summary: PdosRenderabilitySummary;
 }
 
+export interface PdosRenderabilityCliRun {
+  readonly report: PdosRenderabilityReport;
+  readonly output: string;
+  readonly exitCode: 0 | 1;
+}
+
 interface IssueContext {
   readonly targetKind?: PdosTargetKind | undefined;
   readonly targetId?: string | undefined;
@@ -206,6 +212,8 @@ const DEFAULT_CONTRACT_MANIFEST = "product-design-os/contracts/component-contrac
 const COMPONENT_CONTRACT_SCHEMA = "product-design-os/contracts/component-contract.schema.json";
 const COMPOSITION_TARGET_SCHEMA = "product-design-os/composition/composition-target.schema.json";
 const COMPOSITION_SPEC_SCHEMA = "product-design-os/specs/composition.schema.json";
+const DEFAULT_COMPOSITION_SPEC_EXAMPLES_DIR = "product-design-os/specs/examples";
+const COMPOSITION_SPEC_EXAMPLE_SUFFIX = ".composition.json";
 const VALUE_FIELDS: readonly TypedValueField[] = [
   "string_value",
   "number_value",
@@ -277,6 +285,18 @@ export function formatRenderabilityReport(
     "## Compositions",
     ...report.compositions.flatMap(formatCompositionMarkdown)
   ].join("\n").trimEnd()}\n`;
+}
+
+export function getDefaultPdosCompositionSpecPaths(repoRoot = process.cwd()): readonly string[] {
+  const examplesRoot = resolveRepoPath(repoRoot, DEFAULT_COMPOSITION_SPEC_EXAMPLES_DIR);
+  if (!existsSync(examplesRoot)) {
+    return [];
+  }
+
+  return readdirSync(examplesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(COMPOSITION_SPEC_EXAMPLE_SUFFIX))
+    .map((entry) => `${DEFAULT_COMPOSITION_SPEC_EXAMPLES_DIR}/${entry.name}`)
+    .sort();
 }
 
 function analyzeCompositionTarget(input: {
@@ -1244,7 +1264,7 @@ function parseArgs(args: readonly string[]): {
       result.targetPaths.push(value);
       index += 1;
     } else if (key === "--targets") {
-      result.targetPaths.push(...value.split(",").map((targetPath) => targetPath.trim()).filter(Boolean));
+      result.targetPaths.push(...splitPathList(value));
       index += 1;
     } else if (key === "--format" && (value === "json" || value === "markdown")) {
       result.format = value;
@@ -1255,34 +1275,48 @@ function parseArgs(args: readonly string[]): {
   return result;
 }
 
-function printUsage(): void {
-  console.log(`Usage:
-  tsx product-design-os/scripts/check-renderability-product-design-os.ts --target product-design-os/qa/renderability/fixtures/buildable-marketing.json
-  tsx product-design-os/scripts/check-renderability-product-design-os.ts --contract-manifest product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json --targets product-design-os/qa/renderability/fixtures/buildable-marketing.json,product-design-os/qa/renderability/fixtures/nonbuildable-motion.json --format markdown`);
+function splitPathList(value: string): readonly string[] {
+  return value.split(",").map((path) => path.trim()).filter(Boolean);
+}
+
+export function createProductDesignRenderabilityCliRun(
+  cliArgs: readonly string[],
+  repoRoot = process.cwd()
+): PdosRenderabilityCliRun {
+  const args = parseArgs(cliArgs);
+  const targetPaths = args.targetPaths.length > 0 ? args.targetPaths : getDefaultPdosCompositionSpecPaths(repoRoot);
+  const input: {
+    contractManifestPath?: string;
+    targetPaths: readonly string[];
+  } = { targetPaths };
+  if (args.contractManifestPath !== undefined) {
+    input.contractManifestPath = args.contractManifestPath;
+  }
+
+  const report = analyzeProductDesignRenderability(input, repoRoot);
+
+  return {
+    report,
+    output: formatRenderabilityReport(report, args.format),
+    exitCode: report.ok ? 0 : 1
+  };
+}
+
+export function applyProductDesignRenderabilityCliExitCode(report: PdosRenderabilityReport): 0 | 1 {
+  const exitCode = report.ok ? 0 : 1;
+  process.exitCode = exitCode;
+  return exitCode;
 }
 
 function runCli(): void {
   try {
-    const args = parseArgs(process.argv.slice(2));
-    if (args.targetPaths.length === 0) {
-      printUsage();
-      return;
-    }
-
-    const input: {
-      contractManifestPath?: string;
-      targetPaths: readonly string[];
-    } = { targetPaths: args.targetPaths };
-    if (args.contractManifestPath !== undefined) {
-      input.contractManifestPath = args.contractManifestPath;
-    }
-
-    const report = analyzeProductDesignRenderability(input, process.cwd());
-    console.log(formatRenderabilityReport(report, args.format));
+    const cliRun = createProductDesignRenderabilityCliRun(process.argv.slice(2), process.cwd());
+    process.stdout.write(cliRun.output);
+    applyProductDesignRenderabilityCliExitCode(cliRun.report);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown renderability failure.";
     console.error(`Renderability check failed: ${message}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   analyzeProductDesignRenderability,
+  getDefaultPdosCompositionSpecPaths,
   type PdosRenderabilityIssue,
   type PdosTargetKind
 } from "../../scripts/check-renderability-product-design-os";
@@ -66,6 +67,12 @@ export interface PdosBuildabilityFloorReport {
   readonly ok: boolean;
   readonly compositions: readonly PdosBuildabilityCompositionReport[];
   readonly summary: PdosBuildabilityFloorSummary;
+}
+
+export interface PdosBuildabilityFloorCliRun {
+  readonly report: PdosBuildabilityFloorReport;
+  readonly output: string;
+  readonly exitCode: 0 | 1;
 }
 
 interface CompositionSource {
@@ -509,41 +516,54 @@ function splitPathList(value: string): readonly string[] {
   return value.split(",").map((path) => path.trim()).filter(Boolean);
 }
 
-function printUsage(): void {
-  console.log(`Usage:
-  tsx product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts --spec product-design-os/specs/examples/buildable-marketing.composition.json
-  tsx product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts --target product-design-os/qa/renderability/fixtures/nonbuildable-motion.json --format markdown`);
+export function createBuildabilityFloorCliRun(
+  cliArgs: readonly string[],
+  repoRoot = process.cwd()
+): PdosBuildabilityFloorCliRun {
+  const args = parseArgs(cliArgs);
+  const defaultSpecPaths =
+    args.specPaths.length === 0 && args.targetPaths.length === 0 ? getDefaultPdosCompositionSpecPaths(repoRoot) : [];
+  const specPaths = args.specPaths.length > 0 ? args.specPaths : defaultSpecPaths;
+
+  const input: {
+    contractManifestPath?: string;
+    specPaths?: readonly string[];
+    targetPaths?: readonly string[];
+  } = {};
+  if (args.contractManifestPath !== undefined) {
+    input.contractManifestPath = args.contractManifestPath;
+  }
+  if (specPaths.length > 0) {
+    input.specPaths = specPaths;
+  }
+  if (args.targetPaths.length > 0) {
+    input.targetPaths = args.targetPaths;
+  }
+
+  const report = analyzeBuildabilityFloor(input, repoRoot);
+
+  return {
+    report,
+    output: formatBuildabilityFloorReport(report, args.format),
+    exitCode: report.ok ? 0 : 1
+  };
+}
+
+export function applyBuildabilityFloorCliExitCode(report: PdosBuildabilityFloorReport): 0 | 1 {
+  const exitCode = report.ok ? 0 : 1;
+  process.exitCode = exitCode;
+  return exitCode;
 }
 
 function runCli(): void {
   try {
-    const args = parseArgs(process.argv.slice(2));
-    if (args.specPaths.length === 0 && args.targetPaths.length === 0) {
-      printUsage();
-      return;
-    }
-
-    const input: {
-      contractManifestPath?: string;
-      specPaths?: readonly string[];
-      targetPaths?: readonly string[];
-    } = {};
-    if (args.contractManifestPath !== undefined) {
-      input.contractManifestPath = args.contractManifestPath;
-    }
-    if (args.specPaths.length > 0) {
-      input.specPaths = args.specPaths;
-    }
-    if (args.targetPaths.length > 0) {
-      input.targetPaths = args.targetPaths;
-    }
-
-    const report = analyzeBuildabilityFloor(input, process.cwd());
-    console.log(formatBuildabilityFloorReport(report, args.format));
+    const cliRun = createBuildabilityFloorCliRun(process.argv.slice(2), process.cwd());
+    process.stdout.write(cliRun.output);
+    applyBuildabilityFloorCliExitCode(cliRun.report);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown buildability-floor failure.";
     console.error(`Buildability floor check failed: ${message}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
