@@ -573,18 +573,6 @@
         "penalties": []
       },
       {
-        "id": "structural-gravity-grid",
-        "score": 54,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 7/7.",
-          "Motion intent prior applied."
-        ],
-        "penalties": []
-      },
-      {
         "id": "animated-hero",
         "score": 52,
         "selected": false,
@@ -929,39 +917,6 @@
           "Compared against route client_portal and recipe client-portal-trust.",
           "Asset use_case is not an exact match.",
           "Creativity/trust/motion: 4/8/1."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "olovnice-align",
-        "score": 104,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Asset use_case is not an exact match.",
-          "Creativity/trust/motion: 6/7/2."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "maltova-spara",
-        "score": 102,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Asset use_case is not an exact match.",
-          "Creativity/trust/motion: 6/7/4."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "odkryta-textura",
-        "score": 100,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Asset use_case is not an exact match.",
-          "Creativity/trust/motion: 6/7/5."
         ],
         "penalties": []
       },

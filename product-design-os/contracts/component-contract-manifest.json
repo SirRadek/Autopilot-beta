@@ -43,34 +43,23 @@
           "required": true,
           "severity": "error",
           "description": "The hero CTA stays as readable DOM text, not as decorative dashboard imagery.",
-          "source_floors": [
-            "fake-dashboard"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_primary_action"
-          ]
+          "source_floors": ["fake-dashboard"],
+          "visual_qa_issue_codes": ["missing_primary_action"]
         },
         {
           "code": "visible_h1",
           "required": true,
           "severity": "error",
           "description": "The first viewport keeps a readable headline over the motion direction.",
-          "source_floors": [
-            "dark-neon-default"
-          ],
-          "visual_qa_issue_codes": [
-            "weak_heading_hierarchy",
-            "headings_missing"
-          ]
+          "source_floors": ["dark-neon-default"],
+          "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"]
         },
         {
           "code": "performance_budget",
           "required": true,
           "severity": "error",
           "description": "Hero motion avoids particle-heavy treatment that would block the first view.",
-          "source_floors": [
-            "heavy-particles"
-          ]
+          "source_floors": ["heavy-particles"]
         }
       ],
       "notes": "Seed contract for the editorial motion hero asset."
@@ -103,34 +92,23 @@
           "required": true,
           "severity": "error",
           "description": "Primary text is not baked into the background image.",
-          "source_floors": [
-            "text-inside-image"
-          ],
-          "visual_qa_issue_codes": [
-            "primary_content_hidden_in_canvas"
-          ]
+          "source_floors": ["text-inside-image"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
         },
         {
           "code": "visible_h1",
           "required": true,
           "severity": "error",
           "description": "The background cannot reduce headline readability.",
-          "source_floors": [
-            "low-contrast-glass"
-          ],
-          "visual_qa_issue_codes": [
-            "low_contrast",
-            "weak_heading_hierarchy"
-          ]
+          "source_floors": ["low-contrast-glass"],
+          "visual_qa_issue_codes": ["low_contrast", "weak_heading_hierarchy"]
         },
         {
           "code": "performance_budget",
           "required": false,
           "severity": "warning",
           "description": "Heavy blur should stay out of the first viewport budget.",
-          "source_floors": [
-            "heavy-blur"
-          ]
+          "source_floors": ["heavy-blur"]
         }
       ],
       "notes": "Seed contract for the calm prism background asset."
@@ -177,10 +155,7 @@
           "required": true,
           "severity": "error",
           "description": "Proof claims stay adjacent to sourced case evidence and avoid fake metrics.",
-          "source_floors": [
-            "logo-wall-without-proof",
-            "fake-metrics"
-          ]
+          "source_floors": ["logo-wall-without-proof", "fake-metrics"]
         }
       ],
       "notes": "Seed contract for case-study proof strips."
@@ -224,10 +199,7 @@
           "value_type": "string",
           "required": false,
           "min_length": 0,
-          "allowed_values": [
-            "primary",
-            "secondary"
-          ],
+          "allowed_values": ["primary", "secondary"],
           "expected_source": "CTA visual priority"
         },
         {
@@ -244,15 +216,9 @@
           "required": true,
           "min_items": 1,
           "max_items": 1,
-          "accepts_target_kinds": [
-            "asset"
-          ],
-          "accepts_asset_types": [
-            "hero"
-          ],
-          "allowed_asset_ids": [
-            "editorial-motion-hero"
-          ],
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["hero"],
+          "allowed_asset_ids": ["editorial-motion-hero"],
           "description": "Primary first-viewport hero asset."
         },
         {
@@ -260,15 +226,9 @@
           "required": true,
           "min_items": 1,
           "max_items": 1,
-          "accepts_target_kinds": [
-            "asset"
-          ],
-          "accepts_asset_types": [
-            "background"
-          ],
-          "allowed_asset_ids": [
-            "theme-calm-prism-grid"
-          ],
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["background"],
+          "allowed_asset_ids": ["theme-calm-prism-grid"],
           "description": "Background direction that supports the offer."
         }
       ],
@@ -278,35 +238,23 @@
           "required": true,
           "severity": "error",
           "description": "The positioning headline is visible in the first viewport.",
-          "source_floors": [
-            "specific headline"
-          ],
-          "visual_qa_issue_codes": [
-            "weak_heading_hierarchy",
-            "headings_missing"
-          ]
+          "source_floors": ["specific headline"],
+          "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"]
         },
         {
           "code": "dom_text_cta",
           "required": true,
           "severity": "error",
           "description": "The CTA is visible, readable text.",
-          "source_floors": [
-            "visible CTA"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_primary_action",
-            "ctas_missing"
-          ]
+          "source_floors": ["visible CTA"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
         },
         {
           "code": "proof_adjacency",
           "required": false,
           "severity": "warning",
           "description": "The hero should carry a nearby trust cue.",
-          "source_floors": [
-            "trust cue"
-          ]
+          "source_floors": ["trust cue"]
         }
       ],
       "notes": "Seed contract for clear offer-led hero sections."
@@ -345,15 +293,9 @@
           "required": true,
           "min_items": 1,
           "max_items": 1,
-          "accepts_target_kinds": [
-            "asset"
-          ],
-          "accepts_asset_types": [
-            "background"
-          ],
-          "allowed_asset_ids": [
-            "theme-calm-prism-grid"
-          ],
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["background"],
+          "allowed_asset_ids": ["theme-calm-prism-grid"],
           "description": "The static theme asset that carries the crossed direction."
         }
       ],
@@ -363,33 +305,23 @@
           "required": true,
           "severity": "error",
           "description": "Theme direction preserves SEO-readable content outside media layers.",
-          "source_floors": [
-            "SEO-readable content"
-          ],
-          "visual_qa_issue_codes": [
-            "primary_content_hidden_in_canvas"
-          ]
+          "source_floors": ["SEO-readable content"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
         },
         {
           "code": "reduced_motion_fallback",
           "required": true,
           "severity": "error",
           "description": "Crossed visual direction has a mobile/static fallback path.",
-          "source_floors": [
-            "mobile fallback"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_reduced_motion_fallback"
-          ]
+          "source_floors": ["mobile fallback"],
+          "visual_qa_issue_codes": ["missing_reduced_motion_fallback"]
         },
         {
           "code": "proof_adjacency",
           "required": false,
           "severity": "warning",
           "description": "The visual direction should remain tied to product proof.",
-          "source_floors": [
-            "product-proof axis"
-          ]
+          "source_floors": ["product-proof axis"]
         }
       ],
       "notes": "Seed contract for crossed visual directions."
@@ -433,10 +365,7 @@
           "value_type": "string",
           "required": false,
           "min_length": 0,
-          "allowed_values": [
-            "primary",
-            "secondary"
-          ],
+          "allowed_values": ["primary", "secondary"],
           "expected_source": "CTA visual priority"
         },
         {
@@ -453,15 +382,9 @@
           "required": true,
           "min_items": 1,
           "max_items": 1,
-          "accepts_target_kinds": [
-            "asset"
-          ],
-          "accepts_asset_types": [
-            "section"
-          ],
-          "allowed_asset_ids": [
-            "proof-strip-case-study"
-          ],
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["section"],
+          "allowed_asset_ids": ["proof-strip-case-study"],
           "description": "A concrete proof strip or case-study section."
         }
       ],
@@ -471,23 +394,15 @@
           "required": true,
           "severity": "error",
           "description": "The proof item stays paired with its source or case reference.",
-          "source_floors": [
-            "proof item",
-            "source or case reference"
-          ]
+          "source_floors": ["proof item", "source or case reference"]
         },
         {
           "code": "dom_text_cta",
           "required": true,
           "severity": "error",
           "description": "The proof section provides a readable CTA continuation.",
-          "source_floors": [
-            "CTA continuation"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_primary_action",
-            "ctas_missing"
-          ]
+          "source_floors": ["CTA continuation"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
         }
       ],
       "notes": "Seed contract for proof-led marketing sections."
@@ -517,10 +432,7 @@
           "value_type": "string",
           "required": false,
           "min_length": 0,
-          "allowed_values": [
-            "primary",
-            "secondary"
-          ],
+          "allowed_values": ["primary", "secondary"],
           "expected_source": "CTA visual priority"
         }
       ],
@@ -530,15 +442,9 @@
           "required": true,
           "min_items": 1,
           "max_items": 1,
-          "accepts_target_kinds": [
-            "pattern"
-          ],
-          "accepts_pattern_types": [
-            "conversion_pattern"
-          ],
-          "allowed_pattern_ids": [
-            "proof-led-section"
-          ],
+          "accepts_target_kinds": ["pattern"],
+          "accepts_pattern_types": ["conversion_pattern"],
+          "allowed_pattern_ids": ["proof-led-section"],
           "description": "Proof-led section that supports the closing outcome CTA."
         }
       ],
@@ -548,22 +454,15 @@
           "required": true,
           "severity": "error",
           "description": "The outcome CTA is an accessible DOM action.",
-          "source_floors": [
-            "CTA"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_primary_action",
-            "ctas_missing"
-          ]
+          "source_floors": ["CTA"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
         },
         {
           "code": "proof_adjacency",
           "required": true,
           "severity": "error",
           "description": "The CTA remains adjacent to proof for the outcome claim.",
-          "source_floors": [
-            "proof adjacency"
-          ]
+          "source_floors": ["proof adjacency"]
         }
       ],
       "notes": "Seed contract for proof-adjacent closing CTAs."
@@ -608,23 +507,11 @@
           "required": true,
           "min_items": 1,
           "max_items": 2,
-          "accepts_target_kinds": [
-            "asset",
-            "pattern"
-          ],
-          "accepts_asset_types": [
-            "hero",
-            "section"
-          ],
-          "accepts_pattern_types": [
-            "conversion_pattern"
-          ],
-          "allowed_asset_ids": [
-            "editorial-motion-hero"
-          ],
-          "allowed_pattern_ids": [
-            "sharp-positioning-hero"
-          ],
+          "accepts_target_kinds": ["asset", "pattern"],
+          "accepts_asset_types": ["hero", "section"],
+          "accepts_pattern_types": ["conversion_pattern"],
+          "allowed_asset_ids": ["editorial-motion-hero"],
+          "allowed_pattern_ids": ["sharp-positioning-hero"],
           "description": "DOM-first content that remains available before and without motion."
         }
       ],
@@ -634,60 +521,39 @@
           "required": true,
           "severity": "error",
           "description": "Animated hero still starts from content-first visible copy.",
-          "source_floors": [
-            "content-first hero"
-          ],
-          "visual_qa_issue_codes": [
-            "weak_heading_hierarchy",
-            "headings_missing"
-          ]
+          "source_floors": ["content-first hero"],
+          "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"]
         },
         {
           "code": "dom_text_cta",
           "required": true,
           "severity": "error",
           "description": "The hero CTA remains DOM text above motion layers.",
-          "source_floors": [
-            "DOM-text CTA"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_primary_action",
-            "ctas_missing"
-          ]
+          "source_floors": ["DOM-text CTA"],
+          "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"]
         },
         {
           "code": "no_primary_content_in_canvas",
           "required": true,
           "severity": "error",
           "description": "Primary hero content is not trapped inside canvas or media.",
-          "source_floors": [
-            "content-first hero"
-          ],
-          "visual_qa_issue_codes": [
-            "primary_content_hidden_in_canvas"
-          ]
+          "source_floors": ["content-first hero"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
         },
         {
           "code": "reduced_motion_fallback",
           "required": true,
           "severity": "error",
           "description": "High-motion hero has reduced-motion and static fallback coverage.",
-          "source_floors": [
-            "reduced-motion fallback",
-            "static fallback"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_reduced_motion_fallback"
-          ]
+          "source_floors": ["reduced-motion fallback", "static fallback"],
+          "visual_qa_issue_codes": ["missing_reduced_motion_fallback"]
         },
         {
           "code": "performance_budget",
           "required": true,
           "severity": "error",
           "description": "Animated hero declares a performance budget for motion assets.",
-          "source_floors": [
-            "performance budget"
-          ]
+          "source_floors": ["performance budget"]
         }
       ],
       "notes": "Seed contract for motion-enhanced hero sections. The hero_content slot and reduced_motion_fallback invariant are intentionally required."
@@ -698,67 +564,14 @@
       "target_kind": "pattern",
       "target_id": "dot-stage-hero",
       "props": [
-        {
-          "name": "headline",
-          "value_type": "text",
-          "required": true,
-          "min_length": 8,
-          "expected_source": "content-first hero"
-        },
-        {
-          "name": "primary_cta",
-          "value_type": "string",
-          "required": true,
-          "min_length": 3,
-          "expected_source": "DOM-text CTA"
-        },
-        {
-          "name": "trust_cue",
-          "value_type": "string",
-          "required": true,
-          "min_length": 3,
-          "expected_source": "trust cue"
-        },
-        {
-          "name": "display_word",
-          "value_type": "string",
-          "required": true,
-          "min_length": 2,
-          "expected_source": "dot-built display word"
-        },
-        {
-          "name": "cta_href",
-          "value_type": "url",
-          "required": false,
-          "expected_source": "primary CTA destination"
-        },
-        {
-          "name": "scene_preset",
-          "value_type": "string",
-          "required": true,
-          "min_length": 3,
-          "allowed_values": [
-            "spotlight-hero",
-            "noise-to-order",
-            "playhead-process",
-            "lens-proof",
-            "shape-pricing"
-          ],
-          "expected_source": "dot scene preset"
-        },
-        {
-          "name": "motion_intensity",
-          "value_type": "integer",
-          "required": true,
-          "description": "Declared motion intensity on a 0-10 scale."
-        },
-        {
-          "name": "static_fallback_label",
-          "value_type": "string",
-          "required": true,
-          "min_length": 3,
-          "expected_source": "static fallback"
-        }
+        { "name": "headline", "value_type": "text", "required": true, "min_length": 8, "expected_source": "content-first hero" },
+        { "name": "primary_cta", "value_type": "string", "required": true, "min_length": 3, "expected_source": "DOM-text CTA" },
+        { "name": "trust_cue", "value_type": "string", "required": true, "min_length": 3, "expected_source": "trust cue" },
+        { "name": "display_word", "value_type": "string", "required": true, "min_length": 2, "expected_source": "dot-built display word" },
+        { "name": "cta_href", "value_type": "url", "required": false, "expected_source": "primary CTA destination" },
+        { "name": "scene_preset", "value_type": "string", "required": true, "min_length": 3, "allowed_values": ["spotlight-hero", "noise-to-order", "playhead-process", "lens-proof", "shape-pricing"], "expected_source": "dot scene preset" },
+        { "name": "motion_intensity", "value_type": "integer", "required": true, "description": "Declared motion intensity on a 0-10 scale." },
+        { "name": "static_fallback_label", "value_type": "string", "required": true, "min_length": 3, "expected_source": "static fallback" }
       ],
       "slots": [
         {
@@ -766,233 +579,21 @@
           "required": false,
           "min_items": 0,
           "max_items": 1,
-          "accepts_target_kinds": [
-            "asset"
-          ],
-          "accepts_asset_types": [
-            "background",
-            "motion"
-          ],
-          "allowed_asset_ids": [
-            "motion-background"
-          ],
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["background", "motion"],
+          "allowed_asset_ids": ["motion-background"],
           "description": "Optional brand-atmosphere backdrop; the dot field is procedural and needs no stored asset."
         }
       ],
       "output_invariants": [
-        {
-          "code": "visible_h1",
-          "required": true,
-          "severity": "error",
-          "description": "The readable headline is sharp DOM text, opaque at load, not drawn on canvas.",
-          "source_floors": [
-            "content-first hero"
-          ],
-          "visual_qa_issue_codes": [
-            "weak_heading_hierarchy",
-            "headings_missing"
-          ]
-        },
-        {
-          "code": "dom_text_cta",
-          "required": true,
-          "severity": "error",
-          "description": "The primary CTA is a readable DOM anchor above the canvas.",
-          "source_floors": [
-            "DOM-text CTA"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_primary_action",
-            "ctas_missing"
-          ]
-        },
-        {
-          "code": "no_primary_content_in_canvas",
-          "required": true,
-          "severity": "error",
-          "description": "Read copy is DOM; dot-built display words carry a DOM twin so primary content is never canvas-only.",
-          "source_floors": [
-            "content-first hero"
-          ],
-          "visual_qa_issue_codes": [
-            "primary_content_hidden_in_canvas"
-          ]
-        },
-        {
-          "code": "reduced_motion_fallback",
-          "required": true,
-          "severity": "error",
-          "description": "The dot engine bails to a static frame under prefers-reduced-motion and the full site stays readable.",
-          "source_floors": [
-            "reduced-motion fallback",
-            "static fallback"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_reduced_motion_fallback"
-          ]
-        },
-        {
-          "code": "performance_budget",
-          "required": true,
-          "severity": "error",
-          "description": "Procedural dots only (no stored frames); bounded dot budget keeps the first view cheap.",
-          "source_floors": [
-            "performance budget"
-          ]
-        },
-        {
-          "code": "proof_adjacency",
-          "required": false,
-          "severity": "warning",
-          "description": "The hero should carry a nearby trust cue.",
-          "source_floors": [
-            "trust cue"
-          ]
-        }
+        { "code": "visible_h1", "required": true, "severity": "error", "description": "The readable headline is sharp DOM text, opaque at load, not drawn on canvas.", "source_floors": ["content-first hero"], "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"] },
+        { "code": "dom_text_cta", "required": true, "severity": "error", "description": "The primary CTA is a readable DOM anchor above the canvas.", "source_floors": ["DOM-text CTA"], "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"] },
+        { "code": "no_primary_content_in_canvas", "required": true, "severity": "error", "description": "Read copy is DOM; dot-built display words carry a DOM twin so primary content is never canvas-only.", "source_floors": ["content-first hero"], "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"] },
+        { "code": "reduced_motion_fallback", "required": true, "severity": "error", "description": "The dot engine bails to a static frame under prefers-reduced-motion and the full site stays readable.", "source_floors": ["reduced-motion fallback", "static fallback"], "visual_qa_issue_codes": ["missing_reduced_motion_fallback"] },
+        { "code": "performance_budget", "required": true, "severity": "error", "description": "Procedural dots only (no stored frames); bounded dot budget keeps the first view cheap.", "source_floors": ["performance budget"] },
+        { "code": "proof_adjacency", "required": false, "severity": "warning", "description": "The hero should carry a nearby trust cue.", "source_floors": ["trust cue"] }
       ],
       "notes": "Contract for the procedural dot-stage hero. Dot-specific guards (canvas display words need a DOM twin; no stored frames) are enforced by check-render-contract.ts, self-scoped on the [data-dot-word] and [data-dot-stage] markers the renderer emits."
-    },
-    {
-      "id": "pattern-structural-gravity-grid",
-      "schema_version": "1.0.0",
-      "target_kind": "pattern",
-      "target_id": "structural-gravity-grid",
-      "props": [
-        {
-          "name": "eyebrow",
-          "value_type": "text",
-          "required": false,
-          "expected_source": "kicker / positioning line"
-        },
-        {
-          "name": "headline",
-          "value_type": "text",
-          "required": true,
-          "min_length": 8,
-          "expected_source": "content-first hero"
-        },
-        {
-          "name": "primary_cta",
-          "value_type": "string",
-          "required": true,
-          "min_length": 3,
-          "expected_source": "DOM-text CTA"
-        },
-        {
-          "name": "trust_cue",
-          "value_type": "string",
-          "required": true,
-          "min_length": 3,
-          "expected_source": "trust cue"
-        },
-        {
-          "name": "cta_href",
-          "value_type": "url",
-          "required": false,
-          "expected_source": "primary CTA destination"
-        },
-        {
-          "name": "gallery_item_one",
-          "value_type": "string",
-          "required": true,
-          "min_length": 2,
-          "expected_source": "DOM stone-block gallery label"
-        },
-        {
-          "name": "gallery_item_two",
-          "value_type": "string",
-          "required": true,
-          "min_length": 2,
-          "expected_source": "DOM stone-block gallery label"
-        },
-        {
-          "name": "gallery_item_three",
-          "value_type": "string",
-          "required": true,
-          "min_length": 2,
-          "expected_source": "DOM stone-block gallery label"
-        },
-        {
-          "name": "static_fallback_label",
-          "value_type": "string",
-          "required": true,
-          "min_length": 3,
-          "expected_source": "static fallback"
-        }
-      ],
-      "slots": [],
-      "output_invariants": [
-        {
-          "code": "visible_h1",
-          "required": true,
-          "severity": "error",
-          "description": "The readable headline is sharp DOM text, opaque at load, not drawn on canvas.",
-          "source_floors": [
-            "content-first hero"
-          ],
-          "visual_qa_issue_codes": [
-            "weak_heading_hierarchy",
-            "headings_missing"
-          ]
-        },
-        {
-          "code": "dom_text_cta",
-          "required": true,
-          "severity": "error",
-          "description": "The primary CTA is a readable DOM anchor.",
-          "source_floors": [
-            "DOM-text CTA"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_primary_action",
-            "ctas_missing"
-          ]
-        },
-        {
-          "code": "no_primary_content_in_canvas",
-          "required": true,
-          "severity": "error",
-          "description": "Headline and the stone-block gallery items are real DOM text; the motion is CSS-only with no canvas-trapped content.",
-          "source_floors": [
-            "content-first hero"
-          ],
-          "visual_qa_issue_codes": [
-            "primary_content_hidden_in_canvas"
-          ]
-        },
-        {
-          "code": "reduced_motion_fallback",
-          "required": true,
-          "severity": "error",
-          "description": "Under prefers-reduced-motion the settle animation resets to final positions and the page stays readable.",
-          "source_floors": [
-            "reduced-motion fallback",
-            "static fallback"
-          ],
-          "visual_qa_issue_codes": [
-            "missing_reduced_motion_fallback"
-          ]
-        },
-        {
-          "code": "performance_budget",
-          "required": true,
-          "severity": "error",
-          "description": "CSS-only hardware-accelerated transform/opacity; one-shot settle, no loops, no JS runtime.",
-          "source_floors": [
-            "performance budget"
-          ]
-        },
-        {
-          "code": "proof_adjacency",
-          "required": false,
-          "severity": "warning",
-          "description": "The hero should carry a nearby trust cue.",
-          "source_floors": [
-            "trust cue"
-          ]
-        }
-      ],
-      "notes": "Contract for the structural-gravity-grid CSS-only mortar-bed-settle hero. Content (headline, CTA, stone-block gallery labels) is real DOM for SEO/a11y; motion is a one-shot CSS settle with a prefers-reduced-motion reset."
     }
   ]
 }

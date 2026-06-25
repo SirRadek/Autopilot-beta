@@ -24,7 +24,6 @@
     "product-design-os/renderer/components/outcome-cta.ts",
     "product-design-os/renderer/components/proof-led-section.ts",
     "product-design-os/renderer/components/sharp-positioning-hero.ts",
-    "product-design-os/renderer/components/structural-gravity-grid.ts",
     "product-design-os/renderer/map-tokens.ts",
     "product-design-os/renderer/pattern-component-registry.ts",
     "product-design-os/renderer/render-brand-examples.ts",
