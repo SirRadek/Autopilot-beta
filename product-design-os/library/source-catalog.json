@@ -148,6 +148,29 @@
       "notes": "Useful for real material feel when a flat SVG is not enough."
     },
     {
+      "id": "wikimedia-commons-red-brick-wall",
+      "name": "Wikimedia Commons Red brick wall (Unsplash)",
+      "category": "texture",
+      "status": "approved_source",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Red_brick_wall_(Unsplash).jpg",
+      "evidence_urls": [
+        "https://commons.wikimedia.org/wiki/File:Red_brick_wall_(Unsplash).jpg",
+        "https://creativecommons.org/publicdomain/zero/1.0/"
+      ],
+      "license": {
+        "name": "Creative Commons CC0 1.0 Universal Public Domain Dedication",
+        "type": "cc0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-06-25",
+      "allowed_uses": ["trial proof imagery", "masonry material reference", "landing-page section media"],
+      "blocked_uses": ["using as sole proof without adjacent DOM case text", "shipping without local compression or source record"],
+      "adoption_requirements": ["record exact Commons file page", "keep proof claim in DOM text", "serve a resized local copy for performance"],
+      "notes": "Owner-approved CC0 brick-wall proof image for the zednik first-trial composition."
+    },
+    {
       "id": "lucide-icons",
       "name": "Lucide Icons",
       "category": "icon",

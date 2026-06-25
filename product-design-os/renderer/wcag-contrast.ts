@@ -19,6 +19,9 @@ export class WcagContrastError extends Error {
 
 const wcagContrastPairs = [
   ["background", "text"],
+  ["background", "muted_text"],
+  ["surface", "text"],
+  ["surface", "muted_text"],
   ["accent", "accent_text"],
   ["accent_secondary", "accent_text"]
 ] as const;

@@ -20,7 +20,7 @@ strategic* voice.
 |---|---|---|
 | **Opus (Claude)** | Architect · supervisor · final review · gate · land. NEVER sole work-product. | Every phase (unchanged). |
 | **codex_cli** | Implementation worker · logic · **tech-opponent / reviewer / auditor (with Opus)**. | **Implement pass + a review/audit pass** per phase (was: implement only). |
-| **agy_cli (Gemini)** | **Creativity · strategic opponent · SEO** (redacted context). | **Standing** voice on every design-bearing decision; **occasional** opportunistic engagement elsewhere. |
+| **agy_cli (Gemini) — TWO tiers** | **Creativity · strategic opponent · SEO** (redacted context). **`gemini-3.1-pro-high`** = deep verdicts; **`gemini-3.5-flash-high`** = fast/cheap frequent + parallel breadth. | **Engage MORE OFTEN** (owner 2026-06-24): pro-high on every design-bearing decision + the per-phase design verdict; flash-high liberally for quick gut-checks, breadth sweeps, extra rounds, second opinions — cheap enough to use often. |
 | **qwen** | Private local worker (data-sensitive). | Unchanged; engage when privacy axis demands local. |
 
 ## What this means per phase (operational)
@@ -36,6 +36,14 @@ strategic* voice.
 5. **Exhaustive lanes (Ultracode)** → where warranted, add a Claude Workflow adversarial-verify fan-out ON
    TOP of the real-vendor lanes. Note: Workflow `agent()` spawns **Claude** subagents, NOT codex/agy — so a
    Workflow does **not** satisfy "engage codex/agy more"; the real vendors are invoked via `runCliWorker`.
+6. **Two-tier agy (owner 2026-06-24)** → use agy MORE, split by cost/depth:
+   - **`gemini-3.5-flash-high`** (fast/cheap) → frequent light touches: quick "does this look generic /
+     does the page cohere?" gut-checks BEFORE the deep review, breadth sweeps (N flash lanes each on a
+     different angle), extra brainstorm rounds, a fast second opinion. Use it liberally — it's cheap.
+   - **`gemini-3.1-pro-high`** (deep) → the hard verdicts: per-phase design review (page-ready?), strategic
+     calls (brand brainstorm, differentiation, naming, SEO), the final creative sign-off before land.
+   Run them as SEPARATE `runCliWorker` calls (distinct stateDirs; agy auth is flaky so avoid 2 concurrent
+   agy sessions — sequence pro then flash, or flash-sweep then pro-verdict). `model` field selects the tier.
 
 ## Keeping it honest (anti-folklore)
 Each phase records a one-line **vendor-engagement log** (who did implement / audit / creative / review, with

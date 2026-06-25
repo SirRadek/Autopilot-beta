@@ -132,6 +132,15 @@
     "source": {
       "type": "string"
     },
+    "href": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "alt": {
+      "type": "string"
+    },
     "library_source_id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"

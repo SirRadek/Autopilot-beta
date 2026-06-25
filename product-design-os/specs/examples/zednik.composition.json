@@ -1,0 +1,471 @@
+{
+  "spec_kind": "composition_spec",
+  "id": "zednik",
+  "schema_version": "1.0.0",
+  "recipe_id": "marketing-premium",
+  "pattern_ids": [
+    "sharp-positioning-hero",
+    "proof-led-section",
+    "outcome-cta"
+  ],
+  "asset_ids": [
+    "editorial-motion-hero",
+    "theme-calm-prism-grid"
+  ],
+  "required_sections": [
+    "hero",
+    "proof",
+    "cta"
+  ],
+  "sections": [
+    {
+      "section_id": "hero",
+      "role": "first viewport masonry offer and request CTA",
+      "node_ids": [
+        "hero"
+      ],
+      "evidence_ids": [
+        "zednik-hero-offer-evidence",
+        "zednik-brand-token-evidence"
+      ]
+    },
+    {
+      "section_id": "proof",
+      "role": "real material proof and regional case evidence",
+      "node_ids": [
+        "proof"
+      ],
+      "evidence_ids": [
+        "zednik-proof-case-evidence",
+        "zednik-brick-asset-evidence"
+      ]
+    },
+    {
+      "section_id": "cta",
+      "role": "proof-adjacent closing request",
+      "node_ids": [
+        "cta"
+      ],
+      "evidence_ids": [
+        "zednik-cta-evidence"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "hero",
+      "target_kind": "pattern",
+      "target_id": "sharp-positioning-hero",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "eyebrow",
+          "value_type": "string",
+          "string_value": "Tradiční rodinné zednictví z Polabí"
+        },
+        {
+          "name": "headline",
+          "value_type": "text",
+          "string_value": "Stavíme poctivé a bytelné domy z cihel a vápna a citlivě rekonstruujeme staré kamenné chalupy"
+        },
+        {
+          "name": "primary_cta",
+          "value_type": "string",
+          "string_value": "Získat kalkulaci zdarma"
+        },
+        {
+          "name": "trust_cue",
+          "value_type": "string",
+          "string_value": "18 let praxe a 124 dokončených staveb — Brandýs nad Labem, Mělník, Nymburk a okolí"
+        }
+      ],
+      "slot_fills": [
+        {
+          "slot": "hero_asset",
+          "fills": [
+            {
+              "target_kind": "asset",
+              "target_id": "editorial-motion-hero"
+            }
+          ]
+        },
+        {
+          "slot": "theme_background",
+          "fills": [
+            {
+              "target_kind": "asset",
+              "target_id": "theme-calm-prism-grid"
+            }
+          ]
+        }
+      ],
+      "declared_invariants": [
+        "visible_h1",
+        "dom_text_cta",
+        "proof_adjacency"
+      ],
+      "evidence_ids": [
+        "zednik-hero-offer-evidence",
+        "zednik-brand-token-evidence"
+      ]
+    },
+    {
+      "node_id": "proof",
+      "target_kind": "pattern",
+      "target_id": "proof-led-section",
+      "section_id": "proof",
+      "props": [
+        {
+          "name": "outcome_statement",
+          "value_type": "text",
+          "string_value": "Získáte dokonale rovné zdivo a omítky z čistě přírodních materiálů, které vám bez prasklin vydrží po generace."
+        },
+        {
+          "name": "proof_item",
+          "value_type": "text",
+          "string_value": "Kompletní obnova památkově chráněné stodoly v Brandýse s použitím původního pískovce a hydraulického vápna bez příměsi cementu."
+        },
+        {
+          "name": "source_reference",
+          "value_type": "string",
+          "string_value": "Ukázka naší práce · Jak jsme zachránili stodolu z roku 1890 v Brandýse"
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "string_value": "Prohlédnout naše realizace"
+        },
+        {
+          "name": "cta_variant",
+          "value_type": "string",
+          "string_value": "secondary"
+        },
+        {
+          "name": "proof_asset_alt",
+          "value_type": "string",
+          "string_value": "Reálná zednická práce — cihlová zeď"
+        }
+      ],
+      "slot_fills": [
+        {
+          "slot": "proof_asset",
+          "fills": [
+            {
+              "target_kind": "asset",
+              "content": {
+                "href": "./assets/zednik-brick-proof.jpg",
+                "alt": "Reálná zednická práce — cihlová zeď",
+                "license": "CC0-1.0",
+                "source_url": "https://commons.wikimedia.org/wiki/File:Red_brick_wall_(Unsplash).jpg"
+              }
+            }
+          ]
+        }
+      ],
+      "declared_invariants": [
+        "proof_adjacency",
+        "dom_text_cta"
+      ],
+      "evidence_ids": [
+        "zednik-proof-case-evidence",
+        "zednik-brick-asset-evidence"
+      ]
+    },
+    {
+      "node_id": "cta",
+      "target_kind": "pattern",
+      "target_id": "outcome-cta",
+      "section_id": "cta",
+      "props": [
+        {
+          "name": "outcome_statement",
+          "value_type": "text",
+          "string_value": "Udělejte první krok k poctivě postavenému domovu – naceníme váš projekt bez skrytých poplatků a navyšování rozpočtu."
+        },
+        {
+          "name": "cta_label",
+          "value_type": "string",
+          "string_value": "Nezávazně poptat nacenění"
+        }
+      ],
+      "slot_fills": [
+        {
+          "slot": "proof_context",
+          "fills": [
+            {
+              "target_kind": "pattern",
+              "target_id": "proof-led-section"
+            }
+          ]
+        }
+      ],
+      "declared_invariants": [
+        "dom_text_cta",
+        "proof_adjacency"
+      ],
+      "evidence_ids": [
+        "zednik-cta-evidence",
+        "zednik-proof-case-evidence"
+      ]
+    }
+  ],
+  "evidence": {
+    "items": [
+      {
+        "id": "zednik-hero-offer-evidence",
+        "kind": "offer",
+        "summary": "The first viewport states the Czech mason's regional craft offer, primary pricing request, and concrete trust cue.",
+        "pattern_ids": [
+          "sharp-positioning-hero"
+        ],
+        "asset_ids": [
+          "editorial-motion-hero",
+          "theme-calm-prism-grid"
+        ],
+        "notes": "The copy is agy-authored Czech trial copy and remains rendered as DOM text."
+      },
+      {
+        "id": "zednik-proof-case-evidence",
+        "kind": "proof",
+        "summary": "The proof section pairs a sourced case reference with a specific material outcome and secondary continuation CTA.",
+        "pattern_ids": [
+          "proof-led-section"
+        ],
+        "notes": "Proof language avoids fake metrics and stays adjacent to the case-study source."
+      },
+      {
+        "id": "zednik-brick-asset-evidence",
+        "kind": "asset-provenance",
+        "summary": "The brick proof asset records a CC0 Wikimedia Commons source page and local resized demo image.",
+        "notes": "Wikimedia Commons records the file as CC0 1.0 Universal from pre-2017 Unsplash."
+      },
+      {
+        "id": "zednik-brand-token-evidence",
+        "kind": "brand",
+        "summary": "The sage, sandstone, and Lora token overrides implement the owner-selected Pískovec & Šalvěj trial direction.",
+        "pattern_ids": [
+          "sharp-positioning-hero",
+          "proof-led-section",
+          "outcome-cta"
+        ],
+        "notes": "Colors come from docs/decisions/brand-zednik-palette.md and pass the renderer WCAG-AA gate."
+      },
+      {
+        "id": "zednik-cta-evidence",
+        "kind": "conversion",
+        "summary": "The closing CTA asks for a no-obligation craft inquiry after proof context.",
+        "pattern_ids": [
+          "outcome-cta"
+        ],
+        "notes": "The outcome statement names pricing transparency and budget control."
+      }
+    ],
+    "required_section_evidence": [
+      {
+        "section_id": "hero",
+        "evidence_ids": [
+          "zednik-hero-offer-evidence",
+          "zednik-brand-token-evidence"
+        ]
+      },
+      {
+        "section_id": "proof",
+        "evidence_ids": [
+          "zednik-proof-case-evidence",
+          "zednik-brick-asset-evidence"
+        ]
+      },
+      {
+        "section_id": "cta",
+        "evidence_ids": [
+          "zednik-cta-evidence"
+        ]
+      }
+    ]
+  },
+  "visual_qa_probe": {
+    "url": "fixture://zednik",
+    "project_type": "marketing_web",
+    "primary_goal": "Generate qualified local masonry inquiries.",
+    "target_users": [
+      "homeowner",
+      "heritage-renovation-buyer",
+      "regional-client"
+    ],
+    "viewports": [
+      {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 1000,
+        "heading_count": 3,
+        "cta_count": 3,
+        "visible_text_characters": 900,
+        "repeated_card_count": 0,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 1,
+        "reduced_motion_supported": true
+      },
+      {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "heading_count": 2,
+        "cta_count": 2,
+        "visible_text_characters": 500,
+        "repeated_card_count": 0,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 1,
+        "reduced_motion_supported": true
+      }
+    ],
+    "headings": [
+      "Stavíme zdravé domy z cihel a vápna a citlivě rekonstruujeme staré kamenné chalupy",
+      "Získáte dokonale rovné zdivo a omítky z čistě přírodních materiálů, které vám bez prasklin vydrží po generace.",
+      "Udělejte první krok k poctivě postavenému domovu – naceníme váš projekt bez skrytých poplatků a navyšování rozpočtu."
+    ],
+    "ctas": [
+      "Spočítat cenu realizace",
+      "Prohlédnout naše realizace",
+      "Nezávazně poptat řemeslo"
+    ],
+    "template_signals": []
+  },
+  "token_overrides": {
+    "enabled": true,
+    "reason": "Owner-selected Pískovec & Šalvěj zednik trial brand with Lora web font.",
+    "values": [
+      {
+        "token_file": "color",
+        "token_key": "background",
+        "value": "#FAF6F0",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Light stucco page background for the zednik sage brand."
+      },
+      {
+        "token_file": "color",
+        "token_key": "surface",
+        "value": "#F2EAE1",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Sandstone surface tone from the owner-selected palette."
+      },
+      {
+        "token_file": "color",
+        "token_key": "text",
+        "value": "#2C2B29",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Raw umber text color with AA contrast."
+      },
+      {
+        "token_file": "color",
+        "token_key": "muted_text",
+        "value": "#6E6962",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Mortar-muted text color with AA contrast."
+      },
+      {
+        "token_file": "color",
+        "token_key": "border",
+        "value": "#DDD3C7",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Clay grey-beige border token."
+      },
+      {
+        "token_file": "color",
+        "token_key": "accent",
+        "value": "#2C5E43",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Craft sage green primary accent."
+      },
+      {
+        "token_file": "color",
+        "token_key": "accent_secondary",
+        "value": "#A34C32",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Burnt clay secondary accent."
+      },
+      {
+        "token_file": "color",
+        "token_key": "accent_soft",
+        "value": "#E6F0EA",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Soft sage tint for accents."
+      },
+      {
+        "token_file": "color",
+        "token_key": "accent_text",
+        "value": "#FFFFFF",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "White text for accent buttons."
+      },
+      {
+        "token_file": "color",
+        "token_key": "focus_ring",
+        "value": "#2C5E43",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Visible sage focus ring."
+      },
+      {
+        "token_file": "style",
+        "token_key": "accent_angle_deg",
+        "value": "-2deg",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Subtle craft angle from the selected style direction."
+      },
+      {
+        "token_file": "style",
+        "token_key": "corner_style",
+        "value": "rounded",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Rounded corners for a family-scale craft feel."
+      },
+      {
+        "token_file": "style",
+        "token_key": "surface_treatment",
+        "value": "flat",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Flat surface treatment from the selected style direction."
+      },
+      {
+        "token_file": "style",
+        "token_key": "decoration_intensity",
+        "value": "subtle",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Subtle decoration avoids over-styled trade-site polish."
+      },
+      {
+        "token_file": "style",
+        "token_key": "heading_case",
+        "value": "none",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Czech sentence-case copy stays natural."
+      },
+      {
+        "token_file": "typography",
+        "token_key": "web_font_family",
+        "value": "Lora",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Enable the Lora Google Fonts head link for the trial."
+      },
+      {
+        "token_file": "typography",
+        "token_key": "font_body",
+        "value": "\"Lora\", Georgia, serif",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Use Lora for body text once the web font is linked."
+      },
+      {
+        "token_file": "typography",
+        "token_key": "font_heading",
+        "value": "\"Lora\", Georgia, serif",
+        "evidence_id": "zednik-brand-token-evidence",
+        "reason": "Use Lora for headings once the web font is linked."
+      }
+    ]
+  }
+}

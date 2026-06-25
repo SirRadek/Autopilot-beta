@@ -28,52 +28,71 @@ export function checkRenderedContract(html: string, contract: ComponentContract)
     }
   };
 
-  const visibleH1s = root.querySelectorAll("h1").filter(isVisibleElement);
-  const headlineMinLength = minLengthForProp(contract, "headline", 1);
+  if (hasInvariant(contract, "visible_h1")) {
+    const visibleH1s = root.querySelectorAll("h1").filter(isVisibleElement);
+    const headlineMinLength = minLengthForProp(contract, "headline", 1);
 
-  if (visibleH1s.length !== 1) {
-    pushIssue("visible_h1", "error", `Expected exactly one visible h1, found ${visibleH1s.length}.`);
-  } else {
-    const visibleH1 = visibleH1s[0];
-    if (visibleH1 === undefined) {
-      pushIssue("visible_h1", "error", "Expected one visible h1 but none was readable.");
-      return { errors, warnings };
-    }
+    if (visibleH1s.length !== 1) {
+      pushIssue("visible_h1", "error", `Expected exactly one visible h1, found ${visibleH1s.length}.`);
+    } else {
+      const visibleH1 = visibleH1s[0];
+      if (visibleH1 === undefined) {
+        pushIssue("visible_h1", "error", "Expected one visible h1 but none was readable.");
+        return { errors, warnings };
+      }
 
-    const headlineText = normalizeText(visibleH1.text);
-    if (headlineText.length < headlineMinLength) {
-      pushIssue("visible_h1", "error", `Visible h1 text must be at least ${headlineMinLength} characters.`);
+      const headlineText = normalizeText(visibleH1.text);
+      if (headlineText.length < headlineMinLength) {
+        pushIssue("visible_h1", "error", `Visible h1 text must be at least ${headlineMinLength} characters.`);
+      }
     }
   }
 
-  const ctaMinLength = minLengthForProp(contract, "primary_cta", 1);
-  const ctaAnchors = root
-    .querySelectorAll("a")
-    .filter(isVisibleElement)
-    .filter((element) => element.classList.contains("cta") || element.getAttribute("data-contract-prop") === "primary_cta")
-    .filter((element) => normalizeText(element.text).length >= ctaMinLength)
-    .filter((element) => {
-      const href = element.getAttribute("href");
-      return href !== undefined && isSafeHref(href);
-    });
+  if (hasInvariant(contract, "dom_text_cta")) {
+    const ctaPropNames = contractPropNames(contract, ["primary_cta", "cta_label"]);
+    const ctaMinLength = minLengthForFirstProp(contract, ctaPropNames, 1);
+    const ctaAnchors = root
+      .querySelectorAll("a")
+      .filter(isVisibleElement)
+      .filter((element) => element.classList.contains("cta") || ctaPropNames.includes(element.getAttribute("data-contract-prop") ?? ""))
+      .filter((element) => normalizeText(element.text).length >= ctaMinLength)
+      .filter((element) => {
+        const href = element.getAttribute("href");
+        return href !== undefined && isSafeHref(href);
+      });
 
-  if (ctaAnchors.length === 0) {
-    pushIssue("dom_text_cta", "error", `Expected a visible DOM-text CTA anchor with safe href and at least ${ctaMinLength} characters.`);
+    if (ctaAnchors.length === 0) {
+      pushIssue("dom_text_cta", "error", `Expected a visible DOM-text CTA anchor with safe href and at least ${ctaMinLength} characters.`);
+    }
   }
 
-  const trustCueMinLength = minLengthForProp(contract, "trust_cue", 1);
-  const heroRoots = root
-    .querySelectorAll("[data-pattern-id]")
-    .filter((element) => element.getAttribute("data-pattern-id") === contract.target_id);
-  const trustCueNodes = root
-    .querySelectorAll("[data-contract-prop]")
-    .filter((element) => element.getAttribute("data-contract-prop") === "trust_cue")
-    .filter(isVisibleElement)
-    .filter((element) => normalizeText(element.text).length >= trustCueMinLength)
-    .filter((element) => heroRoots.length === 0 || isDescendantOfAny(element, heroRoots));
+  if (hasInvariant(contract, "proof_adjacency")) {
+    const patternRoots = root
+      .querySelectorAll("[data-pattern-id]")
+      .filter((element) => element.getAttribute("data-pattern-id") === contract.target_id);
+    const requiresOutcomeStatement = contract.props.some((prop) => prop.name === "outcome_statement");
+    const outcomeMinLength = minLengthForProp(contract, "outcome_statement", 1);
+    const outcomeNodes = root
+      .querySelectorAll("[data-contract-prop]")
+      .filter((element) => element.getAttribute("data-contract-prop") === "outcome_statement")
+      .filter(isVisibleElement)
+      .filter((element) => patternRoots.length === 0 || isDescendantOfAny(element, patternRoots))
+      .filter((element) => normalizeText(element.text).length >= outcomeMinLength);
+    const proofNodes = proofAdjacencyNodes(root, contract, patternRoots);
 
-  if (trustCueNodes.length === 0) {
-    pushIssue("proof_adjacency", "warning", `Expected nearby trust cue text with at least ${trustCueMinLength} characters.`);
+    if (requiresOutcomeStatement && outcomeNodes.length === 0) {
+      pushIssue(
+        "proof_adjacency",
+        "warning",
+        `Expected a visible outcome_statement node with at least ${outcomeMinLength} characters.`
+      );
+    }
+
+    if (proofNodes.length === 0) {
+      pushIssue("proof_adjacency", "warning", "Expected a visible proof/source node adjacent to the outcome.");
+    } else if (outcomeNodes.length > 0 && !proofNodes.some((proofNode) => outcomeNodes.some((outcomeNode) => areAdjacentElements(proofNode, outcomeNode)))) {
+      pushIssue("proof_adjacency", "warning", "Expected the proof/source node to be adjacent to the outcome statement.");
+    }
   }
 
   checkCanvasTextDomTwin(root, pushIssue);
@@ -230,4 +249,99 @@ function normalizeText(value: string): string {
 
 function minLengthForProp(contract: ComponentContract, propName: string, fallback: number): number {
   return contract.props.find((prop) => prop.name === propName)?.min_length ?? fallback;
+}
+
+function hasInvariant(contract: ComponentContract, code: string): boolean {
+  return contract.output_invariants.some((invariant) => invariant.code === code);
+}
+
+function contractPropNames(contract: ComponentContract, candidates: readonly string[]): readonly string[] {
+  const names = candidates.filter((candidate) => contract.props.some((prop) => prop.name === candidate));
+  return names.length > 0 ? names : candidates;
+}
+
+function minLengthForFirstProp(contract: ComponentContract, propNames: readonly string[], fallback: number): number {
+  const propName = propNames.find((candidate) => contract.props.some((prop) => prop.name === candidate));
+  return propName === undefined ? fallback : minLengthForProp(contract, propName, fallback);
+}
+
+function proofAdjacencyNodes(root: HTMLElement, contract: ComponentContract, patternRoots: readonly HTMLElement[]): readonly HTMLElement[] {
+  const proofPropNames = contractPropNames(contract, ["trust_cue", "proof_item", "source_reference"]);
+  const proofSlotNames: readonly string[] = contract.slots
+    .map((slot) => slot.name)
+    .filter((slotName) => slotName === "proof_context" || slotName === "proof_asset");
+
+  const propNodes = root
+    .querySelectorAll("[data-contract-prop]")
+    .filter((element) => proofPropNames.includes(element.getAttribute("data-contract-prop") ?? ""))
+    .filter(isVisibleElement)
+    .filter((element) => {
+      const propName = element.getAttribute("data-contract-prop");
+      return propName !== undefined && normalizeText(element.text).length >= minLengthForProp(contract, propName, 1);
+    });
+
+  const slotNodes = root
+    .querySelectorAll("[data-contract-slot]")
+    .filter((element) => proofSlotNames.includes(element.getAttribute("data-contract-slot") ?? ""))
+    .filter(isVisibleElement)
+    .filter((element) => hasVisibleProofSlotContent(element, contract));
+
+  return [...propNodes, ...slotNodes].filter((element) => patternRoots.length === 0 || isDescendantOfAny(element, patternRoots));
+}
+
+function hasVisibleProofSlotContent(element: HTMLElement, contract: ComponentContract): boolean {
+  const slotName = element.getAttribute("data-contract-slot");
+  const nestedProofProps = element
+    .querySelectorAll("[data-contract-prop]")
+    .filter(isVisibleElement)
+    .filter((candidate) => {
+      const propName = candidate.getAttribute("data-contract-prop");
+      if (propName === undefined || !["proof_item", "source_reference"].includes(propName)) {
+        return false;
+      }
+
+      return normalizeText(candidate.text).length >= minLengthForProp(contract, propName, 1);
+    });
+
+  if (nestedProofProps.length > 0) {
+    return true;
+  }
+
+  return slotName === "proof_asset" && hasResolvedProofAsset(element);
+}
+
+function hasResolvedProofAsset(element: HTMLElement): boolean {
+  const assetId = element.getAttribute("data-asset-id")?.trim() ?? "";
+  const assetSource = element.getAttribute("data-asset-source")?.trim() ?? "";
+  if (assetId.length === 0 || assetSource.length === 0) {
+    return false;
+  }
+
+  return element.querySelector("img,svg") !== null;
+}
+
+function areAdjacentElements(left: HTMLElement, right: HTMLElement): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  const leftParent = left.parentNode as HTMLElement | null | undefined;
+  const rightParent = right.parentNode as HTMLElement | null | undefined;
+  if (leftParent == null || rightParent == null || leftParent !== rightParent) {
+    return false;
+  }
+
+  const siblings = childElements(leftParent);
+  const leftIndex = siblings.indexOf(left);
+  const rightIndex = siblings.indexOf(right);
+
+  return leftIndex !== -1 && rightIndex !== -1 && Math.abs(leftIndex - rightIndex) === 1;
+}
+
+function childElements(element: HTMLElement): readonly HTMLElement[] {
+  return element.childNodes.filter(isHtmlElementNode);
+}
+
+function isHtmlElementNode(value: unknown): value is HTMLElement {
+  return typeof value === "object" && value !== null && "tagName" in value && "getAttribute" in value;
 }

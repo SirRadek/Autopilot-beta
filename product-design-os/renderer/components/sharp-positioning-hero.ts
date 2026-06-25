@@ -1,17 +1,21 @@
-import type { ComponentContract, ResolvedAsset } from "../types";
+import type { ComponentContract, PatternRenderInput, PatternSlotMap, ResolvedAsset, ResolvedSlotTarget } from "../types";
 import { isSafeHref } from "../safe-url";
 
-export interface SharpPositioningHeroInput {
+export interface SharpPositioningHeroInput extends PatternRenderInput {
   readonly props: {
+    readonly eyebrow?: string;
+    readonly kicker?: string;
     readonly headline?: string;
     readonly primary_cta?: string;
     readonly trust_cue?: string;
     readonly cta_href?: string;
-  };
+    readonly cta_variant?: string;
+    readonly hero_asset_alt?: string;
+  } & PatternRenderInput["props"];
   readonly slots: {
     readonly hero_asset?: readonly ResolvedAsset[];
     readonly theme_background?: readonly ResolvedAsset[];
-  };
+  } & PatternSlotMap;
   readonly contract: ComponentContract;
 }
 
@@ -22,11 +26,16 @@ export interface SharpPositioningHeroContractIssue {
 }
 
 interface ValidSharpPositioningHeroProps {
+  readonly eyebrow: string;
   readonly headline: string;
   readonly primary_cta: string;
   readonly trust_cue: string;
   readonly cta_href: string;
+  readonly cta_variant: CtaVariant;
+  readonly hero_asset_alt: string;
 }
+
+type CtaVariant = "primary" | "secondary";
 
 export class SharpPositioningHeroContractError extends Error {
   readonly issues: readonly SharpPositioningHeroContractIssue[];
@@ -45,45 +54,18 @@ export const sharpPositioningHeroCss = `
   min-height: min(760px, 100svh);
   overflow: hidden;
   color: var(--color-text);
-  background: var(--color-background);
+  background: transparent;
   isolation: isolate;
 }
 
-.sharp-positioning-hero,
-.sharp-positioning-hero * {
-  box-sizing: border-box;
-}
-
-.sharp-positioning-hero__theme {
-  position: absolute;
-  inset: 0;
-  z-index: -3;
-}
-
-.sharp-positioning-hero__theme svg,
-.sharp-positioning-hero__theme img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.sharp-positioning-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  background: var(--style-surface-background);
-}
-
 .sharp-positioning-hero__layout {
-  width: min(100%, 1180px);
+  width: min(100%, var(--pdos-page-container-max));
   min-height: inherit;
   margin-inline: auto;
-  padding: clamp(var(--space-6), 6cqi, calc(var(--space-8) * 2)) var(--space-6);
+  padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 0.95fr);
-  gap: clamp(var(--space-6), 5cqi, calc(var(--space-8) * 2));
+  gap: var(--pdos-page-section-gap);
   align-items: center;
 }
 
@@ -95,16 +77,6 @@ export const sharpPositioningHeroCss = `
   max-width: 52rem;
 }
 
-.sharp-positioning-hero__copy::before {
-  content: "";
-  width: clamp(5rem, 18cqi, 14rem);
-  height: var(--style-decoration-border-width);
-  background: var(--color-accent-secondary);
-  opacity: var(--style-decoration-opacity);
-  transform: rotate(var(--style-accent-angle-deg));
-  transform-origin: left center;
-}
-
 .sharp-positioning-hero__eyebrow {
   display: inline-flex;
   width: fit-content;
@@ -114,7 +86,7 @@ export const sharpPositioningHeroCss = `
   border-block-end: var(--style-decoration-border-width) solid var(--color-accent-soft);
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
-  font-size: 0.84rem;
+  font-size: var(--pdos-type-kicker);
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
 }
@@ -123,7 +95,7 @@ export const sharpPositioningHeroCss = `
   max-width: 11ch;
   margin: 0;
   font-family: var(--type-font-heading);
-  font-size: clamp(3rem, 11cqi, 7.4rem);
+  font-size: var(--pdos-type-display);
   line-height: 0.9;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
@@ -135,39 +107,6 @@ export const sharpPositioningHeroCss = `
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
-}
-
-.sharp-positioning-hero .cta {
-  min-width: 44px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4) var(--space-6);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--style-corner-radius);
-  color: var(--color-accent-text);
-  background: var(--color-accent);
-  font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
-  font-weight: var(--type-weight-bold);
-  line-height: 1;
-  text-decoration: none;
-  box-shadow: var(--shadow-md);
-  transition:
-    transform var(--motion-duration-fast) var(--motion-easing-standard),
-    box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
-}
-
-.sharp-positioning-hero .cta:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-accent-secondary);
-  background: var(--color-accent-secondary);
-}
-
-.sharp-positioning-hero .cta:focus-visible {
-  outline: 3px solid var(--color-focus-ring);
-  outline-offset: 3px;
 }
 
 .sharp-positioning-hero__trust {
@@ -186,18 +125,16 @@ export const sharpPositioningHeroCss = `
   position: relative;
   min-height: clamp(22rem, 56cqi, 38rem);
   border-radius: var(--style-corner-radius);
-  transform: skewX(var(--style-accent-angle-deg));
-  transform-origin: center;
 }
 
 .sharp-positioning-hero__asset {
   position: absolute;
   inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
   overflow: visible;
-  transform: skewX(var(--style-accent-angle-inverse-deg));
-  transform-origin: center;
 }
 
 .sharp-positioning-hero__asset-panel {
@@ -224,6 +161,24 @@ export const sharpPositioningHeroCss = `
   fill: var(--color-surface);
 }
 
+.sharp-positioning-hero__asset-placeholder {
+  fill: color-mix(in srgb, var(--color-surface) 82%, var(--color-background));
+  stroke: var(--color-border);
+  stroke-width: 2;
+}
+
+.sharp-positioning-hero__asset-placeholder-mark {
+  fill: var(--color-accent-soft);
+  opacity: var(--style-decoration-opacity);
+}
+
+.sharp-positioning-hero__asset-placeholder-line {
+  stroke: var(--color-accent-secondary);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.66;
+}
+
 @media (max-width: 760px) {
   .sharp-positioning-hero {
     min-height: auto;
@@ -231,12 +186,10 @@ export const sharpPositioningHeroCss = `
 
   .sharp-positioning-hero__layout {
     grid-template-columns: 1fr;
-    padding: var(--space-8) var(--space-4);
   }
 
   .sharp-positioning-hero h1 {
     max-width: 10ch;
-    font-size: clamp(2.6rem, 18cqi, 4.5rem);
   }
 
   .sharp-positioning-hero__asset-wrap {
@@ -247,48 +200,45 @@ export const sharpPositioningHeroCss = `
     align-items: stretch;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .sharp-positioning-hero .cta {
-    transition: none;
-  }
-
-  .sharp-positioning-hero .cta:hover {
-    transform: none;
-  }
-}
 `.trim();
 
-export function renderSharpPositioningHero(input: SharpPositioningHeroInput): string {
+export function renderSharpPositioningHero(input: PatternRenderInput): string {
   const issues = validateSharpPositioningHeroInput(input);
   if (issues.length > 0) {
     throw new SharpPositioningHeroContractError(issues);
   }
 
   const props = normalizeProps(input.props);
-  const heroAsset = input.slots.hero_asset?.[0];
-  const themeBackground = input.slots.theme_background?.[0];
+  const heroAsset = firstAsset(input.slots.hero_asset);
+  const themeBackground = firstAsset(input.slots.theme_background);
 
   return `
 <section class="sharp-positioning-hero" data-pattern-id="sharp-positioning-hero" data-contract-id="${escapeAttribute(input.contract.id)}" data-hero-asset-id="${escapeAttribute(heroAsset?.id ?? "")}" data-theme-background-id="${escapeAttribute(themeBackground?.id ?? "")}" aria-labelledby="sharp-positioning-hero-title">
-  ${renderThemeBackground(themeBackground)}
   <div class="sharp-positioning-hero__layout">
     <div class="sharp-positioning-hero__copy">
-      <div class="sharp-positioning-hero__eyebrow" aria-hidden="true">Offer / proof / request</div>
+      <div class="sharp-positioning-hero__eyebrow" data-contract-prop="eyebrow">${escapeHtml(props.eyebrow)}</div>
       <h1 id="sharp-positioning-hero-title" data-contract-prop="headline">${escapeHtml(props.headline)}</h1>
       <div class="sharp-positioning-hero__action-row">
-        <a class="cta" data-contract-prop="primary_cta" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.primary_cta)}</a>
+        <a class="${ctaClassName(props.cta_variant)}" data-contract-prop="primary_cta" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.primary_cta)}</a>
         <p class="sharp-positioning-hero__trust" data-contract-prop="trust_cue">${escapeHtml(props.trust_cue)}</p>
       </div>
     </div>
     <div class="sharp-positioning-hero__asset-wrap" data-asset-id="${escapeAttribute(heroAsset?.id ?? "")}" data-asset-source="${escapeAttribute(heroAsset?.source ?? "")}">
-      ${renderEditorialMotionHeroSvg(heroAsset)}
+      ${renderResolvedSlotAssetMarkup(heroAsset, {
+        className: "sharp-positioning-hero__asset",
+        alt: props.hero_asset_alt,
+        fallback: () => renderNeutralHeroAssetFallback(heroAsset)
+      })}
     </div>
   </div>
 </section>`.trim();
 }
 
-function validateSharpPositioningHeroInput(input: SharpPositioningHeroInput): SharpPositioningHeroContractIssue[] {
+function firstAsset(slotTargets: readonly ResolvedSlotTarget[] | undefined): ResolvedAsset | undefined {
+  return slotTargets?.find((slotTarget): slotTarget is ResolvedAsset => slotTarget.targetKind === "asset");
+}
+
+function validateSharpPositioningHeroInput(input: PatternRenderInput): SharpPositioningHeroContractIssue[] {
   const issues: SharpPositioningHeroContractIssue[] = [];
 
   if (input.contract.target_kind !== "pattern" || input.contract.target_id !== "sharp-positioning-hero") {
@@ -309,7 +259,7 @@ function validateSharpPositioningHeroInput(input: SharpPositioningHeroInput): Sh
 }
 
 function validateCtaHref(
-  input: SharpPositioningHeroInput,
+  input: PatternRenderInput,
   issues: SharpPositioningHeroContractIssue[]
 ): void {
   const rawHref = input.props.cta_href;
@@ -327,8 +277,8 @@ function validateCtaHref(
 }
 
 function validateRequiredTextProp(
-  input: SharpPositioningHeroInput,
-  propName: keyof SharpPositioningHeroInput["props"],
+  input: PatternRenderInput,
+  propName: string,
   invariantCode: string,
   issues: SharpPositioningHeroContractIssue[]
 ): void {
@@ -356,14 +306,15 @@ function validateRequiredTextProp(
 }
 
 function validateRequiredAssetSlot(
-  input: SharpPositioningHeroInput,
-  slotName: keyof SharpPositioningHeroInput["slots"],
+  input: PatternRenderInput,
+  slotName: string,
   issues: SharpPositioningHeroContractIssue[]
 ): void {
   const contractSlot = input.contract.slots.find((slot) => slot.name === slotName);
-  const assets = input.slots[slotName] ?? [];
+  const slotTargets = input.slots[slotName] ?? [];
+  const assets = slotTargets.filter((slotTarget): slotTarget is ResolvedAsset => slotTarget.targetKind === "asset");
 
-  if (contractSlot?.required === true && assets.length === 0) {
+  if (contractSlot?.required === true && slotTargets.length === 0) {
     issues.push({
       code: "slot_missing",
       message: `${slotName} must be filled by ${input.contract.id}.`
@@ -372,7 +323,7 @@ function validateRequiredAssetSlot(
   }
 
   const minItems = contractSlot?.min_items;
-  if (minItems !== undefined && assets.length < minItems) {
+  if (minItems !== undefined && slotTargets.length < minItems) {
     issues.push({
       code: "slot_missing",
       message: `${slotName} must include at least ${minItems} asset(s).`
@@ -380,17 +331,26 @@ function validateRequiredAssetSlot(
   }
 
   const maxItems = contractSlot?.max_items;
-  if (maxItems !== undefined && assets.length > maxItems) {
+  if (maxItems !== undefined && slotTargets.length > maxItems) {
     issues.push({
       code: "slot_overfilled",
       message: `${slotName} must include no more than ${maxItems} asset(s).`
     });
   }
 
+  for (const slotTarget of slotTargets) {
+    if (slotTarget.targetKind !== "asset") {
+      issues.push({
+        code: "slot_target_kind_mismatch",
+        message: `${slotName} accepts assets, received ${slotTarget.targetKind} ${slotTarget.id}.`
+      });
+    }
+  }
+
   const allowedIds = new Set(contractSlot?.allowed_asset_ids ?? []);
   if (allowedIds.size > 0) {
     for (const asset of assets) {
-      if (!allowedIds.has(asset.id)) {
+      if (asset.inlineContent !== true && !allowedIds.has(asset.id)) {
         issues.push({
           code: "slot_asset_not_allowed",
           message: `${slotName} does not accept asset ${asset.id}.`
@@ -407,7 +367,7 @@ function validateRequiredAssetSlot(
       });
     }
 
-    if (isFileBackedAsset(asset) && asset.href === undefined) {
+    if (isFileBackedAsset(asset) && asset.href === undefined && asset.inlineSvg === undefined) {
       issues.push({
         code: "slot_asset_source_missing",
         message: `${slotName} asset ${asset.id} is file-backed but has no resolved href.`
@@ -416,48 +376,148 @@ function validateRequiredAssetSlot(
   }
 }
 
-function normalizeProps(props: SharpPositioningHeroInput["props"]): ValidSharpPositioningHeroProps {
+function normalizeProps(props: PatternRenderInput["props"]): ValidSharpPositioningHeroProps {
   const href = props.cta_href?.trim() || "#request";
+  const eyebrow = firstNonEmpty(props.eyebrow, props.kicker) ?? "Offer / proof / request";
   return {
+    eyebrow,
     headline: props.headline?.trim() ?? "",
     primary_cta: props.primary_cta?.trim() ?? "",
     trust_cue: props.trust_cue?.trim() ?? "",
-    cta_href: href
+    cta_href: href,
+    cta_variant: normalizeCtaVariant(props.cta_variant),
+    hero_asset_alt: props.hero_asset_alt?.trim() || "Editorial hero asset"
   };
 }
 
-function renderThemeBackground(asset: ResolvedAsset | undefined): string {
-  if (asset === undefined) {
-    return "";
-  }
-
-  if (asset.href !== undefined) {
-    return `<div class="sharp-positioning-hero__theme" aria-hidden="true" data-asset-id="${escapeAttribute(asset.id)}" data-asset-source="${escapeAttribute(asset.source)}"><img src="${escapeAttribute(asset.href)}" alt="" loading="eager" decoding="async"></div>`;
-  }
-
-  return `<div class="sharp-positioning-hero__theme" aria-hidden="true" data-asset-id="${escapeAttribute(asset.id)}" data-asset-source="${escapeAttribute(asset.source)}"></div>`;
+export function isFileBackedAsset(asset: ResolvedAsset): boolean {
+  return /\.(?:svg|png|jpe?g|webp|gif|avif)$/i.test(asset.source);
 }
 
-function isFileBackedAsset(asset: ResolvedAsset): boolean {
-  return /\.(?:svg|png|jpe?g|webp|gif)$/i.test(asset.source);
-}
-
-function renderEditorialMotionHeroSvg(asset: ResolvedAsset | undefined): string {
-  const label = asset === undefined ? "Editorial motion hero asset" : `Editorial motion hero asset ${asset.id}`;
+function renderNeutralHeroAssetFallback(asset: ResolvedAsset | undefined): string {
+  const label = asset === undefined ? "Neutral hero asset placeholder" : `Neutral hero asset placeholder for ${asset.id}`;
 
   return `
 <svg class="sharp-positioning-hero__asset" viewBox="0 0 640 520" role="img" aria-label="${escapeAttribute(label)}" focusable="false">
-  <path class="sharp-positioning-hero__asset-panel" d="M112 86h346l78 88-92 260H96L42 276 112 86Z"/>
-  <path class="sharp-positioning-hero__asset-muted" d="M156 132h234l54 60-66 186H142L104 266l52-134Z"/>
-  <path class="sharp-positioning-hero__asset-accent" d="M438 116h80l44 52-60 74h-78l-42-54 56-72Z"/>
-  <path class="sharp-positioning-hero__asset-surface" d="M172 176h172v34H172zM172 246h232v20H172zM172 292h184v20H172z"/>
-  <path class="sharp-positioning-hero__asset-line" d="M74 426h418M118 74l330 388M548 250 82 250M448 116 520 242"/>
-  <circle class="sharp-positioning-hero__asset-accent" cx="492" cy="308" r="34"/>
-  <circle class="sharp-positioning-hero__asset-surface" cx="492" cy="308" r="13"/>
+  <rect class="sharp-positioning-hero__asset-placeholder" x="78" y="76" width="462" height="352" rx="0"/>
+  <circle class="sharp-positioning-hero__asset-placeholder-mark" cx="214" cy="190" r="70"/>
+  <path class="sharp-positioning-hero__asset-placeholder-mark" d="M392 116 512 236 392 356 272 236Z"/>
+  <path class="sharp-positioning-hero__asset-placeholder-line" d="M120 398 514 98M126 118l388 282"/>
 </svg>`.trim();
 }
 
-function escapeHtml(value: string): string {
+interface SlotAssetMarkupOptions {
+  readonly className: string;
+  readonly alt: string;
+  readonly fallback: () => string;
+}
+
+export function renderResolvedSlotAssetMarkup(asset: ResolvedAsset | undefined, options: SlotAssetMarkupOptions): string {
+  if (asset?.inlineSvg !== undefined) {
+    const svg = sanitizeInlineSvgAsset(asset.inlineSvg, {
+      className: options.className,
+      label: firstNonEmpty(asset.alt, options.alt, asset.id) ?? "Resolved asset"
+    });
+    if (svg !== undefined) {
+      return svg;
+    }
+  }
+
+  if (asset?.href !== undefined && isSafeHref(asset.href) && isRasterImageHref(asset.href)) {
+    const alt = firstNonEmpty(asset.alt, options.alt) ?? "";
+    return `<img class="${escapeAttribute(options.className)}" src="${escapeAttribute(asset.href)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async">`;
+  }
+
+  return options.fallback();
+}
+
+export function ctaClassName(variant: CtaVariant): string {
+  return variant === "secondary" ? "cta cta--secondary" : "cta";
+}
+
+export function normalizeCtaVariant(value: string | undefined): CtaVariant {
+  return value?.trim().toLowerCase() === "secondary" ? "secondary" : "primary";
+}
+
+function sanitizeInlineSvgAsset(
+  rawSvg: string,
+  options: { readonly className: string; readonly label: string }
+): string | undefined {
+  const match = /<svg\b([^>]*)>([\s\S]*?)<\/svg>/i.exec(rawSvg);
+  if (match === null) {
+    return undefined;
+  }
+
+  const rootAttributes = match[1] ?? "";
+  const viewBox = extractSafeSvgViewBox(rootAttributes) ?? "0 0 640 520";
+  const innerSvg = sanitizeSvgInnerMarkup(match[2] ?? "");
+  return `<svg class="${escapeAttribute(options.className)}" viewBox="${escapeAttribute(viewBox)}" role="img" aria-label="${escapeAttribute(options.label)}" focusable="false">${innerSvg}</svg>`;
+}
+
+const allowedSvgTags = new Set([
+  "circle",
+  "clippath",
+  "defs",
+  "desc",
+  "ellipse",
+  "g",
+  "line",
+  "lineargradient",
+  "mask",
+  "path",
+  "polygon",
+  "polyline",
+  "radialgradient",
+  "rect",
+  "stop",
+  "title"
+]);
+
+function sanitizeSvgInnerMarkup(value: string): string {
+  return value
+    .replace(/<\?xml[\s\S]*?\?>/gi, "")
+    .replace(/<!doctype[\s\S]*?>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|foreignobject|iframe|object|embed|image|use|animate|set|style)\b[\s\S]*?<\/\1>/gi, "")
+    .replace(/<\/?(script|foreignobject|iframe|object|embed|image|use|animate|set|style)\b[^>]*>/gi, "")
+    .replace(/\s+on[a-z0-9:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s+(?:href|xlink:href)\s*=\s*(?:"(?!#)[^"]*"|'(?!#)[^']*'|(?!#)[^\s>]+)/gi, "")
+    .replace(/\s+[a-z0-9:-]+\s*=\s*(?:"[^"]*(?:javascript|vbscript|data)\s*:[^"]*"|'[^']*(?:javascript|vbscript|data)\s*:[^']*'|[^\s>]*(?:javascript|vbscript|data)\s*:[^\s>]*)/gi, "")
+    .replace(/<\/?([a-z][a-z0-9:-]*)\b[^>]*>/gi, (tag: string, rawTagName: string) => {
+      const tagName = rawTagName.toLowerCase();
+      return allowedSvgTags.has(tagName) ? tag : "";
+    })
+    .trim();
+}
+
+function extractSafeSvgViewBox(rootAttributes: string): string | undefined {
+  const match = /\sviewBox\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(rootAttributes);
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return /^-?(?:\d+|\d*\.\d+)(?:\s+-?(?:\d+|\d*\.\d+)){3}$/.test(trimmed) ? trimmed : undefined;
+}
+
+function isRasterImageHref(href: string): boolean {
+  return /\.(?:png|jpe?g|webp|gif|avif)(?:[?#].*)?$/i.test(href);
+}
+
+function firstNonEmpty(...values: readonly (string | undefined)[]): string | undefined {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed !== undefined && trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+}
+
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -466,6 +526,6 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function escapeAttribute(value: string): string {
+export function escapeAttribute(value: string): string {
   return escapeHtml(value);
 }

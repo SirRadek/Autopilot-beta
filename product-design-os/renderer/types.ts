@@ -14,7 +14,11 @@ export interface ContractSlot {
   readonly required: boolean;
   readonly min_items?: number;
   readonly max_items?: number;
+  readonly accepts_target_kinds?: readonly ("asset" | "pattern")[];
+  readonly accepts_asset_types?: readonly string[];
+  readonly accepts_pattern_types?: readonly string[];
   readonly allowed_asset_ids?: readonly string[];
+  readonly allowed_pattern_ids?: readonly string[];
 }
 
 export interface ContractInvariant {
@@ -47,6 +51,29 @@ export interface ResolvedAsset {
   readonly source: string;
   readonly href?: string;
   readonly inlineSvg?: string;
+  readonly alt?: string;
+  readonly inlineContent?: boolean;
+  readonly license?: string;
+  readonly sourceUrl?: string;
+}
+
+export interface ResolvedPatternReference {
+  readonly id: string;
+  readonly targetKind: "pattern";
+  readonly nodeId?: string;
+  readonly props?: PatternPropMap;
+}
+
+export type ResolvedSlotTarget = ResolvedAsset | ResolvedPatternReference;
+
+export type PatternPropMap = Readonly<Record<string, string | undefined>>;
+
+export type PatternSlotMap = Readonly<Record<string, readonly ResolvedSlotTarget[] | undefined>>;
+
+export interface PatternRenderInput {
+  readonly props: PatternPropMap;
+  readonly slots: PatternSlotMap;
+  readonly contract: ComponentContract;
 }
 
 export interface QaTarget {

@@ -149,8 +149,8 @@ describe("Product Design OS D7 brand token overrides", () => {
 
     expect(calm.report.errors).toEqual([]);
     expect(bold.report.errors).toEqual([]);
-    expect(calm.contrast.map((result) => result.pair)).toEqual(["background/text", "accent/accent_text", "accent_secondary/accent_text"]);
-    expect(bold.contrast.map((result) => result.pair)).toEqual(["background/text", "accent/accent_text", "accent_secondary/accent_text"]);
+    expect(calm.contrast.map((result) => result.pair)).toEqual(expectedContrastPairs());
+    expect(bold.contrast.map((result) => result.pair)).toEqual(expectedContrastPairs());
     expect(calm.rootBlock).not.toBe(bold.rootBlock);
     expect(calm.vars.get("color-background")).toBe("#F8FAFC");
     expect(bold.vars.get("color-background")).toBe("#0B0F19");
@@ -183,12 +183,23 @@ describe("Product Design OS D7 brand token overrides", () => {
   it("keeps the committed color floor at WCAG-AA contrast", () => {
     const contrast = assertRenderedWcagAA(mapTokensToCss(pdosRoot));
 
-    expect(contrast.map((result) => result.pair)).toEqual(["background/text", "accent/accent_text", "accent_secondary/accent_text"]);
+    expect(contrast.map((result) => result.pair)).toEqual(expectedContrastPairs());
     for (const result of contrast) {
       expect(result.ratio).toBeGreaterThanOrEqual(4.5);
     }
   });
 });
+
+function expectedContrastPairs(): readonly string[] {
+  return [
+    "background/text",
+    "background/muted_text",
+    "surface/text",
+    "surface/muted_text",
+    "accent/accent_text",
+    "accent_secondary/accent_text"
+  ];
+}
 
 function compositionSpecWithOverrides(overrides: readonly BrandTokenOverride[]): unknown {
   return {

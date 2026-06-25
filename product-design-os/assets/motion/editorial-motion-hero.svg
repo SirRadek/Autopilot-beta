@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 520" role="img" aria-labelledby="title desc">
+  <title id="title">Editorial motion hero asset</title>
+  <desc id="desc">Layered editorial shapes with a clear accent path for a premium launch page.</desc>
+  <path class="sharp-positioning-hero__asset-panel" d="M92 108 292 48l226 78 48 198-168 132-236-42L48 246Z"/>
+  <path class="sharp-positioning-hero__asset-muted" d="M156 136 306 92l156 54 34 136-116 92-168-30-78-118Z"/>
+  <path class="sharp-positioning-hero__asset-accent" d="M418 86h82l56 58-48 84h-92l-52-64Z"/>
+  <path class="sharp-positioning-hero__asset-surface" d="M206 176c72-58 170-48 224 22 52 68 32 168-46 212-74 42-172 12-212-64-34-66-20-126 34-170Z"/>
+  <path class="sharp-positioning-hero__asset-line" d="M86 402c104-42 178-114 224-214M140 100c66 134 166 234 300 300M512 128c-52 120-128 212-230 276"/>
+  <circle class="sharp-positioning-hero__asset-accent" cx="486" cy="318" r="38"/>
+  <circle class="sharp-positioning-hero__asset-surface" cx="486" cy="318" r="14"/>
+</svg>
