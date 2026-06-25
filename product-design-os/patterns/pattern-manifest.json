@@ -51,6 +51,23 @@
       "examples": ["motion-enhanced landing hero", "animated portfolio opener"]
     },
     {
+      "id": "dot-stage-hero",
+      "type": "motion_pattern",
+      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
+      "good_for": ["content-first hero", "memorable brand opener", "dot-built display word", "creative positioning", "tech-curious audience"],
+      "bad_for": ["checkout", "dense internal system", "public-sector critical flow", "content-dense reading page"],
+      "complexity": 7,
+      "usability": 7,
+      "mobile_quality": 7,
+      "requires": ["content-first hero", "DOM-text CTA", "trust cue", "reduced-motion fallback", "static fallback", "performance budget", "responsive typography"],
+      "requires_codes": ["visible_h1","no_primary_content_in_canvas","dom_text_cta","reduced_motion_fallback","performance_budget","proof_adjacency","responsive_typography"],
+      "risks": ["dot field competing with the offer", "display word illegible at low dot counts", "low-end mobile jank", "reduced-motion path treated as degraded"],
+      "accessibility_notes": "Read copy and CTA stay sharp DOM; dot-built display words carry a [data-dot-twin] DOM twin; the canvas is aria-hidden and the engine bails to a static frame under prefers-reduced-motion.",
+      "performance_notes": "Procedural dots only — no stored frames. Cap the dot budget, start text before the canvas, and pause rendering when offscreen or hidden.",
+      "examples": ["dot-stage hero with a dot-built wordmark", "procedural lime-on-dark opener"],
+      "modifiers": ["motion"]
+    },
+    {
       "id": "proof-led-section",
       "type": "conversion_pattern",
       "use_case": ["marketing_web", "portfolio", "landing_page"],

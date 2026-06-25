@@ -10,6 +10,7 @@
   "visual_energy": 8,
   "allowed_pattern_ids": [
     "animated-hero",
+    "dot-stage-hero",
     "theme-crossed-direction",
     "mascot-progressive-guide",
     "cursor-responsive-detail",

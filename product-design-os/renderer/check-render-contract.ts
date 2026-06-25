@@ -76,7 +76,68 @@ export function checkRenderedContract(html: string, contract: ComponentContract)
     pushIssue("proof_adjacency", "warning", `Expected nearby trust cue text with at least ${trustCueMinLength} characters.`);
   }
 
+  checkCanvasTextDomTwin(root, pushIssue);
+  checkNoStoredFrames(root, html, pushIssue);
+
   return { errors, warnings };
+}
+
+type PushIssue = (code: string, fallbackSeverity: "error" | "warning", message: string) => void;
+
+/**
+ * Self-scoping dot-stage guard. Display words drawn on canvas are marked with
+ * [data-dot-word]; each must have a matching [data-dot-twin] DOM node carrying
+ * identical text so crawlers and screen readers still read the word. Only fires
+ * when [data-dot-word] markers are present, so non-dot patterns are unaffected.
+ */
+function checkCanvasTextDomTwin(root: HTMLElement, pushIssue: PushIssue): void {
+  const dotWordNodes = root.querySelectorAll("[data-dot-word]");
+  if (dotWordNodes.length === 0) {
+    return;
+  }
+
+  const twinTextsByWord = new Map<string, string[]>();
+  for (const twin of root.querySelectorAll("[data-dot-twin]")) {
+    const key = normalizeText(twin.getAttribute("data-dot-twin") ?? "");
+    const texts = twinTextsByWord.get(key) ?? [];
+    texts.push(normalizeText(twin.text));
+    twinTextsByWord.set(key, texts);
+  }
+
+  for (const wordNode of dotWordNodes) {
+    const word = normalizeText(wordNode.getAttribute("data-dot-word") ?? "");
+    const twinTexts = twinTextsByWord.get(word) ?? [];
+    if (word.length === 0 || !twinTexts.includes(word)) {
+      pushIssue(
+        "canvas_text_dom_twin",
+        "error",
+        `Dot-built display word "${word}" must have a matching DOM twin: [data-dot-twin="${word}"] with identical text.`
+      );
+    }
+  }
+}
+
+/**
+ * Self-scoping procedural-only guard. A [data-dot-stage] canvas promises a
+ * procedural engine, so the output must ship no stored frames (img/video/
+ * picture/source elements or data: URIs). Scans the raw HTML so frames hidden
+ * inside <script>/<style> (stripped before parsing) are still caught.
+ */
+function checkNoStoredFrames(root: HTMLElement, rawHtml: string, pushIssue: PushIssue): void {
+  if (root.querySelectorAll("[data-dot-stage]").length === 0) {
+    return;
+  }
+
+  const hasFrameElement = /<(?:img|video|picture|source)\b/i.test(rawHtml);
+  const hasDataUri = /(?:src|href|content|srcset)\s*=\s*["']?\s*data:/i.test(rawHtml) || /url\(\s*['"]?\s*data:/i.test(rawHtml);
+
+  if (hasFrameElement || hasDataUri) {
+    pushIssue(
+      "no_stored_frames",
+      "error",
+      "Procedural dot-stage must not embed stored frames (img/video/picture/source elements or data: URIs)."
+    );
+  }
 }
 
 function parseContractDom(html: string): HTMLElement {

@@ -512,6 +512,43 @@
         }
       ],
       "notes": "Seed contract for motion-enhanced hero sections. The hero_content slot and reduced_motion_fallback invariant are intentionally required."
+    },
+    {
+      "id": "pattern-dot-stage-hero",
+      "schema_version": "1.0.0",
+      "target_kind": "pattern",
+      "target_id": "dot-stage-hero",
+      "props": [
+        { "name": "headline", "value_type": "text", "required": true, "min_length": 8, "expected_source": "content-first hero" },
+        { "name": "primary_cta", "value_type": "string", "required": true, "min_length": 3, "expected_source": "DOM-text CTA" },
+        { "name": "trust_cue", "value_type": "string", "required": true, "min_length": 3, "expected_source": "trust cue" },
+        { "name": "display_word", "value_type": "string", "required": true, "min_length": 2, "expected_source": "dot-built display word" },
+        { "name": "cta_href", "value_type": "url", "required": false, "expected_source": "primary CTA destination" },
+        { "name": "scene_preset", "value_type": "string", "required": true, "min_length": 3, "allowed_values": ["spotlight-hero", "noise-to-order", "playhead-process", "lens-proof", "shape-pricing"], "expected_source": "dot scene preset" },
+        { "name": "motion_intensity", "value_type": "integer", "required": true, "description": "Declared motion intensity on a 0-10 scale." },
+        { "name": "static_fallback_label", "value_type": "string", "required": true, "min_length": 3, "expected_source": "static fallback" }
+      ],
+      "slots": [
+        {
+          "name": "motion_background",
+          "required": false,
+          "min_items": 0,
+          "max_items": 1,
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["background", "motion"],
+          "allowed_asset_ids": ["motion-background"],
+          "description": "Optional brand-atmosphere backdrop; the dot field is procedural and needs no stored asset."
+        }
+      ],
+      "output_invariants": [
+        { "code": "visible_h1", "required": true, "severity": "error", "description": "The readable headline is sharp DOM text, opaque at load, not drawn on canvas.", "source_floors": ["content-first hero"], "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"] },
+        { "code": "dom_text_cta", "required": true, "severity": "error", "description": "The primary CTA is a readable DOM anchor above the canvas.", "source_floors": ["DOM-text CTA"], "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"] },
+        { "code": "no_primary_content_in_canvas", "required": true, "severity": "error", "description": "Read copy is DOM; dot-built display words carry a DOM twin so primary content is never canvas-only.", "source_floors": ["content-first hero"], "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"] },
+        { "code": "reduced_motion_fallback", "required": true, "severity": "error", "description": "The dot engine bails to a static frame under prefers-reduced-motion and the full site stays readable.", "source_floors": ["reduced-motion fallback", "static fallback"], "visual_qa_issue_codes": ["missing_reduced_motion_fallback"] },
+        { "code": "performance_budget", "required": true, "severity": "error", "description": "Procedural dots only (no stored frames); bounded dot budget keeps the first view cheap.", "source_floors": ["performance budget"] },
+        { "code": "proof_adjacency", "required": false, "severity": "warning", "description": "The hero should carry a nearby trust cue.", "source_floors": ["trust cue"] }
+      ],
+      "notes": "Contract for the procedural dot-stage hero. Dot-specific guards (canvas display words need a DOM twin; no stored frames) are enforced by check-render-contract.ts, self-scoped on the [data-dot-word] and [data-dot-stage] markers the renderer emits."
     }
   ]
 }
