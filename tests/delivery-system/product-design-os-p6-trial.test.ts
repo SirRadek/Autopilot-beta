@@ -52,7 +52,7 @@ describe("Product Design OS P6 zednik first trial", () => {
     const contrast = assertRootColorContrastWcagAA(result.html);
 
     expect(result.sections.map((section) => section.pattern_id)).toEqual([
-      "sharp-positioning-hero",
+      "structural-gravity-grid",
       "proof-led-section",
       "outcome-cta"
     ]);

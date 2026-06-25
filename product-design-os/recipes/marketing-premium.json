@@ -1,7 +1,16 @@
 {
   "id": "marketing-premium",
-  "project_types": ["marketing_web", "landing_page"],
-  "priorities": ["positioning", "trust", "conversion", "visual-hierarchy", "case-proof"],
+  "project_types": [
+    "marketing_web",
+    "landing_page"
+  ],
+  "priorities": [
+    "positioning",
+    "trust",
+    "conversion",
+    "visual-hierarchy",
+    "case-proof"
+  ],
   "logic_priority": 5,
   "design_priority": 8,
   "seo_priority": 6,
@@ -17,7 +26,8 @@
     "proof-led-section",
     "case-study-strip",
     "outcome-cta",
-    "service-demo-link"
+    "service-demo-link",
+    "structural-gravity-grid"
   ],
   "blocked_assets": [
     "generic-saas-gradient",
@@ -34,7 +44,13 @@
     "service_content_as_html",
     "demo_or_request_cta_as_html"
   ],
-  "tests_required": ["visual-qa", "copy-clarity", "responsive", "a11y", "performance"],
+  "tests_required": [
+    "visual-qa",
+    "copy-clarity",
+    "responsive",
+    "a11y",
+    "performance"
+  ],
   "stop_conditions": [
     "unclear_offer",
     "generic_cta",

@@ -55,7 +55,7 @@
     {
       "node_id": "hero",
       "target_kind": "pattern",
-      "target_id": "sharp-positioning-hero",
+      "target_id": "structural-gravity-grid",
       "section_id": "hero",
       "props": [
         {
@@ -77,37 +77,46 @@
           "name": "trust_cue",
           "value_type": "string",
           "string_value": "18 let praxe a 124 dokončených staveb — Brandýs nad Labem, Mělník, Nymburk a okolí"
-        }
-      ],
-      "slot_fills": [
-        {
-          "slot": "hero_asset",
-          "fills": [
-            {
-              "target_kind": "asset",
-              "target_id": "editorial-motion-hero"
-            }
-          ]
         },
         {
-          "slot": "theme_background",
-          "fills": [
-            {
-              "target_kind": "asset",
-              "target_id": "theme-calm-prism-grid"
-            }
-          ]
+          "name": "cta_href",
+          "string_value": "#kontakt",
+          "value_type": "url"
+        },
+        {
+          "name": "gallery_item_one",
+          "string_value": "Cihlové a kamenné zdivo",
+          "value_type": "string"
+        },
+        {
+          "name": "gallery_item_two",
+          "string_value": "Rekonstrukce a omítky",
+          "value_type": "string"
+        },
+        {
+          "name": "gallery_item_three",
+          "string_value": "Ploty, sokly a terasy",
+          "value_type": "string"
+        },
+        {
+          "name": "static_fallback_label",
+          "string_value": "Ukázky dokončených zednických prací",
+          "value_type": "string"
         }
       ],
       "declared_invariants": [
         "visible_h1",
         "dom_text_cta",
+        "no_primary_content_in_canvas",
+        "reduced_motion_fallback",
+        "performance_budget",
         "proof_adjacency"
       ],
       "evidence_ids": [
         "zednik-hero-offer-evidence",
         "zednik-brand-token-evidence"
-      ]
+      ],
+      "slot_fills": []
     },
     {
       "node_id": "proof",

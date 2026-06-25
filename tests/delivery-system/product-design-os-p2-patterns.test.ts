@@ -138,7 +138,8 @@ describe("Product Design OS P2 pattern renderers", () => {
       "dot-stage-hero",
       "outcome-cta",
       "proof-led-section",
-      "sharp-positioning-hero"
+      "sharp-positioning-hero",
+      "structural-gravity-grid"
     ]);
   });
 
