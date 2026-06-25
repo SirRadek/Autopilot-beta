@@ -23,9 +23,13 @@
     "test": "vitest run",
     "verify": "npm run beta:vendor-check && npm run typecheck && npm run test && npm run pdos:validate && npm run pdos:renderability && npm run pdos:buildability-floor"
   },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@types/node": "25.9.3",
+    "@types/pngjs": "^6.0.5",
     "axe-core": "^4.12.1",
     "node-html-parser": "^8.0.3",
     "node-pty": "^1.1.0",
