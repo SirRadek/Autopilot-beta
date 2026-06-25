@@ -42,7 +42,21 @@ style:
 `background/text 13.14:1 · accent/accent_text 7.53:1 · accent_secondary/accent_text 5.77:1` (all ≥ 4.5:1).
 The palette cannot enter the tokens without passing this gate — so the brand is differentiated AND accessible.
 
+## Trial asset — proof image (owner-approved CC0, 2026-06-24)
+The proof section needs a real photo of mason's work (agy pro: must-fix-before-trial; the renderer's #7
+real-asset path renders it via `href` as a sanitized `<img>`). Owner chose a CC0 stock photo for the trial
+(swappable for real client photos later).
+- **Image:** Red brick wall — Wikimedia Commons `File:Red brick wall (Unsplash).jpg`.
+- **License:** **CC0 1.0 Universal** (public-domain dedication; commercial use, no attribution; pre-2017
+  Unsplash, verified on the Commons file page).
+- **Source page:** https://commons.wikimedia.org/wiki/File:Red_brick_wall_(Unsplash).jpg
+- **Direct (perf thumbnail for the demo):**
+  `https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Red_brick_wall_%28Unsplash%29.jpg/1024px-Red_brick_wall_%28Unsplash%29.jpg`
+  (full-res is 9.93 MB — use a resized thumbnail for web perf; self-host for a real deliverable).
+- **Provenance to record at wire-time (#6):** add to the asset-manifest with `license: "CC0-1.0"` + the
+  source URL (the D5 evidence/SPDX discipline applies to assets too).
+
 ## Next
-Task #6 (first-trial pipeline) builds the full zedník composition spec with these `token_overrides`. The
-other 3 palettes (Lom & Křída, Břidlice & Jíl, Pálená Hlína) are kept in `output/brand-zednik/agy.md` as
-runners-up if the owner wants to revisit.
+Task #6 (first-trial pipeline) builds the full zedník composition spec with these `token_overrides` + the
+CC0 brick photo above. The other 3 palettes (Lom & Křída, Břidlice & Jíl, Pálená Hlína) are kept in
+`output/brand-zednik/agy.md` as runners-up if the owner wants to revisit.
