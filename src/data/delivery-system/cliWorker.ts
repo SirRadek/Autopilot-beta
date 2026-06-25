@@ -7,15 +7,198 @@ import {
   captureCodexResponse,
   writePromptFile
 } from "./cliWorkerCapture";
-import { SESSION_LOCK_PATH } from "./sessionState";
+import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH } from "./sessionState";
 import {
   writeCorrelationEntry,
   writeSubagentEvidence
 } from "./subagentEvidence";
+import {
+  createAlert,
+  type AlertTrigger,
+  writePendingSupervisorAlert
+} from "./supervisorAlerts";
 
 // ─── Vendor types ─────────────────────────────────────────────────────────────
 
 export type CliVendor = "codex_cli" | "agy_cli";
+
+export type CliWorkerFailureSignal =
+  | "timeout"
+  | "auth_error"
+  | "empty_output"
+  | "invalid_json"
+  | "non_zero_exit";
+
+export type CliWorkerOutcome = "success" | CliWorkerFailureSignal;
+
+export type CliWorkerTelemetryOutcome = CliWorkerOutcome | "already_locked";
+
+export type CliWorkerTokenSource =
+  | "provider_reported"
+  | "estimated_tokenizer"
+  | "estimated_chars";
+
+export interface CliWorkerOutcomeInput {
+  readonly exitCode: number;
+  readonly rawOutput: string;
+  readonly parsedJson: unknown;
+  readonly structuredOutputRequested: boolean;
+  readonly errorText?: string | null;
+  readonly timedOut?: boolean;
+}
+
+export interface CliWorkerOutcomeClassification {
+  readonly outcome: CliWorkerOutcome;
+  readonly errorReason: string | null;
+  readonly failure_signals: readonly CliWorkerFailureSignal[];
+}
+
+export interface CliWorkerProviderUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens?: number;
+}
+
+export interface CliCallTelemetryRecord {
+  readonly schema_version: "v1";
+  readonly recorded_at: string;
+  readonly worker_run_id: string;
+  readonly handoff_id: HandoffId;
+  readonly vendor: CliVendor;
+  readonly provider: "openai_gpt" | "gemini_cli";
+  readonly model: string | null;
+  readonly tier_id: string | null;
+  readonly input_chars: number;
+  readonly output_chars: number;
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly total_tokens: number;
+  readonly token_source: CliWorkerTokenSource;
+  readonly duration_seconds: number;
+  readonly exit_code: number;
+  readonly lock_status: CliWorkerResult["lockStatus"];
+  readonly outcome: CliWorkerTelemetryOutcome;
+  readonly failure_signals: readonly CliWorkerFailureSignal[];
+  readonly error_reason: string | null;
+  readonly parsed_json_present: boolean;
+}
+
+export interface BuildCliCallTelemetryRecordInput {
+  readonly recordedAt: string;
+  readonly workerRunId: string;
+  readonly handoffId: HandoffId;
+  readonly vendor: CliVendor;
+  readonly model: string | null;
+  readonly tierId: string | null;
+  readonly prompt: string;
+  readonly rawOutput: string;
+  readonly durationSeconds: number;
+  readonly exitCode: number;
+  readonly lockStatus: CliWorkerResult["lockStatus"];
+  readonly outcome: CliWorkerTelemetryOutcome;
+  readonly failureSignals: readonly CliWorkerFailureSignal[];
+  readonly errorReason: string | null;
+  readonly parsedJson: unknown;
+  readonly providerUsage?: CliWorkerProviderUsage;
+}
+
+const AUTH_ERROR_PATTERNS: readonly RegExp[] = [
+  /\b(?:unauthorized|forbidden|not logged in|login required|please log in)\b/i,
+  /\b(?:invalid|missing|expired)\s+(?:api\s+key|token|credential|credentials)\b/i,
+  /\b(?:api\s+key|token|credential|credentials)\s+(?:invalid|missing|expired|required)\b/i,
+  /\b(?:auth|authentication|authorization|oauth)\b[^\n]{0,80}\b(?:failed|failure|required|expired|missing|invalid|error)\b/i
+];
+
+const TIMEOUT_PATTERNS: readonly RegExp[] = [
+  /\b(?:timed out|timeout|etimedout)\b/i
+];
+
+export function classifyCliWorkerOutcome(input: CliWorkerOutcomeInput): CliWorkerOutcomeClassification {
+  const failureSignals: CliWorkerFailureSignal[] = [];
+  const rawOutput = input.rawOutput ?? "";
+  const diagnosticText = `${input.errorText ?? ""}\n${rawOutput}`;
+
+  if (input.timedOut === true || matchesAny(diagnosticText, TIMEOUT_PATTERNS)) {
+    failureSignals.push("timeout");
+  }
+
+  if (matchesAny(diagnosticText, AUTH_ERROR_PATTERNS)) {
+    failureSignals.push("auth_error");
+  }
+
+  if (rawOutput.trim() === "") {
+    failureSignals.push("empty_output");
+  }
+
+  if (input.structuredOutputRequested && input.parsedJson == null) {
+    failureSignals.push("invalid_json");
+  }
+
+  if (input.exitCode !== 0) {
+    failureSignals.push("non_zero_exit");
+  }
+
+  if (failureSignals.length === 0) {
+    return {
+      outcome: "success",
+      errorReason: null,
+      failure_signals: []
+    };
+  }
+
+  const outcome = failureSignals[0] ?? "non_zero_exit";
+
+  return {
+    outcome,
+    errorReason: errorReasonForOutcome(outcome, input),
+    failure_signals: failureSignals
+  };
+}
+
+export function alertTriggersForCliWorkerOutcome(
+  classification: CliWorkerOutcomeClassification
+): readonly AlertTrigger[] {
+  return classification.failure_signals.map((signal) => signalToAlertTrigger(signal));
+}
+
+export function estimateCliWorkerTokens(text: string): number {
+  const utf8Bytes = Buffer.byteLength(text, "utf8");
+  const wordLikeCount = text.match(/[A-Za-z0-9_]+/g)?.length ?? 0;
+  return Math.ceil(Math.max(utf8Bytes / 4, wordLikeCount * 1.3));
+}
+
+export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordInput): CliCallTelemetryRecord {
+  const providerUsage = input.providerUsage;
+  const inputTokens = providerUsage ? safeTelemetryTokenCount(providerUsage.inputTokens) : estimateCliWorkerTokens(input.prompt);
+  const outputTokens = providerUsage ? safeTelemetryTokenCount(providerUsage.outputTokens) : estimateCliWorkerTokens(input.rawOutput);
+  const totalTokens = providerUsage
+    ? safeTelemetryTokenCount(providerUsage.totalTokens ?? inputTokens + outputTokens)
+    : inputTokens + outputTokens;
+
+  return {
+    schema_version: "v1",
+    recorded_at: input.recordedAt,
+    worker_run_id: input.workerRunId,
+    handoff_id: input.handoffId,
+    vendor: input.vendor,
+    provider: providerForCliVendor(input.vendor),
+    model: input.model,
+    tier_id: input.tierId,
+    input_chars: input.prompt.length,
+    output_chars: input.rawOutput.length,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+    token_source: providerUsage ? "provider_reported" : "estimated_chars",
+    duration_seconds: input.durationSeconds,
+    exit_code: input.exitCode,
+    lock_status: input.lockStatus,
+    outcome: input.outcome,
+    failure_signals: [...input.failureSignals],
+    error_reason: input.errorReason,
+    parsed_json_present: input.parsedJson != null
+  };
+}
 
 // ─── Worker lock ─────────────────────────────────────────────────────────────
 
@@ -32,13 +215,20 @@ export interface WorkerLockRecord {
 }
 
 function lockFilePath(stateDir: string): string {
-  const fileName = SESSION_LOCK_PATH.split(/[\\/]/).at(-1) ?? "worker.lock";
-  return join(stateDir, fileName);
+  return stateFilePath(stateDir, SESSION_LOCK_PATH);
 }
 
 export function isWorkerLockStale(lock: WorkerLockRecord): boolean {
   const startedMs = new Date(lock.started_at).getTime();
+  if (!Number.isFinite(startedMs) || typeof lock.ttl_minutes !== "number" || !Number.isFinite(lock.ttl_minutes)) {
+    return true;
+  }
+
   const ttlMs = lock.ttl_minutes * 60 * 1000;
+  if (ttlMs <= 0) {
+    return true;
+  }
+
   return Date.now() - startedMs > ttlMs;
 }
 
@@ -151,6 +341,31 @@ export async function runCliWorker(
 
   const lockStatus = acquireWorkerLock(lockRecord, stateDir);
   if (lockStatus === "already_locked") {
+    const busyErrorReason = "worker_busy: another worker holds the lock";
+    emitSupervisorAlert("already_locked", {
+      input,
+      workerRunId,
+      lockStatus: "already_locked",
+      errorReason: busyErrorReason
+    }, stateDir);
+    writeCliCallTelemetryRecord(buildCliCallTelemetryRecord({
+      recordedAt: new Date().toISOString(),
+      workerRunId,
+      handoffId: input.handoffId,
+      vendor: input.vendor,
+      model: input.model ?? null,
+      tierId: null,
+      prompt: input.prompt,
+      rawOutput: "",
+      durationSeconds: 0,
+      exitCode: -1,
+      lockStatus: "already_locked",
+      outcome: "already_locked",
+      failureSignals: [],
+      errorReason: busyErrorReason,
+      parsedJson: null
+    }), stateDir);
+
     return {
       workerRunId,
       handoffId: input.handoffId,
@@ -162,8 +377,17 @@ export async function runCliWorker(
       durationSeconds: 0,
       lockStatus: "already_locked",
       workerOutputPath: null,
-      errorReason: "worker_busy: another worker holds the lock"
+      errorReason: busyErrorReason
     };
+  }
+
+  if (lockStatus === "stale_replaced") {
+    emitSupervisorAlert("lock_stale_replaced", {
+      input,
+      workerRunId,
+      lockStatus,
+      errorReason: "lock_stale_replaced: stale worker lock was replaced"
+    }, stateDir);
   }
 
   // Write agent-registry start entry
@@ -185,6 +409,8 @@ export async function runCliWorker(
   let durationSeconds = 0;
   let workerOutputPath: string | null = null;
   let errorReason: string | null = null;
+  let captureErrorText: string | null = null;
+  let captureTimedOut = false;
 
   try {
     if (input.vendor === "agy_cli") {
@@ -210,15 +436,22 @@ export async function runCliWorker(
       parsedJson = result.parsedJson;
       durationSeconds = result.durationMs / 1000;
       workerOutputPath = result.outputFilePath;
-    }
-
-    // Detect output errors even on exit 0 (agy exits 0 on model failures)
-    if (!rawOutput || rawOutput.trim() === "") {
-      errorReason = "empty_output: worker produced no output";
+      captureErrorText = result.errorOutput;
+      captureTimedOut = result.timedOut;
     }
   } catch (err) {
-    errorReason = err instanceof Error ? err.message : String(err);
+    captureErrorText = err instanceof Error ? err.message : String(err);
   }
+
+  const classification = classifyCliWorkerOutcome({
+    exitCode,
+    rawOutput,
+    parsedJson,
+    structuredOutputRequested: input.outputSchemaPath !== undefined,
+    errorText: captureErrorText,
+    timedOut: captureTimedOut
+  });
+  errorReason = classification.errorReason;
 
   const stoppedAt = new Date().toISOString();
 
@@ -235,6 +468,33 @@ export async function runCliWorker(
     source: "supervisor_spawn"
   };
   appendRegistryEntry(registryStop, stateDir);
+
+  writeCliCallTelemetryRecord(buildCliCallTelemetryRecord({
+    recordedAt: stoppedAt,
+    workerRunId,
+    handoffId: input.handoffId,
+    vendor: input.vendor,
+    model: input.model ?? null,
+    tierId: null,
+    prompt: input.prompt,
+    rawOutput,
+    durationSeconds,
+    exitCode,
+    lockStatus,
+    outcome: classification.outcome,
+    failureSignals: classification.failure_signals,
+    errorReason,
+    parsedJson
+  }), stateDir);
+
+  for (const trigger of alertTriggersForCliWorkerOutcome(classification)) {
+    emitSupervisorAlert(trigger, {
+      input,
+      workerRunId,
+      lockStatus,
+      errorReason
+    }, stateDir);
+  }
 
   // Write handoff correlation
   writeCorrelationEntry(
@@ -295,4 +555,82 @@ function writeResponseFile(content: string, runId: string, stateDir: string): st
   const path = join(stateDir, `${runId}-output.txt`);
   writeFileSync(path, content, "utf8");
   return path;
+}
+
+function errorReasonForOutcome(outcome: CliWorkerFailureSignal, input: CliWorkerOutcomeInput): string {
+  switch (outcome) {
+    case "timeout":
+      return "timeout: worker capture timed out";
+    case "auth_error":
+      return "auth_error: worker output indicates authentication failure";
+    case "empty_output":
+      return "empty_output: worker produced no output";
+    case "invalid_json":
+      return "invalid_json: structured output requested but parsed JSON is absent";
+    case "non_zero_exit":
+      return `non_zero_exit: worker exited with code ${input.exitCode}`;
+  }
+}
+
+function matchesAny(value: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(value));
+}
+
+function signalToAlertTrigger(signal: CliWorkerFailureSignal): AlertTrigger {
+  switch (signal) {
+    case "timeout":
+      return "timeout";
+    case "auth_error":
+      return "auth_error";
+    case "empty_output":
+      return "empty_output";
+    case "invalid_json":
+      return "invalid_json";
+    case "non_zero_exit":
+      return "non_zero_exit";
+  }
+}
+
+function providerForCliVendor(vendor: CliVendor): "openai_gpt" | "gemini_cli" {
+  return vendor === "codex_cli" ? "openai_gpt" : "gemini_cli";
+}
+
+function safeTelemetryTokenCount(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.ceil(value) : 0;
+}
+
+function writeCliCallTelemetryRecord(record: CliCallTelemetryRecord, stateDir: string): void {
+  mkdirSync(stateDir, { recursive: true });
+  appendFileSync(stateFilePath(stateDir, CLI_CALL_TELEMETRY_PATH), `${JSON.stringify(record)}\n`, "utf8");
+}
+
+function emitSupervisorAlert(
+  trigger: AlertTrigger,
+  context: {
+    readonly input: CliWorkerInput;
+    readonly workerRunId: string;
+    readonly lockStatus: CliWorkerResult["lockStatus"];
+    readonly errorReason: string | null;
+  },
+  stateDir: string
+): void {
+  const alert = createAlert(
+    trigger,
+    [
+      `handoff_id=${context.input.handoffId as string}`,
+      `worker_run_id=${context.workerRunId}`,
+      `vendor=${context.input.vendor}`,
+      `model=${context.input.model ?? "default"}`,
+      `lock_status=${context.lockStatus}`,
+      `error_reason=${context.errorReason ?? "none"}`
+    ].join(" "),
+    providerForCliVendor(context.input.vendor)
+  );
+
+  writePendingSupervisorAlert(alert, stateDir);
+}
+
+function stateFilePath(stateDir: string, path: string): string {
+  const fileName = path.split(/[\\/]/).at(-1) ?? path;
+  return join(stateDir, fileName);
 }

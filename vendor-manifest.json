@@ -611,12 +611,14 @@
     {
       "source_path": "src/data/delivery-system/cliWorker.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "987031d73c09f6bcd4b93c5d3e5b525c72a7ce5148db387ca4ce41c8fd9d34ab"
+      "content_hash": "987031d73c09f6bcd4b93c5d3e5b525c72a7ce5148db387ca4ce41c8fd9d34ab",
+      "patched_by": "auditC"
     },
     {
       "source_path": "src/data/delivery-system/cliWorkerCapture.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "9b58d9996322ef3a6f98f85b6a534b90b2ac9e117fbd5d6dc0bfdae5d31f8ca1"
+      "content_hash": "9b58d9996322ef3a6f98f85b6a534b90b2ac9e117fbd5d6dc0bfdae5d31f8ca1",
+      "patched_by": "auditC"
     },
     {
       "source_path": "src/data/delivery-system/fallbackChains.ts",
@@ -636,7 +638,8 @@
     {
       "source_path": "src/data/delivery-system/sessionState.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "e1932d2242dee0761b80a43e4e51e5a02bddc14d91fefb8be45e7309d34b25fe"
+      "content_hash": "e1932d2242dee0761b80a43e4e51e5a02bddc14d91fefb8be45e7309d34b25fe",
+      "patched_by": "auditC"
     },
     {
       "source_path": "src/data/delivery-system/subagentEvidence.ts",
@@ -646,12 +649,14 @@
     {
       "source_path": "src/data/delivery-system/subscriptionBudget.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "f80a4dab37e8f48fbf13407f1af621decc9a74fdb6e3c567c9a41693ed6f08a1"
+      "content_hash": "f80a4dab37e8f48fbf13407f1af621decc9a74fdb6e3c567c9a41693ed6f08a1",
+      "patched_by": "auditC"
     },
     {
       "source_path": "src/data/delivery-system/supervisorAlerts.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "343511d8560d3671ae9846cee0ab8831efa9daa22f48ab5d01267974f1688def"
+      "content_hash": "343511d8560d3671ae9846cee0ab8831efa9daa22f48ab5d01267974f1688def",
+      "patched_by": "auditC"
     },
     {
       "source_path": "src/data/delivery-system/tokenEfficiency.ts",

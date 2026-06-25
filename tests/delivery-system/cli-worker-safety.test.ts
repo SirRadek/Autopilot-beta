@@ -1,0 +1,204 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  alertTriggersForCliWorkerOutcome,
+  buildCliCallTelemetryRecord,
+  classifyCliWorkerOutcome,
+  estimateCliWorkerTokens,
+  isWorkerLockStale,
+  type WorkerLockRecord
+} from "../../src/data/delivery-system/cliWorker";
+import {
+  aggregateCliCallTelemetryIntoBudget,
+  type SubscriptionSessionBudget
+} from "../../src/data/delivery-system/subscriptionBudget";
+
+const baseLock: WorkerLockRecord = {
+  schema_version: "v1",
+  worker_run_id: "cli-codex-hp-test-20260625T120000",
+  handoff_id: "hp-test" as WorkerLockRecord["handoff_id"],
+  vendor: "codex_cli",
+  model: null,
+  pid: null,
+  started_at: new Date().toISOString(),
+  lock_source: "supervisor_spawn",
+  ttl_minutes: 30
+};
+
+describe("CLI worker safety classification", () => {
+  it("keeps the clean success classification empty", () => {
+    expect(classifyCliWorkerOutcome({
+      exitCode: 0,
+      rawOutput: "worker text",
+      parsedJson: null,
+      structuredOutputRequested: false
+    })).toEqual({
+      outcome: "success",
+      errorReason: null,
+      failure_signals: []
+    });
+  });
+
+  it("sets errorReason for a non-zero exit even when text exists", () => {
+    const result = classifyCliWorkerOutcome({
+      exitCode: 2,
+      rawOutput: "usage: codex exec ...",
+      parsedJson: null,
+      structuredOutputRequested: false
+    });
+
+    expect(result.outcome).toBe("non_zero_exit");
+    expect(result.errorReason).toBe("non_zero_exit: worker exited with code 2");
+    expect(result.failure_signals).toEqual(["non_zero_exit"]);
+    expect(alertTriggersForCliWorkerOutcome(result)).toEqual(["non_zero_exit"]);
+  });
+
+  it("sets errorReason for auth-error text", () => {
+    const result = classifyCliWorkerOutcome({
+      exitCode: 0,
+      rawOutput: "Error: login required before using this CLI",
+      parsedJson: null,
+      structuredOutputRequested: false
+    });
+
+    expect(result.outcome).toBe("auth_error");
+    expect(result.errorReason).toBe("auth_error: worker output indicates authentication failure");
+    expect(result.failure_signals).toEqual(["auth_error"]);
+  });
+
+  it("sets errorReason for timeout diagnostics", () => {
+    const result = classifyCliWorkerOutcome({
+      exitCode: 1,
+      rawOutput: "",
+      parsedJson: null,
+      structuredOutputRequested: false,
+      errorText: "codex capture timed out after 120000ms"
+    });
+
+    expect(result.outcome).toBe("timeout");
+    expect(result.errorReason).toBe("timeout: worker capture timed out");
+    expect(result.failure_signals).toEqual(["timeout", "empty_output", "non_zero_exit"]);
+  });
+
+  it("sets errorReason for empty output", () => {
+    const result = classifyCliWorkerOutcome({
+      exitCode: 0,
+      rawOutput: "   ",
+      parsedJson: null,
+      structuredOutputRequested: false
+    });
+
+    expect(result.outcome).toBe("empty_output");
+    expect(result.errorReason).toBe("empty_output: worker produced no output");
+    expect(result.failure_signals).toEqual(["empty_output"]);
+  });
+
+  it("sets errorReason for invalid JSON when structured output was requested", () => {
+    const result = classifyCliWorkerOutcome({
+      exitCode: 0,
+      rawOutput: "{ invalid json",
+      parsedJson: null,
+      structuredOutputRequested: true
+    });
+
+    expect(result.outcome).toBe("invalid_json");
+    expect(result.errorReason).toBe("invalid_json: structured output requested but parsed JSON is absent");
+    expect(result.failure_signals).toEqual(["invalid_json"]);
+  });
+});
+
+describe("CLI worker lock validation", () => {
+  it("treats invalid started_at as stale", () => {
+    expect(isWorkerLockStale({ ...baseLock, started_at: "not-a-date" })).toBe(true);
+  });
+
+  it("treats missing or non-numeric ttl_minutes as stale", () => {
+    expect(isWorkerLockStale({ ...baseLock, ttl_minutes: Number.NaN })).toBe(true);
+    expect(isWorkerLockStale({ ...baseLock, ttl_minutes: undefined as unknown as number })).toBe(true);
+    expect(isWorkerLockStale({ ...baseLock, ttl_minutes: "30" as unknown as number })).toBe(true);
+  });
+});
+
+describe("CLI worker token telemetry", () => {
+  it("estimates tokens from chars and word-like counts", () => {
+    expect(estimateCliWorkerTokens("hello world")).toBe(3);
+    expect(estimateCliWorkerTokens("")).toBe(0);
+  });
+
+  it("builds the requested telemetry shape with estimated token counts", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-codex-hp-test-20260625T120000",
+      handoffId: "hp-test" as WorkerLockRecord["handoff_id"],
+      vendor: "codex_cli",
+      model: "gpt-5-codex",
+      tierId: null,
+      prompt: "hello world",
+      rawOutput: "alpha beta gamma",
+      durationSeconds: 1.25,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: { ok: true }
+    });
+
+    expect(record).toEqual({
+      schema_version: "v1",
+      recorded_at: "2026-06-25T12:00:00.000Z",
+      worker_run_id: "cli-codex-hp-test-20260625T120000",
+      handoff_id: "hp-test",
+      vendor: "codex_cli",
+      provider: "openai_gpt",
+      model: "gpt-5-codex",
+      tier_id: null,
+      input_chars: 11,
+      output_chars: 16,
+      input_tokens: 3,
+      output_tokens: 4,
+      total_tokens: 7,
+      token_source: "estimated_chars",
+      duration_seconds: 1.25,
+      exit_code: 0,
+      lock_status: "acquired_supervisor_spawn",
+      outcome: "success",
+      failure_signals: [],
+      error_reason: null,
+      parsed_json_present: true
+    });
+  });
+
+  it("aggregates telemetry into the subscription session budget", () => {
+    const budget: SubscriptionSessionBudget = {
+      provider: "openai_gpt",
+      activeTierId: "codex_subscription",
+      activeTierRateLimitState: "available",
+      rateLimitHitAt: undefined,
+      lastAttemptedAt: undefined,
+      availableTiers: [],
+      exhaustedTierIds: [],
+      sessionTaskCount: 2,
+      sessionInputTokens: 10,
+      sessionOutputTokens: 20,
+      sessionTotalTokens: 30,
+      sessionCallCount: 2,
+      lastSuccessfulTaskAt: undefined,
+      notes: undefined
+    };
+
+    expect(aggregateCliCallTelemetryIntoBudget(budget, {
+      input_tokens: 3,
+      output_tokens: 4,
+      total_tokens: 7,
+      recorded_at: "2026-06-25T12:00:00.000Z"
+    })).toEqual({
+      ...budget,
+      sessionInputTokens: 13,
+      sessionOutputTokens: 24,
+      sessionTotalTokens: 37,
+      sessionCallCount: 3,
+      lastAttemptedAt: "2026-06-25T12:00:00.000Z"
+    });
+  });
+});

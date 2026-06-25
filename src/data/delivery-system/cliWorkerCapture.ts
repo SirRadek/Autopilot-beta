@@ -177,6 +177,8 @@ export interface CodexCaptureResult {
   readonly rawFileContent: string;
   readonly parsedJson: unknown;
   readonly durationMs: number;
+  readonly errorOutput: string;
+  readonly timedOut: boolean;
 }
 
 export async function captureCodexResponse(
@@ -248,8 +250,39 @@ export async function captureCodexResponse(
     outputFilePath: outputFile,
     rawFileContent,
     parsedJson,
-    durationMs
+    durationMs,
+    errorOutput: collectSpawnErrorOutput(result),
+    timedOut: isSpawnTimeout(result.error)
   };
+}
+
+function collectSpawnErrorOutput(result: ReturnType<typeof import("node:child_process").spawnSync>): string {
+  return [
+    outputToString(result.stderr),
+    outputToString(result.stdout),
+    result.error?.message ?? ""
+  ].filter((value) => value.length > 0).join("\n");
+}
+
+function outputToString(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return value.toString("utf8").trim();
+  }
+
+  return "";
+}
+
+function isSpawnTimeout(error: Error | undefined): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ETIMEDOUT" || /\b(?:timed out|timeout|etimedout)\b/i.test(error.message);
 }
 
 // ─── Prompt file writer (shared) ──────────────────────────────────────────────

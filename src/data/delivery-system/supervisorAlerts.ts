@@ -1,3 +1,12 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+import {
+  createInitialSessionState,
+  SESSION_STATE_PATH,
+  type SessionStateManifest
+} from "./sessionState";
+
 export type AlertSeverity = "info" | "warning" | "blocker";
 
 export type AlertTrigger =
@@ -10,7 +19,14 @@ export type AlertTrigger =
   | "missing_owner_decision"
   | "gemini_session_exhausted"
   | "reuse_check_skipped"
-  | "skill_replacement_available";
+  | "skill_replacement_available"
+  | "empty_output"
+  | "non_zero_exit"
+  | "auth_error"
+  | "invalid_json"
+  | "timeout"
+  | "already_locked"
+  | "lock_stale_replaced";
 
 export interface SupervisorAlert {
   readonly id: string;
@@ -34,7 +50,14 @@ const SEVERITY_MAP: Record<AlertTrigger, AlertSeverity> = {
   missing_owner_decision: "blocker",
   gemini_session_exhausted: "warning",
   reuse_check_skipped: "info",
-  skill_replacement_available: "info"
+  skill_replacement_available: "info",
+  empty_output: "blocker",
+  non_zero_exit: "blocker",
+  auth_error: "blocker",
+  invalid_json: "blocker",
+  timeout: "blocker",
+  already_locked: "warning",
+  lock_stale_replaced: "warning"
 };
 
 const RECOMMENDED_ACTION_MAP: Record<AlertTrigger, string> = {
@@ -47,7 +70,14 @@ const RECOMMENDED_ACTION_MAP: Record<AlertTrigger, string> = {
   missing_owner_decision: "Wait for the required owner decision before continuing.",
   gemini_session_exhausted: "Record the exhausted Gemini session and consider an approved Gemini fallback tier.",
   reuse_check_skipped: "Run the reuse check before assigning bounded implementation.",
-  skill_replacement_available: "Review the replacement candidate before continuing with the older skill."
+  skill_replacement_available: "Review the replacement candidate before continuing with the older skill.",
+  empty_output: "Treat the worker run as failed and inspect the captured artifacts before reuse.",
+  non_zero_exit: "Treat the worker run as failed and inspect the CLI exit status before reuse.",
+  auth_error: "Stop dependent worker dispatch until the provider authentication state is repaired.",
+  invalid_json: "Reject the structured worker result and rerun or repair the schema path before reuse.",
+  timeout: "Treat the worker run as failed and decide whether to retry with a bounded timeout.",
+  already_locked: "Wait for the active worker to finish or clear the stale lock after validation.",
+  lock_stale_replaced: "Review the replaced stale lock and confirm no duplicate worker is still running."
 };
 
 let alertSequence = 0;
@@ -74,4 +104,42 @@ export function resolveAlert(alert: SupervisorAlert): SupervisorAlert {
     resolved: true,
     resolvedAt: new Date().toISOString()
   };
+}
+
+export function writePendingSupervisorAlert(alert: SupervisorAlert, stateDir: string): void {
+  const path = stateFilePath(stateDir, SESSION_STATE_PATH);
+  mkdirSync(dirname(path), { recursive: true });
+
+  const state = readSessionStateForAlerts(path);
+  const nextState: SessionStateManifest = {
+    ...state,
+    lastUpdatedAt: alert.createdAt,
+    pendingAlerts: [...state.pendingAlerts, alert]
+  };
+
+  writeFileSync(path, `${JSON.stringify(nextState, null, 2)}\n`, "utf8");
+}
+
+function readSessionStateForAlerts(path: string): SessionStateManifest {
+  if (!existsSync(path)) {
+    return createInitialSessionState();
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<SessionStateManifest>;
+    const fallback = createInitialSessionState();
+
+    return {
+      ...fallback,
+      ...parsed,
+      pendingAlerts: Array.isArray(parsed.pendingAlerts) ? parsed.pendingAlerts : fallback.pendingAlerts
+    } as SessionStateManifest;
+  } catch {
+    return createInitialSessionState();
+  }
+}
+
+function stateFilePath(stateDir: string, path: string): string {
+  const fileName = path.split(/[\\/]/).at(-1) ?? path;
+  return join(stateDir, fileName);
 }

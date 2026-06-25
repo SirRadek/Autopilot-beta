@@ -22,8 +22,37 @@ export interface SubscriptionSessionBudget {
   readonly availableTiers: readonly ProviderTierSpec[];
   readonly exhaustedTierIds: readonly string[];
   readonly sessionTaskCount: number;
+  readonly sessionInputTokens: number;
+  readonly sessionOutputTokens: number;
+  readonly sessionTotalTokens: number;
+  readonly sessionCallCount: number;
   readonly lastSuccessfulTaskAt: string | undefined;
   readonly notes: string | undefined;
+}
+
+export interface SubscriptionBudgetTokenTelemetry {
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly total_tokens: number;
+  readonly recorded_at: string;
+}
+
+export function aggregateCliCallTelemetryIntoBudget(
+  budget: SubscriptionSessionBudget,
+  telemetry: SubscriptionBudgetTokenTelemetry
+): SubscriptionSessionBudget {
+  return {
+    ...budget,
+    sessionInputTokens: safeTokenCount(budget.sessionInputTokens) + safeTokenCount(telemetry.input_tokens),
+    sessionOutputTokens: safeTokenCount(budget.sessionOutputTokens) + safeTokenCount(telemetry.output_tokens),
+    sessionTotalTokens: safeTokenCount(budget.sessionTotalTokens) + safeTokenCount(telemetry.total_tokens),
+    sessionCallCount: safeTokenCount(budget.sessionCallCount) + 1,
+    lastAttemptedAt: telemetry.recorded_at
+  };
+}
+
+function safeTokenCount(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
 export const geminiKnownTiers: readonly ProviderTierSpec[] = [
