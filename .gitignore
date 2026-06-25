@@ -5,3 +5,5 @@ node_modules/
 output/
 state/
 radeq_tmp/
+*.stackdump
+.claude/
