@@ -302,21 +302,52 @@ function validateDotStageHeroInput(input: DotStageHeroInput): DotStageHeroContra
   validateRequiredTextProp(input, "display_word", "canvas_text_dom_twin", issues);
   validateRequiredTextProp(input, "static_fallback_label", "reduced_motion_fallback", issues);
   validateScenePreset(input, issues);
+  validateMotionIntensity(input, issues);
   validateCtaHref(input, issues);
 
   return issues;
 }
 
 function validateScenePreset(input: DotStageHeroInput, issues: DotStageHeroContractIssue[]): void {
-  const raw = input.props.scene_preset?.trim();
-  if (raw === undefined || raw.length === 0) {
+  const contractProp = input.contract.props.find((prop) => prop.name === "scene_preset");
+  const raw = input.props.scene_preset?.trim() ?? "";
+
+  if (contractProp?.required === true && raw.length === 0) {
+    issues.push({
+      code: "scene_preset_required",
+      prop: "scene_preset",
+      message: `scene_preset is required by ${input.contract.id}.`
+    });
     return;
   }
-  if (!(ALLOWED_SCENE_PRESETS as readonly string[]).includes(raw)) {
+
+  if (raw.length > 0 && !(ALLOWED_SCENE_PRESETS as readonly string[]).includes(raw)) {
     issues.push({
       code: "scene_preset_not_allowed",
       prop: "scene_preset",
       message: `scene_preset must be one of: ${ALLOWED_SCENE_PRESETS.join(", ")}.`
+    });
+  }
+}
+
+function validateMotionIntensity(input: DotStageHeroInput, issues: DotStageHeroContractIssue[]): void {
+  const contractProp = input.contract.props.find((prop) => prop.name === "motion_intensity");
+  const raw = input.props.motion_intensity?.trim() ?? "";
+
+  if (contractProp?.required === true && raw.length === 0) {
+    issues.push({
+      code: "motion_intensity_required",
+      prop: "motion_intensity",
+      message: `motion_intensity is required by ${input.contract.id}.`
+    });
+    return;
+  }
+
+  if (raw.length > 0 && !/^\d+$/.test(raw)) {
+    issues.push({
+      code: "motion_intensity_invalid",
+      prop: "motion_intensity",
+      message: "motion_intensity must be a non-negative integer (0-10 scale)."
     });
   }
 }

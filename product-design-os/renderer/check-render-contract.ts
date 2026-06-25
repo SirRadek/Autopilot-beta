@@ -97,7 +97,8 @@ function checkCanvasTextDomTwin(root: HTMLElement, pushIssue: PushIssue): void {
   }
 
   const twinTextsByWord = new Map<string, string[]>();
-  for (const twin of root.querySelectorAll("[data-dot-twin]")) {
+  // Only visible twins count — a hidden/aria-hidden twin is not readable by assistive tech.
+  for (const twin of root.querySelectorAll("[data-dot-twin]").filter(isVisibleElement)) {
     const key = normalizeText(twin.getAttribute("data-dot-twin") ?? "");
     const texts = twinTextsByWord.get(key) ?? [];
     texts.push(normalizeText(twin.text));
@@ -128,14 +129,18 @@ function checkNoStoredFrames(root: HTMLElement, rawHtml: string, pushIssue: Push
     return;
   }
 
-  const hasFrameElement = /<(?:img|video|picture|source)\b/i.test(rawHtml);
-  const hasDataUri = /(?:src|href|content|srcset)\s*=\s*["']?\s*data:/i.test(rawHtml) || /url\(\s*['"]?\s*data:/i.test(rawHtml);
+  const hasFrameElement =
+    /<(?:img|video|picture|source|object|embed|image|use)\b/i.test(rawHtml) ||
+    /<input\b[^>]*\btype\s*=\s*["']?\s*image/i.test(rawHtml);
+  const hasDataUri =
+    /(?:src|href|xlink:href|content|srcset|data)\s*=\s*["']?\s*data:/i.test(rawHtml) ||
+    /(?:url|image-set)\(\s*['"]?\s*data:/i.test(rawHtml);
 
   if (hasFrameElement || hasDataUri) {
     pushIssue(
       "no_stored_frames",
       "error",
-      "Procedural dot-stage must not embed stored frames (img/video/picture/source elements or data: URIs)."
+      "Procedural dot-stage must not embed stored frames (img/video/picture/source/object/embed/svg image/use/input[type=image] elements or data: URIs)."
     );
   }
 }
