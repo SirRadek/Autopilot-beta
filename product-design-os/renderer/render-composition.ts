@@ -572,8 +572,7 @@ function resolvePatternData(input: unknown): RenderPatternData {
     const node = spec.nodes.find((candidate) => {
       return candidate.target_kind === "pattern" && typeof candidate.target_id === "string" && hasPatternComponent(candidate.target_id);
     });
-
-    if (node === undefined) {
+    if (node === undefined || node.target_id === undefined) {
       const renderedPatternIds = spec.nodes
         .filter((candidate) => candidate.target_kind === "pattern")
         .map((candidate) => candidate.target_id ?? "<missing>");
@@ -831,6 +830,10 @@ function findPatternContract(manifest: ContractManifest, patternId: string): Com
 
 function readAssetManifest(pdosRoot: string): AssetManifest {
   return readJson<AssetManifest>(path.join(pdosRoot, "assets", "asset-manifest.json"));
+}
+
+function isRegisteredPattern(patternId: unknown): patternId is string {
+  return typeof patternId === "string" && Object.prototype.hasOwnProperty.call(patternComponentRegistry, patternId);
 }
 
 function resolveSlots(
@@ -1255,7 +1258,12 @@ function isCliEntryPoint(): boolean {
 if (isCliEntryPoint()) {
   const repoRoot = process.cwd();
   const pdosRoot = path.join(repoRoot, "product-design-os");
-  const spec = readJson<CompositionSpec>(path.join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json"));
+  const specArg = process.argv[2];
+  const specPath =
+    specArg !== undefined
+      ? path.resolve(repoRoot, specArg)
+      : path.join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json");
+  const spec = readJson<CompositionSpec>(specPath);
   const result = renderComposition(spec, pdosRoot);
   const pageResult = renderCompositionPage(spec, pdosRoot);
   const outputDir = path.join(repoRoot, "output", "render");
@@ -1266,7 +1274,7 @@ if (isCliEntryPoint()) {
   writeFileSync(outputPath, result.html, "utf8");
   writeFileSync(pageOutputPath, pageResult.html, "utf8");
 
-  const contract = readPatternContract(pdosRoot, "sharp-positioning-hero");
+  const contract = readPatternContract(pdosRoot, patternId);
   const report = checkRenderedContract(result.html, contract);
   if (report.errors.length > 0) {
     throw new Error(`Rendered contract failed: ${report.errors.map((issue) => issue.code).join(", ")}`);

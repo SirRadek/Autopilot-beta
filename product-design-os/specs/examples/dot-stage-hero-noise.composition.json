@@ -1,0 +1,138 @@
+{
+  "spec_kind": "composition_spec",
+  "id": "dot-stage-hero-noise-demo",
+  "schema_version": "1.0.0",
+  "recipe_id": "creative-motion",
+  "pattern_ids": ["dot-stage-hero"],
+  "asset_ids": [],
+  "required_sections": ["hero"],
+  "sections": [
+    {
+      "section_id": "hero",
+      "role": "chaos-to-order hero opener over a procedural dot stage",
+      "node_ids": ["dot-hero"],
+      "evidence_ids": ["dot-hero-evidence"]
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "dot-hero",
+      "target_kind": "pattern",
+      "target_id": "dot-stage-hero",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "string_value": "Z provozního šumu udělám čistý řád."
+        },
+        {
+          "name": "primary_cta",
+          "value_type": "string",
+          "string_value": "Napsat poptávku"
+        },
+        {
+          "name": "trust_cue",
+          "value_type": "string",
+          "string_value": "Data, weby a automatizace bez chaosu."
+        },
+        {
+          "name": "display_word",
+          "value_type": "string",
+          "string_value": "DATA"
+        },
+        {
+          "name": "cta_href",
+          "value_type": "url",
+          "string_value": "#kontakt"
+        },
+        {
+          "name": "scene_preset",
+          "value_type": "string",
+          "string_value": "noise-to-order"
+        },
+        {
+          "name": "motion_intensity",
+          "value_type": "integer",
+          "integer_value": 8
+        },
+        {
+          "name": "static_fallback_label",
+          "value_type": "string",
+          "string_value": "Statická scéna se stejným textem a CTA"
+        }
+      ],
+      "slot_fills": [],
+      "declared_invariants": [
+        "visible_h1",
+        "dom_text_cta",
+        "no_primary_content_in_canvas",
+        "reduced_motion_fallback",
+        "performance_budget"
+      ],
+      "evidence_ids": ["dot-hero-evidence"]
+    }
+  ],
+  "evidence": {
+    "items": [
+      {
+        "id": "dot-hero-evidence",
+        "kind": "offer",
+        "summary": "The noise-to-order opener keeps headline, CTA, and trust cue as sharp DOM text while the dot field resolves from chaos into the display word.",
+        "pattern_ids": ["dot-stage-hero"],
+        "notes": "Same contract and renderer as the spotlight preset; only scene_preset (data) differs — the dots churn harder before resolving."
+      }
+    ],
+    "required_section_evidence": [
+      {
+        "section_id": "hero",
+        "evidence_ids": ["dot-hero-evidence"]
+      }
+    ]
+  },
+  "visual_qa_probe": {
+    "url": "fixture://dot-stage-hero-noise-demo",
+    "project_type": "portfolio",
+    "primary_goal": "Win bespoke data/automation leads with a chaos-to-order opener.",
+    "target_users": ["founder", "small-business", "tech-curious-customer"],
+    "viewports": [
+      {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 1000,
+        "heading_count": 1,
+        "cta_count": 1,
+        "visible_text_characters": 170,
+        "repeated_card_count": 0,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 8,
+        "reduced_motion_supported": true
+      },
+      {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "heading_count": 1,
+        "cta_count": 1,
+        "visible_text_characters": 140,
+        "repeated_card_count": 0,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 8,
+        "reduced_motion_supported": true
+      }
+    ],
+    "headings": ["Z provozního šumu udělám čistý řád."],
+    "ctas": ["Napsat poptávku"],
+    "template_signals": []
+  },
+  "token_overrides": {
+    "enabled": false,
+    "values": []
+  }
+}

@@ -561,6 +561,18 @@
         "penalties": []
       },
       {
+        "id": "dot-stage-hero",
+        "score": 54,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
         "id": "animated-hero",
         "score": 52,
         "selected": false,
@@ -1040,4 +1052,3 @@
   "warnings": [],
   "formula": "score = purpose_fit*3 + target_fit*3 + logic_fit*3 + usability*3 + taste_match*2 + accessibility*2 + mobile_fit*2 - performance_cost*2 - implementation_complexity - template_risk*4 - style_conflict*3"
 }
-

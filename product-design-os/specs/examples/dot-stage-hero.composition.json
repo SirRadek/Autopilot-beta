@@ -1,0 +1,138 @@
+{
+  "spec_kind": "composition_spec",
+  "id": "dot-stage-hero-demo",
+  "schema_version": "1.0.0",
+  "recipe_id": "creative-motion",
+  "pattern_ids": ["dot-stage-hero"],
+  "asset_ids": [],
+  "required_sections": ["hero"],
+  "sections": [
+    {
+      "section_id": "hero",
+      "role": "first viewport offer and CTA over a procedural dot stage",
+      "node_ids": ["dot-hero"],
+      "evidence_ids": ["dot-hero-evidence"]
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "dot-hero",
+      "target_kind": "pattern",
+      "target_id": "dot-stage-hero",
+      "section_id": "hero",
+      "props": [
+        {
+          "name": "headline",
+          "value_type": "text",
+          "string_value": "Rychlý web, čistý proces, méně provozního šumu."
+        },
+        {
+          "name": "primary_cta",
+          "value_type": "string",
+          "string_value": "Napsat poptávku"
+        },
+        {
+          "name": "trust_cue",
+          "value_type": "string",
+          "string_value": "Odpovídám do 1 pracovního dne."
+        },
+        {
+          "name": "display_word",
+          "value_type": "string",
+          "string_value": "RadeQ"
+        },
+        {
+          "name": "cta_href",
+          "value_type": "url",
+          "string_value": "#kontakt"
+        },
+        {
+          "name": "scene_preset",
+          "value_type": "string",
+          "string_value": "spotlight-hero"
+        },
+        {
+          "name": "motion_intensity",
+          "value_type": "integer",
+          "integer_value": 7
+        },
+        {
+          "name": "static_fallback_label",
+          "value_type": "string",
+          "string_value": "Statická scéna se stejným textem a CTA"
+        }
+      ],
+      "slot_fills": [],
+      "declared_invariants": [
+        "visible_h1",
+        "dom_text_cta",
+        "no_primary_content_in_canvas",
+        "reduced_motion_fallback",
+        "performance_budget"
+      ],
+      "evidence_ids": ["dot-hero-evidence"]
+    }
+  ],
+  "evidence": {
+    "items": [
+      {
+        "id": "dot-hero-evidence",
+        "kind": "offer",
+        "summary": "The first viewport keeps the offer headline, CTA, and trust cue as sharp DOM text; the lime dot field and the dot-built display word stay decorative behind it.",
+        "pattern_ids": ["dot-stage-hero"],
+        "notes": "Read copy is DOM. The dot-built display word carries a DOM twin, the canvas is aria-hidden, and the procedural engine bails to a static frame under reduced motion."
+      }
+    ],
+    "required_section_evidence": [
+      {
+        "section_id": "hero",
+        "evidence_ids": ["dot-hero-evidence"]
+      }
+    ]
+  },
+  "visual_qa_probe": {
+    "url": "fixture://dot-stage-hero-demo",
+    "project_type": "portfolio",
+    "primary_goal": "Win bespoke web/data/automation leads with a memorable, fast, accessible opener.",
+    "target_users": ["founder", "small-business", "tech-curious-customer"],
+    "viewports": [
+      {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 1000,
+        "heading_count": 1,
+        "cta_count": 1,
+        "visible_text_characters": 180,
+        "repeated_card_count": 0,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 7,
+        "reduced_motion_supported": true
+      },
+      {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "heading_count": 1,
+        "cta_count": 1,
+        "visible_text_characters": 150,
+        "repeated_card_count": 0,
+        "text_overlap": false,
+        "horizontal_overflow": false,
+        "low_contrast": false,
+        "primary_content_in_canvas": false,
+        "motion_level": 7,
+        "reduced_motion_supported": true
+      }
+    ],
+    "headings": ["Rychlý web, čistý proces, méně provozního šumu."],
+    "ctas": ["Napsat poptávku"],
+    "template_signals": []
+  },
+  "token_overrides": {
+    "enabled": false,
+    "values": []
+  }
+}

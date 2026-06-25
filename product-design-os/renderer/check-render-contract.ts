@@ -95,7 +95,95 @@ export function checkRenderedContract(html: string, contract: ComponentContract)
     }
   }
 
+  checkCanvasTextDomTwin(root, pushIssue);
+  checkNoStoredFrames(root, html, pushIssue);
+  checkReducedMotionFallback(root, html, pushIssue);
+
   return { errors, warnings };
+}
+
+type PushIssue = (code: string, fallbackSeverity: "error" | "warning", message: string) => void;
+
+/**
+ * Self-scoping dot-stage guard. Display words drawn on canvas are marked with
+ * [data-dot-word]; each must have a matching [data-dot-twin] DOM node carrying
+ * identical text so crawlers and screen readers still read the word. Only fires
+ * when [data-dot-word] markers are present, so non-dot patterns are unaffected.
+ */
+function checkCanvasTextDomTwin(root: HTMLElement, pushIssue: PushIssue): void {
+  const dotWordNodes = root.querySelectorAll("[data-dot-word]");
+  if (dotWordNodes.length === 0) {
+    return;
+  }
+
+  const twinTextsByWord = new Map<string, string[]>();
+  // Only visible twins count — a hidden/aria-hidden twin is not readable by assistive tech.
+  for (const twin of root.querySelectorAll("[data-dot-twin]").filter(isVisibleElement)) {
+    const key = normalizeText(twin.getAttribute("data-dot-twin") ?? "");
+    const texts = twinTextsByWord.get(key) ?? [];
+    texts.push(normalizeText(twin.text));
+    twinTextsByWord.set(key, texts);
+  }
+
+  for (const wordNode of dotWordNodes) {
+    const word = normalizeText(wordNode.getAttribute("data-dot-word") ?? "");
+    const twinTexts = twinTextsByWord.get(word) ?? [];
+    if (word.length === 0 || !twinTexts.includes(word)) {
+      pushIssue(
+        "canvas_text_dom_twin",
+        "error",
+        `Dot-built display word "${word}" must have a matching DOM twin: [data-dot-twin="${word}"] with identical text.`
+      );
+    }
+  }
+}
+
+/**
+ * Self-scoping procedural-only guard. A [data-dot-stage] canvas promises a
+ * procedural engine, so the output must ship no stored frames (img/video/
+ * picture/source elements or data: URIs). Scans the raw HTML so frames hidden
+ * inside <script>/<style> (stripped before parsing) are still caught.
+ */
+function checkNoStoredFrames(root: HTMLElement, rawHtml: string, pushIssue: PushIssue): void {
+  if (root.querySelectorAll("[data-dot-stage]").length === 0) {
+    return;
+  }
+
+  const hasFrameElement =
+    /<(?:img|video|picture|source|object|embed|image|use)\b/i.test(rawHtml) ||
+    /<input\b[^>]*\btype\s*=\s*["']?\s*image/i.test(rawHtml);
+  const hasDataUri =
+    /(?:src|href|xlink:href|content|srcset|data)\s*=\s*["']?\s*data:/i.test(rawHtml) ||
+    /(?:url|image-set)\(\s*['"]?\s*data:/i.test(rawHtml);
+
+  if (hasFrameElement || hasDataUri) {
+    pushIssue(
+      "no_stored_frames",
+      "error",
+      "Procedural dot-stage must not embed stored frames (img/video/picture/source/object/embed/svg image/use/input[type=image] elements or data: URIs)."
+    );
+  }
+}
+
+/**
+ * Self-scoping reduced-motion guard. A [data-dot-stage] canvas animates, so the
+ * output must reference a prefers-reduced-motion guard (in the engine script and/or
+ * CSS). Scans the raw HTML because the engine's matchMedia guard lives in a <script>
+ * that is stripped before parsing. This proves the guard EXISTS, not its runtime
+ * behaviour — behaviour is covered by the buildability-floor visual-qa probe.
+ */
+function checkReducedMotionFallback(root: HTMLElement, rawHtml: string, pushIssue: PushIssue): void {
+  if (root.querySelectorAll("[data-dot-stage]").length === 0) {
+    return;
+  }
+
+  if (!/prefers-reduced-motion/i.test(rawHtml)) {
+    pushIssue(
+      "reduced_motion_fallback",
+      "error",
+      "Procedural dot-stage must guard its animation with a prefers-reduced-motion check (none found in script or CSS)."
+    );
+  }
 }
 
 function parseContractDom(html: string): HTMLElement {
