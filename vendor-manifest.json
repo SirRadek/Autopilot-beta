@@ -166,7 +166,8 @@
     {
       "source_path": "product-design-os/library/README.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "1a43e3c3dcfa0510569d425961344184e96d6262beb30573d304002582eba5a8"
+      "content_hash": "1a43e3c3dcfa0510569d425961344184e96d6262beb30573d304002582eba5a8",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/library/project-entry.schema.json",
@@ -176,7 +177,8 @@
     {
       "source_path": "product-design-os/library/project-index.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "468e4ee0ec5c5208f0566bd271764ada4b63581345c01ea684d1d61a7133a619"
+      "content_hash": "468e4ee0ec5c5208f0566bd271764ada4b63581345c01ea684d1d61a7133a619",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/library/reference-catalog.json",
@@ -320,7 +322,8 @@
     {
       "source_path": "product-design-os/reader/document-reader-adapter.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2389d245c29e9c907d839b69e15d81134324dfca26d39944df1bf52d7da4d659"
+      "content_hash": "2389d245c29e9c907d839b69e15d81134324dfca26d39944df1bf52d7da4d659",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/reader/element-map.schema.json",
@@ -330,7 +333,8 @@
     {
       "source_path": "product-design-os/reader/pdf-supervisor-adapter.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "05002671cc74551894e634e5f731b9a51aeb212cf4b6e0a57704dd2453f902bf"
+      "content_hash": "05002671cc74551894e634e5f731b9a51aeb212cf4b6e0a57704dd2453f902bf",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/reader/visual-qa-sample.json",
@@ -412,12 +416,14 @@
     {
       "source_path": "product-design-os/reports/process-mesh-audit-2026-05-31.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "a047e50c5eec21bcfda9946acd4ca838ecc9e82787a7cd7feaf171e97c0ac0fd"
+      "content_hash": "a047e50c5eec21bcfda9946acd4ca838ecc9e82787a7cd7feaf171e97c0ac0fd",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/reports/product-design-os-foundation-report.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "891c97fd630b4f0c7237da632f0259eb88a8a114016a779422727aaff04bdfbf"
+      "content_hash": "891c97fd630b4f0c7237da632f0259eb88a8a114016a779422727aaff04bdfbf",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/reports/qa/.gitkeep",
@@ -462,7 +468,8 @@
     {
       "source_path": "product-design-os/rules/multi-agent-routing.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "fb77f95266eae10c8127450958df0f067f3c33c26f99b9ab46e6e353b1516e7a"
+      "content_hash": "fb77f95266eae10c8127450958df0f067f3c33c26f99b9ab46e6e353b1516e7a",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/rules/performance.md",
@@ -507,17 +514,20 @@
     {
       "source_path": "product-design-os/scripts/capture-design-reader.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "fdabd1fe29443b980f9e1830945d5a5ce06d010bb645563d83ca1363c2f3b14e"
+      "content_hash": "fdabd1fe29443b980f9e1830945d5a5ce06d010bb645563d83ca1363c2f3b14e",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/scripts/capture-element-map.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "dec3d112ace111c16cfe59faa8482c84966358df03b1dea337ef68fe1df2970c"
+      "content_hash": "dec3d112ace111c16cfe59faa8482c84966358df03b1dea337ef68fe1df2970c",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/scripts/route-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "f398e981affe0cbb550ab77c98b715e96aa2ac4d68586f17d4ce5dc3a3482287"
+      "content_hash": "f398e981affe0cbb550ab77c98b715e96aa2ac4d68586f17d4ce5dc3a3482287",
+      "patched_by": "auditD"
     },
     {
       "source_path": "product-design-os/scripts/score-product-design-os.ts",

@@ -875,9 +875,9 @@ function parseArgs(args: readonly string[]): ElementMapInput {
 }
 
 function printUsage(): void {
-  console.log(`Usage:
-  npm run pdos:reader:element-map -- --url https://example.com --output-dir output/playwright/product-design-os
-  npm run pdos:reader:element-map -- --html-file product-design-os/reader/capture-sample.html --xy desktop 120 240`);
+  console.log(`Usage (vendored reader source; beta npm alias not wired):
+  npx tsx product-design-os/scripts/capture-element-map.ts --url https://example.com --output-dir output/playwright/product-design-os
+  npx tsx product-design-os/scripts/capture-element-map.ts --html-file product-design-os/reader/capture-sample.html --xy desktop 120 240`);
 }
 
 function formatCaptureSummary(map: ElementMap): string {

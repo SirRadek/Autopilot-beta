@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-06-05",
+  "updated": "2026-06-25",
   "source": "product-design-os/scripts/update-project-library.ts",
   "projects": [
     {
@@ -8,51 +8,51 @@
       "name": "Autopilot Control Plane Architecture",
       "status": "in_progress",
       "status_label": "active process layer",
-      "architecture_path": "docs/projects/autopilot-control-plane/architecture.md",
-      "work_log_path": "docs/projects/autopilot-control-plane/work-log.md",
-      "project_mesh_path": "docs/projects/autopilot-control-plane/decision-mesh",
-      "mesh_status": "present",
+      "architecture_path": "canonical:docs/projects/autopilot-control-plane/architecture.md",
+      "work_log_path": "canonical:docs/projects/autopilot-control-plane/work-log.md",
+      "project_mesh_path": "canonical:docs/projects/autopilot-control-plane/decision-mesh",
+      "mesh_status": "missing",
       "library_links": {
         "source_ids": [],
         "reference_ids": [],
         "asset_ids": [],
         "pattern_ids": []
       },
-      "notes": "Generated from docs/projects. Enrich library links during project design work."
+      "notes": "External/canonical-only reference from the source Autopilot checkout; docs/projects is not present in autopilot-beta. Normalize the project record into beta before treating these paths as live local files."
     },
     {
       "slug": "multi-agent-autonomous-delivery-system",
       "name": "Multi-Agent Autonomous Delivery System Architecture",
       "status": "in_progress",
       "status_label": "phase-3 read-only Decision Mesh context router",
-      "architecture_path": "docs/projects/multi-agent-autonomous-delivery-system/architecture.md",
-      "work_log_path": "docs/projects/multi-agent-autonomous-delivery-system/work-log.md",
-      "project_mesh_path": "docs/projects/multi-agent-autonomous-delivery-system/decision-mesh",
-      "mesh_status": "present",
+      "architecture_path": "canonical:docs/projects/multi-agent-autonomous-delivery-system/architecture.md",
+      "work_log_path": "canonical:docs/projects/multi-agent-autonomous-delivery-system/work-log.md",
+      "project_mesh_path": "canonical:docs/projects/multi-agent-autonomous-delivery-system/decision-mesh",
+      "mesh_status": "missing",
       "library_links": {
         "source_ids": [],
         "reference_ids": [],
         "asset_ids": [],
         "pattern_ids": []
       },
-      "notes": "Generated from docs/projects. Enrich library links during project design work."
+      "notes": "External/canonical-only reference from the source Autopilot checkout; docs/projects is not present in autopilot-beta. Normalize the project record into beta before treating these paths as live local files."
     },
     {
       "slug": "radeq",
       "name": "Radeq.cz Website Architecture",
       "status": "in_progress",
       "status_label": "active",
-      "architecture_path": "docs/projects/radeq/architecture.md",
-      "work_log_path": "docs/projects/radeq/work-log.md",
-      "project_mesh_path": "docs/projects/radeq/decision-mesh",
-      "mesh_status": "present",
+      "architecture_path": "canonical:docs/projects/radeq/architecture.md",
+      "work_log_path": "canonical:docs/projects/radeq/work-log.md",
+      "project_mesh_path": "canonical:docs/projects/radeq/decision-mesh",
+      "mesh_status": "missing",
       "library_links": {
         "source_ids": [],
         "reference_ids": [],
         "asset_ids": [],
         "pattern_ids": []
       },
-      "notes": "Generated from docs/projects. Enrich library links during project design work."
+      "notes": "External/canonical-only reference from the source Autopilot checkout; docs/projects is not present in autopilot-beta. Normalize the project record into beta before treating these paths as live local files."
     }
   ]
 }

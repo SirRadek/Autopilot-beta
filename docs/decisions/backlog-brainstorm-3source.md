@@ -6,15 +6,15 @@ whole repo, full review). Real **codex_cli** lane returned `empty_output` this r
 3 effective sources. This is analysis/recommendation only; nothing implemented.
 
 ## 0. Ground truth FIRST (the adversarial lane surfaced it)
-The Workflow's critique agent verified against the **session cwd `C:\Programování\Codex`** and found an
+The Workflow's critique agent verified against a **retired duplicate checkout used as that session cwd** and found an
 empty old floor (35 patterns, no `requires_codes`, no harness, empty tokens, no vendor-manifest) → it
 wrongly concluded "the synthesis analyzes the wrong repo / nothing exists." **That conclusion is the
 critique's OWN repo-confusion** — but it's the most valuable accident of the brainstorm, because it proves
 the #1 problem is real:
-- `C:\Programování\autopilot-beta` = the F0–F7 spine (verified: **42/42 `requires_codes`, F6 floor present,
+- the beta checkout = the F0-F7 spine (verified: **42/42 `requires_codes`, F6 floor present,
   HEAD `fde726a`, 36/36 tests**). ✅ This is where all the work correctly lives.
-- `C:\Programování\Codex` (this session's cwd) = a **retired duplicate** (old/empty floor). MEMORY flags it
-  retired; canonical = `C:\Programování\autopilot`.
+- the retired duplicate checkout from that session = old/empty floor. MEMORY flags it retired.
+- the canonical sibling checkout = source Autopilot context, not a portable beta-local path.
 - `SirRadek/autopilot` main has **pivoted to ClientOps** (Next.js/Payload); old control plane frozen under
   `archive/`.
 → **Three repos, no named merge-back target.** The vendor-manifest's byte-identical merge-back discipline
@@ -173,8 +173,9 @@ agy recovered after owner re-auth; codex empty this run is exactly the "silent f
 the real output). It was the most FORENSIC lane — found concrete rot the strategic lanes missed, **all
 verified by Opus against the repo**:
 - **FALSE-GREEN / orphaned Playwright reader (verified):** `scripts/capture-design-reader.ts` +
-  `capture-element-map.ts` import `@playwright/test` — but it's NOT in `package.json`, there are NO
-  `pdos:reader:*` scripts, and the files are NOT in `tsconfig`. Yet `reader/README.md`,
+  `capture-element-map.ts` import `@playwright/test`. That dependency is now present for the browser-gated
+  visual-QA slice, but there are still NO `pdos:reader:*` scripts and the files are NOT in `tsconfig`. Yet
+  older `reader/README.md`,
   `product-design-os/README.md` + the foundation report present `pdos:reader:capture`/`:element-map` as a
   working path. `verify` is green but doesn't cover this surface → docs read as done; code is dead.
 - **Validator subset (verified):** `src/lib/delivery-system/validation.ts` implements 0 of `$ref`/`oneOf`/
@@ -182,7 +183,9 @@ verified by Opus against the repo**:
   every ADR has paid a "no $ref/anyOf/oneOf" tax. → adopt **Ajv v8 + ajv-formats**.
 - **Governance without enforceable evidence:** rules mandate Context7/license/clean-room, but without an
   evidence SCHEMA + source-freshness TTL, "verified" is just text. → add an evidence schema (library,
-  version, query, source, date, covered_claim, fallback) + TTL, gated in `verify`.
+  version, query, source, date, covered_claim, fallback) + TTL; run stale-evidence failure as the separate
+  real-project CI command `pdos:evidence-freshness -- --now YYYY-MM-DD --fail-on-stale`, not deterministic
+  beta `verify`.
 - **"Cosmetic substitution" warning:** adding CC0 catalogs / Playwright does nothing unless WIRED into
   `verify`, manifests, project-index links, and release gates. (CC0 pool: Open Doodles, Open Peeps, Kenney,
   Poly Haven, ambientCG, Quaternius — but don't confuse `approved_source` with a production-adopted asset.)

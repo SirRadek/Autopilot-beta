@@ -500,9 +500,9 @@ function parseArgs(args: readonly string[]): PdosDesignReaderInput {
 }
 
 function printUsage(): void {
-  console.log(`Usage:
-  npm run pdos:reader:capture -- --url https://example.com --output-dir output/playwright/product-design-os
-  npm run pdos:reader:capture -- --html-file product-design-os/reader/capture-sample.html --viewport desktop=1440x900 --viewport mobile=390x844`);
+  console.log(`Usage (vendored reader source; beta npm alias not wired):
+  npx tsx product-design-os/scripts/capture-design-reader.ts --url https://example.com --output-dir output/playwright/product-design-os
+  npx tsx product-design-os/scripts/capture-design-reader.ts --html-file product-design-os/reader/capture-sample.html --viewport desktop=1440x900 --viewport mobile=390x844`);
 }
 
 async function runCli(): Promise<void> {

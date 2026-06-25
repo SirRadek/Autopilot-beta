@@ -1,21 +1,23 @@
 # Design Reader And Visual QA
 
-Status: phase-2 local capture plus structured snapshot analyzer
+Status: wired structured snapshot analyzer plus vendored reader/VEM sources
 
-> ⚠️ **Beta wiring status (D4b, 2026-06-24):** in `autopilot-beta` only `pdos:visual-qa` is wired. The
-> `pdos:reader:capture` / `:element-map` / `:document` commands and the `capture-design-reader.ts` /
-> `capture-element-map.ts` scripts are **vendored from canonical but NOT yet wired here** — there is no
-> `@playwright/test` dependency, no `pdos:reader:*` npm script, and the files are not in `tsconfig`, so
-> those commands **do not run in beta yet**. They are planned to be legalized alongside the real
-> visual-QA / renderer work (see `docs/decisions/owner-decisions-brief.md` D4). Until then, treat the
-> reader commands below as **design intent, not a working path**.
+> **Beta wiring status (D4b, updated 2026-06-25):** in `autopilot-beta` only
+> `pdos:visual-qa` is wired. `@playwright/test` is now a devDependency for the
+> browser-gated visual-QA slice, but the `pdos:reader:capture` /
+> `:element-map` / `:document` commands and the `capture-design-reader.ts` /
+> `capture-element-map.ts` scripts are **vendored from canonical and NOT fully
+> wired here**. There are no `pdos:reader:*` npm scripts, the files are not in
+> `tsconfig`, and the VEM schema is not part of deterministic validation. Treat
+> the reader commands below as **design intent, not a working beta path** until
+> D4b legalization.
 
 ```powershell
 npm.cmd run pdos:visual-qa -- --file product-design-os/reader/visual-qa-sample.json --format markdown
-npm.cmd run pdos:reader:capture -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os   # NOT WIRED in beta
-npm.cmd run pdos:reader:element-map -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os   # NOT WIRED in beta
-npm.cmd run pdos:reader:document -- --check-only --supervisor-root C:\path\pdf-supervisor   # NOT WIRED in beta
 ```
+
+Not wired in beta: `pdos:reader:capture`, `pdos:reader:element-map`, and
+`pdos:reader:document`.
 
 The Visual QA analyzer accepts structured viewport evidence and produces a
 report for:
@@ -30,7 +32,8 @@ report for:
 - repeated card/template-risk signals
 - suggested actions for Design Critic review
 
-The Design Reader capture command uses local Playwright to:
+When legalized, the vendored Design Reader capture source is intended to use
+local Playwright to:
 
 - open a URL or local HTML file
 - capture desktop and mobile screenshots
@@ -40,19 +43,21 @@ The Design Reader capture command uses local Playwright to:
 
 It does not yet run OCR, compare screenshots, or mutate project files.
 
-The Visual Element Map capture command emits `element-map.json` with per-element
-passports and supports an offline `xy -> passport` resolver for human-pointed
-preview defects. Source binding is best-effort and falls back to
+The Visual Element Map source is present as vendored canonical work, but it is
+not a live beta layer yet. Its intended command emits `element-map.json` with
+per-element passports and supports an offline `xy -> passport` resolver for
+human-pointed preview defects. Source binding is best-effort and falls back to
 `sourceRef: "unknown"` when no local `data-*` source hints exist.
 
-The document-reader adapter can call the separate `pdf-supervisor` repository as
-a local external worker. It verifies runtime readiness, invokes
-`document_supervisor.cli`, and expects reviewable Markdown/JSON artifacts under
-`output/document-reader/`. See `pdf-supervisor-adapter.md`.
+The document-reader adapter is also vendored but not exposed through a beta npm
+script. Once wired, it can call the separate `pdf-supervisor` repository as a
+local external worker, verify runtime readiness, invoke `document_supervisor.cli`,
+and expect reviewable Markdown/JSON artifacts under `output/document-reader/`.
+See `pdf-supervisor-adapter.md`.
 
 Future modules should be added incrementally:
 
-- `capture-element-map.ts` (implemented VEM MVP)
+- `capture-element-map.ts` (vendored VEM MVP source; not wired in beta)
 - `run-ocr.ts`
 - `analyze-layout.ts`
 - `detect-template-risk.ts`

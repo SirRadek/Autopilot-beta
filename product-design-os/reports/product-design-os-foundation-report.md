@@ -103,11 +103,11 @@ direction needs its own:
 - Product & Design OS JSON parse check passed for 21 JSON files.
 - `npm.cmd run pdos:validate` now checks required files, recipes, manifests,
   taste memory, Markdown templates, and MCP entry terms.
-- `npm.cmd run pdos:route` now provides a local deterministic intake and
-  change-request route for project type, recipe, risk, gates, and stop
-  conditions.
-- `npm.cmd run pdos:report` now prints a console-only Markdown report covering
-  needs, scope, opposition, and implementation-lock checkpoints.
+- The route CLI source provides a local deterministic intake and change-request
+  route for project type, recipe, risk, gates, and stop conditions; the
+  `pdos:route` npm alias is pending beta package wiring.
+- The same route CLI can print a console-only Markdown report with `--report`;
+  the `pdos:report` npm alias is pending beta package wiring.
 - `npm.cmd run pdos:score` now scores recipes, registered patterns, and
   registered assets with the documented scoring formula.
 - Pattern and asset manifests now include first marketing/creative candidates
@@ -128,13 +128,10 @@ direction needs its own:
 - `npm.cmd run pdos:visual-qa` now provides the first deterministic Design
   Reader / Visual QA layer for structured viewport evidence, template-risk
   signals, reduced-motion checks, canvas-content risk, and layout issues.
-- `npm.cmd run pdos:reader:capture` now uses local Playwright to capture
-  screenshots, extract DOM/CSS evidence, write a reader snapshot, and generate
-  a Visual QA Markdown report for local HTML files or URLs.
-- `npm.cmd run pdos:reader:document` now provides a local external-worker
-  adapter for the separate `pdf-supervisor` Python project, including runtime
-  checks, source-preserving conversion invocation, and expected Markdown/JSON
-  artifact review.
+- The vendored Design Reader capture source is present, but no
+  `pdos:reader:capture` npm alias is wired in beta.
+- The vendored document-reader adapter source is present, but no
+  `pdos:reader:document` npm alias is wired in beta.
 - `git diff --check` passed.
 - `npm.cmd run typecheck` passed.
 - `npm.cmd run mesh:check` passed.

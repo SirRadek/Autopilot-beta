@@ -133,10 +133,12 @@ Gemini output was not treated as source-of-truth evidence.
 
 - Product & Design OS JSON parse check passed for 21 JSON files.
 - `npm.cmd run pdos:validate` passed.
-- `npm.cmd run pdos:route` is available for deterministic local intake and
-  change-request routing.
+- The route CLI source is available for deterministic local intake and
+  change-request routing; the `pdos:route` npm alias is pending beta package
+  wiring.
 - `route_product_design_os` is exposed through the local read-only MCP server.
-- `npm.cmd run pdos:report` is available for console-only Markdown reports.
+- The route CLI source can emit console-only Markdown reports with `--report`;
+  the `pdos:report` npm alias is pending beta package wiring.
 - `npm.cmd run pdos:score` and `score_product_design_os` are available for
   deterministic local scoring.
 - `npm.cmd audit --audit-level=moderate` passed with zero vulnerabilities.

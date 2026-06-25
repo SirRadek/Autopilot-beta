@@ -8,8 +8,10 @@ opponent. Other agents are advisory or bounded workers. No agent approves
 architecture, scope, security, business direction, or final delivery; the owner
 approves delivery.
 
-See `docs/autopilot/business-intelligence-operating-model.md` for the full role
-taxonomy and the capability-plus-data-privacy routing axis.
+The full canonical role taxonomy lives outside this beta checkout at
+`docs/autopilot/business-intelligence-operating-model.md` in the source
+Autopilot repository. Treat that path as external/canonical context unless the
+document is normalized into beta.
 
 ## Roles
 

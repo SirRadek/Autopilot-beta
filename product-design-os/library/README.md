@@ -19,8 +19,9 @@ evidence needed before a source can be used in commercial project work.
   code, icons, fonts, textures, models, or templates.
 - `reference-catalog.json`: websites and examples used for inspiration or
   competitive analysis.
-- `project-index.json`: generated index of known Autopilot project records under
-  `docs/projects/`.
+- `project-index.json`: generated index of known Autopilot project records.
+  In this beta checkout, canonical `docs/projects/` records may be absent; such
+  entries must be marked external/canonical-only until normalized into beta.
 - `templates/`: source, reference, and project entry templates.
 
 ## Rules
@@ -38,12 +39,15 @@ complete.
 
 ## Project Index
 
-Regenerate the local project index with:
+The project-index generator exists in source, but its npm alias is pending Opus
+package.json wiring. Until `pdos:library:projects` is added, regenerate the
+local project index with:
 
 ```powershell
-npm.cmd run pdos:library:projects
+npx.cmd tsx product-design-os/scripts/update-project-library.ts
 ```
 
-The index is intentionally based on `docs/projects/*` records, not remote
-connector state. Remote project data should be normalized into project records
-before it becomes part of this library.
+The index is intentionally based on beta-local `docs/projects/*` records when
+they exist, not remote connector state. Remote or canonical project data should
+be normalized into beta-local project records before it becomes a live local
+library entry.

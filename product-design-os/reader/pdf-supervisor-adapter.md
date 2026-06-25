@@ -1,11 +1,15 @@
 # PDF Supervisor Adapter
 
-Status: phase-1 external worker adapter
+Status: phase-1 external worker adapter, vendored but not beta-wired as an npm command
 
 The Product & Design OS can reuse the separate `SirRadek/pdf-supervisor`
 repository as a local document reader worker. The adapter does not copy that
 repository, install dependencies, mutate GitHub, or make `pdf-supervisor` a new
 Autopilot source of truth.
+
+In `autopilot-beta`, this adapter is not exposed through a `pdos:reader:document`
+npm script yet. The examples below use the direct TypeScript entrypoint for
+deliberate adapter testing until D4b legalization adds the npm command.
 
 ## Why External
 
@@ -28,7 +32,7 @@ Set the worker root with either an argument or environment variable:
 
 ```powershell
 $env:PDOS_PDF_SUPERVISOR_ROOT = "C:\path\pdf-supervisor"
-npm.cmd run pdos:reader:document -- --check-only
+npx.cmd tsx product-design-os/reader/document-reader-adapter.ts --check-only
 ```
 
 Optional Python override:
@@ -40,7 +44,7 @@ $env:PDOS_DOCUMENT_READER_PYTHON = "python"
 ## Runtime Check
 
 ```powershell
-npm.cmd run pdos:reader:document -- --check-only --supervisor-root C:\path\pdf-supervisor
+npx.cmd tsx product-design-os/reader/document-reader-adapter.ts --check-only --supervisor-root C:\path\pdf-supervisor
 ```
 
 The check verifies:
@@ -68,7 +72,7 @@ py -3.11 -m venv .codex-run\venvs\pdf-supervisor
 Then run the adapter with explicit local paths:
 
 ```powershell
-npm.cmd run pdos:reader:document -- `
+npx.cmd tsx product-design-os/reader/document-reader-adapter.ts -- `
   --check-only `
   --supervisor-root .codex-run\workers\pdf-supervisor `
   --python .codex-run\venvs\pdf-supervisor\Scripts\python.exe
@@ -80,7 +84,7 @@ copy the `pdf-supervisor` repository into Autopilot source.
 ## Conversion
 
 ```powershell
-npm.cmd run pdos:reader:document -- `
+npx.cmd tsx product-design-os/reader/document-reader-adapter.ts -- `
   --source C:\path\file.pdf `
   --output-dir output/document-reader/example `
   --supervisor-root C:\path\pdf-supervisor

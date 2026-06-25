@@ -758,11 +758,11 @@ function parseArgs(args: readonly string[]): {
 }
 
 function printUsage(): void {
-  console.log(`Usage:
-  npm run pdos:route -- --text "marketing site for leads"
-  npm run pdos:report -- --text "marketing site for leads"
-  npm run pdos:route -- --file product-design-os/briefs/example.json
-  npm run pdos:route -- --change "add 3d avatar to checkout" --context context.json`);
+  console.log(`Usage (beta npm aliases pending):
+  npx tsx product-design-os/scripts/route-product-design-os.ts --text "marketing site for leads"
+  npx tsx product-design-os/scripts/route-product-design-os.ts --report --text "marketing site for leads"
+  npx tsx product-design-os/scripts/route-product-design-os.ts --file product-design-os/briefs/example.json
+  npx tsx product-design-os/scripts/route-product-design-os.ts --change "add 3d avatar to checkout" --context context.json`);
 }
 
 function runCli(): void {

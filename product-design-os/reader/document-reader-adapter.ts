@@ -424,9 +424,9 @@ function parseArgs(argv: readonly string[]): PdosDocumentReaderInput {
 
 function usage(): string {
   return [
-    "Usage:",
-    "  npm run pdos:reader:document -- --check-only --supervisor-root C:\\path\\pdf-supervisor",
-    "  npm run pdos:reader:document -- --source C:\\path\\file.pdf --output-dir output/document-reader/example --supervisor-root C:\\path\\pdf-supervisor",
+    "Usage (vendored reader source; beta npm alias not wired):",
+    "  npx tsx product-design-os/reader/document-reader-adapter.ts --check-only --supervisor-root C:\\path\\pdf-supervisor",
+    "  npx tsx product-design-os/reader/document-reader-adapter.ts --source C:\\path\\file.pdf --output-dir output/document-reader/example --supervisor-root C:\\path\\pdf-supervisor",
     "",
     "Environment:",
     "  PDOS_PDF_SUPERVISOR_ROOT can provide the pdf-supervisor repository path.",

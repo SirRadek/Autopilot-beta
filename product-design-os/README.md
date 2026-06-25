@@ -35,22 +35,28 @@ Run the deterministic foundation check with:
 npm.cmd run pdos:validate
 ```
 
-Route a project intake or change request locally with:
+Run wired beta commands with:
 
 ```powershell
+npm.cmd run pdos:score -- --text "marketing website for leads with motion" --format markdown
+npm.cmd run pdos:visual-qa -- --file visual-snapshot.json --format markdown
+npm.cmd run pdos:evidence-freshness -- --now 2026-06-25
 npm.cmd run pdos:route -- --text "marketing website for leads with motion"
 npm.cmd run pdos:route -- --change "add 3d avatar to checkout"
 npm.cmd run pdos:report -- --text "marketing website for leads with motion"
-npm.cmd run pdos:score -- --text "marketing website for leads with motion" --format markdown
-npm.cmd run pdos:visual-qa -- --file visual-snapshot.json --format markdown
-npm.cmd run pdos:reader:capture -- --html-file product-design-os/reader/capture-sample.html --output-dir output/playwright/product-design-os   # NOT WIRED in beta (see reader/README.md)
-npm.cmd run pdos:reader:document -- --check-only --supervisor-root C:\path\pdf-supervisor   # NOT WIRED in beta
 npm.cmd run pdos:library:projects
 ```
 
-> ⚠️ `pdos:reader:*` are vendored-from-canonical but **not wired in beta** (no `@playwright/test` dep / npm
-> script / tsconfig entry). Planned for legalization with the visual-QA/renderer work — see
-> `reader/README.md` and `docs/decisions/owner-decisions-brief.md` (D4).
+The route/report (`route-product-design-os.ts`, `--report` flag) and
+project-library (`update-project-library.ts`) CLIs are now wired as the
+`pdos:route`, `pdos:report`, and `pdos:library:projects` npm aliases above.
+
+> `@playwright/test` is now a devDependency for the browser-gated visual-QA
+> slice. The `pdos:reader:*` commands are still vendored-from-canonical but
+> **not wired in beta**: no reader npm scripts, no tsconfig include, and no
+> deterministic validate coverage for the reader/VEM layer. Planned
+> legalization remains D4b; see `reader/README.md` and
+> `docs/decisions/owner-decisions-brief.md`.
 
 ## Process Gates
 
@@ -68,11 +74,11 @@ Mesh MCP tools: `select_capabilities`, `get_relevant_subgraph`,
 The local read-only MCP server also exposes `route_product_design_os` for the
 same intake/change-request routing and `score_product_design_os` for local
 recipe/pattern/asset scoring without writing files.
-The local Design Reader can capture screenshots and DOM/CSS evidence with
-Playwright, then feed structured viewport evidence into Visual QA. OCR and
-reference comparison remain later phases. The document-reader adapter can also
-invoke the separate `pdf-supervisor` Python worker for PDF/document conversion
-without copying that project into Autopilot.
+The wired Visual QA analyzer consumes structured viewport evidence. The vendored
+Design Reader, Visual Element Map, and document-reader sources are not a
+supported beta command surface yet; when legalized, they will capture
+screenshots, DOM/CSS evidence, element passports, and PDF/document artifacts
+without copying external workers into Autopilot.
 For design/technology claims, prefer Context7 when connected; otherwise record
 the official-docs fallback.
 For creative visual directions, use `rules/theme-crossing.md` to combine mood
@@ -88,8 +94,11 @@ license evidence, fallbacks, and QA.
 
 ## Integration Boundary
 
-- Existing root `mesh/` remains Autopilot's operational mesh.
-- Project-specific meshes remain under `docs/projects/<project-slug>/decision-mesh/`.
+- This beta checkout does not include canonical root `mesh/` or
+  `docs/projects/...` trees. References to those paths are external/canonical
+  context unless normalized into beta-local project records.
+- In the canonical Autopilot checkout, project-specific meshes remain under
+  `docs/projects/<project-slug>/decision-mesh/`.
 - `product-design-os/` provides templates and registries that those meshes and
   project records may reference.
 - `product-design-os/library/` stores reusable source reviews, reference records,

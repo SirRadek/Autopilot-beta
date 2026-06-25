@@ -67,27 +67,30 @@ creative axis. "default-OFF pending eval" really means "pending an owner call th
 ## D4 — QA gating + the orphaned reader (codex's #1, two linked calls)
 **Q4a:** Do buildability / a11y / perf / visual-QA stay report-only, or BLOCK release where they should?
 **Q4b:** The Playwright reader (`capture-design-reader.ts`/`capture-element-map.ts`) is **verified orphaned**
-(imports `@playwright/test` not in deps; no `pdos:reader:*` scripts; not in tsconfig) yet docs present it as
-working = **false-green**. Legalize, or quarantine?
+as a beta command surface: `@playwright/test` is now present as a devDependency for browser-gated visual-QA,
+but there are still no `pdos:reader:*` scripts, no tsconfig include, and no deterministic validation path for
+the reader/VEM layer. Docs must not present it as working = **false-green**. Legalize, or quarantine?
 **Rec (4a):** Once a real renderer produces real artifacts, the **objective** axes (axe-core, Lighthouse
 budget, structural buildability) become **BLOCKING** in `verify`/release; **on-brand stays advisory**. Until
 the renderer exists there's nothing real to gate → stay report-only.
 **Rec (4b):** Two steps. **NOW (cheap, no renderer):** kill the false-green — mark the reader docs "planned,
 not wired" so `verify`-green stops implying a working reader. **THEN:** LEGALIZE it (Playwright is exactly
-the adopt-for-substrate pick for real visual-QA) — add `@playwright/test`, the `pdos:reader:*` scripts, the
-tsconfig include, wire into the real visual-QA. This converts the mock `analyzeProductDesignVisualQa` into a
-real DOM probe.
+the adopt-for-substrate pick for real visual-QA) — keep the Playwright devDependency, add the
+`pdos:reader:*` scripts and tsconfig include, and wire the reader/VEM layer into the real visual-QA. This
+converts the mock `analyzeProductDesignVisualQa` into a real DOM probe.
 **Depends:** 4b-now is independent (do immediately); 4a + 4b-legalize depend on D1. Effort: low (now) / med.
 
 ## D5 — Make governance enforceable (evidence schema + TTL) — codex
 **Q:** Rules mandate Context7/license/clean-room, but "verified" is satisfiable by free text. Add an
-evidence schema + source-freshness TTL, gated in `verify`?
+evidence schema plus a source-freshness TTL gate?
 **Fork:** Text-trust is cheap but means the governance is aspiration, not a gate — for a system whose pitch
 is "model output advisory until verified," that's a hole.
 **Rec:** **Yes — add it.** A small `evidence.schema.json` (`{ library, version, query, source, date,
-covered_claim, fallback }`) + a `source_freshness_ttl`, validated in `verify`; SPDX license normalization
-(esp. `CC0-1.0`) + per-asset adoption evidence (URL/path/license). This is the difference between
-governance-as-doc and governance-as-gate, and it's cheap.
+covered_claim, fallback }`) plus `freshness_ttl_days`; SPDX license normalization (esp. `CC0-1.0`) +
+per-asset adoption evidence (URL/path/license). Shape and referential integrity belong in deterministic
+validation/verify. Time-aware stale-evidence failure belongs in the separate real-project CI command
+`pdos:evidence-freshness -- --now YYYY-MM-DD --fail-on-stale`, intentionally outside deterministic beta
+`verify` because committed example evidence ages out and TTL is capped.
 **Depends:** none — do early. Effort: low / high trust-value.
 
 ## D6 — Validator: keep the homemade subset, or adopt Ajv — codex (REVISED after reading the code)
