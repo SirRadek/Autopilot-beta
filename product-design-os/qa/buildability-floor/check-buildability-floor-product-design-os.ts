@@ -1,6 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -99,63 +98,49 @@ export function analyzeBuildabilityFloor(
   input: PdosBuildabilityFloorInput,
   repoRoot = process.cwd()
 ): PdosBuildabilityFloorReport {
-  const tempRoot = input.specPaths !== undefined && input.specPaths.length > 0
-    ? mkdtempSync(join(tmpdir(), "pdos-f6-buildability-"))
-    : undefined;
+  const specSources = (input.specPaths ?? []).map((specPath) => createSpecSource(specPath, repoRoot));
+  const targetSources = (input.targetPaths ?? []).map((targetPath) => createTargetSource(targetPath, repoRoot));
+  const sources = [...specSources, ...targetSources];
+  const targetPaths = sources.map((source) => source.path);
+  const renderabilityInput: {
+    contractManifestPath?: string;
+    targetPaths: readonly string[];
+  } = { targetPaths };
 
-  try {
-    const specSources = (input.specPaths ?? []).map((specPath, index) =>
-      createSpecSource(specPath, index, repoRoot, tempRoot)
-    );
-    const targetSources = (input.targetPaths ?? []).map((targetPath) =>
-      createTargetSource(targetPath, repoRoot)
-    );
-    const sources = [...specSources, ...targetSources];
-    const targetPaths = sources.map((source) => source.path);
-    const renderabilityInput: {
-      contractManifestPath?: string;
-      targetPaths: readonly string[];
-    } = { targetPaths };
+  if (input.contractManifestPath !== undefined) {
+    renderabilityInput.contractManifestPath = input.contractManifestPath;
+  }
 
-    if (input.contractManifestPath !== undefined) {
-      renderabilityInput.contractManifestPath = input.contractManifestPath;
+  const renderabilityReport = analyzeProductDesignRenderability(renderabilityInput, repoRoot);
+  const patternManifest = loadPatternManifest(repoRoot);
+  const contracts = loadPatternContracts(repoRoot, input.contractManifestPath ?? DEFAULT_CONTRACT_MANIFEST);
+
+  const compositions = sources.map((source, index) => {
+    const renderabilityComposition = renderabilityReport.compositions[index];
+    if (renderabilityComposition === undefined) {
+      throw new Error(`Missing renderability result for ${source.path}.`);
     }
 
-    const renderabilityReport = analyzeProductDesignRenderability(renderabilityInput, repoRoot);
-    const patternManifest = loadPatternManifest(repoRoot);
-    const contracts = loadPatternContracts(repoRoot, input.contractManifestPath ?? DEFAULT_CONTRACT_MANIFEST);
-
-    const compositions = sources.map((source, index) => {
-      const renderabilityComposition = renderabilityReport.compositions[index];
-      if (renderabilityComposition === undefined) {
-        throw new Error(`Missing renderability result for ${source.path}.`);
-      }
-
-      const structuralNonBuildable = renderabilityComposition.non_buildable.filter(
-        (issue) => issue.code !== VISUAL_QA_RENDERABILITY_CODE
-      );
-      const taxonomyFloor = analyzeTaxonomyFloor(source.value, patternManifest, contracts);
-      const visualQa = analyzeVisualQaAxis(source.value);
-
-      return {
-        id: renderabilityComposition.id,
-        build_floor_passed: structuralNonBuildable.length === 0 && taxonomyFloor.length === 0,
-        structural_non_buildable: structuralNonBuildable,
-        taxonomy_floor: taxonomyFloor,
-        visual_qa: visualQa
-      };
-    });
+    const structuralNonBuildable = renderabilityComposition.non_buildable.filter(
+      (issue) => issue.code !== VISUAL_QA_RENDERABILITY_CODE
+    );
+    const taxonomyFloor = analyzeTaxonomyFloor(source.value, patternManifest, contracts);
+    const visualQa = analyzeVisualQaAxis(source.value);
 
     return {
-      ok: compositions.every((composition) => composition.build_floor_passed),
-      compositions,
-      summary: summarizeCompositions(compositions)
+      id: renderabilityComposition.id,
+      build_floor_passed: structuralNonBuildable.length === 0 && taxonomyFloor.length === 0,
+      structural_non_buildable: structuralNonBuildable,
+      taxonomy_floor: taxonomyFloor,
+      visual_qa: visualQa
     };
-  } finally {
-    if (tempRoot !== undefined) {
-      rmSync(tempRoot, { recursive: true, force: true });
-    }
-  }
+  });
+
+  return {
+    ok: compositions.every((composition) => composition.build_floor_passed),
+    compositions,
+    summary: summarizeCompositions(compositions)
+  };
 }
 
 export function formatBuildabilityFloorReport(
@@ -188,19 +173,12 @@ export function formatBuildabilityFloorReport(
 
 function createSpecSource(
   specPath: string,
-  index: number,
-  repoRoot: string,
-  tempRoot: string | undefined
+  repoRoot: string
 ): CompositionSource {
-  if (tempRoot === undefined) {
-    throw new Error("Internal error: temp root missing for composition spec normalization.");
-  }
-
-  const specValue = readJson(resolveRepoPath(repoRoot, specPath));
-  const targetValue = toF3CompositionTarget(specValue);
-  const tempTargetPath = join(tempRoot, `${String(index).padStart(3, "0")}-${safeTempBasename(specPath)}`);
-  writeFileSync(tempTargetPath, `${JSON.stringify(targetValue, null, 2)}\n`);
-  return { path: tempTargetPath, value: specValue };
+  return {
+    path: specPath,
+    value: readJson(resolveRepoPath(repoRoot, specPath))
+  };
 }
 
 function createTargetSource(targetPath: string, repoRoot: string): CompositionSource {
@@ -209,27 +187,6 @@ function createTargetSource(targetPath: string, repoRoot: string): CompositionSo
     path: targetPath,
     value: readJson(resolvedPath)
   };
-}
-
-function toF3CompositionTarget(value: unknown): unknown {
-  if (!isRecord(value)) {
-    return value;
-  }
-
-  const target = cloneJsonRecord(value);
-  delete target.spec_kind;
-  delete target.evidence;
-  delete target.token_overrides;
-
-  for (const section of getRecordArray(target.sections)) {
-    delete section.evidence_ids;
-  }
-
-  for (const node of getRecordArray(target.nodes)) {
-    delete node.evidence_ids;
-  }
-
-  return target;
 }
 
 function analyzeTaxonomyFloor(
@@ -463,15 +420,6 @@ function resolveRepoPath(repoRoot: string, path: string): string {
 
 function contractKey(targetKind: PdosTargetKind, targetId: string): string {
   return `${targetKind}:${targetId}`;
-}
-
-function safeTempBasename(file: string): string {
-  const name = basename(file).replace(/[^A-Za-z0-9.-]/g, "_");
-  return name.endsWith(".json") ? name : `${name}.json`;
-}
-
-function cloneJsonRecord(value: Record<string, unknown>): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
 }
 
 function isHardBuildabilityCode(code: string): code is PatternRequirementCode {

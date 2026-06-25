@@ -15,6 +15,7 @@ import {
 
 const repoRoot = process.cwd();
 const buildableSpecPath = "product-design-os/specs/examples/buildable-marketing.composition.json";
+const zednikSpecPath = "product-design-os/specs/examples/zednik.composition.json";
 const nonbuildableTargetPath = "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json";
 const patternManifestFile = join(repoRoot, "product-design-os", "patterns", "pattern-manifest.json");
 const patternSchemaFile = join(repoRoot, "product-design-os", "patterns", "pattern.schema.json");
@@ -45,6 +46,20 @@ function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
 
 function writeJson(file: string, value: unknown): void {
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function replaceProofAssetFills(spec: Record<string, unknown>, fills: readonly unknown[]): void {
+  const proofNode = getRecordArray(spec.nodes).find((node) => node.node_id === "proof-section" || node.node_id === "proof");
+  if (proofNode === undefined) {
+    throw new Error("Missing proof node.");
+  }
+
+  const proofAssetSlot = getRecordArray(proofNode.slot_fills).find((slotFill) => slotFill.slot === "proof_asset");
+  if (proofAssetSlot === undefined) {
+    throw new Error("Missing proof_asset slot fill.");
+  }
+
+  proofAssetSlot.fills = [...fills];
 }
 
 function getRecordProperty(value: Record<string, unknown>, key: string): Record<string, unknown> {
@@ -84,6 +99,17 @@ describe("Product Design OS F6 buildability floor", () => {
     expect(composition.taxonomy_floor).toEqual([]);
   });
 
+  it("passes inline content slot fills in the committed zednik composition", () => {
+    const report = analyzeBuildabilityFloor({ specPaths: [zednikSpecPath] }, repoRoot);
+    const composition = byId(report, "zednik");
+    const structuralCodes = composition.structural_non_buildable.map((issue) => issue.code);
+
+    expect(report.ok).toBe(true);
+    expect(composition.build_floor_passed).toBe(true);
+    expect(structuralCodes).not.toContain("SLOT_MISSING");
+    expect(composition.taxonomy_floor).toEqual([]);
+  });
+
   it("fails the F3 nonbuildable motion target on structural buildability errors", () => {
     const report = analyzeBuildabilityFloor({ targetPaths: [nonbuildableTargetPath] }, repoRoot);
     const composition = byId(report, "nonbuildable-motion");
@@ -93,6 +119,27 @@ describe("Product Design OS F6 buildability floor", () => {
     expect(composition.build_floor_passed).toBe(false);
     expect(structuralCodes).toEqual(new Set(["CONTRACT_MISSING", "SLOT_MISSING", "INVARIANT_UNDECLARED"]));
     expect(structuralCodes.has("VISUAL_QA_ERROR")).toBe(false);
+  });
+
+  it("fails a required slot fill with neither target_id nor inline content", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "pdos-f6-slot-"));
+    const tempSpec = join(tempRoot, "missing-proof-asset.composition.json");
+
+    try {
+      const spec = cloneRecord(readJsonRecord(join(repoRoot, buildableSpecPath)));
+      replaceProofAssetFills(spec, [{ target_kind: "asset" }]);
+      writeJson(tempSpec, spec);
+
+      const report = analyzeBuildabilityFloor({ specPaths: [tempSpec] }, repoRoot);
+      const composition = byId(report, "buildable-marketing");
+      const structuralCodes = composition.structural_non_buildable.map((issue) => issue.code);
+
+      expect(report.ok).toBe(false);
+      expect(composition.build_floor_passed).toBe(false);
+      expect(structuralCodes).toContain("SLOT_MISSING");
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("keeps visual QA independent from the buildability floor verdict", () => {

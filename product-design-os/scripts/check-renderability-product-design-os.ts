@@ -3,6 +3,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validateJsonSchema } from "../../src/lib/delivery-system/validation";
+import { isSafeHref } from "../renderer/safe-url";
 import { analyzeProductDesignVisualQa } from "./visual-qa-product-design-os";
 import type { PdosVisualQaInput, PdosVisualQaReport } from "./visual-qa-product-design-os";
 
@@ -150,7 +151,17 @@ interface CompositionSlotFill {
 
 interface CompositionSlotFillItem {
   readonly target_kind: PdosTargetKind;
-  readonly target_id: string;
+  readonly target_id?: string;
+  readonly content?: CompositionInlineContent;
+}
+
+interface CompositionInlineContent {
+  readonly href?: string;
+  readonly alt?: string;
+  readonly license?: string;
+  readonly source_url?: string;
+  readonly inline_svg?: string;
+  readonly asset_type?: string;
 }
 
 interface RecipeRegistryEntry {
@@ -194,6 +205,7 @@ type TypedValueField = "string_value" | "number_value" | "integer_value" | "bool
 const DEFAULT_CONTRACT_MANIFEST = "product-design-os/contracts/component-contract-manifest.json";
 const COMPONENT_CONTRACT_SCHEMA = "product-design-os/contracts/component-contract.schema.json";
 const COMPOSITION_TARGET_SCHEMA = "product-design-os/composition/composition-target.schema.json";
+const COMPOSITION_SPEC_SCHEMA = "product-design-os/specs/composition.schema.json";
 const VALUE_FIELDS: readonly TypedValueField[] = [
   "string_value",
   "number_value",
@@ -209,6 +221,7 @@ export function analyzeProductDesignRenderability(
   const checkedFiles = new Set<string>();
   const componentContractSchema = readJsonChecked(resolveRepoPath(repoRoot, COMPONENT_CONTRACT_SCHEMA), repoRoot, checkedFiles);
   const compositionTargetSchema = readJsonChecked(resolveRepoPath(repoRoot, COMPOSITION_TARGET_SCHEMA), repoRoot, checkedFiles);
+  const compositionSpecSchema = readJsonChecked(resolveRepoPath(repoRoot, COMPOSITION_SPEC_SCHEMA), repoRoot, checkedFiles);
   const registries = loadRegistries(repoRoot, checkedFiles);
   const contractContext = loadContractContext(
     resolveRepoPath(repoRoot, input.contractManifestPath ?? DEFAULT_CONTRACT_MANIFEST),
@@ -223,6 +236,7 @@ export function analyzeProductDesignRenderability(
       repoRoot,
       checkedFiles,
       compositionTargetSchema,
+      compositionSpecSchema,
       registries,
       contracts: contractContext.contracts,
       globalIssues: contractContext.issues
@@ -270,16 +284,18 @@ function analyzeCompositionTarget(input: {
   readonly repoRoot: string;
   readonly checkedFiles: Set<string>;
   readonly compositionTargetSchema: unknown;
+  readonly compositionSpecSchema: unknown;
   readonly registries: PdosRegistries;
   readonly contracts: ReadonlyMap<string, ComponentContract>;
   readonly globalIssues: readonly PdosRenderabilityIssue[];
 }): PdosRenderabilityCompositionReport {
-  const targetValue = readJsonChecked(input.file, input.repoRoot, input.checkedFiles);
+  const sourceValue = readJsonChecked(input.file, input.repoRoot, input.checkedFiles);
+  const targetValue = toF3CompositionTarget(sourceValue);
   const nonBuildable: PdosRenderabilityIssue[] = [...input.globalIssues];
   const warnings: PdosRenderabilityIssue[] = [];
-  const targetId = isRecord(targetValue) && typeof targetValue.id === "string" ? targetValue.id : basename(input.file, ".json");
+  const targetId = isRecord(sourceValue) && typeof sourceValue.id === "string" ? sourceValue.id : basename(input.file, ".json");
 
-  if (!isRecord(targetValue)) {
+  if (!isRecord(sourceValue)) {
     addIssue(nonBuildable, "SCHEMA_INVALID", "error", "Composition target must be a JSON object.");
     return {
       id: targetId,
@@ -289,7 +305,9 @@ function analyzeCompositionTarget(input: {
     };
   }
 
-  for (const issue of validateJsonSchema(targetValue, input.compositionTargetSchema)) {
+  const schema = isCompositionSpec(sourceValue) ? input.compositionSpecSchema : input.compositionTargetSchema;
+  const schemaValue = isCompositionSpec(sourceValue) ? sourceValue : targetValue;
+  for (const issue of validateJsonSchema(schemaValue, schema)) {
     addIssue(nonBuildable, "SCHEMA_INVALID", "error", `${issue.path}: ${issue.message}`);
   }
 
@@ -592,6 +610,14 @@ function validateNodeSlots(
 
     for (const fill of fillItems) {
       validateSlotFill(slot, fill, node, contract, registries, issues);
+      if (isInlineContentSlotFill(fill)) {
+        continue;
+      }
+
+      if (fill.target_id === undefined) {
+        continue;
+      }
+
       const key = contractKey(fill.target_kind, fill.target_id);
       if (!contracts.has(key)) {
         addIssue(issues, "CONTRACT_MISSING", "error", `Missing contract for slot fill ${fill.target_kind}:${fill.target_id}.`, {
@@ -625,6 +651,16 @@ function validateSlotFill(
   }
 
   if (fill.target_kind === "asset") {
+    if (fill.content !== undefined) {
+      validateInlineContentSlotFill(slot, fill, context, issues);
+      return;
+    }
+
+    if (fill.target_id === undefined) {
+      addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} asset fill requires target_id or content.`, context);
+      return;
+    }
+
     const asset = registries.assets.get(fill.target_id);
     if (slot.allowed_asset_ids !== undefined && !slot.allowed_asset_ids.includes(fill.target_id)) {
       addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} does not allow asset ${fill.target_id}.`, context);
@@ -639,6 +675,11 @@ function validateSlotFill(
       );
     }
   } else {
+    if (fill.target_id === undefined) {
+      addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} pattern fill requires target_id.`, context);
+      return;
+    }
+
     const pattern = registries.patterns.get(fill.target_id);
     if (slot.allowed_pattern_ids !== undefined && !slot.allowed_pattern_ids.includes(fill.target_id)) {
       addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} does not allow pattern ${fill.target_id}.`, context);
@@ -652,6 +693,37 @@ function validateSlotFill(
         context
       );
     }
+  }
+}
+
+function validateInlineContentSlotFill(
+  slot: ComponentContractSlot,
+  fill: CompositionSlotFillItem,
+  context: IssueContext,
+  issues: PdosRenderabilityIssue[]
+): void {
+  if (!hasUsableInlineContent(fill.content)) {
+    addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} inline asset content requires href or inline_svg.`, context);
+    return;
+  }
+
+  const href = optionalTrimmedString(fill.content.href);
+  if (href !== undefined) {
+    if (!isSafeHref(href)) {
+      addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} inline asset href is not safe.`, context);
+    } else if (!isRasterImageHref(href)) {
+      addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} inline asset href must point to a raster image.`, context);
+    }
+  }
+
+  const sourceUrl = optionalTrimmedString(fill.content.source_url);
+  if (sourceUrl !== undefined && !isSafeHref(sourceUrl)) {
+    addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} inline asset source_url is not safe.`, context);
+  }
+
+  const assetType = inlineAssetTypeForSlot(fill.content, slot);
+  if (slot.accepts_asset_types !== undefined && !slot.accepts_asset_types.includes(assetType)) {
+    addIssue(issues, "SLOT_FILL_INVALID", "error", `Slot ${slot.name} does not accept inline asset type ${assetType}.`, context);
   }
 }
 
@@ -856,6 +928,27 @@ function readJsonChecked(file: string, repoRoot: string, checkedFiles: Set<strin
   return JSON.parse(readFileSync(file, "utf8")) as unknown;
 }
 
+export function toF3CompositionTarget(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const target = cloneJsonRecord(value);
+  delete target.spec_kind;
+  delete target.evidence;
+  delete target.token_overrides;
+
+  for (const section of getRecordArray(target, "sections")) {
+    delete section.evidence_ids;
+  }
+
+  for (const node of getRecordArray(target, "nodes")) {
+    delete node.evidence_ids;
+  }
+
+  return target;
+}
+
 function resolveRepoPath(repoRoot: string, path: string): string {
   return resolve(repoRoot, path);
 }
@@ -915,6 +1008,15 @@ function issueContextFromUnknownTarget(value: unknown): IssueContext {
   }
 
   return context;
+}
+
+function inlineAssetTypeForSlot(content: CompositionInlineContent, slot: ComponentContractSlot): string {
+  const explicitType = optionalTrimmedString(content.asset_type);
+  if (explicitType !== undefined) {
+    return explicitType;
+  }
+
+  return slot.accepts_asset_types?.length === 1 ? slot.accepts_asset_types[0] ?? "inline-content" : "inline-content";
 }
 
 function typedFieldForValueType(valueType: ContractPropValueType): TypedValueField {
@@ -1025,6 +1127,10 @@ function isCompositionTarget(value: unknown): value is CompositionTarget {
   );
 }
 
+function isCompositionSpec(value: unknown): boolean {
+  return isRecord(value) && value.spec_kind === "composition_spec";
+}
+
 function isCompositionSection(value: unknown): value is CompositionSection {
   return isRecord(value) && typeof value.section_id === "string" && typeof value.role === "string";
 }
@@ -1050,7 +1156,15 @@ function isCompositionSlotFill(value: unknown): value is CompositionSlotFill {
 }
 
 function isCompositionSlotFillItem(value: unknown): value is CompositionSlotFillItem {
-  return isRecord(value) && isTargetKind(value.target_kind) && typeof value.target_id === "string";
+  if (!isRecord(value) || !isTargetKind(value.target_kind)) {
+    return false;
+  }
+
+  if (optionalTrimmedString(value.target_id) !== undefined) {
+    return true;
+  }
+
+  return value.target_kind === "asset" && hasUsableInlineContent(value.content);
 }
 
 function isVisualQaInput(value: unknown): value is PdosVisualQaInput {
@@ -1071,6 +1185,34 @@ function getStringArray(value: unknown): readonly string[] {
   }
 
   return value.filter((item) => typeof item === "string");
+}
+
+function cloneJsonRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function isInlineContentSlotFill(fill: CompositionSlotFillItem): boolean {
+  return fill.target_kind === "asset" && fill.content !== undefined;
+}
+
+function hasUsableInlineContent(value: unknown): value is CompositionInlineContent {
+  return (
+    isRecord(value) &&
+    (optionalTrimmedString(value.href) !== undefined || optionalTrimmedString(value.inline_svg) !== undefined)
+  );
+}
+
+function optionalTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function isRasterImageHref(href: string): boolean {
+  return /\.(?:png|jpe?g|webp|gif|avif)(?:[?#].*)?$/i.test(href);
 }
 
 function hasOwn(value: object, key: string): boolean {
