@@ -1,5 +1,17 @@
 import type { ReasoningProviderId } from "./modelPolicy";
 import type { SubscriptionSessionBudget } from "./subscriptionBudget";
+import {
+  DEFAULT_TIER_CIRCUIT_BREAKER_THRESHOLDS,
+  computeTierCircuitState,
+  isActiveTierExplicitlyUnverified,
+  isFallbackTierLocallyConfirmed,
+  isSelfFallbackRoute,
+  isTierCircuitOpen,
+  isVerifiedTierExhaustedOrOpen,
+  type TierCircuitBreakerThresholds,
+  type TierCircuitState,
+  type TierFailureSignalRecord
+} from "./routingGuards";
 
 export type FallbackTrigger =
   | "rate_limited"
@@ -17,6 +29,14 @@ export interface FallbackChainStep {
   readonly condition: string;
   readonly requiresCheckpoint: boolean;
   readonly requiresOwnerApproval: boolean;
+}
+
+export interface ResolveFallbackOptions {
+  readonly fallbackChain?: readonly FallbackChainStep[];
+  readonly budgets?: readonly SubscriptionSessionBudget[];
+  readonly recentFailureSignals?: readonly TierFailureSignalRecord[];
+  readonly circuitBreakerThresholds?: TierCircuitBreakerThresholds;
+  readonly now?: string | Date;
 }
 
 export const subscriptionFallbackChains: readonly FallbackChainStep[] = [
@@ -75,15 +95,20 @@ export const subscriptionFallbackChains: readonly FallbackChainStep[] = [
 export function resolveFallback(
   trigger: FallbackTrigger,
   fromProvider: ReasoningProviderId,
-  budget: SubscriptionSessionBudget
+  budget: SubscriptionSessionBudget,
+  options: ResolveFallbackOptions = {}
 ): FallbackChainStep | undefined {
-  if (fromProvider === "gemini_cli" && allTiersExhausted(budget)) {
-    return subscriptionFallbackChains.find(
+  const fallbackChain = options.fallbackChain ?? subscriptionFallbackChains;
+  const budgets = options.budgets ?? [budget];
+  const circuitStates = resolveCircuitStates(options);
+
+  if (fromProvider === "gemini_cli" && allVerifiedTiersExhaustedOrOpen(budget, circuitStates)) {
+    return fallbackChain.find(
       (step) => step.fromProvider === "gemini_cli" && step.trigger === "all_tiers_exhausted"
-    );
+    ) ?? buildBlockedFallbackStep(trigger, fromProvider, budget.activeTierId, "All verified Gemini tiers are exhausted or circuit-open; pause only.");
   }
 
-  return subscriptionFallbackChains.find((step) => {
+  const matchingSteps = fallbackChain.filter((step) => {
     if (step.trigger !== trigger || step.fromProvider !== fromProvider) {
       return false;
     }
@@ -92,17 +117,111 @@ export function resolveFallback(
       return false;
     }
 
-    if (step.toProvider === "gemini_cli" && step.toTierId && budget.exhaustedTierIds.includes(step.toTierId)) {
-      return false;
-    }
-
     return true;
   });
+
+  const validStep = matchingSteps.find((step) => isValidFallbackStep(step, budget, budgets, circuitStates));
+  if (validStep) {
+    return validStep;
+  }
+
+  if (matchingSteps.length > 0) {
+    return buildBlockedFallbackStep(
+      trigger,
+      fromProvider,
+      budget.activeTierId,
+      "No valid fallback candidate remains after self-route, verified-tier, and circuit-breaker guards."
+    );
+  }
+
+  return undefined;
 }
 
-function allTiersExhausted(budget: SubscriptionSessionBudget): boolean {
+function isValidFallbackStep(
+  step: FallbackChainStep,
+  budget: SubscriptionSessionBudget,
+  budgets: readonly SubscriptionSessionBudget[],
+  circuitStates: readonly TierCircuitState[]
+): boolean {
+  if (
+    isSelfFallbackRoute({
+      fromProvider: step.fromProvider,
+      fromTierId: step.fromTierId ?? budget.activeTierId,
+      toProvider: step.toProvider,
+      toTierId: step.toTierId
+    })
+  ) {
+    return false;
+  }
+
+  if (!isFallbackTierLocallyConfirmed({ toProvider: step.toProvider, toTierId: step.toTierId, budgets })) {
+    return false;
+  }
+
+  if (step.toProvider === "owner_decision" || step.toProvider === "blocked") {
+    return true;
+  }
+
+  const targetBudget = budgets.find((candidate) => candidate.provider === step.toProvider);
+  if (targetBudget && isActiveTierExplicitlyUnverified(targetBudget)) {
+    return false;
+  }
+
+  const targetTierId = step.toTierId ?? targetBudget?.activeTierId;
+  if (isTierCircuitOpen(circuitStates, step.toProvider, targetTierId)) {
+    return false;
+  }
+
+  if (targetBudget && targetTierId && targetBudget.exhaustedTierIds.includes(targetTierId)) {
+    return false;
+  }
+
+  return true;
+}
+
+function allVerifiedTiersExhaustedOrOpen(
+  budget: SubscriptionSessionBudget,
+  circuitStates: readonly TierCircuitState[]
+): boolean {
+  const verifiedTiers = budget.availableTiers.filter((tier) => tier.verifiedLocally);
+
   return (
-    budget.availableTiers.length > 0 &&
-    budget.availableTiers.every((tier) => budget.exhaustedTierIds.includes(tier.tierId))
+    verifiedTiers.length > 0 &&
+    verifiedTiers.every((tier) => isVerifiedTierExhaustedOrOpen(budget, tier.tierId, circuitStates))
   );
+}
+
+function resolveCircuitStates(options: ResolveFallbackOptions): readonly TierCircuitState[] {
+  const recentFailureSignals = options.recentFailureSignals ?? [];
+  if (recentFailureSignals.length === 0) {
+    return [];
+  }
+
+  if (options.now === undefined) {
+    throw new Error("routing_circuit_now_required: pass an injected now when recentFailureSignals are provided");
+  }
+
+  return computeTierCircuitState(
+    recentFailureSignals,
+    options.circuitBreakerThresholds ?? DEFAULT_TIER_CIRCUIT_BREAKER_THRESHOLDS,
+    options.now
+  );
+}
+
+function buildBlockedFallbackStep(
+  trigger: FallbackTrigger,
+  fromProvider: ReasoningProviderId,
+  fromTierId: string | undefined,
+  condition: string
+): FallbackChainStep {
+  return {
+    trigger,
+    fromProvider,
+    fromTierId,
+    toProvider: "blocked",
+    toTierId: undefined,
+    condition,
+    requiresCheckpoint: true,
+    requiresOwnerApproval: false
+  };
 }

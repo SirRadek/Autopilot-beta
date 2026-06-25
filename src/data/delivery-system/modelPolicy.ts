@@ -12,6 +12,16 @@ import {
   selectTokenEfficiencyRoute
 } from "./tokenEfficiency";
 import { resolveFallback } from "./fallbackChains";
+import {
+  DEFAULT_TIER_CIRCUIT_BREAKER_THRESHOLDS,
+  computeTierCircuitState,
+  isActiveTierExplicitlyUnverified,
+  isSelfFallbackRoute,
+  isTierCircuitOpen,
+  type TierCircuitBreakerThresholds,
+  type TierCircuitState,
+  type TierFailureSignalRecord
+} from "./routingGuards";
 
 export type ModelPolicyLayer =
   | "orchestrator"
@@ -113,6 +123,14 @@ export interface SupervisorRoutingDecision {
   readonly fallbackProvider: ReasoningProviderId | "owner_decision" | "blocked";
   readonly learningSignal: SupervisorLearningSignal | undefined;
   readonly decisionReasoning: string;
+}
+
+export type RoutingAuthorityRole = "advisory" | "source_of_truth" | "authoritative";
+
+export interface RoleConstrainedRoutingDecision {
+  readonly assignedProvider: ReasoningProviderId;
+  readonly advisoryTrustTier?: AdvisoryTrustTier;
+  readonly authorityRole: RoutingAuthorityRole;
 }
 
 export interface CredentialedAdvisoryProviderPolicy {
@@ -780,6 +798,9 @@ export function buildSupervisorRoutingDecision(input: {
   readonly layer: ModelPolicyLayer;
   readonly budgets: readonly SubscriptionSessionBudget[];
   readonly evalRecords: readonly EvalRecordSummary[];
+  readonly recentFailureSignals?: readonly TierFailureSignalRecord[];
+  readonly circuitBreakerThresholds?: TierCircuitBreakerThresholds;
+  readonly now?: string | Date;
 }): SupervisorRoutingDecision {
   const tokenEfficiencyRoute = selectTokenEfficiencyRoute({ task: input.taskDescription });
   const contextWidthSpec = selectContextWidth(tokenEfficiencyRoute.profile, [
@@ -790,17 +811,35 @@ export function buildSupervisorRoutingDecision(input: {
   const providerStatuses = Object.fromEntries(
     input.budgets.map((budget) => [budget.provider, budget.activeTierRateLimitState])
   ) as Readonly<Record<string, SubscriptionRateLimitState>>;
-  const assignedProvider = selectModelForLayer(input.layer, providerStatuses);
+  const preferredAssignedProvider = selectModelForLayer(input.layer, providerStatuses);
+  const circuitStates = resolveRoutingCircuitStates(input);
+  const assignedProvider =
+    selectHardAllowedProvider(preferredAssignedProvider, taskLane, input.budgets, circuitStates) ??
+    preferredAssignedProvider;
   const assignedBudget = input.budgets.find((budget) => budget.provider === assignedProvider);
   const subscriptionBudgetState = assignedBudget?.activeTierRateLimitState ?? "unknown";
   const fallback = assignedBudget
     ? resolveFallback(
         subscriptionBudgetState === "rate_limited" ? "rate_limited" : "provider_unavailable",
         assignedProvider,
-        assignedBudget
+        assignedBudget,
+        {
+          budgets: input.budgets,
+          ...(input.recentFailureSignals !== undefined ? { recentFailureSignals: input.recentFailureSignals } : {}),
+          ...(input.circuitBreakerThresholds !== undefined ? { circuitBreakerThresholds: input.circuitBreakerThresholds } : {}),
+          ...(input.now !== undefined ? { now: input.now } : {})
+        }
       )
     : undefined;
   const providerFamily = providerFamilyForReasoningProvider(assignedProvider);
+  const fallbackProvider = selectDecisionFallbackProvider({
+    fallback,
+    assignedProvider,
+    assignedTierId: assignedBudget?.activeTierId,
+    subscriptionBudgetState
+  });
+
+  assertRoleConstraint({ assignedProvider, authorityRole: "advisory" });
 
   return {
     taskId: input.taskId,
@@ -811,10 +850,26 @@ export function buildSupervisorRoutingDecision(input: {
     assignedProvider,
     assignedTierId: assignedBudget?.activeTierId,
     subscriptionBudgetState,
-    fallbackProvider: fallback?.toProvider ?? assignedProvider,
+    fallbackProvider,
     learningSignal: deriveLearningSignal(input.layer, providerFamily, input.evalRecords),
-    decisionReasoning: `Layer ${input.layer} maps to ${assignedProvider}; context width ${contextWidthSpec.budgetClass}; task lane ${taskLane}.`
+    decisionReasoning:
+      `Layer ${input.layer} maps to ${assignedProvider}; context width ${contextWidthSpec.budgetClass}; task lane ${taskLane}.` +
+      (assignedProvider === preferredAssignedProvider
+        ? ""
+        : ` Preferred provider ${preferredAssignedProvider} was skipped by routing guards.`)
   };
+}
+
+export function assertRoleConstraint(decision: RoleConstrainedRoutingDecision): void {
+  const advisoryTrustTier = decision.advisoryTrustTier ?? advisoryTrustTierForProvider(decision.assignedProvider);
+
+  if (decision.authorityRole === "advisory" || advisoryTrustTier === "local_evidence") {
+    return;
+  }
+
+  throw new Error(
+    `model_output_used_as_source_of_truth: ${decision.assignedProvider} has advisoryTrustTier ${advisoryTrustTier} and cannot be promoted to ${decision.authorityRole}`
+  );
 }
 
 export function selectModelForLayer(
@@ -850,6 +905,86 @@ function selectProviderPolicies(taskLanes: readonly ReasoningTaskLaneId[]): Reas
       return lane ? [...lane.preferredProviders] : [];
     })
   );
+}
+
+function resolveRoutingCircuitStates(input: {
+  readonly recentFailureSignals?: readonly TierFailureSignalRecord[];
+  readonly circuitBreakerThresholds?: TierCircuitBreakerThresholds;
+  readonly now?: string | Date;
+}): readonly TierCircuitState[] {
+  const recentFailureSignals = input.recentFailureSignals ?? [];
+  if (recentFailureSignals.length === 0) {
+    return [];
+  }
+
+  if (input.now === undefined) {
+    throw new Error("routing_circuit_now_required: pass an injected now when recentFailureSignals are provided");
+  }
+
+  return computeTierCircuitState(
+    recentFailureSignals,
+    input.circuitBreakerThresholds ?? DEFAULT_TIER_CIRCUIT_BREAKER_THRESHOLDS,
+    input.now
+  );
+}
+
+function selectHardAllowedProvider(
+  preferredProvider: ReasoningProviderId,
+  taskLane: ReasoningTaskLaneId,
+  budgets: readonly SubscriptionSessionBudget[],
+  circuitStates: readonly TierCircuitState[]
+): ReasoningProviderId | undefined {
+  const candidateProviders = unique([
+    preferredProvider,
+    ...selectProviderPolicies([taskLane]),
+    "qwen_local",
+    "deterministic_tools"
+  ] satisfies readonly ReasoningProviderId[]);
+
+  return candidateProviders.find((provider) => isHardRouteAllowed(provider, budgets, circuitStates));
+}
+
+function isHardRouteAllowed(
+  provider: ReasoningProviderId,
+  budgets: readonly SubscriptionSessionBudget[],
+  circuitStates: readonly TierCircuitState[]
+): boolean {
+  const budget = budgets.find((candidate) => candidate.provider === provider);
+
+  if (!budget) {
+    return !isTierCircuitOpen(circuitStates, provider, undefined);
+  }
+
+  if (isActiveTierExplicitlyUnverified(budget)) {
+    return false;
+  }
+
+  return !isTierCircuitOpen(circuitStates, provider, budget.activeTierId);
+}
+
+function selectDecisionFallbackProvider(input: {
+  readonly fallback: ReturnType<typeof resolveFallback>;
+  readonly assignedProvider: ReasoningProviderId;
+  readonly assignedTierId: string | undefined;
+  readonly subscriptionBudgetState: SubscriptionRateLimitState;
+}): SupervisorRoutingDecision["fallbackProvider"] {
+  if (
+    input.fallback &&
+    !isSelfFallbackRoute({
+      fromProvider: input.assignedProvider,
+      fromTierId: input.assignedTierId,
+      toProvider: input.fallback.toProvider,
+      toTierId: input.fallback.toTierId
+    })
+  ) {
+    return input.fallback.toProvider;
+  }
+
+  if (input.subscriptionBudgetState === "rate_limited" || input.subscriptionBudgetState === "exhausted") {
+    return "blocked";
+  }
+
+  return input.assignedProvider;
 }
 
 function selectAdvisoryProviders(
@@ -936,6 +1071,15 @@ function providerFamilyForReasoningProvider(provider: ReasoningProviderId): Mode
     case "deterministic_tools":
       return "local";
   }
+}
+
+function advisoryTrustTierForProvider(provider: ReasoningProviderId): AdvisoryTrustTier {
+  const policy = reasoningProviderPolicies.find((candidate) => candidate.id === provider);
+  if (!policy) {
+    throw new Error(`Reasoning provider policy not found: ${provider}`);
+  }
+
+  return policy.advisoryTrustTier;
 }
 
 function unique<T>(values: readonly T[]): T[] {

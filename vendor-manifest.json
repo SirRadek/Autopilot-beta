@@ -42,7 +42,8 @@
     "product-design-os/specs/examples/dot-stage-hero.composition.json",
     "product-design-os/specs/examples/zednik.composition.json",
     "product-design-os/tokens/TOKEN_FLOOR.md",
-    "product-design-os/tokens/style.json"
+    "product-design-os/tokens/style.json",
+    "src/data/delivery-system/routingGuards.ts"
   ],
   "files": [
     {
@@ -633,7 +634,8 @@
     {
       "source_path": "src/data/delivery-system/fallbackChains.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "e883f7d3cf258a15661e2e816eb81603f2c9b5d5b4a931099f65be8a53bcf682"
+      "content_hash": "e883f7d3cf258a15661e2e816eb81603f2c9b5d5b4a931099f65be8a53bcf682",
+      "patched_by": "C-pass-2a"
     },
     {
       "source_path": "src/data/delivery-system/modelOutputEvaluation.ts",
@@ -643,7 +645,8 @@
     {
       "source_path": "src/data/delivery-system/modelPolicy.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "a19a13f60cbe00101908f5fb197785aa6e86caf9cf91be4f8d814a2e285036d6"
+      "content_hash": "a19a13f60cbe00101908f5fb197785aa6e86caf9cf91be4f8d814a2e285036d6",
+      "patched_by": "C-pass-2a"
     },
     {
       "source_path": "src/data/delivery-system/sessionState.ts",
