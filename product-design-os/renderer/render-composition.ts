@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { checkRenderedContract } from "./check-render-contract";
 import { mapTokensToCss } from "./map-tokens";
-import { getPatternComponent } from "./pattern-component-registry";
+import { getPatternComponent, patternComponentRegistry } from "./pattern-component-registry";
 import { assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
 import type {
   AssetManifestEntry,
@@ -189,15 +189,15 @@ function resolvePatternData(input: unknown): RenderPatternData {
   }
 
   if (isRecord(input) && "pattern_id" in input) {
-    if (input.pattern_id !== "sharp-positioning-hero") {
+    if (!isRegisteredPattern(input.pattern_id)) {
       throw new RenderCompositionSpecError(
         "unsupported_pattern_id",
-        `Unsupported pattern id "${String(input.pattern_id)}" for slice renderer.`
+        `Unsupported pattern id "${String(input.pattern_id)}" — no renderer is registered for it.`
       );
     }
 
     return {
-      patternId: "sharp-positioning-hero",
+      patternId: input.pattern_id,
       nodeId: typeof input.node_id === "string" ? input.node_id : "direct-pattern",
       props: readDirectProps(input.props),
       slotFills: readSlotFills(input.slot_fills),
@@ -207,23 +207,24 @@ function resolvePatternData(input: unknown): RenderPatternData {
 
   if (isRecord(input) && "nodes" in input) {
     const spec = readCompositionSpec(input);
+    // Render the first pattern node that has a registered renderer.
     const node = spec.nodes.find(
-      (candidate) => candidate.target_kind === "pattern" && candidate.target_id === "sharp-positioning-hero"
+      (candidate) => candidate.target_kind === "pattern" && isRegisteredPattern(candidate.target_id)
     );
 
-    if (node === undefined) {
+    if (node === undefined || node.target_id === undefined) {
       const renderedPatternIds = spec.nodes
         .filter((candidate) => candidate.target_kind === "pattern")
         .map((candidate) => candidate.target_id ?? "<missing>");
       throw new RenderCompositionSpecError(
         "pattern_node_missing",
-        `Composition spec does not contain a renderable sharp-positioning-hero node. Pattern nodes: ${renderedPatternIds.join(", ")}.`
+        `Composition spec does not contain a renderable pattern node (no registered renderer). Pattern nodes: ${renderedPatternIds.join(", ")}.`
       );
     }
 
     return {
-      patternId: "sharp-positioning-hero",
-      nodeId: node.node_id ?? "positioning-hero",
+      patternId: node.target_id,
+      nodeId: node.node_id ?? "pattern-node",
       props: readCompositionProps(node.props),
       slotFills: readSlotFills(node.slot_fills),
       tokenOverrides: readTokenOverrides(spec)
@@ -436,12 +437,18 @@ function readAssetManifest(pdosRoot: string): AssetManifest {
   return readJson<AssetManifest>(path.join(pdosRoot, "assets", "asset-manifest.json"));
 }
 
+function isRegisteredPattern(patternId: unknown): patternId is string {
+  return typeof patternId === "string" && Object.prototype.hasOwnProperty.call(patternComponentRegistry, patternId);
+}
+
 function resolveSlots(
   slotFills: readonly SlotFill[],
   assetManifest: AssetManifest,
   pdosRoot: string,
   contract: ComponentContract
-): { readonly hero_asset?: readonly ResolvedAsset[]; readonly theme_background?: readonly ResolvedAsset[] } {
+): Record<string, readonly ResolvedAsset[]> {
+  // Resolve every declared slot generically so any registered renderer gets its slots
+  // (sharp-positioning-hero reads hero_asset/theme_background; dot-stage-hero reads motion_background).
   const slots: Record<string, ResolvedAsset[]> = {};
 
   for (const slotFill of slotFills) {
@@ -467,14 +474,7 @@ function resolveSlots(
     slots[slotFill.slot] = resolvedAssets;
   }
 
-  const result: { hero_asset?: readonly ResolvedAsset[]; theme_background?: readonly ResolvedAsset[] } = {};
-  if (slots.hero_asset !== undefined) {
-    result.hero_asset = slots.hero_asset;
-  }
-  if (slots.theme_background !== undefined) {
-    result.theme_background = slots.theme_background;
-  }
-  return result;
+  return slots;
 }
 
 function resolveAsset(
@@ -643,15 +643,22 @@ function isCliEntryPoint(): boolean {
 if (isCliEntryPoint()) {
   const repoRoot = process.cwd();
   const pdosRoot = path.join(repoRoot, "product-design-os");
-  const spec = readJson<CompositionSpec>(path.join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json"));
+  const specArg = process.argv[2];
+  const specPath =
+    specArg !== undefined
+      ? path.resolve(repoRoot, specArg)
+      : path.join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json");
+  const spec = readJson<CompositionSpec>(specPath);
   const result = renderComposition(spec, pdosRoot);
+
+  const patternId = result.qaTargets[0]?.patternId ?? "composition";
   const outputDir = path.join(repoRoot, "output", "render");
-  const outputPath = path.join(outputDir, "sharp-positioning-hero.html");
+  const outputPath = path.join(outputDir, `${patternId}.html`);
 
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(outputPath, result.html, "utf8");
 
-  const contract = readPatternContract(pdosRoot, "sharp-positioning-hero");
+  const contract = readPatternContract(pdosRoot, patternId);
   const report = checkRenderedContract(result.html, contract);
   if (report.errors.length > 0) {
     throw new Error(`Rendered contract failed: ${report.errors.map((issue) => issue.code).join(", ")}`);
