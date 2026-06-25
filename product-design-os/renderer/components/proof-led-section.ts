@@ -1,6 +1,13 @@
 import { isSafeHref } from "../safe-url";
 import type { ComponentContract, PatternRenderInput, ResolvedAsset, ResolvedSlotTarget } from "../types";
-import { escapeAttribute, escapeHtml, isFileBackedAsset } from "./sharp-positioning-hero";
+import {
+  ctaClassName,
+  escapeAttribute,
+  escapeHtml,
+  isFileBackedAsset,
+  normalizeCtaVariant,
+  renderResolvedSlotAssetMarkup
+} from "./sharp-positioning-hero";
 
 export interface ProofLedSectionContractIssue {
   readonly code: string;
@@ -14,6 +21,8 @@ interface ValidProofLedSectionProps {
   readonly source_reference: string;
   readonly cta_label: string;
   readonly cta_href: string;
+  readonly cta_variant: "primary" | "secondary";
+  readonly proof_asset_alt: string;
 }
 
 export class ProofLedSectionContractError extends Error {
@@ -179,7 +188,7 @@ export function renderProofLedSection(input: PatternRenderInput): string {
 <section class="proof-led-section" data-pattern-id="proof-led-section" data-contract-id="${escapeAttribute(input.contract.id)}" data-proof-asset-id="${escapeAttribute(proofAsset?.id ?? "")}" aria-labelledby="proof-led-section-title">
   <div class="proof-led-section__inner">
     <div class="proof-led-section__asset-wrap" data-contract-slot="proof_asset" data-asset-id="${escapeAttribute(proofAsset?.id ?? "")}" data-asset-source="${escapeAttribute(proofAsset?.source ?? "")}">
-      ${renderProofAsset(proofAsset)}
+      ${renderProofAsset(proofAsset, props.proof_asset_alt)}
     </div>
     <div class="proof-led-section__content">
       <div class="proof-led-section__statement">
@@ -187,7 +196,7 @@ export function renderProofLedSection(input: PatternRenderInput): string {
         <p class="proof-led-section__proof" data-contract-prop="proof_item">${escapeHtml(props.proof_item)}</p>
         <p class="proof-led-section__source" data-contract-prop="source_reference">${escapeHtml(props.source_reference)}</p>
       </div>
-      <a class="cta" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
+      <a class="${ctaClassName(props.cta_variant)}" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
     </div>
   </div>
 </section>`.trim();
@@ -326,10 +335,10 @@ function validateRequiredAssetSlot(
       });
     }
 
-    if (isFileBackedAsset(asset) && asset.href === undefined) {
+    if (isFileBackedAsset(asset) && asset.href === undefined && asset.inlineSvg === undefined) {
       issues.push({
         code: "slot_asset_source_missing",
-        message: `${slotName} asset ${asset.id} is file-backed but has no resolved href.`
+        message: `${slotName} asset ${asset.id} is file-backed but has no resolved href or inline SVG.`
       });
     }
   }
@@ -342,7 +351,9 @@ function normalizeProps(props: PatternRenderInput["props"]): ValidProofLedSectio
     outcome_statement: props.outcome_statement?.trim() ?? "",
     source_reference: props.source_reference?.trim() ?? "",
     cta_label: props.cta_label?.trim() ?? "",
-    cta_href: href
+    cta_href: href,
+    cta_variant: normalizeCtaVariant(props.cta_variant),
+    proof_asset_alt: props.proof_asset_alt?.trim() || "Case-study proof asset"
   };
 }
 
@@ -350,20 +361,21 @@ function firstAsset(slotTargets: readonly ResolvedSlotTarget[] | undefined): Res
   return slotTargets?.find((slotTarget): slotTarget is ResolvedAsset => slotTarget.targetKind === "asset");
 }
 
-function renderProofAsset(asset: ResolvedAsset | undefined): string {
-  if (asset?.href !== undefined) {
-    return `<img src="${escapeAttribute(asset.href)}" alt="" loading="lazy" decoding="async">`;
-  }
+function renderProofAsset(asset: ResolvedAsset | undefined, alt: string): string {
+  return renderResolvedSlotAssetMarkup(asset, {
+    className: "proof-led-section__asset",
+    alt,
+    fallback: () => renderNeutralProofAssetFallback(asset)
+  });
+}
 
+function renderNeutralProofAssetFallback(asset: ResolvedAsset | undefined): string {
   const label = asset?.id ?? "";
   return `
 <svg class="proof-led-section__asset" viewBox="0 0 560 420" role="img" aria-label="${escapeAttribute(label)}" focusable="false">
   <rect class="proof-led-section__asset-bg" x="0" y="0" width="560" height="420"/>
-  <path class="proof-led-section__asset-panel" d="M84 82h308l84 74v182H84z"/>
-  <path class="proof-led-section__asset-soft" d="M126 124h214v54H126zM126 216h278v24H126zM126 266h226v24H126z"/>
-  <path class="proof-led-section__asset-accent" d="M388 106h58l44 44-44 44h-58l-44-44z"/>
-  <path class="proof-led-section__asset-line" d="M82 338h394M126 188h266M126 304h176M360 106l86 88"/>
-  <circle class="proof-led-section__asset-accent" cx="412" cy="294" r="30"/>
-  <path class="proof-led-section__asset-line" d="m396 294 12 12 24-28"/>
+  <circle class="proof-led-section__asset-soft" cx="178" cy="172" r="72"/>
+  <path class="proof-led-section__asset-accent" d="M348 92 470 214 348 336 226 214Z"/>
+  <path class="proof-led-section__asset-line" d="M88 338h384M112 104l336 232M454 104 118 336"/>
 </svg>`.trim();
 }

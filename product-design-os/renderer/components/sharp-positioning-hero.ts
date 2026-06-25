@@ -3,10 +3,14 @@ import { isSafeHref } from "../safe-url";
 
 export interface SharpPositioningHeroInput extends PatternRenderInput {
   readonly props: {
+    readonly eyebrow?: string;
+    readonly kicker?: string;
     readonly headline?: string;
     readonly primary_cta?: string;
     readonly trust_cue?: string;
     readonly cta_href?: string;
+    readonly cta_variant?: string;
+    readonly hero_asset_alt?: string;
   } & PatternRenderInput["props"];
   readonly slots: {
     readonly hero_asset?: readonly ResolvedAsset[];
@@ -22,11 +26,16 @@ export interface SharpPositioningHeroContractIssue {
 }
 
 interface ValidSharpPositioningHeroProps {
+  readonly eyebrow: string;
   readonly headline: string;
   readonly primary_cta: string;
   readonly trust_cue: string;
   readonly cta_href: string;
+  readonly cta_variant: CtaVariant;
+  readonly hero_asset_alt: string;
 }
+
+type CtaVariant = "primary" | "secondary";
 
 export class SharpPositioningHeroContractError extends Error {
   readonly issues: readonly SharpPositioningHeroContractIssue[];
@@ -121,8 +130,10 @@ export const sharpPositioningHeroCss = `
 .sharp-positioning-hero__asset {
   position: absolute;
   inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
   overflow: visible;
 }
 
@@ -148,6 +159,24 @@ export const sharpPositioningHeroCss = `
 
 .sharp-positioning-hero__asset-surface {
   fill: var(--color-surface);
+}
+
+.sharp-positioning-hero__asset-placeholder {
+  fill: color-mix(in srgb, var(--color-surface) 82%, var(--color-background));
+  stroke: var(--color-border);
+  stroke-width: 2;
+}
+
+.sharp-positioning-hero__asset-placeholder-mark {
+  fill: var(--color-accent-soft);
+  opacity: var(--style-decoration-opacity);
+}
+
+.sharp-positioning-hero__asset-placeholder-line {
+  stroke: var(--color-accent-secondary);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.66;
 }
 
 @media (max-width: 760px) {
@@ -187,15 +216,19 @@ export function renderSharpPositioningHero(input: PatternRenderInput): string {
 <section class="sharp-positioning-hero" data-pattern-id="sharp-positioning-hero" data-contract-id="${escapeAttribute(input.contract.id)}" data-hero-asset-id="${escapeAttribute(heroAsset?.id ?? "")}" data-theme-background-id="${escapeAttribute(themeBackground?.id ?? "")}" aria-labelledby="sharp-positioning-hero-title">
   <div class="sharp-positioning-hero__layout">
     <div class="sharp-positioning-hero__copy">
-      <div class="sharp-positioning-hero__eyebrow" aria-hidden="true">Offer / proof / request</div>
+      <div class="sharp-positioning-hero__eyebrow" data-contract-prop="eyebrow">${escapeHtml(props.eyebrow)}</div>
       <h1 id="sharp-positioning-hero-title" data-contract-prop="headline">${escapeHtml(props.headline)}</h1>
       <div class="sharp-positioning-hero__action-row">
-        <a class="cta" data-contract-prop="primary_cta" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.primary_cta)}</a>
+        <a class="${ctaClassName(props.cta_variant)}" data-contract-prop="primary_cta" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.primary_cta)}</a>
         <p class="sharp-positioning-hero__trust" data-contract-prop="trust_cue">${escapeHtml(props.trust_cue)}</p>
       </div>
     </div>
     <div class="sharp-positioning-hero__asset-wrap" data-asset-id="${escapeAttribute(heroAsset?.id ?? "")}" data-asset-source="${escapeAttribute(heroAsset?.source ?? "")}">
-      ${renderEditorialMotionHeroSvg(heroAsset)}
+      ${renderResolvedSlotAssetMarkup(heroAsset, {
+        className: "sharp-positioning-hero__asset",
+        alt: props.hero_asset_alt,
+        fallback: () => renderNeutralHeroAssetFallback(heroAsset)
+      })}
     </div>
   </div>
 </section>`.trim();
@@ -334,7 +367,7 @@ function validateRequiredAssetSlot(
       });
     }
 
-    if (isFileBackedAsset(asset) && asset.href === undefined) {
+    if (isFileBackedAsset(asset) && asset.href === undefined && asset.inlineSvg === undefined) {
       issues.push({
         code: "slot_asset_source_missing",
         message: `${slotName} asset ${asset.id} is file-backed but has no resolved href.`
@@ -345,31 +378,143 @@ function validateRequiredAssetSlot(
 
 function normalizeProps(props: PatternRenderInput["props"]): ValidSharpPositioningHeroProps {
   const href = props.cta_href?.trim() || "#request";
+  const eyebrow = firstNonEmpty(props.eyebrow, props.kicker) ?? "Offer / proof / request";
   return {
+    eyebrow,
     headline: props.headline?.trim() ?? "",
     primary_cta: props.primary_cta?.trim() ?? "",
     trust_cue: props.trust_cue?.trim() ?? "",
-    cta_href: href
+    cta_href: href,
+    cta_variant: normalizeCtaVariant(props.cta_variant),
+    hero_asset_alt: props.hero_asset_alt?.trim() || "Editorial hero asset"
   };
 }
 
 export function isFileBackedAsset(asset: ResolvedAsset): boolean {
-  return /\.(?:svg|png|jpe?g|webp|gif)$/i.test(asset.source);
+  return /\.(?:svg|png|jpe?g|webp|gif|avif)$/i.test(asset.source);
 }
 
-function renderEditorialMotionHeroSvg(asset: ResolvedAsset | undefined): string {
-  const label = asset === undefined ? "Editorial motion hero asset" : `Editorial motion hero asset ${asset.id}`;
+function renderNeutralHeroAssetFallback(asset: ResolvedAsset | undefined): string {
+  const label = asset === undefined ? "Neutral hero asset placeholder" : `Neutral hero asset placeholder for ${asset.id}`;
 
   return `
 <svg class="sharp-positioning-hero__asset" viewBox="0 0 640 520" role="img" aria-label="${escapeAttribute(label)}" focusable="false">
-  <path class="sharp-positioning-hero__asset-panel" d="M112 86h346l78 88-92 260H96L42 276 112 86Z"/>
-  <path class="sharp-positioning-hero__asset-muted" d="M156 132h234l54 60-66 186H142L104 266l52-134Z"/>
-  <path class="sharp-positioning-hero__asset-accent" d="M438 116h80l44 52-60 74h-78l-42-54 56-72Z"/>
-  <path class="sharp-positioning-hero__asset-surface" d="M172 176h172v34H172zM172 246h232v20H172zM172 292h184v20H172z"/>
-  <path class="sharp-positioning-hero__asset-line" d="M74 426h418M118 74l330 388M548 250 82 250M448 116 520 242"/>
-  <circle class="sharp-positioning-hero__asset-accent" cx="492" cy="308" r="34"/>
-  <circle class="sharp-positioning-hero__asset-surface" cx="492" cy="308" r="13"/>
+  <rect class="sharp-positioning-hero__asset-placeholder" x="78" y="76" width="462" height="352" rx="0"/>
+  <circle class="sharp-positioning-hero__asset-placeholder-mark" cx="214" cy="190" r="70"/>
+  <path class="sharp-positioning-hero__asset-placeholder-mark" d="M392 116 512 236 392 356 272 236Z"/>
+  <path class="sharp-positioning-hero__asset-placeholder-line" d="M120 398 514 98M126 118l388 282"/>
 </svg>`.trim();
+}
+
+interface SlotAssetMarkupOptions {
+  readonly className: string;
+  readonly alt: string;
+  readonly fallback: () => string;
+}
+
+export function renderResolvedSlotAssetMarkup(asset: ResolvedAsset | undefined, options: SlotAssetMarkupOptions): string {
+  if (asset?.inlineSvg !== undefined) {
+    const svg = sanitizeInlineSvgAsset(asset.inlineSvg, {
+      className: options.className,
+      label: firstNonEmpty(asset.alt, options.alt, asset.id) ?? "Resolved asset"
+    });
+    if (svg !== undefined) {
+      return svg;
+    }
+  }
+
+  if (asset?.href !== undefined && isSafeHref(asset.href) && isRasterImageHref(asset.href)) {
+    const alt = firstNonEmpty(asset.alt, options.alt) ?? "";
+    return `<img class="${escapeAttribute(options.className)}" src="${escapeAttribute(asset.href)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async">`;
+  }
+
+  return options.fallback();
+}
+
+export function ctaClassName(variant: CtaVariant): string {
+  return variant === "secondary" ? "cta cta--secondary" : "cta";
+}
+
+export function normalizeCtaVariant(value: string | undefined): CtaVariant {
+  return value?.trim().toLowerCase() === "secondary" ? "secondary" : "primary";
+}
+
+function sanitizeInlineSvgAsset(
+  rawSvg: string,
+  options: { readonly className: string; readonly label: string }
+): string | undefined {
+  const match = /<svg\b([^>]*)>([\s\S]*?)<\/svg>/i.exec(rawSvg);
+  if (match === null) {
+    return undefined;
+  }
+
+  const rootAttributes = match[1] ?? "";
+  const viewBox = extractSafeSvgViewBox(rootAttributes) ?? "0 0 640 520";
+  const innerSvg = sanitizeSvgInnerMarkup(match[2] ?? "");
+  return `<svg class="${escapeAttribute(options.className)}" viewBox="${escapeAttribute(viewBox)}" role="img" aria-label="${escapeAttribute(options.label)}" focusable="false">${innerSvg}</svg>`;
+}
+
+const allowedSvgTags = new Set([
+  "circle",
+  "clippath",
+  "defs",
+  "desc",
+  "ellipse",
+  "g",
+  "line",
+  "lineargradient",
+  "mask",
+  "path",
+  "polygon",
+  "polyline",
+  "radialgradient",
+  "rect",
+  "stop",
+  "title"
+]);
+
+function sanitizeSvgInnerMarkup(value: string): string {
+  return value
+    .replace(/<\?xml[\s\S]*?\?>/gi, "")
+    .replace(/<!doctype[\s\S]*?>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|foreignobject|iframe|object|embed|image|use|animate|set|style)\b[\s\S]*?<\/\1>/gi, "")
+    .replace(/<\/?(script|foreignobject|iframe|object|embed|image|use|animate|set|style)\b[^>]*>/gi, "")
+    .replace(/\s+on[a-z0-9:-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s+(?:href|xlink:href)\s*=\s*(?:"(?!#)[^"]*"|'(?!#)[^']*'|(?!#)[^\s>]+)/gi, "")
+    .replace(/\s+[a-z0-9:-]+\s*=\s*(?:"[^"]*(?:javascript|vbscript|data)\s*:[^"]*"|'[^']*(?:javascript|vbscript|data)\s*:[^']*'|[^\s>]*(?:javascript|vbscript|data)\s*:[^\s>]*)/gi, "")
+    .replace(/<\/?([a-z][a-z0-9:-]*)\b[^>]*>/gi, (tag: string, rawTagName: string) => {
+      const tagName = rawTagName.toLowerCase();
+      return allowedSvgTags.has(tagName) ? tag : "";
+    })
+    .trim();
+}
+
+function extractSafeSvgViewBox(rootAttributes: string): string | undefined {
+  const match = /\sviewBox\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(rootAttributes);
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return /^-?(?:\d+|\d*\.\d+)(?:\s+-?(?:\d+|\d*\.\d+)){3}$/.test(trimmed) ? trimmed : undefined;
+}
+
+function isRasterImageHref(href: string): boolean {
+  return /\.(?:png|jpe?g|webp|gif|avif)(?:[?#].*)?$/i.test(href);
+}
+
+function firstNonEmpty(...values: readonly (string | undefined)[]): string | undefined {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed !== undefined && trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
 }
 
 export function escapeHtml(value: string): string {

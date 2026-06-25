@@ -138,6 +138,7 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
   const assetManifest = readAssetManifest(pdosRoot);
   const slots = resolveSlots(patternData.slotFills, assetManifest, pdosRoot, contract, patternData.compositionNodes);
   const tokenCss = mapTokensToCss(pdosRoot, patternData.tokenOverrides);
+  const fontHeadLinks = renderWebFontHeadLinks(tokenCss);
 
   const fragment = component.render({
     props: patternData.props,
@@ -152,6 +153,7 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    ...fontHeadLinks,
     `<title>${escapeHtml(title)}</title>`,
     "<style>",
     tokenCss,
@@ -191,7 +193,9 @@ export function renderCompositionPage(specInput: unknown, pdosRoot: string): Ren
   const spec = readCompositionSpec(specInput);
   const assetManifest = readAssetManifest(pdosRoot);
   const contractManifest = readContractManifest(pdosRoot);
-  const tokenCss = mapTokensToCss(pdosRoot, readTokenOverrides(spec));
+  const tokenOverrides = readTokenOverrides(spec);
+  const tokenCss = mapTokensToCss(pdosRoot, tokenOverrides);
+  const fontHeadLinks = renderWebFontHeadLinks(tokenCss);
 
   const fragments: string[] = [];
   const sections: RenderedCompositionSection[] = [];
@@ -278,6 +282,7 @@ export function renderCompositionPage(specInput: unknown, pdosRoot: string): Ren
   const html = renderHtmlDocument({
     title,
     tokenCss,
+    fontHeadLinks,
     componentCss: [...componentCss].join("\n\n"),
     body: `<main class="pdos-page" data-composition-id="${escapeAttribute(title)}">\n${fragments.join("\n")}\n</main>`
   });
@@ -331,7 +336,7 @@ svg {
   isolation: isolate;
   overflow: hidden;
   display: grid;
-  row-gap: var(--pdos-page-section-gap);
+  row-gap: 0;
   color: var(--color-text);
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--color-border) 26%, transparent) 1px, transparent 1px),
@@ -392,6 +397,20 @@ svg {
   background: var(--color-accent-secondary);
 }
 
+.cta--secondary {
+  color: var(--color-accent);
+  background: transparent;
+  border-color: var(--color-accent);
+  box-shadow: none;
+}
+
+.cta--secondary:hover {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border-color: var(--color-accent-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
 .cta:focus-visible {
   outline: 3px solid var(--color-focus-ring);
   outline-offset: 3px;
@@ -421,6 +440,7 @@ svg {
 function renderHtmlDocument(input: {
   readonly title: string;
   readonly tokenCss: string;
+  readonly fontHeadLinks: readonly string[];
   readonly componentCss: string;
   readonly body: string;
 }): string {
@@ -430,6 +450,7 @@ function renderHtmlDocument(input: {
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    ...input.fontHeadLinks,
     `<title>${escapeHtml(input.title)}</title>`,
     "<style>",
     input.tokenCss,
@@ -442,6 +463,49 @@ function renderHtmlDocument(input: {
     "</body>",
     "</html>"
   ].join("\n");
+}
+
+function renderWebFontHeadLinks(tokenCss: string): readonly string[] {
+  const family = cssRootVarValue(tokenCss, "type-web-font-family");
+  if (family === undefined || family.toLowerCase() === "none") {
+    return [];
+  }
+
+  if (!/^[a-zA-Z0-9 ]{1,80}$/.test(family)) {
+    return [];
+  }
+
+  const weights = normalizeGoogleFontWeights(cssRootVarValue(tokenCss, "type-web-font-weights") ?? "400,700");
+  if (weights.length === 0) {
+    return [];
+  }
+
+  const familyQuery = encodeURIComponent(family).replace(/%20/g, "+");
+  const href = `https://fonts.googleapis.com/css2?family=${familyQuery}:wght@${weights.join(";")}&display=swap`;
+  if (!isSafeHref(href)) {
+    return [];
+  }
+
+  return [
+    '<link rel="preconnect" href="https://fonts.googleapis.com">',
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+    `<link rel="stylesheet" href="${escapeAttribute(href)}">`
+  ];
+}
+
+function cssRootVarValue(css: string, name: string): string | undefined {
+  const rootBlock = /:root\{([\s\S]*?)\n\}/.exec(css)?.[1];
+  if (rootBlock === undefined) {
+    return undefined;
+  }
+
+  const match = new RegExp(`--${escapeRegExp(name)}:\\s*([^;]+);`).exec(rootBlock);
+  return match?.[1]?.trim();
+}
+
+function normalizeGoogleFontWeights(value: string): readonly string[] {
+  const weights = value.split(",").map((weight) => weight.trim()).filter((weight) => weight.length > 0);
+  return weights.every((weight) => /^(?:[1-9]00)$/.test(weight)) ? weights : [];
 }
 
 function selectorForFirstContractProp(contract: ComponentContract, propNames: readonly string[], fallback = "[data-contract-prop]"): string {
@@ -955,6 +1019,18 @@ function resolveAssetSource(
     );
   }
 
+  if (isSvgAssetSource(normalizedSource)) {
+    try {
+      return { inlineSvg: readFileSync(absolutePath, "utf8") };
+    } catch (error) {
+      return handleUnresolvedAssetSource(
+        "asset_source_unreadable",
+        `Asset SVG source could not be read: ${normalizedSource}. ${errorMessage(error)}`,
+        context
+      );
+    }
+  }
+
   return { href: `../../${normalizedSource}` };
 }
 
@@ -964,7 +1040,11 @@ function isLocalProductDesignOsSource(source: string): boolean {
 
 function sourceMustResolveToFile(asset: AssetManifestEntry): boolean {
   const normalizedSource = asset.source.replace(/\\/g, "/");
-  return normalizedSource !== "product-design-os" || asset.type === "background" || /\.(?:svg|png|jpe?g|webp|gif)$/i.test(asset.source);
+  return normalizedSource !== "product-design-os" || asset.type === "background" || /\.(?:svg|png|jpe?g|webp|gif|avif)$/i.test(asset.source);
+}
+
+function isSvgAssetSource(source: string): boolean {
+  return /\.svg$/i.test(source);
 }
 
 function handleUnresolvedAssetSource(
@@ -1010,6 +1090,10 @@ function escapeHtml(value: string): string {
 
 function escapeAttribute(value: string): string {
   return escapeHtml(value);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function isCliEntryPoint(): boolean {

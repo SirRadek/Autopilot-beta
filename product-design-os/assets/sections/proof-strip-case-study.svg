@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" role="img" aria-labelledby="title desc">
+  <title id="title">Case-study proof strip asset</title>
+  <desc id="desc">A proof-led case strip with source, outcome, and completion cues represented as abstract shapes.</desc>
+  <rect class="proof-led-section__asset-bg" x="0" y="0" width="560" height="420"/>
+  <path class="proof-led-section__asset-panel" d="M74 78h312l92 92v172H74Z"/>
+  <path class="proof-led-section__asset-soft" d="M126 132h190v58H126ZM126 226h246v28H126ZM126 282h198v28H126Z"/>
+  <path class="proof-led-section__asset-accent" d="M386 110h62l48 48-48 48h-62l-48-48Z"/>
+  <path class="proof-led-section__asset-line" d="M78 342h400M132 202h252M356 110l92 96"/>
+  <circle class="proof-led-section__asset-accent" cx="414" cy="292" r="32"/>
+  <path class="proof-led-section__asset-line" d="m398 292 12 12 28-34"/>
+</svg>

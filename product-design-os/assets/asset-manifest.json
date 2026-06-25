@@ -17,7 +17,7 @@
       "avoid_with_tags": ["fake-dashboard", "heavy-particles", "dark-neon-default"],
       "template_risk": 2,
       "license": "internal-metadata",
-      "source": "product-design-os",
+      "source": "product-design-os/assets/motion/editorial-motion-hero.svg",
       "provenance_status": "internal",
       "notes": "Hero direction for a memorable first viewport while keeping the offer and CTA as real DOM text."
     },
@@ -36,7 +36,7 @@
       "avoid_with_tags": ["logo-wall-without-proof", "fake-metrics"],
       "template_risk": 2,
       "license": "internal-metadata",
-      "source": "product-design-os",
+      "source": "product-design-os/assets/sections/proof-strip-case-study.svg",
       "provenance_status": "internal",
       "notes": "Use for outcomes, case evidence, and concrete before-after proof instead of generic trust blocks."
     },

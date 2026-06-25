@@ -1,6 +1,6 @@
 import { isSafeHref } from "../safe-url";
 import type { PatternRenderInput, ResolvedPatternReference, ResolvedSlotTarget } from "../types";
-import { escapeAttribute, escapeHtml } from "./sharp-positioning-hero";
+import { ctaClassName, escapeAttribute, escapeHtml, normalizeCtaVariant } from "./sharp-positioning-hero";
 
 export interface OutcomeCtaContractIssue {
   readonly code: string;
@@ -12,6 +12,7 @@ interface ValidOutcomeCtaProps {
   readonly outcome_statement: string;
   readonly cta_label: string;
   readonly cta_href: string;
+  readonly cta_variant: "primary" | "secondary";
 }
 
 export class OutcomeCtaContractError extends Error {
@@ -97,7 +98,7 @@ export const outcomeCtaCss = `
   text-transform: var(--style-heading-transform);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   .outcome-cta__copy {
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -136,7 +137,7 @@ export function renderOutcomeCta(input: PatternRenderInput): string {
         ${renderProofContext(proofContext)}
       </div>
       <h2 id="outcome-cta-title" data-contract-prop="outcome_statement">${escapeHtml(props.outcome_statement)}</h2>
-      <a class="cta" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
+      <a class="${ctaClassName(props.cta_variant)}" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
     </div>
   </div>
 </section>`.trim();
@@ -266,7 +267,8 @@ function normalizeProps(props: PatternRenderInput["props"]): ValidOutcomeCtaProp
   return {
     outcome_statement: props.outcome_statement?.trim() ?? "",
     cta_label: props.cta_label?.trim() ?? "",
-    cta_href: href
+    cta_href: href,
+    cta_variant: normalizeCtaVariant(props.cta_variant)
   };
 }
 

@@ -89,7 +89,7 @@ describe("Product Design OS P3 full-page rendering", () => {
     const pageRule = cssRuleBlock(result.html, ".pdos-page");
     const pageSectionRule = cssRuleBlock(result.html, ".pdos-page > section");
 
-    expect(pageRule).toContain("row-gap: var(--pdos-page-section-gap);");
+    expect(result.html).toContain("padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);");
     expect(pageRule).toContain("var(--style-surface-background)");
     expect(pageSectionRule).toContain("background: transparent;");
     expect(result.html).not.toContain("border-block-start: 1px solid");

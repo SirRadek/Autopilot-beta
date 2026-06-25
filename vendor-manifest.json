@@ -5,6 +5,8 @@
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
   "file_count": 120,
   "beta_authored": [
+    "product-design-os/assets/motion/editorial-motion-hero.svg",
+    "product-design-os/assets/sections/proof-strip-case-study.svg",
     "product-design-os/composition/composition-target.schema.json",
     "product-design-os/contracts/component-contract-manifest.json",
     "product-design-os/contracts/component-contract.schema.json",
