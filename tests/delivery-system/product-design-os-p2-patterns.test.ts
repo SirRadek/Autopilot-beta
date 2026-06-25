@@ -135,6 +135,7 @@ describe("Product Design OS P2 pattern renderers", () => {
     expect(patternComponentRegistry["proof-led-section"].render).toBe(renderProofLedSection);
     expect(patternComponentRegistry["outcome-cta"].render).toBe(renderOutcomeCta);
     expect(Object.keys(patternComponentRegistry).sort()).toEqual([
+      "dot-stage-hero",
       "outcome-cta",
       "proof-led-section",
       "sharp-positioning-hero"

@@ -833,7 +833,7 @@ function readAssetManifest(pdosRoot: string): AssetManifest {
 }
 
 function isRegisteredPattern(patternId: unknown): patternId is string {
-  return typeof patternId === "string" && Object.prototype.hasOwnProperty.call(patternComponentRegistry, patternId);
+  return typeof patternId === "string" && hasPatternComponent(patternId);
 }
 
 function resolveSlots(
@@ -1274,7 +1274,7 @@ if (isCliEntryPoint()) {
   writeFileSync(outputPath, result.html, "utf8");
   writeFileSync(pageOutputPath, pageResult.html, "utf8");
 
-  const contract = readPatternContract(pdosRoot, patternId);
+  const contract = readPatternContract(pdosRoot, result.qaTargets[0]?.patternId ?? "sharp-positioning-hero");
   const report = checkRenderedContract(result.html, contract);
   if (report.errors.length > 0) {
     throw new Error(`Rendered contract failed: ${report.errors.map((issue) => issue.code).join(", ")}`);

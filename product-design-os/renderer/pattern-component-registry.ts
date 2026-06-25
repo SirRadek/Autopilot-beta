@@ -4,6 +4,7 @@ import {
 } from "./components/sharp-positioning-hero";
 import { outcomeCtaCss, renderOutcomeCta } from "./components/outcome-cta";
 import { proofLedSectionCss, renderProofLedSection } from "./components/proof-led-section";
+import { dotStageHeroCss, renderDotStageHero } from "./components/dot-stage-hero";
 import type { PatternRenderInput } from "./types";
 export interface PatternComponentRegistryEntry {
   readonly render: (input: PatternRenderInput) => string;
@@ -26,6 +27,11 @@ export const patternComponentRegistry = {
   "outcome-cta": {
     render: renderOutcomeCta,
     css: outcomeCtaCss,
+    rendererKind: "section"
+  },
+  "dot-stage-hero": {
+    render: renderDotStageHero,
+    css: dotStageHeroCss,
     rendererKind: "section"
   }
 } satisfies Record<string, PatternComponentRegistryEntry>;

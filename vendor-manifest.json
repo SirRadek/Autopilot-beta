@@ -20,6 +20,7 @@
     "product-design-os/qa/variants/sample-product-design-variants.ts",
     "product-design-os/recipes/recipe.schema.json",
     "product-design-os/renderer/check-render-contract.ts",
+    "product-design-os/renderer/components/dot-stage-hero.ts",
     "product-design-os/renderer/components/outcome-cta.ts",
     "product-design-os/renderer/components/proof-led-section.ts",
     "product-design-os/renderer/components/sharp-positioning-hero.ts",
@@ -37,6 +38,8 @@
     "product-design-os/scripts/pattern-requirement-taxonomy.ts",
     "product-design-os/specs/composition.schema.json",
     "product-design-os/specs/examples/buildable-marketing.composition.json",
+    "product-design-os/specs/examples/dot-stage-hero-noise.composition.json",
+    "product-design-os/specs/examples/dot-stage-hero.composition.json",
     "product-design-os/specs/examples/zednik.composition.json",
     "product-design-os/tokens/TOKEN_FLOOR.md",
     "product-design-os/tokens/style.json"
