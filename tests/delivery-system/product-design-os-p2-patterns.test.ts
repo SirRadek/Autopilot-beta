@@ -206,7 +206,9 @@ function proofAsset(): ResolvedAsset {
 function proofContext(): ResolvedPatternReference {
   return {
     id: "proof-led-section",
-    targetKind: "pattern"
+    targetKind: "pattern",
+    nodeId: "proof-section",
+    props: proofProps()
   };
 }
 
@@ -249,6 +251,18 @@ function outcomeCompositionSpec(): unknown {
           {
             slot: "proof_context",
             fills: [{ target_kind: "pattern", target_id: "proof-led-section" }]
+          }
+        ]
+      },
+      {
+        node_id: "proof-section",
+        target_kind: "pattern",
+        target_id: "proof-led-section",
+        props: propsArray(proofProps()),
+        slot_fills: [
+          {
+            slot: "proof_asset",
+            fills: [{ target_kind: "asset", target_id: "proof-strip-case-study" }]
           }
         ]
       }

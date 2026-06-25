@@ -56,6 +56,8 @@ export interface ResolvedAsset {
 export interface ResolvedPatternReference {
   readonly id: string;
   readonly targetKind: "pattern";
+  readonly nodeId?: string;
+  readonly props?: PatternPropMap;
 }
 
 export type ResolvedSlotTarget = ResolvedAsset | ResolvedPatternReference;

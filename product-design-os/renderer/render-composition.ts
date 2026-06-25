@@ -2,13 +2,14 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { checkRenderedContract } from "./check-render-contract";
+import { checkRenderedContract, type RenderContractIssue } from "./check-render-contract";
 import { mapTokensToCss } from "./map-tokens";
-import { getPatternComponent, hasPatternComponent } from "./pattern-component-registry";
+import { getPatternComponent, hasPatternComponent, hasSectionPatternComponent } from "./pattern-component-registry";
 import { assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
 import type {
   AssetManifestEntry,
   ComponentContract,
+  PatternPropMap,
   PatternSlotMap,
   QaTarget,
   ResolvedAsset,
@@ -21,6 +22,23 @@ import type {
 export interface RenderCompositionResult {
   readonly html: string;
   readonly qaTargets: readonly QaTarget[];
+}
+
+export interface RenderCompositionPageResult {
+  readonly html: string;
+  readonly sections: readonly RenderedCompositionSection[];
+  readonly skipped: readonly SkippedCompositionNode[];
+}
+
+export interface RenderedCompositionSection {
+  readonly node_id: string;
+  readonly pattern_id: string;
+  readonly contractErrors: readonly RenderContractIssue[];
+}
+
+export interface SkippedCompositionNode {
+  readonly node_id: string;
+  readonly reason: string;
 }
 
 export class RenderCompositionSpecError extends Error {
@@ -81,6 +99,7 @@ interface RenderPatternData {
   readonly props: Record<string, string>;
   readonly slotFills: readonly SlotFill[];
   readonly tokenOverrides: TokenOverrideMap;
+  readonly compositionNodes?: readonly CompositionNode[];
 }
 
 interface ContractManifest {
@@ -117,9 +136,8 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
   const component = getPatternComponent(patternData.patternId);
   const contract = readPatternContract(pdosRoot, patternData.patternId);
   const assetManifest = readAssetManifest(pdosRoot);
-  const slots = resolveSlots(patternData.slotFills, assetManifest, pdosRoot, contract);
+  const slots = resolveSlots(patternData.slotFills, assetManifest, pdosRoot, contract, patternData.compositionNodes);
   const tokenCss = mapTokensToCss(pdosRoot, patternData.tokenOverrides);
-  assertTokenColorContrast(tokenCss);
 
   const fragment = component.render({
     props: patternData.props,
@@ -146,6 +164,7 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
     "</body>",
     "</html>"
   ].join("\n");
+  assertTokenColorContrast(html);
 
   return {
     html,
@@ -164,7 +183,120 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
   };
 }
 
+export function renderCompositionPage(specInput: unknown, pdosRoot: string): RenderCompositionPageResult {
+  if (!isRecord(specInput) || !("nodes" in specInput)) {
+    throw new RenderCompositionSpecError("malformed_spec", "Expected a composition spec with a nodes array.");
+  }
+
+  const spec = readCompositionSpec(specInput);
+  const assetManifest = readAssetManifest(pdosRoot);
+  const contractManifest = readContractManifest(pdosRoot);
+  const tokenCss = mapTokensToCss(pdosRoot, readTokenOverrides(spec));
+
+  const fragments: string[] = [];
+  const sections: RenderedCompositionSection[] = [];
+  const skipped: SkippedCompositionNode[] = [];
+  const componentCss = new Set<string>();
+
+  spec.nodes.forEach((node, index) => {
+    const nodeId = node.node_id ?? `composition-node-${index + 1}`;
+
+    if (node.target_kind === "asset") {
+      skipped.push({
+        node_id: nodeId,
+        reason: `Asset ${node.target_id ?? "<missing>"} is slot-only and skipped during section rendering.`
+      });
+      return;
+    }
+
+    if (node.target_kind !== "pattern") {
+      throw new RenderCompositionSpecError(
+        "unsupported_target_kind",
+        `Composition node ${nodeId} has unsupported target_kind ${node.target_kind ?? "<missing>"}.`
+      );
+    }
+
+    const patternId = node.target_id;
+    if (typeof patternId !== "string" || patternId.trim().length === 0) {
+      throw new RenderCompositionSpecError("malformed_pattern_id", `Pattern node ${nodeId} is missing a string target_id.`);
+    }
+
+    const contract = findPatternContract(contractManifest, patternId);
+    if (!hasPatternComponent(patternId)) {
+      if (contract !== undefined) {
+        skipped.push({
+          node_id: nodeId,
+          reason: `Pattern ${patternId} has a contract but no registered section renderer.`
+        });
+        return;
+      }
+
+      throw new RenderCompositionSpecError(
+        "unsupported_pattern_id",
+        `No renderer or contract registered for pattern ${patternId} on node ${nodeId}.`
+      );
+    }
+
+    if (!hasSectionPatternComponent(patternId)) {
+      skipped.push({
+        node_id: nodeId,
+        reason: `Pattern ${patternId} is registered, but not as a section renderer.`
+      });
+      return;
+    }
+
+    if (contract === undefined) {
+      throw new RenderCompositionSpecError("contract_missing", `Missing contract for renderable pattern ${patternId}.`);
+    }
+
+    const component = getPatternComponent(patternId);
+    const fragment = component.render({
+      props: readCompositionProps(node.props),
+      slots: resolveSlots(readSlotFills(node.slot_fills), assetManifest, pdosRoot, contract, spec.nodes),
+      contract
+    });
+    const report = checkRenderedContract(fragment, contract);
+
+    componentCss.add(component.css);
+    fragments.push(fragment);
+    sections.push({
+      node_id: nodeId,
+      pattern_id: patternId,
+      contractErrors: report.errors
+    });
+  });
+
+  if (sections.length === 0) {
+    const skippedPatternIds = skipped.map((node) => `${node.node_id} (${node.reason})`).join("; ");
+    throw new RenderCompositionSpecError(
+      "pattern_node_missing",
+      `Composition spec does not contain a renderable section pattern node. Skipped nodes: ${skippedPatternIds || "<none>"}.`
+    );
+  }
+
+  const title = typeof spec.id === "string" ? spec.id : sections[0]?.pattern_id ?? "composition";
+  const html = renderHtmlDocument({
+    title,
+    tokenCss,
+    componentCss: [...componentCss].join("\n\n"),
+    body: `<main class="pdos-page" data-composition-id="${escapeAttribute(title)}">\n${fragments.join("\n")}\n</main>`
+  });
+  assertTokenColorContrast(html);
+
+  return {
+    html,
+    sections,
+    skipped
+  };
+}
+
 const documentBaseCss = `
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html {
   min-width: 320px;
   color: var(--color-text);
@@ -172,6 +304,14 @@ html {
 }
 
 body {
+  --pdos-page-container-max: 1180px;
+  --pdos-page-gutter: var(--space-6);
+  --pdos-page-section-padding-block: calc(var(--space-8) * 2);
+  --pdos-page-section-gap: calc(var(--space-8) * 2);
+  --pdos-type-kicker: 0.84rem;
+  --pdos-type-body-lg: 1.15rem;
+  --pdos-type-heading: 5rem;
+  --pdos-type-display: 7.4rem;
   margin: 0;
   font-family: var(--type-font-body);
   font-size: var(--type-size-body);
@@ -179,7 +319,130 @@ body {
   color: var(--color-text);
   background: var(--color-background);
 }
+
+img,
+svg {
+  max-width: 100%;
+}
+
+.pdos-page {
+  min-height: 100svh;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  row-gap: var(--pdos-page-section-gap);
+  color: var(--color-text);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-border) 26%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in srgb, var(--color-border) 22%, transparent) 1px, transparent 1px),
+    var(--style-surface-background);
+  background-size:
+    clamp(7rem, 16vw, 14rem) clamp(7rem, 16vw, 14rem),
+    clamp(7rem, 16vw, 14rem) clamp(7rem, 16vw, 14rem),
+    auto;
+}
+
+.pdos-page > section {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+.sharp-positioning-hero__copy::before,
+.proof-led-section__content::before,
+.outcome-cta__inner::before {
+  content: "";
+  display: block;
+  width: clamp(5rem, 18cqi, 14rem);
+  height: var(--style-decoration-border-width);
+  border-radius: var(--style-corner-radius);
+  background: var(--color-accent-secondary);
+  opacity: var(--style-decoration-opacity);
+  transform: rotate(var(--style-accent-angle-deg));
+  transform-origin: left center;
+}
+
+.cta {
+  min-width: 44px;
+  min-height: 44px;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4) var(--space-6);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--style-corner-radius);
+  color: var(--color-accent-text);
+  background: var(--color-accent);
+  font-family: var(--type-font-body);
+  font-size: var(--type-size-body);
+  font-weight: var(--type-weight-bold);
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: var(--shadow-md);
+  transition:
+    transform var(--motion-duration-fast) var(--motion-easing-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+.cta:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-accent-secondary);
+  background: var(--color-accent-secondary);
+}
+
+.cta:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  body {
+    --pdos-page-gutter: var(--space-4);
+    --pdos-page-section-padding-block: var(--space-8);
+    --pdos-page-section-gap: var(--space-8);
+    --pdos-type-heading: 3.35rem;
+    --pdos-type-display: 4.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta {
+    transition: none;
+  }
+
+  .cta:hover {
+    transform: none;
+  }
+}
 `.trim();
+
+function renderHtmlDocument(input: {
+  readonly title: string;
+  readonly tokenCss: string;
+  readonly componentCss: string;
+  readonly body: string;
+}): string {
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escapeHtml(input.title)}</title>`,
+    "<style>",
+    input.tokenCss,
+    documentBaseCss,
+    input.componentCss,
+    "</style>",
+    "</head>",
+    "<body>",
+    input.body,
+    "</body>",
+    "</html>"
+  ].join("\n");
+}
 
 function selectorForFirstContractProp(contract: ComponentContract, propNames: readonly string[], fallback = "[data-contract-prop]"): string {
   const propName = propNames.find((candidate) => contract.props.some((prop) => prop.name === candidate));
@@ -251,7 +514,8 @@ function resolvePatternData(input: unknown): RenderPatternData {
       nodeId: node.node_id ?? "rendered-pattern",
       props: readCompositionProps(node.props),
       slotFills: readSlotFills(node.slot_fills),
-      tokenOverrides: readTokenOverrides(spec)
+      tokenOverrides: readTokenOverrides(spec),
+      compositionNodes: spec.nodes
     };
   }
 
@@ -445,16 +709,23 @@ function readSlotFills(value: unknown): readonly SlotFill[] {
 }
 
 function readPatternContract(pdosRoot: string, patternId: string): ComponentContract {
-  const manifest = readJson<ContractManifest>(path.join(pdosRoot, "contracts", "component-contract-manifest.json"));
-  const contract = manifest.contracts?.find(
-    (candidate) => candidate.target_kind === "pattern" && candidate.target_id === patternId
-  );
+  const contract = findPatternContract(readContractManifest(pdosRoot), patternId);
 
   if (contract === undefined) {
     throw new Error(`Missing contract for pattern ${patternId}.`);
   }
 
   return contract;
+}
+
+function readContractManifest(pdosRoot: string): ContractManifest {
+  return readJson<ContractManifest>(path.join(pdosRoot, "contracts", "component-contract-manifest.json"));
+}
+
+function findPatternContract(manifest: ContractManifest, patternId: string): ComponentContract | undefined {
+  return manifest.contracts?.find(
+    (candidate) => candidate.target_kind === "pattern" && candidate.target_id === patternId
+  );
 }
 
 function readAssetManifest(pdosRoot: string): AssetManifest {
@@ -465,7 +736,8 @@ function resolveSlots(
   slotFills: readonly SlotFill[],
   assetManifest: AssetManifest,
   pdosRoot: string,
-  contract: ComponentContract
+  contract: ComponentContract,
+  compositionNodes: readonly CompositionNode[] = []
 ): PatternSlotMap {
   const slots: Record<string, ResolvedSlotTarget[]> = {};
 
@@ -475,10 +747,27 @@ function resolveSlots(
     }
 
     const contractSlot = contract.slots.find((slot) => slot.name === slotFill.slot);
+    if (contractSlot === undefined) {
+      throw new RenderCompositionSpecError(
+        "unknown_slot_name",
+        `Pattern ${contract.target_id} does not define slot "${slotFill.slot}".`
+      );
+    }
+
     const resolvedTargets: ResolvedSlotTarget[] = [];
     for (const fill of slotFill.fills ?? []) {
       if (fill.target_id === undefined) {
-        continue;
+        throw new RenderCompositionSpecError(
+          "malformed_slot_fills",
+          `slot_fills for "${slotFill.slot}" require target_kind and target_id.`
+        );
+      }
+
+      if (fill.target_kind !== "asset" && fill.target_kind !== "pattern") {
+        throw new RenderCompositionSpecError(
+          "unsupported_slot_fill_target_kind",
+          `Slot "${slotFill.slot}" on pattern ${contract.target_id} has unsupported fill target_kind ${fill.target_kind ?? "<missing>"}.`
+        );
       }
 
       if (fill.target_kind === "asset") {
@@ -492,7 +781,7 @@ function resolveSlots(
       }
 
       if (fill.target_kind === "pattern") {
-        resolvedTargets.push(resolvePatternReference(fill.target_id));
+        resolvedTargets.push(resolvePatternReference(fill.target_id, compositionNodes));
       }
     }
 
@@ -502,11 +791,67 @@ function resolveSlots(
   return slots;
 }
 
-function resolvePatternReference(patternId: string): ResolvedPatternReference {
+function resolvePatternReference(patternReferenceId: string, compositionNodes: readonly CompositionNode[]): ResolvedPatternReference {
+  const nodeIdMatches = compositionNodes.filter((node) => node.target_kind === "pattern" && node.node_id === patternReferenceId);
+  if (nodeIdMatches.length > 1) {
+    throw new RenderCompositionSpecError(
+      "ambiguous_pattern_node_id",
+      `Pattern slot reference ${patternReferenceId} matched multiple composition node_id values.`
+    );
+  }
+
+  if (nodeIdMatches.length === 1) {
+    const sourceNode = nodeIdMatches[0];
+    if (sourceNode === undefined) {
+      throw new RenderCompositionSpecError("ambiguous_pattern_node_id", `Pattern slot reference ${patternReferenceId} was unreadable.`);
+    }
+    return resolvedPatternReferenceFromNode(patternReferenceId, sourceNode);
+  }
+
+  const targetIdMatches = compositionNodes.filter((node) => node.target_kind === "pattern" && node.target_id === patternReferenceId);
+  if (targetIdMatches.length > 1) {
+    throw new RenderCompositionSpecError(
+      "ambiguous_pattern_target_id",
+      `Pattern slot reference ${patternReferenceId} matched ${targetIdMatches.length} composition nodes by target_id; use a node_id target instead.`
+    );
+  }
+
+  if (targetIdMatches.length === 1) {
+    const sourceNode = targetIdMatches[0];
+    if (sourceNode === undefined) {
+      throw new RenderCompositionSpecError("ambiguous_pattern_target_id", `Pattern slot reference ${patternReferenceId} was unreadable.`);
+    }
+    return resolvedPatternReferenceFromNode(patternReferenceId, sourceNode);
+  }
+
   return {
-    id: patternId,
+    id: patternReferenceId,
     targetKind: "pattern"
   };
+}
+
+function resolvedPatternReferenceFromNode(patternReferenceId: string, sourceNode: CompositionNode): ResolvedPatternReference {
+  if (typeof sourceNode.target_id !== "string" || sourceNode.target_id.trim().length === 0) {
+    throw new RenderCompositionSpecError(
+      "malformed_pattern_id",
+      `Pattern slot reference ${patternReferenceId} resolves to a node without a string target_id.`
+    );
+  }
+
+  const reference: ResolvedPatternReference = {
+    id: sourceNode.target_id,
+    targetKind: "pattern"
+  };
+
+  if (sourceNode?.node_id !== undefined) {
+    (reference as { nodeId?: string }).nodeId = sourceNode.node_id;
+  }
+
+  if (sourceNode?.props !== undefined) {
+    (reference as { props?: PatternPropMap }).props = readCompositionProps(sourceNode.props);
+  }
+
+  return reference;
 }
 
 function resolveAsset(
@@ -663,6 +1008,10 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function escapeAttribute(value: string): string {
+  return escapeHtml(value);
+}
+
 function isCliEntryPoint(): boolean {
   const entryPoint = process.argv[1];
   if (entryPoint === undefined) {
@@ -677,11 +1026,14 @@ if (isCliEntryPoint()) {
   const pdosRoot = path.join(repoRoot, "product-design-os");
   const spec = readJson<CompositionSpec>(path.join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json"));
   const result = renderComposition(spec, pdosRoot);
+  const pageResult = renderCompositionPage(spec, pdosRoot);
   const outputDir = path.join(repoRoot, "output", "render");
   const outputPath = path.join(outputDir, "sharp-positioning-hero.html");
+  const pageOutputPath = path.join(outputDir, "landing-page.html");
 
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(outputPath, result.html, "utf8");
+  writeFileSync(pageOutputPath, pageResult.html, "utf8");
 
   const contract = readPatternContract(pdosRoot, "sharp-positioning-hero");
   const report = checkRenderedContract(result.html, contract);
@@ -689,5 +1041,15 @@ if (isCliEntryPoint()) {
     throw new Error(`Rendered contract failed: ${report.errors.map((issue) => issue.code).join(", ")}`);
   }
 
+  const pageContractFailures = pageResult.sections.filter((section) => section.contractErrors.length > 0);
+  if (pageContractFailures.length > 0) {
+    throw new Error(
+      `Rendered page contract failed: ${pageContractFailures
+        .map((section) => `${section.node_id}:${section.contractErrors.map((issue) => issue.code).join(",")}`)
+        .join("; ")}`
+    );
+  }
+
   console.log(`Rendered ${path.relative(repoRoot, outputPath).replace(/\\/g, "/")}`);
+  console.log(`Rendered ${path.relative(repoRoot, pageOutputPath).replace(/\\/g, "/")}`);
 }

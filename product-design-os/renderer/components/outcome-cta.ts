@@ -30,53 +30,59 @@ export const outcomeCtaCss = `
   position: relative;
   overflow: hidden;
   color: var(--color-text);
-  background: var(--color-background);
-}
-
-.outcome-cta,
-.outcome-cta * {
-  box-sizing: border-box;
-}
-
-.outcome-cta::before {
-  content: "";
-  position: absolute;
-  inset: var(--space-4);
-  border: var(--style-decoration-border-width) solid var(--color-border);
-  border-radius: var(--style-corner-radius);
-  background: var(--style-surface-background);
+  background: transparent;
 }
 
 .outcome-cta__inner {
   position: relative;
   z-index: 1;
-  width: min(100%, 1180px);
+  width: min(100%, var(--pdos-page-container-max));
   margin-inline: auto;
-  padding: clamp(var(--space-8), 8cqi, calc(var(--space-8) * 2)) var(--space-6);
+  padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);
+  display: grid;
+  gap: var(--space-6);
 }
 
 .outcome-cta__copy {
   display: grid;
-  grid-template-columns: minmax(2.75rem, 0.12fr) minmax(0, 1fr) auto;
-  gap: clamp(var(--space-4), 4cqi, var(--space-8));
+  grid-template-columns: minmax(13rem, 0.36fr) minmax(0, 1fr) auto;
+  gap: var(--pdos-page-section-gap);
   align-items: center;
 }
 
 .outcome-cta__proof-context {
   min-width: 44px;
   min-height: 44px;
-  height: 100%;
-  align-self: stretch;
+  align-self: center;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-inline-start: var(--style-decoration-border-width) solid var(--color-accent-secondary);
   border-radius: var(--style-corner-radius);
-  background:
-    linear-gradient(
-      180deg,
-      var(--color-accent-secondary) 0%,
-      color-mix(in srgb, var(--color-accent-secondary) 42%, var(--color-accent-soft)) 100%
-    );
-  opacity: var(--style-decoration-opacity);
-  transform: skewY(var(--style-accent-angle-deg));
-  transform-origin: center;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 78%, var(--color-background));
+  box-shadow: var(--shadow-sm);
+}
+
+.outcome-cta__proof-source,
+.outcome-cta__proof-text {
+  margin: 0;
+}
+
+.outcome-cta__proof-source {
+  width: fit-content;
+  color: var(--color-muted-text);
+  font-family: var(--type-font-body);
+  font-size: var(--pdos-type-kicker);
+  font-weight: var(--type-weight-bold);
+  letter-spacing: 0;
+}
+
+.outcome-cta__proof-text {
+  color: var(--color-text);
+  font-family: var(--type-font-body);
+  font-size: var(--type-size-body);
+  line-height: var(--type-line-height-body);
 }
 
 .outcome-cta h2 {
@@ -84,68 +90,25 @@ export const outcomeCtaCss = `
   max-width: 16ch;
   color: var(--color-text);
   font-family: var(--type-font-heading);
-  font-size: clamp(2.35rem, 7cqi, 5.5rem);
+  font-size: var(--pdos-type-heading);
   line-height: 0.94;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
   text-transform: var(--style-heading-transform);
 }
 
-.outcome-cta .cta {
-  min-width: 44px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4) var(--space-6);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--style-corner-radius);
-  color: var(--color-accent-text);
-  background: var(--color-accent);
-  font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
-  font-weight: var(--type-weight-bold);
-  line-height: 1;
-  text-decoration: none;
-  box-shadow: var(--shadow-md);
-  transition:
-    transform var(--motion-duration-fast) var(--motion-easing-standard),
-    box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
-}
-
-.outcome-cta .cta:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-accent-secondary);
-  background: var(--color-accent-secondary);
-}
-
-.outcome-cta .cta:focus-visible {
-  outline: 3px solid var(--color-focus-ring);
-  outline-offset: 3px;
-}
-
 @media (max-width: 760px) {
-  .outcome-cta::before {
-    inset: var(--space-3);
-  }
-
-  .outcome-cta__inner {
-    padding: var(--space-8) var(--space-4);
-  }
-
   .outcome-cta__copy {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
 
   .outcome-cta__proof-context {
-    height: 0.5rem;
-    min-height: 0.5rem;
+    min-height: 44px;
   }
 
   .outcome-cta h2 {
     max-width: 12ch;
-    font-size: clamp(2rem, 14cqi, 3.35rem);
   }
 
   .outcome-cta .cta {
@@ -153,15 +116,6 @@ export const outcomeCtaCss = `
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .outcome-cta .cta {
-    transition: none;
-  }
-
-  .outcome-cta .cta:hover {
-    transform: none;
-  }
-}
 `.trim();
 
 export function renderOutcomeCta(input: PatternRenderInput): string {
@@ -172,12 +126,15 @@ export function renderOutcomeCta(input: PatternRenderInput): string {
 
   const props = normalizeProps(input.props);
   const proofContext = firstPattern(input.slots.proof_context);
+  const proofContextId = proofContext?.nodeId ?? proofContext?.id ?? "";
 
   return `
-<section class="outcome-cta" data-pattern-id="outcome-cta" data-contract-id="${escapeAttribute(input.contract.id)}" data-proof-context-id="${escapeAttribute(proofContext?.id ?? "")}" aria-labelledby="outcome-cta-title">
+<section class="outcome-cta" data-pattern-id="outcome-cta" data-contract-id="${escapeAttribute(input.contract.id)}" data-proof-context-id="${escapeAttribute(proofContextId)}" aria-labelledby="outcome-cta-title">
   <div class="outcome-cta__inner">
     <div class="outcome-cta__copy">
-      <div class="outcome-cta__proof-context" data-contract-slot="proof_context" data-slot-target-kind="pattern" data-slot-target-id="${escapeAttribute(proofContext?.id ?? "")}" aria-label="${escapeAttribute(props.outcome_statement)}"></div>
+      <div class="outcome-cta__proof-context" data-contract-slot="proof_context" data-slot-target-kind="pattern" data-slot-target-id="${escapeAttribute(proofContextId)}">
+        ${renderProofContext(proofContext)}
+      </div>
       <h2 id="outcome-cta-title" data-contract-prop="outcome_statement">${escapeHtml(props.outcome_statement)}</h2>
       <a class="cta" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
     </div>
@@ -315,4 +272,32 @@ function normalizeProps(props: PatternRenderInput["props"]): ValidOutcomeCtaProp
 
 function firstPattern(slotTargets: readonly ResolvedSlotTarget[] | undefined): ResolvedPatternReference | undefined {
   return slotTargets?.find((slotTarget): slotTarget is ResolvedPatternReference => slotTarget.targetKind === "pattern");
+}
+
+function renderProofContext(proofContext: ResolvedPatternReference | undefined): string {
+  const proofText = firstNonEmpty(proofContext?.props?.proof_item, proofContext?.props?.outcome_statement);
+  if (proofText === undefined) {
+    return "";
+  }
+
+  const source = firstNonEmpty(proofContext?.props?.source_reference);
+  const sourceMarkup =
+    source === undefined
+      ? ""
+      : `<p class="outcome-cta__proof-source" data-contract-prop="source_reference">${escapeHtml(source)}</p>`;
+
+  return `
+${sourceMarkup}
+<p class="outcome-cta__proof-text" data-contract-prop="proof_item">${escapeHtml(proofText)}</p>`.trim();
+}
+
+function firstNonEmpty(...values: readonly (string | undefined)[]): string | undefined {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed !== undefined && trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
 }

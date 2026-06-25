@@ -133,7 +133,7 @@ describe("Product Design OS slice 1 renderer", () => {
     ).toThrow(TokenOverrideValidationError);
   });
 
-  it("renders SVG theme assets as images and ignores hostile inline SVG content", () => {
+  it("keeps theme background assets out of the section canvas and ignores hostile inline SVG content", () => {
     const contract = readSharpPositioningHeroContract();
     const slots = demoSlots();
     const themeBackground = slots.theme_background[0];
@@ -159,7 +159,8 @@ describe("Product Design OS slice 1 renderer", () => {
       contract
     });
 
-    expect(html).toContain('<img src="../../product-design-os/assets/backgrounds/theme-calm-prism-grid.svg"');
+    expect(html).toContain('data-theme-background-id="theme-calm-prism-grid"');
+    expect(html).not.toContain('<img src="../../product-design-os/assets/backgrounds/theme-calm-prism-grid.svg"');
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("foreignObject");
     expect(html).not.toContain("onload");

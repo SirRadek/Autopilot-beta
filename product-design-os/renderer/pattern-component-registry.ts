@@ -9,20 +9,24 @@ import type { PatternRenderInput } from "./types";
 export interface PatternComponentRegistryEntry {
   readonly render: (input: PatternRenderInput) => string;
   readonly css: string;
+  readonly rendererKind: "section";
 }
 
 export const patternComponentRegistry = {
   "sharp-positioning-hero": {
     render: renderSharpPositioningHero,
-    css: sharpPositioningHeroCss
+    css: sharpPositioningHeroCss,
+    rendererKind: "section"
   },
   "proof-led-section": {
     render: renderProofLedSection,
-    css: proofLedSectionCss
+    css: proofLedSectionCss,
+    rendererKind: "section"
   },
   "outcome-cta": {
     render: renderOutcomeCta,
-    css: outcomeCtaCss
+    css: outcomeCtaCss,
+    rendererKind: "section"
   }
 } satisfies Record<string, PatternComponentRegistryEntry>;
 
@@ -30,6 +34,10 @@ export type RegisteredPatternId = keyof typeof patternComponentRegistry;
 
 export function hasPatternComponent(patternId: string): patternId is RegisteredPatternId {
   return Object.prototype.hasOwnProperty.call(patternComponentRegistry, patternId);
+}
+
+export function hasSectionPatternComponent(patternId: string): patternId is RegisteredPatternId {
+  return hasPatternComponent(patternId) && patternComponentRegistry[patternId].rendererKind === "section";
 }
 
 export function getPatternComponent(patternId: string): PatternComponentRegistryEntry {

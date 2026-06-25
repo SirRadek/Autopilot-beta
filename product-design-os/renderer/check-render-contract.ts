@@ -70,12 +70,23 @@ export function checkRenderedContract(html: string, contract: ComponentContract)
     const patternRoots = root
       .querySelectorAll("[data-pattern-id]")
       .filter((element) => element.getAttribute("data-pattern-id") === contract.target_id);
+    const requiresOutcomeStatement = contract.props.some((prop) => prop.name === "outcome_statement");
+    const outcomeMinLength = minLengthForProp(contract, "outcome_statement", 1);
     const outcomeNodes = root
       .querySelectorAll("[data-contract-prop]")
       .filter((element) => element.getAttribute("data-contract-prop") === "outcome_statement")
       .filter(isVisibleElement)
-      .filter((element) => patternRoots.length === 0 || isDescendantOfAny(element, patternRoots));
+      .filter((element) => patternRoots.length === 0 || isDescendantOfAny(element, patternRoots))
+      .filter((element) => normalizeText(element.text).length >= outcomeMinLength);
     const proofNodes = proofAdjacencyNodes(root, contract, patternRoots);
+
+    if (requiresOutcomeStatement && outcomeNodes.length === 0) {
+      pushIssue(
+        "proof_adjacency",
+        "warning",
+        `Expected a visible outcome_statement node with at least ${outcomeMinLength} characters.`
+      );
+    }
 
     if (proofNodes.length === 0) {
       pushIssue("proof_adjacency", "warning", "Expected a visible proof/source node adjacent to the outcome.");
@@ -184,9 +195,41 @@ function proofAdjacencyNodes(root: HTMLElement, contract: ComponentContract, pat
   const slotNodes = root
     .querySelectorAll("[data-contract-slot]")
     .filter((element) => proofSlotNames.includes(element.getAttribute("data-contract-slot") ?? ""))
-    .filter(isVisibleElement);
+    .filter(isVisibleElement)
+    .filter((element) => hasVisibleProofSlotContent(element, contract));
 
   return [...propNodes, ...slotNodes].filter((element) => patternRoots.length === 0 || isDescendantOfAny(element, patternRoots));
+}
+
+function hasVisibleProofSlotContent(element: HTMLElement, contract: ComponentContract): boolean {
+  const slotName = element.getAttribute("data-contract-slot");
+  const nestedProofProps = element
+    .querySelectorAll("[data-contract-prop]")
+    .filter(isVisibleElement)
+    .filter((candidate) => {
+      const propName = candidate.getAttribute("data-contract-prop");
+      if (propName === undefined || !["proof_item", "source_reference"].includes(propName)) {
+        return false;
+      }
+
+      return normalizeText(candidate.text).length >= minLengthForProp(contract, propName, 1);
+    });
+
+  if (nestedProofProps.length > 0) {
+    return true;
+  }
+
+  return slotName === "proof_asset" && hasResolvedProofAsset(element);
+}
+
+function hasResolvedProofAsset(element: HTMLElement): boolean {
+  const assetId = element.getAttribute("data-asset-id")?.trim() ?? "";
+  const assetSource = element.getAttribute("data-asset-source")?.trim() ?? "";
+  if (assetId.length === 0 || assetSource.length === 0) {
+    return false;
+  }
+
+  return element.querySelector("img,svg") !== null;
 }
 
 function areAdjacentElements(left: HTMLElement, right: HTMLElement): boolean {

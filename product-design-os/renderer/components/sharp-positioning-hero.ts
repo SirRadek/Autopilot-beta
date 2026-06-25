@@ -45,45 +45,18 @@ export const sharpPositioningHeroCss = `
   min-height: min(760px, 100svh);
   overflow: hidden;
   color: var(--color-text);
-  background: var(--color-background);
+  background: transparent;
   isolation: isolate;
 }
 
-.sharp-positioning-hero,
-.sharp-positioning-hero * {
-  box-sizing: border-box;
-}
-
-.sharp-positioning-hero__theme {
-  position: absolute;
-  inset: 0;
-  z-index: -3;
-}
-
-.sharp-positioning-hero__theme svg,
-.sharp-positioning-hero__theme img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.sharp-positioning-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  background: var(--style-surface-background);
-}
-
 .sharp-positioning-hero__layout {
-  width: min(100%, 1180px);
+  width: min(100%, var(--pdos-page-container-max));
   min-height: inherit;
   margin-inline: auto;
-  padding: clamp(var(--space-6), 6cqi, calc(var(--space-8) * 2)) var(--space-6);
+  padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 0.95fr);
-  gap: clamp(var(--space-6), 5cqi, calc(var(--space-8) * 2));
+  gap: var(--pdos-page-section-gap);
   align-items: center;
 }
 
@@ -95,16 +68,6 @@ export const sharpPositioningHeroCss = `
   max-width: 52rem;
 }
 
-.sharp-positioning-hero__copy::before {
-  content: "";
-  width: clamp(5rem, 18cqi, 14rem);
-  height: var(--style-decoration-border-width);
-  background: var(--color-accent-secondary);
-  opacity: var(--style-decoration-opacity);
-  transform: rotate(var(--style-accent-angle-deg));
-  transform-origin: left center;
-}
-
 .sharp-positioning-hero__eyebrow {
   display: inline-flex;
   width: fit-content;
@@ -114,7 +77,7 @@ export const sharpPositioningHeroCss = `
   border-block-end: var(--style-decoration-border-width) solid var(--color-accent-soft);
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
-  font-size: 0.84rem;
+  font-size: var(--pdos-type-kicker);
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
 }
@@ -123,7 +86,7 @@ export const sharpPositioningHeroCss = `
   max-width: 11ch;
   margin: 0;
   font-family: var(--type-font-heading);
-  font-size: clamp(3rem, 11cqi, 7.4rem);
+  font-size: var(--pdos-type-display);
   line-height: 0.9;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
@@ -135,39 +98,6 @@ export const sharpPositioningHeroCss = `
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
-}
-
-.sharp-positioning-hero .cta {
-  min-width: 44px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4) var(--space-6);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--style-corner-radius);
-  color: var(--color-accent-text);
-  background: var(--color-accent);
-  font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
-  font-weight: var(--type-weight-bold);
-  line-height: 1;
-  text-decoration: none;
-  box-shadow: var(--shadow-md);
-  transition:
-    transform var(--motion-duration-fast) var(--motion-easing-standard),
-    box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
-}
-
-.sharp-positioning-hero .cta:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-accent-secondary);
-  background: var(--color-accent-secondary);
-}
-
-.sharp-positioning-hero .cta:focus-visible {
-  outline: 3px solid var(--color-focus-ring);
-  outline-offset: 3px;
 }
 
 .sharp-positioning-hero__trust {
@@ -186,8 +116,6 @@ export const sharpPositioningHeroCss = `
   position: relative;
   min-height: clamp(22rem, 56cqi, 38rem);
   border-radius: var(--style-corner-radius);
-  transform: skewX(var(--style-accent-angle-deg));
-  transform-origin: center;
 }
 
 .sharp-positioning-hero__asset {
@@ -196,8 +124,6 @@ export const sharpPositioningHeroCss = `
   width: 100%;
   height: 100%;
   overflow: visible;
-  transform: skewX(var(--style-accent-angle-inverse-deg));
-  transform-origin: center;
 }
 
 .sharp-positioning-hero__asset-panel {
@@ -231,12 +157,10 @@ export const sharpPositioningHeroCss = `
 
   .sharp-positioning-hero__layout {
     grid-template-columns: 1fr;
-    padding: var(--space-8) var(--space-4);
   }
 
   .sharp-positioning-hero h1 {
     max-width: 10ch;
-    font-size: clamp(2.6rem, 18cqi, 4.5rem);
   }
 
   .sharp-positioning-hero__asset-wrap {
@@ -245,16 +169,6 @@ export const sharpPositioningHeroCss = `
 
   .sharp-positioning-hero__action-row {
     align-items: stretch;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sharp-positioning-hero .cta {
-    transition: none;
-  }
-
-  .sharp-positioning-hero .cta:hover {
-    transform: none;
   }
 }
 `.trim();
@@ -271,7 +185,6 @@ export function renderSharpPositioningHero(input: PatternRenderInput): string {
 
   return `
 <section class="sharp-positioning-hero" data-pattern-id="sharp-positioning-hero" data-contract-id="${escapeAttribute(input.contract.id)}" data-hero-asset-id="${escapeAttribute(heroAsset?.id ?? "")}" data-theme-background-id="${escapeAttribute(themeBackground?.id ?? "")}" aria-labelledby="sharp-positioning-hero-title">
-  ${renderThemeBackground(themeBackground)}
   <div class="sharp-positioning-hero__layout">
     <div class="sharp-positioning-hero__copy">
       <div class="sharp-positioning-hero__eyebrow" aria-hidden="true">Offer / proof / request</div>
@@ -438,18 +351,6 @@ function normalizeProps(props: PatternRenderInput["props"]): ValidSharpPositioni
     trust_cue: props.trust_cue?.trim() ?? "",
     cta_href: href
   };
-}
-
-function renderThemeBackground(asset: ResolvedAsset | undefined): string {
-  if (asset === undefined) {
-    return "";
-  }
-
-  if (asset.href !== undefined) {
-    return `<div class="sharp-positioning-hero__theme" aria-hidden="true" data-asset-id="${escapeAttribute(asset.id)}" data-asset-source="${escapeAttribute(asset.source)}"><img src="${escapeAttribute(asset.href)}" alt="" loading="eager" decoding="async"></div>`;
-  }
-
-  return `<div class="sharp-positioning-hero__theme" aria-hidden="true" data-asset-id="${escapeAttribute(asset.id)}" data-asset-source="${escapeAttribute(asset.source)}"></div>`;
 }
 
 export function isFileBackedAsset(asset: ResolvedAsset): boolean {

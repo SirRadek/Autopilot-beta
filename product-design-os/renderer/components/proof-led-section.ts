@@ -32,31 +32,18 @@ export const proofLedSectionCss = `
   position: relative;
   overflow: hidden;
   color: var(--color-text);
-  background: var(--color-background);
-}
-
-.proof-led-section,
-.proof-led-section * {
-  box-sizing: border-box;
-}
-
-.proof-led-section::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: var(--style-surface-background);
+  background: transparent;
 }
 
 .proof-led-section__inner {
   position: relative;
   z-index: 1;
-  width: min(100%, 1180px);
+  width: min(100%, var(--pdos-page-container-max));
   margin-inline: auto;
-  padding: clamp(var(--space-7), 7cqi, calc(var(--space-8) * 2)) var(--space-6);
+  padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);
   display: grid;
   grid-template-columns: minmax(16rem, 0.72fr) minmax(0, 1fr);
-  gap: clamp(var(--space-6), 6cqi, calc(var(--space-8) * 2));
+  gap: var(--pdos-page-section-gap);
   align-items: center;
 }
 
@@ -68,8 +55,6 @@ export const proofLedSectionCss = `
   border-radius: var(--style-corner-radius);
   background: color-mix(in srgb, var(--color-surface) 84%, var(--color-background));
   box-shadow: var(--shadow-md);
-  transform: rotate(var(--style-accent-angle-deg));
-  transform-origin: center;
 }
 
 .proof-led-section__asset-wrap img,
@@ -86,8 +71,6 @@ export const proofLedSectionCss = `
 .proof-led-section__asset {
   position: absolute;
   inset: 0;
-  transform: rotate(var(--style-accent-angle-inverse-deg));
-  transform-origin: center;
 }
 
 .proof-led-section__asset-bg {
@@ -134,7 +117,7 @@ export const proofLedSectionCss = `
   max-width: 14ch;
   color: var(--color-text);
   font-family: var(--type-font-heading);
-  font-size: clamp(2.25rem, 7cqi, 5rem);
+  font-size: var(--pdos-type-heading);
   line-height: 0.95;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
@@ -146,7 +129,7 @@ export const proofLedSectionCss = `
   max-width: 36rem;
   color: var(--color-text);
   font-family: var(--type-font-body);
-  font-size: clamp(var(--type-size-body), 2.5cqi, var(--type-size-lg));
+  font-size: var(--pdos-type-body-lg);
   line-height: var(--type-line-height-body);
 }
 
@@ -158,49 +141,14 @@ export const proofLedSectionCss = `
   border-block-end: var(--style-decoration-border-width) solid var(--color-accent-soft);
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
-  font-size: 0.84rem;
+  font-size: var(--pdos-type-kicker);
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
-}
-
-.proof-led-section .cta {
-  min-width: 44px;
-  min-height: 44px;
-  width: fit-content;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4) var(--space-6);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--style-corner-radius);
-  color: var(--color-accent-text);
-  background: var(--color-accent);
-  font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
-  font-weight: var(--type-weight-bold);
-  line-height: 1;
-  text-decoration: none;
-  box-shadow: var(--shadow-md);
-  transition:
-    transform var(--motion-duration-fast) var(--motion-easing-standard),
-    box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
-}
-
-.proof-led-section .cta:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-accent-secondary);
-  background: var(--color-accent-secondary);
-}
-
-.proof-led-section .cta:focus-visible {
-  outline: 3px solid var(--color-focus-ring);
-  outline-offset: 3px;
 }
 
 @media (max-width: 760px) {
   .proof-led-section__inner {
     grid-template-columns: 1fr;
-    padding: var(--space-8) var(--space-4);
   }
 
   .proof-led-section__asset-wrap {
@@ -209,7 +157,6 @@ export const proofLedSectionCss = `
 
   .proof-led-section h2 {
     max-width: 12ch;
-    font-size: clamp(2rem, 14cqi, 3.35rem);
   }
 
   .proof-led-section .cta {
@@ -217,15 +164,6 @@ export const proofLedSectionCss = `
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .proof-led-section .cta {
-    transition: none;
-  }
-
-  .proof-led-section .cta:hover {
-    transform: none;
-  }
-}
 `.trim();
 
 export function renderProofLedSection(input: PatternRenderInput): string {
