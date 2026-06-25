@@ -66,17 +66,17 @@
         {
           "name": "headline",
           "value_type": "text",
-          "string_value": "Stavíme zdravé domy z cihel a vápna a citlivě rekonstruujeme staré kamenné chalupy"
+          "string_value": "Stavíme poctivé a bytelné domy z cihel a vápna a citlivě rekonstruujeme staré kamenné chalupy"
         },
         {
           "name": "primary_cta",
           "value_type": "string",
-          "string_value": "Spočítat cenu realizace"
+          "string_value": "Získat kalkulaci zdarma"
         },
         {
           "name": "trust_cue",
           "value_type": "string",
-          "string_value": "18 let poctivé praxe a 124 dokončených staveb v regionu"
+          "string_value": "18 let praxe a 124 dokončených staveb — Brandýs nad Labem, Mělník, Nymburk a okolí"
         }
       ],
       "slot_fills": [
@@ -128,7 +128,7 @@
         {
           "name": "source_reference",
           "value_type": "string",
-          "string_value": "Případová studie · Rekonstrukce stodoly z roku 1890"
+          "string_value": "Ukázka naší práce · Jak jsme zachránili stodolu z roku 1890 v Brandýse"
         },
         {
           "name": "cta_label",
@@ -185,7 +185,7 @@
         {
           "name": "cta_label",
           "value_type": "string",
-          "string_value": "Nezávazně poptat řemeslo"
+          "string_value": "Nezávazně poptat nacenění"
         }
       ],
       "slot_fills": [

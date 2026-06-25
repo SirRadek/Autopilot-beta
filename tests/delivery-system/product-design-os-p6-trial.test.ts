@@ -71,7 +71,7 @@ describe("Product Design OS P6 zednik first trial", () => {
     expect(result.html).toContain("https://fonts.googleapis.com/css2?family=Lora:wght@400;700&amp;display=swap");
     expect(ctas).toEqual([
       {
-        text: "Spočítat cenu realizace",
+        text: "Získat kalkulaci zdarma",
         className: "cta"
       },
       {
@@ -79,7 +79,7 @@ describe("Product Design OS P6 zednik first trial", () => {
         className: "cta cta--secondary"
       },
       {
-        text: "Nezávazně poptat řemeslo",
+        text: "Nezávazně poptat nacenění",
         className: "cta"
       }
     ]);
