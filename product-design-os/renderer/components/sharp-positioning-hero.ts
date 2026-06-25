@@ -350,7 +350,7 @@ function validateRequiredAssetSlot(
   const allowedIds = new Set(contractSlot?.allowed_asset_ids ?? []);
   if (allowedIds.size > 0) {
     for (const asset of assets) {
-      if (!allowedIds.has(asset.id)) {
+      if (asset.inlineContent !== true && !allowedIds.has(asset.id)) {
         issues.push({
           code: "slot_asset_not_allowed",
           message: `${slotName} does not accept asset ${asset.id}.`

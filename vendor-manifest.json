@@ -7,6 +7,7 @@
   "beta_authored": [
     "product-design-os/assets/motion/editorial-motion-hero.svg",
     "product-design-os/assets/sections/proof-strip-case-study.svg",
+    "product-design-os/assets/sections/zednik-brick-proof.jpg",
     "product-design-os/composition/composition-target.schema.json",
     "product-design-os/contracts/component-contract-manifest.json",
     "product-design-os/contracts/component-contract.schema.json",
@@ -26,6 +27,7 @@
     "product-design-os/renderer/pattern-component-registry.ts",
     "product-design-os/renderer/render-brand-examples.ts",
     "product-design-os/renderer/render-composition.ts",
+    "product-design-os/renderer/render-zednik-trial.ts",
     "product-design-os/renderer/safe-url.ts",
     "product-design-os/renderer/types.ts",
     "product-design-os/renderer/visual-qa-playwright.ts",
@@ -35,6 +37,7 @@
     "product-design-os/scripts/pattern-requirement-taxonomy.ts",
     "product-design-os/specs/composition.schema.json",
     "product-design-os/specs/examples/buildable-marketing.composition.json",
+    "product-design-os/specs/examples/zednik.composition.json",
     "product-design-os/tokens/TOKEN_FLOOR.md",
     "product-design-os/tokens/style.json"
   ],
@@ -185,7 +188,8 @@
     {
       "source_path": "product-design-os/library/source-catalog.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "98e7fb12e83b24b50a4761f907f1b9728537b3ad6b7234fd2c8c03a4fc32d8ac"
+      "content_hash": "98e7fb12e83b24b50a4761f907f1b9728537b3ad6b7234fd2c8c03a4fc32d8ac",
+      "patched_by": "P6"
     },
     {
       "source_path": "product-design-os/library/source.schema.json",

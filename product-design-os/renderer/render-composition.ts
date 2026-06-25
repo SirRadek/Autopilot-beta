@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { checkRenderedContract, type RenderContractIssue } from "./check-render-contract";
 import { mapTokensToCss } from "./map-tokens";
 import { getPatternComponent, hasPatternComponent, hasSectionPatternComponent } from "./pattern-component-registry";
+import { isSafeHref } from "./safe-url";
 import { assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
 import type {
   AssetManifestEntry,
@@ -85,6 +86,16 @@ interface SlotFill {
 interface SlotFillTarget {
   readonly target_kind?: string;
   readonly target_id?: string;
+  readonly content?: InlineContentAsset;
+}
+
+interface InlineContentAsset {
+  readonly href?: string;
+  readonly alt?: string;
+  readonly license?: string;
+  readonly source_url?: string;
+  readonly inline_svg?: string;
+  readonly asset_type?: string;
 }
 
 interface TokenOverrideSpec {
@@ -758,10 +769,36 @@ function readSlotFills(value: unknown): readonly SlotFill[] {
       if (!isRecord(fill)) {
         throw new RenderCompositionSpecError("malformed_slot_fills", `slot_fills for "${slotFill.slot}" must contain fill objects.`);
       }
-      if (typeof fill.target_kind !== "string" || typeof fill.target_id !== "string") {
+      if (typeof fill.target_kind !== "string") {
         throw new RenderCompositionSpecError(
           "malformed_slot_fills",
-          `slot_fills for "${slotFill.slot}" require target_kind and target_id.`
+          `slot_fills for "${slotFill.slot}" require target_kind.`
+        );
+      }
+
+      if (fill.target_kind === "asset") {
+        const hasRegistryId = typeof fill.target_id === "string";
+        const hasInlineContent = fill.content !== undefined;
+        if (!hasRegistryId && !hasInlineContent) {
+          throw new RenderCompositionSpecError(
+            "malformed_slot_fills",
+            `slot_fills for "${slotFill.slot}" require target_id or content for asset fills.`
+          );
+        }
+
+        if (hasInlineContent && !isRecord(fill.content)) {
+          throw new RenderCompositionSpecError(
+            "malformed_slot_fills",
+            `slot_fills content for "${slotFill.slot}" must be an object.`
+          );
+        }
+        continue;
+      }
+
+      if (typeof fill.target_id !== "string") {
+        throw new RenderCompositionSpecError(
+          "malformed_slot_fills",
+          `slot_fills for "${slotFill.slot}" require target_id.`
         );
       }
     }
@@ -820,13 +857,6 @@ function resolveSlots(
 
     const resolvedTargets: ResolvedSlotTarget[] = [];
     for (const fill of slotFill.fills ?? []) {
-      if (fill.target_id === undefined) {
-        throw new RenderCompositionSpecError(
-          "malformed_slot_fills",
-          `slot_fills for "${slotFill.slot}" require target_kind and target_id.`
-        );
-      }
-
       if (fill.target_kind !== "asset" && fill.target_kind !== "pattern") {
         throw new RenderCompositionSpecError(
           "unsupported_slot_fill_target_kind",
@@ -835,6 +865,24 @@ function resolveSlots(
       }
 
       if (fill.target_kind === "asset") {
+        if (fill.content !== undefined) {
+          resolvedTargets.push(
+            resolveInlineContentAsset(fill.content, {
+              assetType: defaultInlineAssetType(contractSlot),
+              required: contractSlot.required === true,
+              slotName: slotFill.slot
+            })
+          );
+          continue;
+        }
+
+        if (fill.target_id === undefined) {
+          throw new RenderCompositionSpecError(
+            "malformed_slot_fills",
+            `slot_fills for "${slotFill.slot}" require target_id or content for asset fills.`
+          );
+        }
+
         resolvedTargets.push(
           resolveAsset(fill.target_id, assetManifest, pdosRoot, {
             required: contractSlot?.required === true,
@@ -845,6 +893,13 @@ function resolveSlots(
       }
 
       if (fill.target_kind === "pattern") {
+        if (fill.target_id === undefined) {
+          throw new RenderCompositionSpecError(
+            "malformed_slot_fills",
+            `slot_fills for "${slotFill.slot}" require target_id for pattern fills.`
+          );
+        }
+
         resolvedTargets.push(resolvePatternReference(fill.target_id, compositionNodes));
       }
     }
@@ -955,6 +1010,85 @@ function resolveAsset(
   };
 }
 
+function resolveInlineContentAsset(
+  content: InlineContentAsset,
+  context: { readonly required: boolean; readonly slotName: string; readonly assetType: string }
+): ResolvedAsset {
+  if (!isRecord(content)) {
+    throw new RenderCompositionSpecError("malformed_inline_asset", `Inline asset content for "${context.slotName}" must be an object.`);
+  }
+
+  const href = optionalTrimmedString(content.href);
+  const inlineSvg = optionalTrimmedString(content.inline_svg);
+
+  if (href === undefined && inlineSvg === undefined) {
+    throw new RenderCompositionSpecError(
+      "inline_asset_source_missing",
+      `Inline asset content for "${context.slotName}" requires href or inline_svg.`
+    );
+  }
+
+  if (href !== undefined) {
+    if (!isSafeHref(href)) {
+      throw new RenderCompositionSpecError(
+        "unsafe_inline_asset_href",
+        `Inline asset content for "${context.slotName}" has an unsafe href.`
+      );
+    }
+
+    if (!isRasterImageHref(href)) {
+      throw new RenderCompositionSpecError(
+        "inline_asset_href_not_raster",
+        `Inline asset content for "${context.slotName}" must use a raster image href.`
+      );
+    }
+  }
+
+  const sourceUrl = optionalTrimmedString(content.source_url);
+  if (sourceUrl !== undefined && !isSafeHref(sourceUrl)) {
+    throw new RenderCompositionSpecError(
+      "unsafe_inline_asset_source_url",
+      `Inline asset content for "${context.slotName}" has an unsafe source_url.`
+    );
+  }
+
+  const resolved: ResolvedAsset = {
+    id: `inline:${context.slotName}`,
+    targetKind: "asset",
+    assetType: optionalTrimmedString(content.asset_type) ?? context.assetType,
+    source: href ?? "inline-svg",
+    inlineContent: true
+  };
+
+  if (href !== undefined) {
+    (resolved as { href?: string }).href = href;
+  }
+
+  if (inlineSvg !== undefined) {
+    (resolved as { inlineSvg?: string }).inlineSvg = inlineSvg;
+  }
+
+  const alt = optionalTrimmedString(content.alt);
+  if (alt !== undefined) {
+    (resolved as { alt?: string }).alt = alt;
+  }
+
+  const license = optionalTrimmedString(content.license);
+  if (license !== undefined) {
+    (resolved as { license?: string }).license = license;
+  }
+
+  if (sourceUrl !== undefined) {
+    (resolved as { sourceUrl?: string }).sourceUrl = sourceUrl;
+  }
+
+  return resolved;
+}
+
+function defaultInlineAssetType(slot: ComponentContract["slots"][number]): string {
+  return slot.accepts_asset_types?.length === 1 ? slot.accepts_asset_types[0] ?? "inline-content" : "inline-content";
+}
+
 function resolveAssetSource(
   asset: AssetManifestEntry,
   pdosRoot: string,
@@ -1045,6 +1179,19 @@ function sourceMustResolveToFile(asset: AssetManifestEntry): boolean {
 
 function isSvgAssetSource(source: string): boolean {
   return /\.svg$/i.test(source);
+}
+
+function isRasterImageHref(href: string): boolean {
+  return /\.(?:png|jpe?g|webp|gif|avif)(?:[?#].*)?$/i.test(href);
+}
+
+function optionalTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function handleUnresolvedAssetSource(

@@ -3,6 +3,8 @@
   "tokens": {
     "font_body": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
     "font_heading": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    "web_font_family": "none",
+    "web_font_weights": "400,700",
     "size_body": "1rem",
     "size_heading": "1.5rem",
     "line_height_body": 1.5,

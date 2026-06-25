@@ -52,6 +52,9 @@ export interface ResolvedAsset {
   readonly href?: string;
   readonly inlineSvg?: string;
   readonly alt?: string;
+  readonly inlineContent?: boolean;
+  readonly license?: string;
+  readonly sourceUrl?: string;
 }
 
 export interface ResolvedPatternReference {
