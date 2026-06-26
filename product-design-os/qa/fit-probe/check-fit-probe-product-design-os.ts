@@ -356,8 +356,14 @@ async function measureViewport(page: PageLike, viewport: BrowserViewportInput): 
   return page.evaluate<FitProbeViewportMeasurement, BrowserViewportInput>((currentViewport) => {
     const selector = "[data-contract-prop], h1, h2, h3, h4, h5, h6, p, a, button";
     const rawElements = uniqueElements(Array.from(document.querySelectorAll(selector)));
-    const elements = rawElements.map(measureElement).filter((element) => element.textLength > 0);
-    const overlaps = measureOverlaps(rawElements, elements);
+    const measuredElementPairs = rawElements
+      .map((browserElement) => ({
+        browserElement,
+        measurement: measureElement(browserElement)
+      }))
+      .filter((pair) => pair.measurement.textLength > 0);
+    const elements = measuredElementPairs.map((pair) => pair.measurement);
+    const overlaps = measureOverlaps(measuredElementPairs);
     const body = document.body;
 
     return {
@@ -441,24 +447,26 @@ async function measureViewport(page: PageLike, viewport: BrowserViewportInput): 
       return lines;
     }
 
-    function measureOverlaps(
-      rawElementsForContainment: readonly BrowserElement[],
-      measuredElements: readonly FitProbeElementMeasurement[]
-    ) {
+    function measureOverlaps(measuredElementPairsForContainment: readonly {
+      readonly browserElement: BrowserElement;
+      readonly measurement: FitProbeElementMeasurement;
+    }[]) {
       const output = [];
-      for (let firstIndex = 0; firstIndex < measuredElements.length; firstIndex += 1) {
-        const first = measuredElements[firstIndex];
-        const firstElement = rawElementsForContainment[firstIndex];
-        if (first === undefined || firstElement === undefined || !first.visible) {
+      for (let firstIndex = 0; firstIndex < measuredElementPairsForContainment.length; firstIndex += 1) {
+        const firstPair = measuredElementPairsForContainment[firstIndex];
+        if (firstPair === undefined || !firstPair.measurement.visible) {
           continue;
         }
-        for (let secondIndex = firstIndex + 1; secondIndex < measuredElements.length; secondIndex += 1) {
-          const second = measuredElements[secondIndex];
-          const secondElement = rawElementsForContainment[secondIndex];
-          if (second === undefined || secondElement === undefined || !second.visible) {
+        const first = firstPair.measurement;
+        const firstElement = firstPair.browserElement;
+        for (let secondIndex = firstIndex + 1; secondIndex < measuredElementPairsForContainment.length; secondIndex += 1) {
+          const secondPair = measuredElementPairsForContainment[secondIndex];
+          if (secondPair === undefined || !secondPair.measurement.visible) {
             continue;
           }
-          if (firstElement.contains(secondElement) || secondElement.contains(firstElement)) {
+          const second = secondPair.measurement;
+          const secondElement = secondPair.browserElement;
+          if (isSameTextContainerPair(firstElement, secondElement)) {
             continue;
           }
           const intersection = intersectRect(first.rect, second.rect);
@@ -476,6 +484,14 @@ async function measureViewport(page: PageLike, viewport: BrowserViewportInput): 
         }
       }
       return output;
+    }
+
+    function isSameTextContainerPair(firstElement: BrowserElement, secondElement: BrowserElement): boolean {
+      return (
+        firstElement.contains(secondElement) ||
+        secondElement.contains(firstElement) ||
+        (firstElement.parentElement !== null && firstElement.parentElement === secondElement.parentElement)
+      );
     }
 
     function readableSelector(element: BrowserElement, tagName: string, contractProp: string): string {

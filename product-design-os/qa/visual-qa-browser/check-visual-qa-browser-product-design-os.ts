@@ -597,7 +597,7 @@ async function measureVisualQaViewport(
           if (second === undefined) {
             continue;
           }
-          if (first.element.contains(second.element) || second.element.contains(first.element)) {
+          if (isSameTextContainerPair(first.element, second.element)) {
             continue;
           }
           if (first.rect.width <= 0 || second.rect.width <= 0 || first.rect.height <= 0 || second.rect.height <= 0) {
@@ -610,6 +610,14 @@ async function measureVisualQaViewport(
         }
       }
       return count;
+    }
+
+    function isSameTextContainerPair(firstElement: BrowserElement, secondElement: BrowserElement): boolean {
+      return (
+        firstElement.contains(secondElement) ||
+        secondElement.contains(firstElement) ||
+        (firstElement.parentElement !== null && firstElement.parentElement === secondElement.parentElement)
+      );
     }
 
     function effectiveBackground(element: BrowserElement): RgbaColor {

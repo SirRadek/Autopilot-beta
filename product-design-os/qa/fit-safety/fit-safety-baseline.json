@@ -29,7 +29,7 @@
     },
     {
       "id": "tactile-shadow-hero",
-      "css_sha256": "dad9e19388690176b936f1e64a39afd6889705a68d5445e58b94e6ea69f0f656",
+      "css_sha256": "9e10effb2d29b77879358d2d57dac8d3631f2bd0bfc63050368d63334231e3bd",
       "status": "warn-only",
       "reason": "V5 hero merged from PR#3; fit-clean after merge fixes."
     }

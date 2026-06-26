@@ -331,6 +331,12 @@ export const tactileShadowHeroCss = `
   }
 }
 
+@media (max-width: 640px) {
+  .tactile-shadow-hero__photo-caption {
+    display: none;
+  }
+}
+
 @media (max-width: 540px) {
   .tactile-shadow-hero {
     min-height: min(680px, 100svh);
