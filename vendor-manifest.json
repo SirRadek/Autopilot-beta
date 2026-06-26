@@ -43,7 +43,14 @@
     "product-design-os/specs/examples/zednik.composition.json",
     "product-design-os/tokens/TOKEN_FLOOR.md",
     "product-design-os/tokens/style.json",
-    "src/data/delivery-system/routingGuards.ts"
+    "src/data/delivery-system/routingGuards.ts",
+    "src/lib/image-point-cloud/cli.ts",
+    "src/lib/image-point-cloud/debug-overlay.ts",
+    "src/lib/image-point-cloud/index.ts",
+    "src/lib/image-point-cloud/pack.ts",
+    "src/lib/image-point-cloud/png.ts",
+    "src/lib/image-point-cloud/sampler.ts",
+    "src/lib/image-point-cloud/types.ts"
   ],
   "files": [
     {
@@ -612,7 +619,7 @@
       "source_path": "product-design-os/tokens/typography.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
-      "patched_by": "F4b"
+      "patched_by": "F4b,F1"
     },
     {
       "source_path": "src/data/delivery-system/checkCompletionMatrix.ts",

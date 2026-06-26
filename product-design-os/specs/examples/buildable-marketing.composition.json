@@ -1,6 +1,7 @@
 {
   "spec_kind": "composition_spec",
   "id": "buildable-marketing",
+  "lang": "en",
   "schema_version": "1.0.0",
   "recipe_id": "marketing-premium",
   "pattern_ids": [

@@ -117,7 +117,7 @@ export const sharpPositioningHeroCss = `
   border-radius: var(--style-corner-radius);
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
+  font-size: var(--pdos-type-body);
   line-height: var(--type-line-height-body);
 }
 

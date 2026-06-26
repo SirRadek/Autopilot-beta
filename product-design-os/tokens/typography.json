@@ -9,7 +9,39 @@
     "size_heading": "1.5rem",
     "line_height_body": 1.5,
     "weight_regular": 400,
-    "weight_bold": 700
+    "weight_bold": 700,
+    "role_scale": {
+      "caption": {
+        "min_rem": "0.75rem",
+        "fluid_cqi": "0.82cqi",
+        "max_rem": "0.875rem"
+      },
+      "kicker": {
+        "min_rem": "0.78rem",
+        "fluid_cqi": "0.9cqi",
+        "max_rem": "0.94rem"
+      },
+      "body": {
+        "min_rem": "1rem",
+        "fluid_cqi": "1.12cqi",
+        "max_rem": "1.125rem"
+      },
+      "body_lg": {
+        "min_rem": "1.08rem",
+        "fluid_cqi": "1.35cqi",
+        "max_rem": "1.24rem"
+      },
+      "heading": {
+        "min_rem": "2.35rem",
+        "fluid_cqi": "6cqi",
+        "max_rem": "5rem"
+      },
+      "display": {
+        "min_rem": "2.75rem",
+        "fluid_cqi": "8.2cqi",
+        "max_rem": "7.4rem"
+      }
+    }
   },
   "notes": "F4b neutral floor defaults. Override per project spec."
 }

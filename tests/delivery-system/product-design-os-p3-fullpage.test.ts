@@ -10,6 +10,10 @@ import type { ComponentContract, TokenPrimitive } from "../../product-design-os/
 
 const pdosRoot = path.join(process.cwd(), "product-design-os");
 const baseCompositionFile = path.join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json");
+const zednikCompositionFile = path.join(pdosRoot, "specs", "examples", "zednik.composition.json");
+const fluidTypeRoles = ["caption", "kicker", "body", "body-lg", "heading", "display"] as const;
+
+type FluidTypeRole = (typeof fluidTypeRoles)[number];
 
 describe("Product Design OS P3 full-page rendering", () => {
   it("renders hero, proof, and CTA sections in spec order with explicit skipped pattern reasons", () => {
@@ -82,6 +86,38 @@ describe("Product Design OS P3 full-page rendering", () => {
     expect(result.html).toContain("font-size: var(--pdos-type-display);");
     expect(result.html).toContain("font-size: var(--pdos-type-heading);");
     expect(result.html).not.toContain("width: min(100%, 1180px)");
+  });
+
+  it("emits fluid type clamps from structured typography tokens", () => {
+    const result = renderCompositionPage(readJson(baseCompositionFile), pdosRoot);
+
+    for (const role of fluidTypeRoles) {
+      const roleToken = typographyRoleToken(role);
+
+      expect(result.html).toContain(`--type-role-scale-${role}-min-rem: ${roleToken.min_rem};`);
+      expect(result.html).toContain(`--type-role-scale-${role}-max-rem: ${roleToken.max_rem};`);
+      expect(result.html).toContain(
+        `--pdos-type-${role}: clamp(var(--type-role-scale-${role}-min-rem), var(--type-role-scale-${role}-fluid-cqi), var(--type-role-scale-${role}-max-rem));`
+      );
+    }
+
+    expect(result.html).toContain("text-wrap: balance;");
+    expect(result.html).toContain("text-wrap: pretty;");
+    expect(result.html).toContain("overflow-wrap: anywhere;");
+    expect(result.html).toContain("hyphens: auto;");
+    expect(result.html).toContain(
+      "grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--pdos-panel-min, 18rem)), 1fr));"
+    );
+    expect(cssRuleBlock(result.html, ".sharp-positioning-hero__layout")).not.toContain("auto-fit");
+    expect(result.html).not.toContain("--pdos-type-heading: 5rem;");
+    expect(result.html).not.toContain("--pdos-type-display: 7.4rem;");
+  });
+
+  it('emits lang="cs" for the zednik composition', () => {
+    const result = renderCompositionPage(readJson(zednikCompositionFile), pdosRoot);
+
+    expect(result.html).toContain('<html lang="cs">');
+    expect(result.html).not.toContain('<html lang="en">');
   });
 
   it("owns the continuous canvas on the page wrapper with transparent section roots", () => {
@@ -544,6 +580,25 @@ function readPatternContract(patternId: string): ComponentContract {
   }
 
   return contract;
+}
+
+function typographyRoleToken(role: FluidTypeRole): { readonly min_rem: string; readonly max_rem: string } {
+  const typography = readJsonRecord(path.join(pdosRoot, "tokens", "typography.json"));
+  const tokens = typography.tokens;
+  if (!isRecord(tokens) || !isRecord(tokens.role_scale)) {
+    throw new Error("typography.json must include role_scale tokens.");
+  }
+
+  const tokenKey = role.replace("-", "_");
+  const roleToken = tokens.role_scale[tokenKey];
+  if (!isRecord(roleToken) || typeof roleToken.min_rem !== "string" || typeof roleToken.max_rem !== "string") {
+    throw new Error(`typography.json role_scale.${tokenKey} must include min_rem and max_rem.`);
+  }
+
+  return {
+    min_rem: roleToken.min_rem,
+    max_rem: roleToken.max_rem
+  };
 }
 
 function readJson<T = unknown>(filePath: string): T {
