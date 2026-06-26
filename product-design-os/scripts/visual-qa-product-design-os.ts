@@ -18,6 +18,11 @@ export interface PdosVisualViewportInput {
   readonly primary_content_in_canvas?: boolean;
   readonly motion_level?: number;
   readonly reduced_motion_supported?: boolean;
+  readonly text_fit?: boolean;
+  readonly clipped_text_count?: number;
+  readonly min_font_px?: number;
+  readonly max_line_length_ch?: number;
+  readonly fit_scale_min?: number;
 }
 
 export interface PdosVisualQaInput {
@@ -159,6 +164,46 @@ function validateViewports(input: PdosVisualQaInput): readonly PdosVisualIssue[]
         viewport: viewport.name
       });
     }
+    if (viewport.text_fit === false) {
+      issues.push({
+        code: "text_fit_probe_failed",
+        severity: "warning",
+        message: "Viewport text-fit probe reported a fit failure.",
+        viewport: viewport.name
+      });
+    }
+    if ((viewport.clipped_text_count ?? 0) > 0) {
+      issues.push({
+        code: "clipped_text_detected",
+        severity: "warning",
+        message: "Viewport text-fit probe reported clipped text.",
+        viewport: viewport.name
+      });
+    }
+    if (viewport.min_font_px !== undefined && viewport.min_font_px < 12) {
+      issues.push({
+        code: "min_font_below_legible_floor",
+        severity: "warning",
+        message: "Viewport text-fit probe reported text below the advisory legibility floor.",
+        viewport: viewport.name
+      });
+    }
+    if (viewport.max_line_length_ch !== undefined && viewport.max_line_length_ch > 80) {
+      issues.push({
+        code: "line_length_above_readability_band",
+        severity: "warning",
+        message: "Viewport text-fit probe reported a long text line.",
+        viewport: viewport.name
+      });
+    }
+    if (viewport.fit_scale_min !== undefined && viewport.fit_scale_min < 0.85) {
+      issues.push({
+        code: "fit_scale_below_advisory_floor",
+        severity: "warning",
+        message: "Viewport text-fit probe reported aggressive text scaling.",
+        viewport: viewport.name
+      });
+    }
     if ((viewport.heading_count ?? 0) === 0) {
       issues.push({
         code: "weak_heading_hierarchy",
@@ -254,6 +299,14 @@ function suggestActions(issues: readonly PdosVisualIssue[], templateRiskScore: n
   for (const issue of issues) {
     if (issue.code === "horizontal_overflow" || issue.code === "text_overlap") {
       actions.add("Fix responsive layout before visual polish.");
+    } else if (
+      issue.code === "text_fit_probe_failed" ||
+      issue.code === "clipped_text_detected" ||
+      issue.code === "min_font_below_legible_floor" ||
+      issue.code === "line_length_above_readability_band" ||
+      issue.code === "fit_scale_below_advisory_floor"
+    ) {
+      actions.add("Treat text-fit probe findings as advisory until the browser VOR gate is enabled.");
     } else if (issue.code === "low_contrast") {
       actions.add("Raise contrast and re-check key text/actions.");
     } else if (issue.code === "primary_content_hidden_in_canvas") {
@@ -359,6 +412,11 @@ function toViewportInput(value: Record<string, unknown>): PdosVisualViewportInpu
     primary_content_in_canvas?: boolean;
     motion_level?: number;
     reduced_motion_supported?: boolean;
+    text_fit?: boolean;
+    clipped_text_count?: number;
+    min_font_px?: number;
+    max_line_length_ch?: number;
+    fit_scale_min?: number;
   } = {
     name: typeof value.name === "string" ? value.name : "unknown"
   };
@@ -374,6 +432,11 @@ function toViewportInput(value: Record<string, unknown>): PdosVisualViewportInpu
   assignIfBoolean(output, "primary_content_in_canvas", value.primary_content_in_canvas);
   assignIfNumber(output, "motion_level", value.motion_level);
   assignIfBoolean(output, "reduced_motion_supported", value.reduced_motion_supported);
+  assignIfBoolean(output, "text_fit", value.text_fit);
+  assignIfInteger(output, "clipped_text_count", value.clipped_text_count);
+  assignIfNumber(output, "min_font_px", value.min_font_px);
+  assignIfNumber(output, "max_line_length_ch", value.max_line_length_ch);
+  assignIfNumber(output, "fit_scale_min", value.fit_scale_min);
   return output;
 }
 
@@ -391,6 +454,12 @@ function assignIfStringArray<T extends Record<string, unknown>>(target: T, key: 
 
 function assignIfNumber<T extends Record<string, unknown>>(target: T, key: keyof T, value: unknown): void {
   if (typeof value === "number" && Number.isFinite(value)) {
+    target[key] = value as T[keyof T];
+  }
+}
+
+function assignIfInteger<T extends Record<string, unknown>>(target: T, key: keyof T, value: unknown): void {
+  if (typeof value === "number" && Number.isInteger(value)) {
     target[key] = value as T[keyof T];
   }
 }

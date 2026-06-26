@@ -1,0 +1,31 @@
+{
+  "schema": "autopilot-beta/pdos-fit-safety-baseline@1",
+  "generated_on": "2026-06-26",
+  "note": "F2 grandfather baseline: matching component CSS hashes are warn-only for source-level fit-safety lint findings. Missing or changed components block on high-confidence precondition violations.",
+  "components": [
+    {
+      "id": "dot-stage-hero",
+      "css_sha256": "af2135173419ad1a8b45d4854807ab4fc7263ed6a1266f66bcf2f8c6dc33340f",
+      "status": "warn-only",
+      "reason": "Existing F2 component baseline."
+    },
+    {
+      "id": "outcome-cta",
+      "css_sha256": "eb242494f82cd5e5ce6d663090a94cf92e6790a4cab10d49b1c6ecf331b64260",
+      "status": "warn-only",
+      "reason": "Existing F2 component baseline."
+    },
+    {
+      "id": "proof-led-section",
+      "css_sha256": "6a054cce9f5de5bcea9510ae6f23dfa060bb1620a12902006f1b2ef6e54664c6",
+      "status": "warn-only",
+      "reason": "Existing F2 component baseline."
+    },
+    {
+      "id": "sharp-positioning-hero",
+      "css_sha256": "b2315f37087932985f803bd8e1d9dd6b407cf4858af2aa6993dd76836452faa7",
+      "status": "warn-only",
+      "reason": "Existing F2 component baseline."
+    }
+  ]
+}

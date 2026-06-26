@@ -417,6 +417,21 @@
               },
               "reduced_motion_supported": {
                 "type": "boolean"
+              },
+              "text_fit": {
+                "type": "boolean"
+              },
+              "clipped_text_count": {
+                "type": "integer"
+              },
+              "min_font_px": {
+                "type": "number"
+              },
+              "max_line_length_ch": {
+                "type": "number"
+              },
+              "fit_scale_min": {
+                "type": "number"
               }
             }
           }

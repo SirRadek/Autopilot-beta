@@ -198,7 +198,10 @@
               "no_primary_content_in_canvas",
               "reduced_motion_fallback",
               "performance_budget",
-              "proof_adjacency"
+              "proof_adjacency",
+              "fits_viewport_range",
+              "no_text_overflow_at_breakpoints",
+              "min_legible_text"
             ]
           },
           "required": {

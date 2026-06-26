@@ -14,6 +14,8 @@
     "product-design-os/evidence/evidence.schema.json",
     "product-design-os/evidence/records/example-context7-evidence.json",
     "product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
+    "product-design-os/qa/fit-safety/check-fit-safety-product-design-os.ts",
+    "product-design-os/qa/fit-safety/fit-safety-baseline.json",
     "product-design-os/qa/renderability/fixtures/buildable-marketing.json",
     "product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json",
     "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json",
@@ -557,7 +559,8 @@
     {
       "source_path": "product-design-os/scripts/visual-qa-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "aed5bbd4b1619cf0e53d4c3e676ed3b2d39eb017e1ef5168b135a40ee7afc1f6"
+      "content_hash": "1a0b5a97c6080c2cf5851cdcc7c9f80f75c9e56a522188f378a0a6c1417de065",
+      "patched_by": "textfit-F2"
     },
     {
       "source_path": "product-design-os/taste/feedback-log.json",
