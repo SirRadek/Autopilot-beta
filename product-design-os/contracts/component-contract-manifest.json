@@ -911,6 +911,12 @@
           "required": true,
           "min_length": 3,
           "expected_source": "static fallback"
+        },
+        {
+          "name": "wall_image_href",
+          "value_type": "url",
+          "required": false,
+          "expected_source": "full-bleed sandstone wall photo (CC0)"
         }
       ],
       "slots": [],

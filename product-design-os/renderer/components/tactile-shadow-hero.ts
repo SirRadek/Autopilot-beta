@@ -10,6 +10,7 @@ interface TactileShadowHeroInput extends PatternRenderInput {
     readonly cta_href?: string;
     readonly heritage_badge?: string;
     readonly photo_caption?: string;
+    readonly wall_image_href?: string;
     readonly static_fallback_label?: string;
   } & PatternRenderInput["props"];
   readonly contract: ComponentContract;
@@ -29,8 +30,11 @@ interface ValidTactileShadowHeroProps {
   readonly cta_href: string;
   readonly heritage_badge: string;
   readonly photo_caption: string;
+  readonly wall_image_href?: string;
   readonly static_fallback_label: string;
 }
+
+type TactileShadowHeroTextProp = Exclude<keyof ValidTactileShadowHeroProps, "wall_image_href">;
 
 export class TactileShadowHeroContractError extends Error {
   readonly issues: readonly TactileShadowHeroContractIssue[];
@@ -69,6 +73,31 @@ export const tactileShadowHeroCss = `
     radial-gradient(circle at 68% 36%, color-mix(in srgb, var(--color-text) 14%, transparent) 0 0.14rem, transparent 0.16rem),
     radial-gradient(circle at 86% 74%, color-mix(in srgb, var(--color-border) 54%, transparent) 0 0.2rem, transparent 0.23rem),
     linear-gradient(135deg, color-mix(in srgb, var(--color-surface) 86%, var(--color-background)) 0 32%, color-mix(in srgb, var(--color-background) 72%, var(--color-surface)) 32% 64%, color-mix(in srgb, var(--color-surface) 68%, var(--color-accent-soft)) 64% 100%);
+}
+
+.tactile-shadow-hero__stone--image {
+  background: var(--color-background);
+}
+
+.tactile-shadow-hero__wall-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tactile-shadow-hero__photo-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse at 50% 46%, color-mix(in srgb, var(--color-background) 94%, transparent) 0 34%, color-mix(in srgb, var(--color-background) 86%, transparent) 34% 58%, transparent 76%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background) 76%, transparent) 0%, color-mix(in srgb, var(--color-background) 90%, transparent) 54%, color-mix(in srgb, var(--color-text) 44%, transparent) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 34%, transparent) 0%, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 34%, transparent) 100%);
+  pointer-events: none;
 }
 
 .tactile-shadow-hero__stone::before {
@@ -359,10 +388,7 @@ export function renderTactileShadowHero(input: PatternRenderInput): string {
 
   return `
 <section class="tactile-shadow-hero" data-pattern-id="tactile-shadow-hero" data-contract-id="${escapeAttribute(input.contract.id)}" data-motion-strategy="css-only" data-reduced-motion-fallback="${escapeAttribute(props.static_fallback_label)}" aria-labelledby="tactile-shadow-hero-title">
-  <figure class="tactile-shadow-hero__stone" aria-label="${escapeAttribute(props.photo_caption)}">
-    <div class="tactile-shadow-hero__stone-surface" aria-hidden="true"></div>
-    <figcaption class="tactile-shadow-hero__photo-caption" data-contract-prop="photo_caption">${escapeHtml(props.photo_caption)}</figcaption>
-  </figure>
+  ${renderWallLayer(props)}
   <div class="tactile-shadow-hero__layout">
     <div class="tactile-shadow-hero__copy tactile-shadow-hero__focus">
       <p class="tactile-shadow-hero__eyebrow" data-contract-prop="eyebrow">${escapeHtml(props.eyebrow)}</p>
@@ -400,6 +426,7 @@ function validateTactileShadowHeroInput(
   validateRequiredTextProp(input, props, "photo_caption", "no_primary_content_in_canvas", issues);
   validateRequiredTextProp(input, props, "static_fallback_label", "reduced_motion_fallback", issues);
   validateCtaHref(props, issues);
+  validateWallImageHref(props, issues);
 
   return issues;
 }
@@ -414,10 +441,24 @@ function validateCtaHref(props: ValidTactileShadowHeroProps, issues: TactileShad
   }
 }
 
+function validateWallImageHref(props: ValidTactileShadowHeroProps, issues: TactileShadowHeroContractIssue[]): void {
+  if (props.wall_image_href === undefined) {
+    return;
+  }
+
+  if (!isSafeHref(props.wall_image_href)) {
+    issues.push({
+      code: "unsafe_href",
+      prop: "wall_image_href",
+      message: "wall_image_href must use #, /, ./, ../, http(s), mailto, or tel."
+    });
+  }
+}
+
 function validateRequiredTextProp(
   input: PatternRenderInput,
   props: ValidTactileShadowHeroProps,
-  propName: keyof ValidTactileShadowHeroProps,
+  propName: TactileShadowHeroTextProp,
   invariantCode: string,
   issues: TactileShadowHeroContractIssue[]
 ): void {
@@ -444,7 +485,8 @@ function validateRequiredTextProp(
 }
 
 function normalizeProps(props: TactileShadowHeroInput["props"]): ValidTactileShadowHeroProps {
-  return {
+  const wallImageHref = props.wall_image_href?.trim();
+  const normalized: ValidTactileShadowHeroProps = {
     eyebrow: props.eyebrow?.trim() || "Patinovaný stín",
     headline: props.headline?.trim() || "Poctivé zednické řemeslo z Polabí",
     primary_cta: props.primary_cta?.trim() || "Získat kalkulaci zdarma",
@@ -454,6 +496,32 @@ function normalizeProps(props: TactileShadowHeroInput["props"]): ValidTactileSha
     photo_caption: props.photo_caption?.trim() || "Foto: hrubě opracovaná pískovcová zeď",
     static_fallback_label: props.static_fallback_label?.trim() || "Statický patinovaný stín bez pohybu"
   };
+
+  if (wallImageHref !== undefined && wallImageHref.length > 0) {
+    return {
+      ...normalized,
+      wall_image_href: wallImageHref
+    };
+  }
+
+  return normalized;
+}
+
+function renderWallLayer(props: ValidTactileShadowHeroProps): string {
+  if (props.wall_image_href !== undefined) {
+    return `
+<figure class="tactile-shadow-hero__stone tactile-shadow-hero__stone--image">
+    <img class="tactile-shadow-hero__wall-image" src="${escapeAttribute(props.wall_image_href)}" alt="${escapeAttribute(props.photo_caption)}" decoding="async" fetchpriority="high">
+    <div class="tactile-shadow-hero__photo-scrim" aria-hidden="true"></div>
+    <figcaption class="tactile-shadow-hero__photo-caption" data-contract-prop="photo_caption">${escapeHtml(props.photo_caption)}</figcaption>
+  </figure>`.trim();
+  }
+
+  return `
+<figure class="tactile-shadow-hero__stone" aria-label="${escapeAttribute(props.photo_caption)}">
+    <div class="tactile-shadow-hero__stone-surface" aria-hidden="true"></div>
+    <figcaption class="tactile-shadow-hero__photo-caption" data-contract-prop="photo_caption">${escapeHtml(props.photo_caption)}</figcaption>
+  </figure>`.trim();
 }
 
 function escapeHtml(value: string): string {

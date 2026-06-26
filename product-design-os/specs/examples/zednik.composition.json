@@ -97,6 +97,11 @@
           "name": "static_fallback_label",
           "string_value": "Pískovcová zeď z dokončené stavby",
           "value_type": "string"
+        },
+        {
+          "name": "wall_image_href",
+          "string_value": "./assets/sections/zednik-sandstone-wall.jpg",
+          "value_type": "url"
         }
       ],
       "slot_fills": [],
