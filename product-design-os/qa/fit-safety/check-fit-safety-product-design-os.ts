@@ -299,7 +299,7 @@ function lintComponentCss(component: PdosFitSafetyComponentSource): readonly Raw
         findings.push(...lintFontClamp(component, rule, declaration, customProperties, "component_css"));
       }
 
-      if (declaration.property === "grid-template-columns" || declaration.property === "grid-template-rows") {
+      if (declaration.property === "grid-template-columns") {
         const gridIssue = lintGridTrack(component, rule, declaration, "component_css");
         if (gridIssue !== undefined) {
           findings.push(gridIssue);

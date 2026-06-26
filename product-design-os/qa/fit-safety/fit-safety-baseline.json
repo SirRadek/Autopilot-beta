@@ -26,6 +26,12 @@
       "css_sha256": "ff8f7ae1dfa1d5d7e20ba2eb0341f40abf09280a700c5a66959566849e2f3e5b",
       "status": "warn-only",
       "reason": "Existing F2 component baseline."
+    },
+    {
+      "id": "tactile-shadow-hero",
+      "css_sha256": "dad9e19388690176b936f1e64a39afd6889705a68d5445e58b94e6ea69f0f656",
+      "status": "warn-only",
+      "reason": "V5 hero merged from PR#3; fit-clean after merge fixes."
     }
   ]
 }

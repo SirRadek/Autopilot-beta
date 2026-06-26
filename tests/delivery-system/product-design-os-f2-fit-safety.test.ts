@@ -68,7 +68,8 @@ describe("Product Design OS F2 fit-safety lint", () => {
       "dot-stage-hero",
       "outcome-cta",
       "proof-led-section",
-      "sharp-positioning-hero"
+      "sharp-positioning-hero",
+      "tactile-shadow-hero"
     ]);
     expect(statuses).toEqual(new Set(["pass"]));
     expect(cliRun.report.components.every((component) => component.baseline === "matched")).toBe(true);
