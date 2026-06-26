@@ -22,6 +22,8 @@
     "product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json",
     "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json",
     "product-design-os/qa/variants/sample-product-design-variants.ts",
+    "product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts",
+    "product-design-os/qa/visual-qa-browser/visual-qa-browser-core.ts",
     "product-design-os/recipes/recipe.schema.json",
     "product-design-os/renderer/check-render-contract.ts",
     "product-design-os/renderer/components/dot-stage-hero.ts",
