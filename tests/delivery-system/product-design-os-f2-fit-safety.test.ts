@@ -58,7 +58,7 @@ function baselineFor(id: string, css: string): PdosFitSafetyBaseline {
 }
 
 describe("Product Design OS F2 fit-safety lint", () => {
-  it("runs on committed components as warn-only and exits zero", () => {
+  it("runs on committed components as clean matched baselines and exits zero", () => {
     const cliRun = createFitSafetyLintCliRun(["--no-pages"], repoRoot);
     const statuses = new Set(cliRun.report.components.map((component) => component.status));
 
@@ -70,8 +70,9 @@ describe("Product Design OS F2 fit-safety lint", () => {
       "proof-led-section",
       "sharp-positioning-hero"
     ]);
-    expect(cliRun.report.components.every((component) => component.status !== "fail")).toBe(true);
-    expect(statuses.has("warn")).toBe(true);
+    expect(statuses).toEqual(new Set(["pass"]));
+    expect(cliRun.report.components.every((component) => component.baseline === "matched")).toBe(true);
+    expect(cliRun.report.summary.warning_count).toBe(0);
   });
 
   it("fails a synthetic new component with a clamp minimum below the legible floor", () => {

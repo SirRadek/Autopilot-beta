@@ -46,7 +46,7 @@ export const outcomeCtaCss = `
 
 .outcome-cta__copy {
   display: grid;
-  grid-template-columns: minmax(13rem, 0.36fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(min(100%, 13rem), 0.36fr) minmax(0, 1fr) minmax(min(100%, 14rem), 0.34fr);
   gap: var(--pdos-page-section-gap);
   align-items: center;
 }
@@ -80,6 +80,8 @@ export const outcomeCtaCss = `
 }
 
 .outcome-cta__proof-text {
+  max-width: min(100%, 62ch);
+  justify-self: start;
   color: var(--color-text);
   font-family: var(--type-font-body);
   font-size: var(--pdos-type-body);

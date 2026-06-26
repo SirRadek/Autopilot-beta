@@ -12,12 +12,12 @@
     "weight_bold": 700,
     "role_scale": {
       "caption": {
-        "min_rem": "0.75rem",
+        "min_rem": "0.8rem",
         "fluid_cqi": "0.82cqi",
         "max_rem": "0.875rem"
       },
       "kicker": {
-        "min_rem": "0.78rem",
+        "min_rem": "0.8rem",
         "fluid_cqi": "0.9cqi",
         "max_rem": "0.94rem"
       },

@@ -11,19 +11,19 @@
     },
     {
       "id": "outcome-cta",
-      "css_sha256": "eb242494f82cd5e5ce6d663090a94cf92e6790a4cab10d49b1c6ecf331b64260",
+      "css_sha256": "6b09e61145717cc02374657e4239c1f8a6a9b021fbeb5767414bd9a8a648b90f",
       "status": "warn-only",
       "reason": "Existing F2 component baseline."
     },
     {
       "id": "proof-led-section",
-      "css_sha256": "6a054cce9f5de5bcea9510ae6f23dfa060bb1620a12902006f1b2ef6e54664c6",
+      "css_sha256": "0dea1cb7a156fdcb40d07ec503fe629b4be39d509a0292acd3c1da1e7aa6bfe4",
       "status": "warn-only",
       "reason": "Existing F2 component baseline."
     },
     {
       "id": "sharp-positioning-hero",
-      "css_sha256": "b2315f37087932985f803bd8e1d9dd6b407cf4858af2aa6993dd76836452faa7",
+      "css_sha256": "ff8f7ae1dfa1d5d7e20ba2eb0341f40abf09280a700c5a66959566849e2f3e5b",
       "status": "warn-only",
       "reason": "Existing F2 component baseline."
     }

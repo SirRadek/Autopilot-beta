@@ -51,7 +51,7 @@ export const proofLedSectionCss = `
   margin-inline: auto;
   padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);
   display: grid;
-  grid-template-columns: minmax(16rem, 0.72fr) minmax(0, 1fr);
+  grid-template-columns: minmax(min(100%, 16rem), 0.72fr) minmax(0, 1fr);
   gap: var(--pdos-page-section-gap);
   align-items: center;
 }
@@ -111,7 +111,7 @@ export const proofLedSectionCss = `
   display: grid;
   gap: var(--space-6);
   align-content: center;
-  max-width: 48rem;
+  max-width: min(100%, 70ch);
 }
 
 .proof-led-section__statement {
@@ -135,7 +135,7 @@ export const proofLedSectionCss = `
 
 .proof-led-section__proof {
   margin: 0;
-  max-width: 36rem;
+  max-width: min(100%, 66ch);
   color: var(--color-text);
   font-family: var(--type-font-body);
   font-size: var(--pdos-type-body-lg);
