@@ -250,6 +250,18 @@
         "penalties": []
       },
       {
+        "id": "tactile-shadow-hero",
+        "score": 91,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/7.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
         "id": "outcome-cta",
         "score": 89,
         "selected": false,
