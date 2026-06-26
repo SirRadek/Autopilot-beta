@@ -22,7 +22,8 @@
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "test": "vitest run",
-    "verify": "npm run beta:vendor-check && npm run typecheck && npm run test && npm run pdos:validate && npm run pdos:renderability && npm run pdos:buildability-floor && npm run pdos:fit-safety-lint"
+    "verify": "npm run beta:vendor-check && npm run typecheck && npm run test && npm run pdos:validate && npm run pdos:renderability && npm run pdos:buildability-floor && npm run pdos:fit-safety-lint",
+    "pdos:fit-probe": "tsx product-design-os/qa/fit-probe/check-fit-probe-product-design-os.ts"
   },
   "dependencies": {
     "pngjs": "^7.0.0"

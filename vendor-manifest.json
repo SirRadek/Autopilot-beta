@@ -14,6 +14,8 @@
     "product-design-os/evidence/evidence.schema.json",
     "product-design-os/evidence/records/example-context7-evidence.json",
     "product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
+    "product-design-os/qa/fit-probe/check-fit-probe-product-design-os.ts",
+    "product-design-os/qa/fit-probe/fit-probe-core.ts",
     "product-design-os/qa/fit-safety/check-fit-safety-product-design-os.ts",
     "product-design-os/qa/fit-safety/fit-safety-baseline.json",
     "product-design-os/qa/renderability/fixtures/buildable-marketing.json",
