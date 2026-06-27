@@ -90,11 +90,11 @@ export const outcomeCtaCss = `
 
 .outcome-cta h2 {
   margin: 0;
-  max-width: 16ch;
+  max-width: min(100%, 24ch);
   color: var(--color-text);
   font-family: var(--type-font-heading);
-  font-size: var(--pdos-type-heading);
-  line-height: 0.94;
+  font-size: clamp(1.8rem, 3.4cqi, 3rem);
+  line-height: 1.08;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
   text-transform: var(--style-heading-transform);
@@ -111,7 +111,8 @@ export const outcomeCtaCss = `
   }
 
   .outcome-cta h2 {
-    max-width: 12ch;
+    max-width: min(100%, 20ch);
+    font-size: clamp(1.6rem, 6cqi, 2.3rem);
   }
 
   .outcome-cta .cta {

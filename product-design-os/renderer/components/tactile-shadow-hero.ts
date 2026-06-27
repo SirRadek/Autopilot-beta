@@ -95,7 +95,7 @@ export const tactileShadowHeroCss = `
   inset: 0;
   z-index: 1;
   background:
-    radial-gradient(ellipse at 50% 46%, color-mix(in srgb, var(--color-background) 26%, transparent) 0 34%, color-mix(in srgb, var(--color-background) 16%, transparent) 34% 58%, transparent 76%),
+    radial-gradient(ellipse at 50% 46%, color-mix(in srgb, var(--color-background) 58%, transparent) 0 30%, color-mix(in srgb, var(--color-background) 34%, transparent) 30% 54%, transparent 78%),
     linear-gradient(180deg, color-mix(in srgb, var(--color-background) 14%, transparent) 0%, color-mix(in srgb, var(--color-background) 10%, transparent) 54%, color-mix(in srgb, var(--color-text) 18%, transparent) 100%),
     linear-gradient(90deg, color-mix(in srgb, var(--color-text) 14%, transparent) 0%, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 14%, transparent) 100%);
   pointer-events: none;
@@ -121,8 +121,8 @@ export const tactileShadowHeroCss = `
   inset: 0;
   z-index: 3;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 12%, transparent) 0, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 14%, transparent) 100%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-text) 10%, transparent) 0, transparent 28%, transparent 66%, color-mix(in srgb, var(--color-text) 16%, transparent) 100%);
+    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 8%, transparent) 0, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 9%, transparent) 100%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-text) 6%, transparent) 0, transparent 28%, transparent 66%, color-mix(in srgb, var(--color-text) 9%, transparent) 100%);
   pointer-events: none;
 }
 
@@ -160,7 +160,7 @@ export const tactileShadowHeroCss = `
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-background) 74%, var(--color-surface));
   font-family: var(--type-font-body);
-  font-size: clamp(0.8rem, 1.3cqi, 0.92rem);
+  font-size: clamp(1rem, 1.3cqi, 1.05rem);
   font-weight: var(--type-weight-bold);
   line-height: 1.2;
 }
@@ -206,7 +206,7 @@ export const tactileShadowHeroCss = `
   color: var(--color-accent);
   font-family: var(--type-font-heading);
   font-size: clamp(2.35rem, 6.2cqi, 5.2rem);
-  line-height: 1.02;
+  line-height: 1.08;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
   text-align: center;
@@ -232,19 +232,16 @@ export const tactileShadowHeroCss = `
   align-items: center;
   justify-content: center;
   padding: var(--space-4) var(--space-6);
-  border: var(--style-decoration-border-width) solid color-mix(in srgb, var(--color-accent) 74%, var(--color-text));
+  border: var(--style-decoration-border-width) solid color-mix(in srgb, var(--color-accent) 78%, var(--color-text));
   border-radius: min(var(--style-corner-radius), 8px);
-  color: var(--color-text);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--color-surface) 82%, var(--color-accent)) 0 48%, color-mix(in srgb, var(--color-background) 68%, var(--color-surface)) 48% 100%);
+  color: var(--color-accent-text);
+  background: var(--color-accent);
   font-family: var(--type-font-body);
   font-size: var(--type-size-body);
   font-weight: var(--type-weight-bold);
   line-height: 1;
   text-decoration: none;
-  box-shadow:
-    0 0.4rem 1.4rem color-mix(in srgb, var(--color-text) 38%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--color-background) 72%, transparent);
+  box-shadow: 0 0.4rem 1.2rem color-mix(in srgb, var(--color-text) 28%, transparent);
 }
 
 .tactile-shadow-hero .cta:hover {
@@ -262,13 +259,13 @@ export const tactileShadowHeroCss = `
   padding: var(--space-2) var(--space-4);
   border: var(--style-decoration-border-width) solid color-mix(in srgb, var(--color-accent-soft) 72%, var(--color-border));
   border-radius: min(var(--style-corner-radius), 8px);
-  color: color-mix(in srgb, var(--color-background) 88%, var(--color-surface));
-  background: color-mix(in srgb, var(--color-text) 58%, transparent);
+  color: color-mix(in srgb, var(--color-background) 92%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-text) 92%, var(--color-accent));
   font-family: var(--type-font-body);
   font-size: clamp(1rem, 1.5cqi, 1.1rem);
   font-weight: var(--type-weight-bold);
   line-height: 1.35;
-  text-shadow: 0 0.35rem 1.1rem color-mix(in srgb, var(--color-text) 58%, transparent);
+  text-shadow: 0 0.12rem 0.4rem color-mix(in srgb, var(--color-text) 30%, transparent);
 }
 
 .tactile-shadow-hero__badge-separator {

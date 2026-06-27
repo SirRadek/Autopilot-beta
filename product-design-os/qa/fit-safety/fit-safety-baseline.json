@@ -11,15 +11,15 @@
     },
     {
       "id": "outcome-cta",
-      "css_sha256": "6b09e61145717cc02374657e4239c1f8a6a9b021fbeb5767414bd9a8a648b90f",
+      "css_sha256": "68dd773281dacd16dd38009fa17209b7b4b69fe475386879382b5927f5253082",
       "status": "warn-only",
-      "reason": "Existing F2 component baseline."
+      "reason": "Deep-critique fix: section H2 scale reduced + line-height/width (RF-1/RF-2)."
     },
     {
       "id": "proof-led-section",
-      "css_sha256": "0dea1cb7a156fdcb40d07ec503fe629b4be39d509a0292acd3c1da1e7aa6bfe4",
+      "css_sha256": "50bb9dba99ab12c6272a70556a2f00043eef4cab39c08eebe6b0874eecc25dea",
       "status": "warn-only",
-      "reason": "Existing F2 component baseline."
+      "reason": "Deep-critique fix: section H2 scale reduced + warm proof-photo filter + solid CTA."
     },
     {
       "id": "sharp-positioning-hero",
@@ -29,9 +29,9 @@
     },
     {
       "id": "tactile-shadow-hero",
-      "css_sha256": "e0a5ee32a4faba4a52f2c3ca24fcc062cb0582cab5225f1876e1e660625a8b8e",
+      "css_sha256": "09ee39b51affacc78ce279f262698e36721c6b96497869c134f505978c135db9",
       "status": "warn-only",
-      "reason": "V5 hero after design-critique fixes (warm scrim + photo filter, sentence H1, hyphens:manual)."
+      "reason": "Deep-critique fix: solid sage CTA, opaque badge, stronger copy backing band, H1 line-height."
     }
   ]
 }

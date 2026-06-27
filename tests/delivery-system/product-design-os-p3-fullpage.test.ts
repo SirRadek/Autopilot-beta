@@ -84,7 +84,10 @@ describe("Product Design OS P3 full-page rendering", () => {
     expect(countOccurrences(result.html, "--pdos-page-container-max: 1180px;")).toBe(1);
     expect(result.html).toContain("width: min(100%, var(--pdos-page-container-max));");
     expect(result.html).toContain("font-size: var(--pdos-type-display);");
-    expect(result.html).toContain("font-size: var(--pdos-type-heading);");
+    // The heading type role is emitted in :root as the default scale; sections may
+    // size their own h2 tighter (deep-critique RF-1), so assert the scale is wired,
+    // not that a specific component consumes it.
+    expect(result.html).toContain("--pdos-type-heading: clamp(");
     expect(result.html).not.toContain("width: min(100%, 1180px)");
   });
 

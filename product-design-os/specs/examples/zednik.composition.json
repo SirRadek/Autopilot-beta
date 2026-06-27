@@ -128,12 +128,12 @@
         {
           "name": "outcome_statement",
           "value_type": "text",
-          "string_value": "Získáte dokonale rovné zdivo a omítky z čistě přírodních materiálů, které vám bez prasklin vydrží po generace."
+          "string_value": "Řemeslo, které přetrvá generace."
         },
         {
           "name": "proof_item",
           "value_type": "text",
-          "string_value": "Kompletní obnova památkově chráněné stodoly v Brandýse s použitím původního pískovce a hydraulického vápna bez příměsi cementu."
+          "string_value": "Získáte dokonale rovné zdivo a omítky z čistě přírodních materiálů, které vám bez prasklin vydrží po generace. Kompletní obnova památkově chráněné stodoly v Brandýse s použitím původního pískovce a hydraulického vápna bez příměsi cementu."
         },
         {
           "name": "source_reference",
@@ -146,6 +146,11 @@
           "string_value": "Prohlédnout naše realizace"
         },
         {
+          "name": "cta_href",
+          "value_type": "url",
+          "string_value": "#kontakt"
+        },
+        {
           "name": "cta_variant",
           "value_type": "string",
           "string_value": "secondary"
@@ -153,7 +158,7 @@
         {
           "name": "proof_asset_alt",
           "value_type": "string",
-          "string_value": "Reálná zednická práce — cihlová zeď"
+          "string_value": "Ručně kladené kamenné zdivo — rekonstrukce staré chalupy"
         }
       ],
       "slot_fills": [
@@ -163,10 +168,10 @@
             {
               "target_kind": "asset",
               "content": {
-                "href": "./assets/zednik-brick-proof.jpg",
-                "alt": "Reálná zednická práce — cihlová zeď",
+                "href": "./assets/sections/zednik-stone-proof.jpg",
+                "alt": "Ručně kladené kamenné zdivo — rekonstrukce staré chalupy",
                 "license": "CC0-1.0",
-                "source_url": "https://commons.wikimedia.org/wiki/File:Red_brick_wall_(Unsplash).jpg"
+                "source_url": "https://www.flickr.com/photos/58187590@N02/25240639751"
               }
             }
           ]
@@ -190,12 +195,17 @@
         {
           "name": "outcome_statement",
           "value_type": "text",
-          "string_value": "Udělejte první krok k poctivě postavenému domovu – naceníme váš projekt bez skrytých poplatků a navyšování rozpočtu."
+          "string_value": "Postavme váš domov poctivě a bez skrytých poplatků."
         },
         {
           "name": "cta_label",
           "value_type": "string",
           "string_value": "Nezávazně poptat nacenění"
+        },
+        {
+          "name": "cta_href",
+          "value_type": "url",
+          "string_value": "#kontakt"
         }
       ],
       "slot_fills": [
@@ -335,14 +345,14 @@
       }
     ],
     "headings": [
-      "Stavíme zdravé domy z cihel a vápna a citlivě rekonstruujeme staré kamenné chalupy",
-      "Získáte dokonale rovné zdivo a omítky z čistě přírodních materiálů, které vám bez prasklin vydrží po generace.",
-      "Udělejte první krok k poctivě postavenému domovu – naceníme váš projekt bez skrytých poplatků a navyšování rozpočtu."
+      "Stavíme z cihel a kamene. Citlivě rekonstruujeme staré chalupy.",
+      "Řemeslo, které přetrvá generace.",
+      "Postavme váš domov poctivě a bez skrytých poplatků."
     ],
     "ctas": [
-      "Spočítat cenu realizace",
+      "Získat kalkulaci zdarma",
       "Prohlédnout naše realizace",
-      "Nezávazně poptat řemeslo"
+      "Nezávazně poptat nacenění"
     ],
     "template_signals": []
   },

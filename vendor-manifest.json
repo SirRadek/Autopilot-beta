@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 120,
+  "file_count": 121,
   "beta_authored": [
     "product-design-os/assets/motion/editorial-motion-hero.svg",
     "product-design-os/assets/sections/proof-strip-case-study.svg",
@@ -158,6 +158,11 @@
       "source_path": "product-design-os/assets/sections/.gitkeep",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/sections/zednik-stone-proof.jpg",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "1bc186b23486e554ebb44d9056675481f30b5d960920310ffa2f22fc67b9ab1a"
     },
     {
       "source_path": "product-design-os/assets/theme-crossing-reference-pack.md",
