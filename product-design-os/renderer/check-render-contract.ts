@@ -1,5 +1,6 @@
 import { parse, type HTMLElement } from "node-html-parser";
 
+import { detectUndeclaredCloudInHtml } from "./check-point-cloud-scene";
 import { isSafeHref } from "./safe-url";
 import type { ComponentContract } from "./types";
 
@@ -98,6 +99,14 @@ export function checkRenderedContract(html: string, contract: ComponentContract)
   checkCanvasTextDomTwin(root, pushIssue);
   checkNoStoredFrames(root, html, pushIssue);
   checkReducedMotionFallback(root, html, pushIssue);
+
+  // Safety net: a stored point-cloud payload embedded in <script> is invisible to
+  // the guards above (they scan stripped DOM / frame regexes). Reject any cloud
+  // payload that did not come through a validated [data-point-cloud] canvas.
+  const undeclaredCloud = detectUndeclaredCloudInHtml(html);
+  if (undeclaredCloud !== null) {
+    pushIssue(undeclaredCloud.code, undeclaredCloud.severity, undeclaredCloud.message);
+  }
 
   return { errors, warnings };
 }

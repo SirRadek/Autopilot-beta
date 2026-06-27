@@ -137,6 +137,7 @@ describe("Product Design OS P2 pattern renderers", () => {
     expect(Object.keys(patternComponentRegistry).sort()).toEqual([
       "dot-stage-hero",
       "outcome-cta",
+      "point-cloud-background",
       "proof-led-section",
       "sharp-positioning-hero"
     ]);

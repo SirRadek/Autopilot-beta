@@ -68,6 +68,23 @@
       "modifiers": ["motion"]
     },
     {
+      "id": "point-cloud-background",
+      "type": "motion_pattern",
+      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
+      "good_for": ["2.5D brand backdrop", "depth-field hero background", "creative positioning", "memorable first viewport", "tech-curious audience"],
+      "bad_for": ["checkout", "dense internal system", "public-sector critical flow", "content-dense reading page"],
+      "complexity": 7,
+      "usability": 7,
+      "mobile_quality": 7,
+      "requires": ["content-first hero", "DOM-text CTA", "trust cue", "reduced-motion fallback", "static fallback", "performance budget", "responsive typography"],
+      "requires_codes": ["visible_h1","no_primary_content_in_canvas","dom_text_cta","reduced_motion_fallback","performance_budget","proof_adjacency","responsive_typography"],
+      "risks": ["depth field competing with the offer", "low-end mobile jank", "reduced-motion path treated as degraded", "stored cloud reconstructing readable text in canvas"],
+      "accessibility_notes": "Read copy and CTA stay sharp DOM; the cloud canvas is aria-hidden and the engine freezes to a static home-pose frame under prefers-reduced-motion. The stored point cloud is gated by validatePointCloudScene (declared text needs a DOM twin; no primary content in canvas).",
+      "performance_notes": "Bounded point budget (<=24000), procedural draw only, no per-frame allocation; pause and freeze offscreen or hidden. Inline the cloud only within budget; larger clouds fetch same-origin.",
+      "examples": ["2.5D point-cloud brand backdrop with sharp DOM offer", "depth-field hero over a faithful image cloud"],
+      "modifiers": ["motion"]
+    },
+    {
       "id": "proof-led-section",
       "type": "conversion_pattern",
       "use_case": ["marketing_web", "portfolio", "landing_page"],

@@ -573,6 +573,18 @@
         "penalties": []
       },
       {
+        "id": "point-cloud-background",
+        "score": 54,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
         "id": "animated-hero",
         "score": 52,
         "selected": false,
@@ -1024,6 +1036,32 @@
       {
         "id": "motion-background",
         "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "brand-portrait-cloud",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "radeq-cat-cloud",
+        "score": 69,
         "selected": false,
         "reasons": [
           "Compared against route client_portal and recipe client-portal-trust.",

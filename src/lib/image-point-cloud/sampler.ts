@@ -1,4 +1,4 @@
-import { encodeFloat32Base64, encodeUint8Base64 } from "./pack";
+import { encodeFloat32Base64, encodeUint8Base64, encodeUint16Base64 } from "./pack";
 import { readPngImage, toPngImageSource } from "./png";
 import type {
   ColorHistogramSummary,
@@ -11,6 +11,18 @@ import type {
   RgbaImage
 } from "./types";
 
+/**
+ * Generous library sanity bound for depthAmp. xy is normalized to [-0.5, 0.5], so
+ * even 64 lets z reach ±32 (extreme). Web/render budgets are far stricter and are
+ * enforced at the gate (POINT_CLOUD_SCENE_BUDGETS.maxDepthAmp). This only removes
+ * the unbounded-above foothold (the assert was previously min-only).
+ */
+const MAX_DEPTH_AMP = 64;
+/** Lowpoly-facet bake ceiling: facets are a sparse decimation, never a second full cloud. */
+const POINT_CLOUD_FACET_CEILING = 4000;
+/** Capped k-NN edge bake ceiling (pair count). Mirrors the renderer's maxEdges gate. */
+const POINT_CLOUD_EDGE_CEILING = 18_000;
+
 interface NormalizedOptions {
   readonly sampleStep: number;
   readonly alphaThreshold: number;
@@ -18,6 +30,9 @@ interface NormalizedOptions {
   readonly depthAmp: number;
   readonly seed: string;
   readonly targetCount?: number;
+  readonly facetCount?: number;
+  readonly edgeNeighbors?: number;
+  readonly maxEdges?: number;
   readonly includeSizes: boolean;
   readonly basePointSize: number;
   readonly histogramBuckets: number;
@@ -161,11 +176,21 @@ function imageToPointCloudFromImage(image: RgbaImage, options: NormalizedOptions
     colorHistogram: getColorHistogram(colors, selected.length, options.histogramBuckets)
   };
 
-  const encoding = sizes === undefined
-    ? { positions: "base64:f32le" as const, colors: "base64:u8" as const }
-    : { positions: "base64:f32le" as const, colors: "base64:u8" as const, sizes: "base64:u8" as const };
+  const facets = options.facetCount === undefined ? undefined : bakeFacets(selected, options.facetCount);
+  const edges = options.edgeNeighbors !== undefined && options.edgeNeighbors > 0
+    ? buildCappedEdges(positions, selected.length, options.edgeNeighbors, options.maxEdges ?? POINT_CLOUD_EDGE_CEILING)
+    : undefined;
+  const hasEdges = edges !== undefined && edges.length > 0;
 
-  const encodedBase = {
+  const encoding = {
+    positions: "base64:f32le" as const,
+    colors: "base64:u8" as const,
+    ...(sizes !== undefined ? { sizes: "base64:u8" as const } : {}),
+    ...(facets !== undefined ? { facetPositions: "base64:f32le" as const, facetColors: "base64:u8" as const } : {}),
+    ...(hasEdges ? { edges: "base64:u16le" as const } : {})
+  };
+
+  return {
     schemaVersion: 1 as const,
     encoding,
     pointCount: selected.length,
@@ -176,29 +201,187 @@ function imageToPointCloudFromImage(image: RgbaImage, options: NormalizedOptions
     sampleStep: options.sampleStep,
     positions: encodeFloat32Base64(positions),
     colors: encodeUint8Base64(colors),
-    stats
+    stats,
+    ...(sizes !== undefined ? { sizes: encodeUint8Base64(sizes) } : {}),
+    ...(facets !== undefined
+      ? { facetCount: facets.facetCount, facetPositions: facets.facetPositions, facetColors: facets.facetColors }
+      : {}),
+    ...(hasEdges ? { edgeCount: (edges as Uint16Array).length / 2, edges: encodeUint16Base64(edges as Uint16Array) } : {})
   };
+}
 
-  if (sizes !== undefined) {
-    return {
-      ...encodedBase,
-      sizes: encodeUint8Base64(sizes)
-    };
+/**
+ * Capped k-nearest-neighbour edge bake over the SELECTED points (must run AFTER the
+ * final selection+sort so indices match the committed point order). A uniform spatial
+ * grid yields O(N) neighbour candidates; each point keeps its k≤3 nearest, pairs are
+ * deduped (lo·N+hi) and globally capped shortest-first at maxEdges. The sort tiebreaks
+ * on point index so the byte output is reproducible. Edges connect the brand cloud's
+ * OWN points — a hairline web over the silhouette, never new geometry.
+ */
+function buildCappedEdges(positions: Float32Array, pointCount: number, k: number, maxEdges: number): Uint16Array {
+  if (k < 1 || pointCount < 2 || maxEdges < 1) {
+    return new Uint16Array(0);
   }
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < pointCount; i += 1) {
+    const x = positions[i * 3] ?? 0;
+    const y = positions[i * 3 + 1] ?? 0;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const span = Math.max(maxX - minX, maxY - minY) || 1;
+  const cell = span / Math.max(1, Math.sqrt(pointCount));
+  const cellKey = (gx: number, gy: number): number => (gx * 73856093) ^ (gy * 19349663);
+  const grid = new Map<number, number[]>();
+  for (let i = 0; i < pointCount; i += 1) {
+    const gx = Math.floor(((positions[i * 3] ?? 0) - minX) / cell);
+    const gy = Math.floor(((positions[i * 3 + 1] ?? 0) - minY) / cell);
+    const key = cellKey(gx, gy);
+    let bucket = grid.get(key);
+    if (bucket === undefined) {
+      bucket = [];
+      grid.set(key, bucket);
+    }
+    bucket.push(i);
+  }
+  const seen = new Set<number>();
+  const candidates: { a: number; b: number; d2: number }[] = [];
+  for (let i = 0; i < pointCount; i += 1) {
+    const x = positions[i * 3] ?? 0;
+    const y = positions[i * 3 + 1] ?? 0;
+    const gx = Math.floor((x - minX) / cell);
+    const gy = Math.floor((y - minY) / cell);
+    const near: { j: number; d2: number }[] = [];
+    for (let ox = -1; ox <= 1; ox += 1) {
+      for (let oy = -1; oy <= 1; oy += 1) {
+        const bucket = grid.get(cellKey(gx + ox, gy + oy));
+        if (bucket === undefined) {
+          continue;
+        }
+        for (const j of bucket) {
+          if (j === i) {
+            continue;
+          }
+          const dx = x - (positions[j * 3] ?? 0);
+          const dy = y - (positions[j * 3 + 1] ?? 0);
+          near.push({ j, d2: dx * dx + dy * dy });
+        }
+      }
+    }
+    near.sort((p, q) => p.d2 - q.d2 || p.j - q.j); // stable tiebreak on index ⇒ deterministic
+    const limit = Math.min(k, near.length);
+    for (let n = 0; n < limit; n += 1) {
+      const j = (near[n] as { j: number; d2: number }).j;
+      const lo = Math.min(i, j);
+      const hi = Math.max(i, j);
+      const id = lo * pointCount + hi;
+      if (seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      candidates.push({ a: lo, b: hi, d2: (near[n] as { j: number; d2: number }).d2 });
+    }
+  }
+  candidates.sort((p, q) => p.d2 - q.d2 || p.a - q.a || p.b - q.b); // shortest-first, stable
+  const kept = candidates.slice(0, maxEdges);
+  const out = new Uint16Array(kept.length * 2);
+  for (let e = 0; e < kept.length; e += 1) {
+    const pair = kept[e] as { a: number; b: number };
+    out[e * 2] = pair.a;
+    out[e * 2 + 1] = pair.b;
+  }
+  return out;
+}
 
-  return encodedBase;
+/**
+ * Lowpoly-facet bake: a DETERMINISTIC decimation of the SAME selected points into
+ * cell-centroid facets (mean position + mean colour over a uniform XY grid). Because
+ * every facet is the mean of a subset of the brand cloud's own points, the facet set
+ * is a strict subset of the cloud's convex hull (bbox ⊆ full bbox) and strictly fewer
+ * points — it is the client's own image re-sampled, never synthetic geometry. No RNG:
+ * grid bucketization + sorted-key emission make the bytes reproducible.
+ */
+function bakeFacets(
+  selected: readonly CandidatePoint[],
+  targetFacets: number
+): { facetCount: number; facetPositions: string; facetColors: string } | undefined {
+  if (!Number.isFinite(targetFacets) || targetFacets < 1 || selected.length === 0) {
+    return undefined;
+  }
+  const grid = Math.max(1, Math.round(Math.sqrt(targetFacets)));
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const point of selected) {
+    if (point.positionX < minX) minX = point.positionX;
+    if (point.positionX > maxX) maxX = point.positionX;
+    if (point.positionY < minY) minY = point.positionY;
+    if (point.positionY > maxY) maxY = point.positionY;
+  }
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  const cells = new Map<number, { n: number; x: number; y: number; z: number; r: number; g: number; b: number }>();
+  for (const point of selected) {
+    const gx = Math.min(grid - 1, Math.floor(((point.positionX - minX) / spanX) * grid));
+    const gy = Math.min(grid - 1, Math.floor(((point.positionY - minY) / spanY) * grid));
+    const key = gy * grid + gx;
+    let cell = cells.get(key);
+    if (cell === undefined) {
+      cell = { n: 0, x: 0, y: 0, z: 0, r: 0, g: 0, b: 0 };
+      cells.set(key, cell);
+    }
+    cell.n += 1;
+    cell.x += point.positionX;
+    cell.y += point.positionY;
+    cell.z += point.positionZ;
+    cell.r += point.red;
+    cell.g += point.green;
+    cell.b += point.blue;
+  }
+  const keys = Array.from(cells.keys()).sort((a, b) => a - b);
+  const facetPositions = new Float32Array(keys.length * 3);
+  const facetColors = new Uint8Array(keys.length * 3);
+  for (let index = 0; index < keys.length; index += 1) {
+    const cell = cells.get(keys[index] as number) as { n: number; x: number; y: number; z: number; r: number; g: number; b: number };
+    facetPositions[index * 3] = cell.x / cell.n;
+    facetPositions[index * 3 + 1] = cell.y / cell.n;
+    facetPositions[index * 3 + 2] = cell.z / cell.n;
+    facetColors[index * 3] = clampByte(cell.r / cell.n);
+    facetColors[index * 3 + 1] = clampByte(cell.g / cell.n);
+    facetColors[index * 3 + 2] = clampByte(cell.b / cell.n);
+  }
+  return {
+    facetCount: keys.length,
+    facetPositions: encodeFloat32Base64(facetPositions),
+    facetColors: encodeUint8Base64(facetColors)
+  };
 }
 
 function normalizeOptions(options: ImageToPointCloudOptions): NormalizedOptions {
   const sampleStep = assertInteger("sampleStep", options.sampleStep ?? 1, 1);
   const alphaThreshold = assertNumberRange("alphaThreshold", options.alphaThreshold ?? 1, 0, 255);
   const brightnessFloor = assertNumberRange("brightnessFloor", options.brightnessFloor ?? 0, 0, 1);
-  const depthAmp = assertFiniteNumber("depthAmp", options.depthAmp ?? 1, 0);
+  const depthAmp = assertNumberRange("depthAmp", options.depthAmp ?? 1, 0, MAX_DEPTH_AMP);
   const basePointSize = assertInteger("basePointSize", options.basePointSize ?? 1, 1, 255);
   const histogramBuckets = assertInteger("histogramBuckets", options.histogramBuckets ?? 16, 1, 256);
   const targetCount = options.targetCount === undefined
     ? undefined
     : assertInteger("targetCount", options.targetCount, 0);
+  const facetCount = options.facetCount === undefined
+    ? undefined
+    : assertInteger("facetCount", options.facetCount, 1, POINT_CLOUD_FACET_CEILING);
+  const edgeNeighbors = options.edgeNeighbors === undefined
+    ? undefined
+    : assertInteger("edgeNeighbors", options.edgeNeighbors, 0, 3);
+  const maxEdges = options.maxEdges === undefined
+    ? undefined
+    : assertInteger("maxEdges", options.maxEdges, 0, POINT_CLOUD_EDGE_CEILING);
 
   return {
     sampleStep,
@@ -207,6 +390,9 @@ function normalizeOptions(options: ImageToPointCloudOptions): NormalizedOptions 
     depthAmp,
     seed: String(options.seed ?? "image-point-cloud"),
     ...(targetCount !== undefined ? { targetCount } : {}),
+    ...(facetCount !== undefined ? { facetCount } : {}),
+    ...(edgeNeighbors !== undefined ? { edgeNeighbors } : {}),
+    ...(maxEdges !== undefined ? { maxEdges } : {}),
     includeSizes: options.includeSizes ?? false,
     basePointSize,
     histogramBuckets,

@@ -121,6 +121,21 @@ interface AssetManifest {
   readonly assets?: readonly AssetManifestEntry[];
 }
 
+interface PointCloudSourceCatalog {
+  readonly sources?: readonly PointCloudCatalogSource[];
+}
+
+interface PointCloudCatalogSource {
+  readonly id?: string;
+  readonly status?: string;
+  readonly commercial_use?: string;
+}
+
+type PointCloudManifestEntry = AssetManifestEntry & {
+  readonly provenance_status?: unknown;
+  readonly library_source_id?: unknown;
+};
+
 const defaultHeroData: RenderPatternData = {
   patternId: "sharp-positioning-hero",
   nodeId: "positioning-hero",
@@ -836,6 +851,38 @@ function isRegisteredPattern(patternId: unknown): patternId is string {
   return typeof patternId === "string" && hasPatternComponent(patternId);
 }
 
+function assertPointCloudProvenance(assetId: string, assetManifest: AssetManifest, pdosRoot: string): void {
+  const asset = assetManifest.assets?.find((candidate) => candidate.id === assetId) as PointCloudManifestEntry | undefined;
+  if (asset?.type !== "point_cloud") {
+    return;
+  }
+
+  const provenanceStatus = optionalTrimmedString(asset.provenance_status);
+  if (provenanceStatus === undefined || provenanceStatus === "internal") {
+    return;
+  }
+
+  const sourceId = optionalTrimmedString(asset.library_source_id);
+  if (sourceId === undefined) {
+    throw new RenderCompositionSpecError(
+      "cloud_source_unlicensed",
+      `cloud_source_unlicensed: Point-cloud asset "${asset.id}" has provenance_status "${provenanceStatus}" but no library_source_id.`
+    );
+  }
+
+  const catalog = readJson<PointCloudSourceCatalog>(path.join(pdosRoot, "library", "source-catalog.json"));
+  const source = catalog.sources?.find((candidate) => candidate.id === sourceId);
+  const commercialUse = source?.commercial_use;
+  if (source?.status === "approved_source" && (commercialUse === "allowed" || commercialUse === "allowed_with_attribution")) {
+    return;
+  }
+
+  throw new RenderCompositionSpecError(
+    "cloud_source_unlicensed",
+    `cloud_source_unlicensed: Point-cloud asset "${asset.id}" references unapproved or unlicensed source "${sourceId}".`
+  );
+}
+
 function resolveSlots(
   slotFills: readonly SlotFill[],
   assetManifest: AssetManifest,
@@ -886,6 +933,7 @@ function resolveSlots(
           );
         }
 
+        assertPointCloudProvenance(fill.target_id, assetManifest, pdosRoot);
         resolvedTargets.push(
           resolveAsset(fill.target_id, assetManifest, pdosRoot, {
             required: contractSlot?.required === true,
@@ -1092,11 +1140,18 @@ function defaultInlineAssetType(slot: ComponentContract["slots"][number]): strin
   return slot.accepts_asset_types?.length === 1 ? slot.accepts_asset_types[0] ?? "inline-content" : "inline-content";
 }
 
+/** Upper bound on a point-cloud JSON inlined into HTML; larger clouds fetch. */
+const MAX_INLINE_POINT_CLOUD_CHARS = 768 * 1024;
+
 function resolveAssetSource(
   asset: AssetManifestEntry,
   pdosRoot: string,
   context: { readonly required: boolean; readonly slotName: string }
-): { readonly href?: string; readonly inlineSvg?: string } {
+): {
+  readonly href?: string;
+  readonly inlineSvg?: string;
+  readonly dataRef?: { readonly mime: "application/json"; readonly inline: string };
+} {
   if (asset.source.trim().length === 0) {
     return handleUnresolvedAssetSource(
       "asset_source_missing",
@@ -1168,6 +1223,23 @@ function resolveAssetSource(
     }
   }
 
+  if (isPointCloudJsonSource(asset, normalizedSource)) {
+    try {
+      const raw = readFileSync(absolutePath, "utf8");
+      // Inline only budget-sized clouds; larger payloads fall through to a
+      // same-origin fetched href so the first viewport is not bloated.
+      if (raw.length <= MAX_INLINE_POINT_CLOUD_CHARS) {
+        return { dataRef: { mime: "application/json", inline: raw } };
+      }
+    } catch (error) {
+      return handleUnresolvedAssetSource(
+        "asset_source_unreadable",
+        `Asset point-cloud source could not be read: ${normalizedSource}. ${errorMessage(error)}`,
+        context
+      );
+    }
+  }
+
   return { href: `../../${normalizedSource}` };
 }
 
@@ -1182,6 +1254,10 @@ function sourceMustResolveToFile(asset: AssetManifestEntry): boolean {
 
 function isSvgAssetSource(source: string): boolean {
   return /\.svg$/i.test(source);
+}
+
+function isPointCloudJsonSource(asset: AssetManifestEntry, source: string): boolean {
+  return asset.type === "point_cloud" && /\.json$/i.test(source);
 }
 
 function isRasterImageHref(href: string): boolean {

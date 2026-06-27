@@ -60,6 +60,28 @@ export function decodeUint8Base64(value: string, expectedLength?: number, label 
   return result;
 }
 
+export function encodeUint16Base64(values: Uint16Array): string {
+  const bytes = new Uint8Array(values.length * Uint16Array.BYTES_PER_ELEMENT);
+  const view = new DataView(bytes.buffer);
+  for (let index = 0; index < values.length; index += 1) {
+    view.setUint16(index * Uint16Array.BYTES_PER_ELEMENT, values[index] ?? 0, true);
+  }
+  return encodeBytesBase64(bytes);
+}
+
+export function decodeUint16Base64(value: string, label = "u16"): Uint16Array {
+  const bytes = decodeBase64ToBytes(value, { label });
+  if (bytes.byteLength % Uint16Array.BYTES_PER_ELEMENT !== 0) {
+    throw new Error(`${label} payload length must be divisible by 2`);
+  }
+  const result = new Uint16Array(bytes.byteLength / Uint16Array.BYTES_PER_ELEMENT);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let index = 0; index < result.length; index += 1) {
+    result[index] = view.getUint16(index * Uint16Array.BYTES_PER_ELEMENT, true);
+  }
+  return result;
+}
+
 export function decodePointCloud(encoded: EncodedPointCloud): DecodedPointCloud {
   if (encoded.schemaVersion !== 1) {
     throw new Error(`unsupported point cloud schemaVersion: ${encoded.schemaVersion}`);
