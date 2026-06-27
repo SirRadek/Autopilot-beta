@@ -67,6 +67,24 @@ navyšování rozpočtu" (CB5); marginal muted_text pairs (A11Y-4); 70rem copy-w
 Full verified findings with file:line evidence: `output/critique2/` (workflow output) +
 agy artifact. This appendix is the durable record.
 
+## Resolution log
+- **Wave 1** (landed `ba5eb84`, live): solid sage CTA (cux-2 hero), opaque badge (A11Y-1),
+  stronger hero copy backing (SC-1/A11Y-2), real warm stone proof photo (CB1/CB2), split +
+  resized proof/CTA headings (RF-1/RF-2/RF-6/SC-4), unified `#kontakt` hrefs (CB4), softened
+  over-promise (CB5), refreshed stale probe (CB3), proof CTA solid (cux-2).
+- **Wave 2** (landed `c1e181f`, live): the `#kontakt` contact section — tappable `tel:` +
+  accessible `mailto:` form (cux-1, the CRITICAL). Phone/email are PLACEHOLDERS (owner swaps).
+- **Wave 3** (this pass): **A11Y-4** muted_text override `#6E6962`→`#5F5A53` (4.57→5.87:1 on
+  panel); **A11Y-3** WCAG gate hardened — `resolveColor` now resolves `color-mix()` (incl.
+  transparent-over-backdrop) and the gate HARD-checks the badge + muted-on-panel composited
+  pairs and WARNs on text-over-photo. Verified the resolver against this doc's own hand-
+  computed numbers: pre-fix badge fill = rgb(131,128,125), pre-fix badge contrast = 3.60:1
+  (the value the old gate was blind to). 11 new unit tests; verify EXIT 0 (164 tests).
+- **Deferred** (LOW/NIT, not blocking): cux-5/agy Move 3 (outcome-cta 3-column splits the
+  testimonial from the CTA → cohesion redesign), RF-4 (4K sparseness), SC-3 (dead stone-surface
+  CSS in image variant), RF-5 (70rem copy-wrapper cap), CB6 (sage as H1 body color), cux-6
+  (abstract-SVG proof fallback). Next polish pass.
+
 ## Meta
 The deterministic gates AND a browser fit-probe were all green on this page, and my own
 screenshot read missed the dead CTAs and the missing proof image entirely. Only giving the

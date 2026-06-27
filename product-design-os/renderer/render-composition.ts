@@ -6,7 +6,7 @@ import { checkRenderedContract, type RenderContractIssue } from "./check-render-
 import { mapTokensToCss } from "./map-tokens";
 import { getPatternComponent, hasPatternComponent, hasSectionPatternComponent } from "./pattern-component-registry";
 import { isSafeHref } from "./safe-url";
-import { assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
+import { assertComponentColorContrastWcagAA, assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
 import type {
   AssetManifestEntry,
   ComponentContract,
@@ -596,6 +596,10 @@ function selectorForFirstContractProp(contract: ComponentContract, propNames: re
 function assertTokenColorContrast(tokenCss: string): void {
   try {
     assertRootColorContrastWcagAA(tokenCss);
+    // Extends the gate to the composited color-mix component pairs (badge fill, surface
+    // panel) the 6 hex :root pairs are blind to. Token-driven, so it runs on token CSS;
+    // the over-photo warnings only fire when the full HTML carries the hero image marker.
+    assertComponentColorContrastWcagAA(tokenCss);
   } catch (error) {
     if (error instanceof WcagContrastError) {
       throw new RenderCompositionSpecError("token_color_contrast_below_aa", error.message);

@@ -409,9 +409,9 @@
       {
         "token_file": "color",
         "token_key": "muted_text",
-        "value": "#6E6962",
+        "value": "#5F5A53",
         "evidence_id": "zednik-brand-token-evidence",
-        "reason": "Mortar-muted text color with AA contrast."
+        "reason": "Mortar-muted text color, darkened for a comfortable AA margin (5.7:1 on surface) per deep-critique A11Y-4."
       },
       {
         "token_file": "color",

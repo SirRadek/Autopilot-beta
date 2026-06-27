@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { renderCompositionPage } from "./render-composition";
-import { assertRootColorContrastWcagAA } from "./wcag-contrast";
+import { assertComponentColorContrastWcagAA, assertRootColorContrastWcagAA } from "./wcag-contrast";
 
 const repoRoot = process.cwd();
 const pdosRoot = path.join(repoRoot, "product-design-os");
@@ -12,6 +12,7 @@ const outputPath = path.join(outputDir, "zednik-trial.html");
 
 const result = renderCompositionPage(readJson(specPath), pdosRoot);
 const contrastPairs = assertRootColorContrastWcagAA(result.html);
+const componentContrast = assertComponentColorContrastWcagAA(result.html);
 const imgCount = countOccurrences(result.html, "<img ");
 const loraFontLinkPresent = result.html.includes("https://fonts.googleapis.com/css2?family=Lora:wght@400;700&amp;display=swap");
 const contractFailures = result.sections.filter((section) => section.contractErrors.length > 0);
@@ -26,6 +27,12 @@ for (const section of result.sections) {
   console.log(`- ${section.node_id} (${section.pattern_id}): contract errors ${errors}`);
 }
 console.log(`WCAG-AA: ${contrastPairs.map((pair) => `${pair.pair} ${pair.ratio.toFixed(2)}:1`).join(", ")}`);
+console.log(
+  `WCAG-AA components: ${componentContrast.results.map((pair) => `${pair.pair} ${pair.ratio.toFixed(2)}:1`).join(", ")}`
+);
+for (const warning of componentContrast.warnings) {
+  console.warn(`WCAG-AA WARNING: ${warning.pair} — ${warning.reason}`);
+}
 console.log(`Images: ${imgCount}`);
 console.log(`Lora font link present: ${loraFontLinkPresent}`);
 
