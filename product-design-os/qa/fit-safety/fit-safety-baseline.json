@@ -29,9 +29,9 @@
     },
     {
       "id": "tactile-shadow-hero",
-      "css_sha256": "9e10effb2d29b77879358d2d57dac8d3631f2bd0bfc63050368d63334231e3bd",
+      "css_sha256": "e0a5ee32a4faba4a52f2c3ca24fcc062cb0582cab5225f1876e1e660625a8b8e",
       "status": "warn-only",
-      "reason": "V5 hero merged from PR#3; fit-clean after merge fixes."
+      "reason": "V5 hero after design-critique fixes (warm scrim + photo filter, sentence H1, hyphens:manual)."
     }
   ]
 }

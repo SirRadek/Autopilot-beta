@@ -378,19 +378,24 @@ svg {
 .pdos-page,
 .pdos-page > section {
   overflow-wrap: anywhere;
-  hyphens: auto;
+  hyphens: manual;
 }
 
 .pdos-page :where(h1, h2, h3, h4, h5, h6) {
   text-wrap: balance;
   overflow-wrap: anywhere;
-  hyphens: auto;
+  hyphens: manual;
 }
 
 .pdos-page :where(p, li, a, span) {
   text-wrap: pretty;
   overflow-wrap: anywhere;
+  hyphens: manual;
+}
+
+[data-auto-hyphenate="true"] {
   hyphens: auto;
+  overflow-wrap: break-word;
 }
 
 .pdos-panel-grid,

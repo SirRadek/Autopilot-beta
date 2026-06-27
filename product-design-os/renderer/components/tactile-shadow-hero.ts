@@ -87,6 +87,7 @@ export const tactileShadowHeroCss = `
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: saturate(1.08) contrast(1.04) brightness(1.06);
 }
 
 .tactile-shadow-hero__photo-scrim {
@@ -94,9 +95,9 @@ export const tactileShadowHeroCss = `
   inset: 0;
   z-index: 1;
   background:
-    radial-gradient(ellipse at 50% 46%, color-mix(in srgb, var(--color-background) 94%, transparent) 0 34%, color-mix(in srgb, var(--color-background) 86%, transparent) 34% 58%, transparent 76%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-background) 76%, transparent) 0%, color-mix(in srgb, var(--color-background) 90%, transparent) 54%, color-mix(in srgb, var(--color-text) 44%, transparent) 100%),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 34%, transparent) 0%, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 34%, transparent) 100%);
+    radial-gradient(ellipse at 50% 46%, color-mix(in srgb, var(--color-background) 26%, transparent) 0 34%, color-mix(in srgb, var(--color-background) 16%, transparent) 34% 58%, transparent 76%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background) 14%, transparent) 0%, color-mix(in srgb, var(--color-background) 10%, transparent) 54%, color-mix(in srgb, var(--color-text) 18%, transparent) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 14%, transparent) 0%, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 14%, transparent) 100%);
   pointer-events: none;
 }
 
@@ -120,8 +121,8 @@ export const tactileShadowHeroCss = `
   inset: 0;
   z-index: 3;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 34%, transparent) 0, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 38%, transparent) 100%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-text) 32%, transparent) 0, transparent 28%, transparent 66%, color-mix(in srgb, var(--color-text) 44%, transparent) 100%);
+    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 12%, transparent) 0, transparent 22%, transparent 78%, color-mix(in srgb, var(--color-text) 14%, transparent) 100%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-text) 10%, transparent) 0, transparent 28%, transparent 66%, color-mix(in srgb, var(--color-text) 16%, transparent) 100%);
   pointer-events: none;
 }
 
@@ -196,25 +197,25 @@ export const tactileShadowHeroCss = `
   font-size: var(--pdos-type-kicker);
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
-  text-shadow: 0 0.35rem 1.4rem color-mix(in srgb, var(--color-text) 54%, transparent);
+  text-shadow: 0 0.18rem 0.6rem color-mix(in srgb, var(--color-text) 22%, transparent);
 }
 
 .tactile-shadow-hero h1 {
-  max-width: 13ch;
+  max-width: min(100%, 24ch);
   margin: 0;
   color: var(--color-accent);
   font-family: var(--type-font-heading);
-  font-size: clamp(2.8rem, 10cqi, 7.4rem);
-  line-height: 0.92;
+  font-size: clamp(2.35rem, 6.2cqi, 5.2rem);
+  line-height: 1.02;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
   text-align: center;
-  text-shadow:
-    0 0.16rem 0 color-mix(in srgb, var(--color-background) 44%, transparent),
-    0 0.6rem 2rem color-mix(in srgb, var(--color-text) 72%, transparent),
-    0 0 3rem color-mix(in srgb, var(--color-text) 54%, transparent);
+  text-shadow: 0 0.08rem 0 color-mix(in srgb, var(--color-background) 60%, transparent), 0 0.3rem 0.9rem color-mix(in srgb, var(--color-text) 26%, transparent);
   text-transform: var(--style-heading-transform);
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
+  text-wrap: balance;
 }
 
 .tactile-shadow-hero__bottom {
@@ -321,8 +322,8 @@ export const tactileShadowHeroCss = `
   }
 
   .tactile-shadow-hero h1 {
-    max-width: 11ch;
-    font-size: clamp(2.45rem, 15cqi, 5rem);
+    max-width: min(100%, 20ch);
+    font-size: clamp(2.2rem, 8.5cqi, 3.9rem);
   }
 
   .tactile-shadow-hero__photo-caption {
@@ -351,8 +352,8 @@ export const tactileShadowHeroCss = `
   }
 
   .tactile-shadow-hero h1 {
-    max-width: 10ch;
-    font-size: clamp(2.25rem, 18cqi, 4.2rem);
+    max-width: min(100%, 18ch);
+    font-size: clamp(2rem, 10.5cqi, 3.35rem);
   }
 
   .tactile-shadow-hero__bottom {
