@@ -49,14 +49,32 @@ export const outcomeCtaCss = `
   gap: var(--space-6);
 }
 
+/* 2-column: proof testimonial spans the left, the heading sits directly above the CTA on
+   the right so they read as one conversion unit. DOM stays flat (proof, h2, cta siblings)
+   so the proof_adjacency render-contract holds; placement is via grid areas only. */
 .outcome-cta__copy {
   display: grid;
-  grid-template-columns: minmax(min(100%, 13rem), 0.36fr) minmax(0, 1fr) minmax(min(100%, 14rem), 0.34fr);
-  gap: var(--pdos-page-section-gap);
-  align-items: center;
+  grid-template-columns: minmax(min(100%, 18rem), 0.4fr) minmax(0, 1fr);
+  grid-template-areas:
+    "proof heading"
+    "proof cta";
+  gap: var(--space-5) var(--pdos-page-section-gap);
+  align-content: center;
+}
+
+.outcome-cta__copy > h2 {
+  grid-area: heading;
+  align-self: end;
+}
+
+.outcome-cta__copy > .cta {
+  grid-area: cta;
+  align-self: start;
+  justify-self: start;
 }
 
 .outcome-cta__proof-context {
+  grid-area: proof;
   min-width: 44px;
   min-height: 44px;
   align-self: center;
@@ -204,11 +222,19 @@ export const outcomeCtaCss = `
 @media (max-width: 960px) {
   .outcome-cta__copy {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "proof"
+      "heading"
+      "cta";
     align-items: stretch;
   }
 
   .outcome-cta__proof-context {
     min-height: 44px;
+  }
+
+  .outcome-cta__copy > .cta {
+    justify-self: stretch;
   }
 
   .outcome-cta h2 {

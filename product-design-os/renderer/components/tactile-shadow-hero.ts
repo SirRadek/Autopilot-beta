@@ -126,6 +126,7 @@ export const tactileShadowHeroCss = `
   pointer-events: none;
 }
 
+/* The base stone dot/gradient background and stone surface render only in the non-image fallback; image variants use renderWallLayer's photo instead. */
 .tactile-shadow-hero__stone-surface {
   position: absolute;
   inset: 0;

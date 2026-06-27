@@ -11,7 +11,7 @@
     },
     {
       "id": "outcome-cta",
-      "css_sha256": "6fe09d96ebf349fc7789391a267ff96622046d1568e748100a5909bf2ea5d458",
+      "css_sha256": "b87f85d37b3e8a4f202d616ac062344b69e8e8d4c0ceb0a882fd80da88dd9c47",
       "status": "warn-only",
       "reason": "Deep-critique wave 2: #kontakt contact block (tel: + mailto form) added."
     },
@@ -29,7 +29,7 @@
     },
     {
       "id": "tactile-shadow-hero",
-      "css_sha256": "09ee39b51affacc78ce279f262698e36721c6b96497869c134f505978c135db9",
+      "css_sha256": "92f3c5bc1b12b03f66b696ac7483e3eaeb4204e2c255793c0e37ec91701bb81e",
       "status": "warn-only",
       "reason": "Deep-critique fix: solid sage CTA, opaque badge, stronger copy backing band, H1 line-height."
     }
