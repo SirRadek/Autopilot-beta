@@ -206,6 +206,31 @@
           "name": "cta_href",
           "value_type": "url",
           "string_value": "#kontakt"
+        },
+        {
+          "name": "contact_heading",
+          "value_type": "string",
+          "string_value": "Ozvěte se — rádi přijedeme na nezávaznou obhlídku"
+        },
+        {
+          "name": "contact_phone",
+          "value_type": "string",
+          "string_value": "+420 XXX XXX XXX"
+        },
+        {
+          "name": "contact_phone_href",
+          "value_type": "url",
+          "string_value": "tel:+420000000000"
+        },
+        {
+          "name": "contact_email",
+          "value_type": "string",
+          "string_value": "poptavka@example.cz"
+        },
+        {
+          "name": "contact_note",
+          "value_type": "string",
+          "string_value": "Zavolejte, nebo nám napište přes formulář — ozveme se do druhého dne."
         }
       ],
       "slot_fills": [

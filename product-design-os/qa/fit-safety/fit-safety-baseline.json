@@ -11,9 +11,9 @@
     },
     {
       "id": "outcome-cta",
-      "css_sha256": "68dd773281dacd16dd38009fa17209b7b4b69fe475386879382b5927f5253082",
+      "css_sha256": "6fe09d96ebf349fc7789391a267ff96622046d1568e748100a5909bf2ea5d458",
       "status": "warn-only",
-      "reason": "Deep-critique fix: section H2 scale reduced + line-height/width (RF-1/RF-2)."
+      "reason": "Deep-critique wave 2: #kontakt contact block (tel: + mailto form) added."
     },
     {
       "id": "proof-led-section",
