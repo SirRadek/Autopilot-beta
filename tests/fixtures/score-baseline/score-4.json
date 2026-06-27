@@ -584,6 +584,18 @@
         "penalties": []
       },
       {
+        "id": "tactile-shadow-hero",
+        "score": 55,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
         "id": "animated-hero",
         "score": 53,
         "selected": false,

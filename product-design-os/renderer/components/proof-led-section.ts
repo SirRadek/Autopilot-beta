@@ -51,7 +51,7 @@ export const proofLedSectionCss = `
   margin-inline: auto;
   padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);
   display: grid;
-  grid-template-columns: minmax(16rem, 0.72fr) minmax(0, 1fr);
+  grid-template-columns: minmax(min(100%, 16rem), 0.72fr) minmax(0, 1fr);
   gap: var(--pdos-page-section-gap);
   align-items: center;
 }
@@ -75,6 +75,7 @@ export const proofLedSectionCss = `
 
 .proof-led-section__asset-wrap img {
   object-fit: cover;
+  filter: saturate(1.08) sepia(0.16) brightness(1.05) contrast(1.02);
 }
 
 .proof-led-section__asset {
@@ -111,7 +112,7 @@ export const proofLedSectionCss = `
   display: grid;
   gap: var(--space-6);
   align-content: center;
-  max-width: 48rem;
+  max-width: min(100%, 70ch);
 }
 
 .proof-led-section__statement {
@@ -123,11 +124,11 @@ export const proofLedSectionCss = `
 
 .proof-led-section h2 {
   margin: 0;
-  max-width: 14ch;
+  max-width: min(100%, 24ch);
   color: var(--color-text);
   font-family: var(--type-font-heading);
-  font-size: var(--pdos-type-heading);
-  line-height: 0.95;
+  font-size: clamp(1.8rem, 3.4cqi, 3rem);
+  line-height: 1.08;
   font-weight: var(--type-weight-bold);
   letter-spacing: 0;
   text-transform: var(--style-heading-transform);
@@ -135,7 +136,7 @@ export const proofLedSectionCss = `
 
 .proof-led-section__proof {
   margin: 0;
-  max-width: 36rem;
+  max-width: min(100%, 66ch);
   color: var(--color-text);
   font-family: var(--type-font-body);
   font-size: var(--pdos-type-body-lg);
@@ -165,7 +166,8 @@ export const proofLedSectionCss = `
   }
 
   .proof-led-section h2 {
-    max-width: 12ch;
+    max-width: min(100%, 20ch);
+    font-size: clamp(1.6rem, 6cqi, 2.3rem);
   }
 
   .proof-led-section .cta {
@@ -196,7 +198,7 @@ export function renderProofLedSection(input: PatternRenderInput): string {
         <p class="proof-led-section__proof" data-contract-prop="proof_item">${escapeHtml(props.proof_item)}</p>
         <p class="proof-led-section__source" data-contract-prop="source_reference">${escapeHtml(props.source_reference)}</p>
       </div>
-      <a class="${ctaClassName(props.cta_variant)}" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
+      <a class="${ctaClassName("primary")}" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
     </div>
   </div>
 </section>`.trim();

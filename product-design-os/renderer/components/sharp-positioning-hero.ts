@@ -64,7 +64,7 @@ export const sharpPositioningHeroCss = `
   margin-inline: auto;
   padding: var(--pdos-page-section-padding-block) var(--pdos-page-gutter);
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 0.95fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(min(100%, 18rem), 0.95fr);
   gap: var(--pdos-page-section-gap);
   align-items: center;
 }
@@ -74,7 +74,7 @@ export const sharpPositioningHeroCss = `
   display: grid;
   gap: var(--space-6);
   align-content: end;
-  max-width: 52rem;
+  max-width: min(100%, 72ch);
 }
 
 .sharp-positioning-hero__eyebrow {
@@ -110,14 +110,14 @@ export const sharpPositioningHeroCss = `
 }
 
 .sharp-positioning-hero__trust {
-  max-width: 26rem;
+  max-width: min(100%, 56ch);
   margin: 0;
   padding-inline-start: var(--space-4);
   border-inline-start: var(--style-decoration-border-width) solid var(--color-accent);
   border-radius: var(--style-corner-radius);
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
+  font-size: var(--pdos-type-body);
   line-height: var(--type-line-height-body);
 }
 

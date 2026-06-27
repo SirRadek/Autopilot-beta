@@ -13,9 +13,9 @@ const pdosRoot = path.join(process.cwd(), "product-design-os");
 const trialSpecFile = path.join(pdosRoot, "specs", "examples", "zednik.composition.json");
 const compositionSchemaFile = path.join(pdosRoot, "specs", "composition.schema.json");
 const assetManifestFile = path.join(pdosRoot, "assets", "asset-manifest.json");
-const brickHref = "./assets/zednik-brick-proof.jpg";
-const brickAlt = "Reálná zednická práce — cihlová zeď";
-const brickSourceUrl = "https://commons.wikimedia.org/wiki/File:Red_brick_wall_(Unsplash).jpg";
+const proofHref = "./assets/sections/zednik-stone-proof.jpg";
+const proofAlt = "Ručně kladené kamenné zdivo — rekonstrukce staré chalupy";
+const proofSourceUrl = "https://www.flickr.com/photos/58187590@N02/25240639751";
 
 describe("Product Design OS P6 zednik first trial", () => {
   it("validates the trial composition spec and inline content provenance", () => {
@@ -31,15 +31,15 @@ describe("Product Design OS P6 zednik first trial", () => {
     expect(recordArrayValue(spec, "asset_ids")).not.toContain("zednik-brick-proof");
     expect(inlineContent).toEqual(
       expect.objectContaining({
-        href: brickHref,
-        alt: brickAlt,
+        href: proofHref,
+        alt: proofAlt,
         license: "CC0-1.0",
-        source_url: brickSourceUrl
+        source_url: proofSourceUrl
       })
     );
   });
 
-  it("renders the zednik page with clean contracts, AA contrast, real brick image, Lora, and CTA priority", () => {
+  it("renders the zednik page with clean contracts, AA contrast, real stone image, Lora, and CTA priority", () => {
     const result = renderCompositionPage(readJson(trialSpecFile), pdosRoot);
     const root = parse(result.html);
     const proof = requiredElement(root, '[data-pattern-id="proof-led-section"]');
@@ -52,7 +52,7 @@ describe("Product Design OS P6 zednik first trial", () => {
     const contrast = assertRootColorContrastWcagAA(result.html);
 
     expect(result.sections.map((section) => section.pattern_id)).toEqual([
-      "sharp-positioning-hero",
+      "tactile-shadow-hero",
       "proof-led-section",
       "outcome-cta"
     ]);
@@ -66,8 +66,8 @@ describe("Product Design OS P6 zednik first trial", () => {
       "accent_secondary/accent_text"
     ]);
     expect(isSafeHref(proofImageSrc)).toBe(true);
-    expect(proofImageSrc).toBe(brickHref);
-    expect(requiredAttribute(proofImage, "alt")).toBe("Reálná zednická práce — cihlová zeď");
+    expect(proofImageSrc).toBe(proofHref);
+    expect(requiredAttribute(proofImage, "alt")).toBe(proofAlt);
     expect(result.html).toContain("https://fonts.googleapis.com/css2?family=Lora:wght@400;700&amp;display=swap");
     expect(ctas).toEqual([
       {
@@ -76,7 +76,7 @@ describe("Product Design OS P6 zednik first trial", () => {
       },
       {
         text: "Prohlédnout naše realizace",
-        className: "cta cta--secondary"
+        className: "cta"
       },
       {
         text: "Nezávazně poptat nacenění",

@@ -6,6 +6,7 @@ import { outcomeCtaCss, renderOutcomeCta } from "./components/outcome-cta";
 import { proofLedSectionCss, renderProofLedSection } from "./components/proof-led-section";
 import { dotStageHeroCss, renderDotStageHero } from "./components/dot-stage-hero";
 import { pointCloudBackgroundCss, renderPointCloudBackground } from "./components/point-cloud-background";
+import { renderTactileShadowHero, tactileShadowHeroCss } from "./components/tactile-shadow-hero";
 import type { PatternRenderInput } from "./types";
 export interface PatternComponentRegistryEntry {
   readonly render: (input: PatternRenderInput) => string;
@@ -38,6 +39,11 @@ export const patternComponentRegistry = {
   "point-cloud-background": {
     render: renderPointCloudBackground,
     css: pointCloudBackgroundCss,
+    rendererKind: "section"
+  },
+  "tactile-shadow-hero": {
+    render: renderTactileShadowHero,
+    css: tactileShadowHeroCss,
     rendererKind: "section"
   }
 } satisfies Record<string, PatternComponentRegistryEntry>;

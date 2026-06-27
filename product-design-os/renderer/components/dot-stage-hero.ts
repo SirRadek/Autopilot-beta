@@ -164,7 +164,7 @@ export const dotStageHeroCss = `
   color: var(--color-accent-text);
   background: var(--color-accent);
   font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
+  font-size: var(--pdos-type-body);
   font-weight: var(--type-weight-bold);
   line-height: 1;
   text-decoration: none;
@@ -180,7 +180,7 @@ export const dotStageHeroCss = `
   margin: 0;
   color: var(--color-muted-text);
   font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
+  font-size: var(--pdos-type-body);
   line-height: var(--type-line-height-body);
 }
 

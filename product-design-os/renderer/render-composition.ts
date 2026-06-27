@@ -6,7 +6,7 @@ import { checkRenderedContract, type RenderContractIssue } from "./check-render-
 import { mapTokensToCss } from "./map-tokens";
 import { getPatternComponent, hasPatternComponent, hasSectionPatternComponent } from "./pattern-component-registry";
 import { isSafeHref } from "./safe-url";
-import { assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
+import { assertComponentColorContrastWcagAA, assertRootColorContrastWcagAA, WcagContrastError } from "./wcag-contrast";
 import type {
   AssetManifestEntry,
   ComponentContract,
@@ -54,6 +54,7 @@ export class RenderCompositionSpecError extends Error {
 
 interface CompositionSpec {
   readonly id?: string;
+  readonly lang?: string;
   readonly nodes: readonly CompositionNode[];
   readonly token_overrides?: {
     readonly enabled?: boolean;
@@ -107,6 +108,7 @@ interface TokenOverrideSpec {
 interface RenderPatternData {
   readonly patternId: string;
   readonly nodeId: string;
+  readonly lang: string;
   readonly props: Record<string, string>;
   readonly slotFills: readonly SlotFill[];
   readonly tokenOverrides: TokenOverrideMap;
@@ -136,9 +138,16 @@ type PointCloudManifestEntry = AssetManifestEntry & {
   readonly library_source_id?: unknown;
 };
 
+const DEFAULT_COMPOSITION_LANG = "cs";
+const htmlLangPattern = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/;
+const fluidTypeRoles = ["caption", "kicker", "body", "body-lg", "heading", "display"] as const;
+
+type FluidTypeRole = (typeof fluidTypeRoles)[number];
+
 const defaultHeroData: RenderPatternData = {
   patternId: "sharp-positioning-hero",
   nodeId: "positioning-hero",
+  lang: DEFAULT_COMPOSITION_LANG,
   props: {
     headline: "A premium launch page with clear proof before polish",
     primary_cta: "Request a plan",
@@ -175,7 +184,7 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
   const title = patternData.props.headline ?? patternData.props.outcome_statement ?? patternData.patternId;
   const html = [
     "<!doctype html>",
-    '<html lang="en">',
+    `<html lang="${escapeAttribute(patternData.lang)}">`,
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
@@ -183,7 +192,7 @@ export function renderComposition(specOrPattern: unknown, pdosRoot: string): Ren
     `<title>${escapeHtml(title)}</title>`,
     "<style>",
     tokenCss,
-    documentBaseCss,
+    renderDocumentBaseCss(tokenCss),
     component.css,
     "</style>",
     "</head>",
@@ -307,6 +316,7 @@ export function renderCompositionPage(specInput: unknown, pdosRoot: string): Ren
   const title = typeof spec.id === "string" ? spec.id : sections[0]?.pattern_id ?? "composition";
   const html = renderHtmlDocument({
     title,
+    lang: spec.lang ?? DEFAULT_COMPOSITION_LANG,
     tokenCss,
     fontHeadLinks,
     componentCss: [...componentCss].join("\n\n"),
@@ -321,7 +331,8 @@ export function renderCompositionPage(specInput: unknown, pdosRoot: string): Ren
   };
 }
 
-const documentBaseCss = `
+function renderDocumentBaseCss(tokenCss: string): string {
+  return `
 *,
 *::before,
 *::after {
@@ -339,13 +350,12 @@ body {
   --pdos-page-gutter: var(--space-6);
   --pdos-page-section-padding-block: calc(var(--space-8) * 2);
   --pdos-page-section-gap: calc(var(--space-8) * 2);
-  --pdos-type-kicker: 0.84rem;
-  --pdos-type-body-lg: 1.15rem;
-  --pdos-type-heading: 5rem;
-  --pdos-type-display: 7.4rem;
+${fluidTypeCssDeclarations()}
+  --pdos-panel-min: 18rem;
+  --pdos-panel-gap: var(--space-6);
   margin: 0;
   font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
+  font-size: var(--pdos-type-body);
   line-height: var(--type-line-height-body);
   color: var(--color-text);
   background: var(--color-background);
@@ -380,6 +390,36 @@ svg {
   background: transparent;
 }
 
+.pdos-page,
+.pdos-page > section {
+  overflow-wrap: anywhere;
+  hyphens: manual;
+}
+
+.pdos-page :where(h1, h2, h3, h4, h5, h6) {
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  hyphens: manual;
+}
+
+.pdos-page :where(p, li, a, span) {
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+  hyphens: manual;
+}
+
+[data-auto-hyphenate="true"] {
+  hyphens: auto;
+  overflow-wrap: break-word;
+}
+
+.pdos-panel-grid,
+[data-pdos-panel-grid] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--pdos-panel-min, 18rem)), 1fr));
+  gap: var(--pdos-panel-gap, var(--space-6));
+}
+
 .sharp-positioning-hero__copy::before,
 .proof-led-section__content::before,
 .outcome-cta__inner::before {
@@ -407,7 +447,7 @@ svg {
   color: var(--color-accent-text);
   background: var(--color-accent);
   font-family: var(--type-font-body);
-  font-size: var(--type-size-body);
+  font-size: var(--pdos-type-body);
   font-weight: var(--type-weight-bold);
   line-height: 1;
   text-decoration: none;
@@ -447,8 +487,6 @@ svg {
     --pdos-page-gutter: var(--space-4);
     --pdos-page-section-padding-block: var(--space-8);
     --pdos-page-section-gap: var(--space-8);
-    --pdos-type-heading: 3.35rem;
-    --pdos-type-display: 4.5rem;
   }
 }
 
@@ -462,9 +500,11 @@ svg {
   }
 }
 `.trim();
+}
 
 function renderHtmlDocument(input: {
   readonly title: string;
+  readonly lang: string;
   readonly tokenCss: string;
   readonly fontHeadLinks: readonly string[];
   readonly componentCss: string;
@@ -472,7 +512,7 @@ function renderHtmlDocument(input: {
 }): string {
   return [
     "<!doctype html>",
-    '<html lang="en">',
+    `<html lang="${escapeAttribute(input.lang)}">`,
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
@@ -480,7 +520,7 @@ function renderHtmlDocument(input: {
     `<title>${escapeHtml(input.title)}</title>`,
     "<style>",
     input.tokenCss,
-    documentBaseCss,
+    renderDocumentBaseCss(input.tokenCss),
     input.componentCss,
     "</style>",
     "</head>",
@@ -489,6 +529,32 @@ function renderHtmlDocument(input: {
     "</body>",
     "</html>"
   ].join("\n");
+}
+
+function fluidTypeCssDeclarations(): string {
+  return fluidTypeRoles.map((role) => `  --pdos-type-${role}: ${fluidTypeClamp(role)};`).join("\n");
+}
+
+function fluidTypeClamp(role: FluidTypeRole): string {
+  return [
+    "clamp(",
+    `var(--type-role-scale-${role}-min-rem), `,
+    `var(--type-role-scale-${role}-fluid-cqi), `,
+    `var(--type-role-scale-${role}-max-rem)`,
+    ")"
+  ].join("");
+}
+
+function readCompositionLang(value: unknown): string {
+  if (value === undefined) {
+    return DEFAULT_COMPOSITION_LANG;
+  }
+
+  if (typeof value !== "string" || !htmlLangPattern.test(value)) {
+    throw new RenderCompositionSpecError("malformed_lang", "Composition lang must be a short BCP 47 language tag.");
+  }
+
+  return value;
 }
 
 function renderWebFontHeadLinks(tokenCss: string): readonly string[] {
@@ -545,6 +611,10 @@ function selectorForFirstContractProp(contract: ComponentContract, propNames: re
 function assertTokenColorContrast(tokenCss: string): void {
   try {
     assertRootColorContrastWcagAA(tokenCss);
+    // Extends the gate to the composited color-mix component pairs (badge fill, surface
+    // panel) the 6 hex :root pairs are blind to. Token-driven, so it runs on token CSS;
+    // the over-photo warnings only fire when the full HTML carries the hero image marker.
+    assertComponentColorContrastWcagAA(tokenCss);
   } catch (error) {
     if (error instanceof WcagContrastError) {
       throw new RenderCompositionSpecError("token_color_contrast_below_aa", error.message);
@@ -576,6 +646,7 @@ function resolvePatternData(input: unknown): RenderPatternData {
     return {
       patternId: input.pattern_id,
       nodeId: typeof input.node_id === "string" ? input.node_id : "direct-pattern",
+      lang: readCompositionLang(input.lang),
       props: readDirectProps(input.props),
       slotFills: readSlotFills(input.slot_fills),
       tokenOverrides: {}
@@ -601,6 +672,7 @@ function resolvePatternData(input: unknown): RenderPatternData {
     return {
       patternId: node.target_id ?? "",
       nodeId: node.node_id ?? "rendered-pattern",
+      lang: spec.lang ?? DEFAULT_COMPOSITION_LANG,
       props: readCompositionProps(node.props),
       slotFills: readSlotFills(node.slot_fills),
       tokenOverrides: readTokenOverrides(spec),
@@ -729,6 +801,7 @@ function readCompositionSpec(input: Record<string, unknown>): CompositionSpec {
   if (typeof input.id === "string") {
     (spec as { id?: string }).id = input.id;
   }
+  (spec as { lang?: string }).lang = readCompositionLang(input.lang);
 
   if ("token_overrides" in input) {
     if (!isRecord(input.token_overrides)) {

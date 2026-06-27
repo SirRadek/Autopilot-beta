@@ -583,6 +583,17 @@
         "penalties": []
       },
       {
+        "id": "tactile-shadow-hero",
+        "score": 52,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7."
+        ],
+        "penalties": []
+      },
+      {
         "id": "animated-hero",
         "score": 50,
         "selected": false,

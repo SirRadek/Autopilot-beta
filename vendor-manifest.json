@@ -3,23 +3,30 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 120,
+  "file_count": 121,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
     "product-design-os/assets/motion/editorial-motion-hero.svg",
     "product-design-os/assets/sections/proof-strip-case-study.svg",
     "product-design-os/assets/sections/zednik-brick-proof.jpg",
+    "product-design-os/assets/sections/zednik-sandstone-wall.jpg",
     "product-design-os/composition/composition-target.schema.json",
     "product-design-os/contracts/component-contract-manifest.json",
     "product-design-os/contracts/component-contract.schema.json",
     "product-design-os/evidence/evidence.schema.json",
     "product-design-os/evidence/records/example-context7-evidence.json",
     "product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
+    "product-design-os/qa/fit-probe/check-fit-probe-product-design-os.ts",
+    "product-design-os/qa/fit-probe/fit-probe-core.ts",
+    "product-design-os/qa/fit-safety/check-fit-safety-product-design-os.ts",
+    "product-design-os/qa/fit-safety/fit-safety-baseline.json",
     "product-design-os/qa/renderability/fixtures/buildable-marketing.json",
     "product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json",
     "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json",
     "product-design-os/qa/variants/sample-product-design-variants.ts",
+    "product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts",
+    "product-design-os/qa/visual-qa-browser/visual-qa-browser-core.ts",
     "product-design-os/recipes/recipe.schema.json",
     "product-design-os/renderer/check-point-cloud-scene.ts",
     "product-design-os/renderer/check-render-contract.ts",
@@ -28,6 +35,7 @@
     "product-design-os/renderer/components/point-cloud-background.ts",
     "product-design-os/renderer/components/proof-led-section.ts",
     "product-design-os/renderer/components/sharp-positioning-hero.ts",
+    "product-design-os/renderer/components/tactile-shadow-hero.ts",
     "product-design-os/renderer/map-tokens.ts",
     "product-design-os/renderer/pattern-component-registry.ts",
     "product-design-os/renderer/render-brand-examples.ts",
@@ -157,6 +165,11 @@
       "source_path": "product-design-os/assets/sections/.gitkeep",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "source_path": "product-design-os/assets/sections/zednik-stone-proof.jpg",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "1bc186b23486e554ebb44d9056675481f30b5d960920310ffa2f22fc67b9ab1a"
     },
     {
       "source_path": "product-design-os/assets/theme-crossing-reference-pack.md",
@@ -564,7 +577,8 @@
     {
       "source_path": "product-design-os/scripts/visual-qa-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "aed5bbd4b1619cf0e53d4c3e676ed3b2d39eb017e1ef5168b135a40ee7afc1f6"
+      "content_hash": "1a0b5a97c6080c2cf5851cdcc7c9f80f75c9e56a522188f378a0a6c1417de065",
+      "patched_by": "textfit-F2"
     },
     {
       "source_path": "product-design-os/taste/feedback-log.json",
@@ -626,7 +640,7 @@
       "source_path": "product-design-os/tokens/typography.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "2f39d0cdf9bd5b94a8ac6fe2bed7d425ecf97beec8dc097c20cde54ffc6849e6",
-      "patched_by": "F4b"
+      "patched_by": "F4b,F1"
     },
     {
       "source_path": "src/data/delivery-system/checkCompletionMatrix.ts",

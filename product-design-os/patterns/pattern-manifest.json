@@ -5,67 +5,205 @@
     {
       "id": "sharp-positioning-hero",
       "type": "conversion_pattern",
-      "use_case": ["marketing_web", "landing_page"],
-      "good_for": ["clear service offer", "lead generation", "non-technical audience", "strong primary CTA"],
-      "bad_for": ["internal_system", "dashboard", "checkout"],
+      "use_case": [
+        "marketing_web",
+        "landing_page"
+      ],
+      "good_for": [
+        "clear service offer",
+        "lead generation",
+        "non-technical audience",
+        "strong primary CTA"
+      ],
+      "bad_for": [
+        "internal_system",
+        "dashboard",
+        "checkout"
+      ],
       "complexity": 3,
       "usability": 9,
       "mobile_quality": 9,
-      "requires": ["specific headline", "visible CTA", "trust cue", "responsive typography"],
-      "requires_codes": ["visible_h1","semantic_headings","dom_text_cta","cta_path","proof_adjacency","trust_signal","responsive_typography"],
-      "risks": ["generic copy", "weak proof", "hero-only storytelling"],
+      "requires": [
+        "specific headline",
+        "visible CTA",
+        "trust cue",
+        "responsive typography"
+      ],
+      "requires_codes": [
+        "visible_h1",
+        "semantic_headings",
+        "dom_text_cta",
+        "cta_path",
+        "proof_adjacency",
+        "trust_signal",
+        "responsive_typography"
+      ],
+      "risks": [
+        "generic copy",
+        "weak proof",
+        "hero-only storytelling"
+      ],
       "accessibility_notes": "Keep headline and CTA in DOM text, preserve heading order, and keep tap targets at least 44px on touch devices.",
       "performance_notes": "Use static or CSS-driven visuals first; avoid blocking hero content behind canvas or video.",
-      "examples": ["offer-led homepage hero", "service landing hero"]
+      "examples": [
+        "offer-led homepage hero",
+        "service landing hero"
+      ]
     },
     {
       "id": "outcome-cta",
       "type": "conversion_pattern",
-      "use_case": ["marketing_web", "landing_page", "portfolio"],
-      "good_for": ["closing conversion", "lead generation", "outcome clarity", "proof-adjacent CTA"],
-      "bad_for": ["unsupported promise", "checkout", "critical public-sector flow"],
+      "use_case": [
+        "marketing_web",
+        "landing_page",
+        "portfolio"
+      ],
+      "good_for": [
+        "closing conversion",
+        "lead generation",
+        "outcome clarity",
+        "proof-adjacent CTA"
+      ],
+      "bad_for": [
+        "unsupported promise",
+        "checkout",
+        "critical public-sector flow"
+      ],
       "complexity": 3,
       "usability": 9,
       "mobile_quality": 9,
-      "requires": ["outcome statement", "CTA", "proof adjacency", "accessible copy"],
-      "requires_codes": ["outcome_statement","dom_text_cta","cta_path","proof_adjacency","accessible_copy"],
-      "risks": ["generic/unsupported outcome claims"],
+      "requires": [
+        "outcome statement",
+        "CTA",
+        "proof adjacency",
+        "accessible copy"
+      ],
+      "requires_codes": [
+        "outcome_statement",
+        "dom_text_cta",
+        "cta_path",
+        "proof_adjacency",
+        "accessible_copy"
+      ],
+      "risks": [
+        "generic/unsupported outcome claims"
+      ],
       "accessibility_notes": "CTA copy must describe the action and outcome without relying on visual emphasis alone.",
       "performance_notes": "Keep the closing CTA lightweight and avoid blocking it behind animation or media.",
-      "examples": ["outcome-led closing CTA", "proof-adjacent CTA band"]
+      "examples": [
+        "outcome-led closing CTA",
+        "proof-adjacent CTA band"
+      ]
     },
     {
       "id": "animated-hero",
       "type": "motion_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
-      "good_for": ["content-first hero", "memorable brand opener", "motion-enhanced CTA", "creative positioning"],
-      "bad_for": ["checkout", "dense internal system", "public-sector critical flow"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page",
+        "experimental"
+      ],
+      "good_for": [
+        "content-first hero",
+        "memorable brand opener",
+        "motion-enhanced CTA",
+        "creative positioning"
+      ],
+      "bad_for": [
+        "checkout",
+        "dense internal system",
+        "public-sector critical flow"
+      ],
       "complexity": 7,
       "usability": 7,
       "mobile_quality": 6,
-      "requires": ["content-first hero", "DOM-text CTA", "reduced-motion fallback", "static fallback", "performance budget"],
-      "requires_codes": ["visible_h1","no_primary_content_in_canvas","dom_text_cta","reduced_motion_fallback","demo_fallback","performance_budget"],
-      "risks": ["animation delaying page purpose", "CTA hidden by motion", "low-end mobile jank", "hero content trapped in canvas"],
+      "requires": [
+        "content-first hero",
+        "DOM-text CTA",
+        "reduced-motion fallback",
+        "static fallback",
+        "performance budget"
+      ],
+      "requires_codes": [
+        "visible_h1",
+        "no_primary_content_in_canvas",
+        "dom_text_cta",
+        "reduced_motion_fallback",
+        "demo_fallback",
+        "performance_budget"
+      ],
+      "risks": [
+        "animation delaying page purpose",
+        "CTA hidden by motion",
+        "low-end mobile jank",
+        "hero content trapped in canvas"
+      ],
       "accessibility_notes": "Hero copy and CTA must remain DOM text with readable contrast, focus states, and equivalent static presentation for reduced motion.",
       "performance_notes": "Render text and CTA before motion; cap animation asset weight and avoid blocking LCP with canvas, video, or large script bundles.",
-      "examples": ["motion-enhanced landing hero", "animated portfolio opener"]
+      "examples": [
+        "motion-enhanced landing hero",
+        "animated portfolio opener"
+      ]
     },
     {
       "id": "dot-stage-hero",
       "type": "motion_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
-      "good_for": ["content-first hero", "memorable brand opener", "dot-built display word", "creative positioning", "tech-curious audience"],
-      "bad_for": ["checkout", "dense internal system", "public-sector critical flow", "content-dense reading page"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page",
+        "experimental"
+      ],
+      "good_for": [
+        "content-first hero",
+        "memorable brand opener",
+        "dot-built display word",
+        "creative positioning",
+        "tech-curious audience"
+      ],
+      "bad_for": [
+        "checkout",
+        "dense internal system",
+        "public-sector critical flow",
+        "content-dense reading page"
+      ],
       "complexity": 7,
       "usability": 7,
       "mobile_quality": 7,
-      "requires": ["content-first hero", "DOM-text CTA", "trust cue", "reduced-motion fallback", "static fallback", "performance budget", "responsive typography"],
-      "requires_codes": ["visible_h1","no_primary_content_in_canvas","dom_text_cta","reduced_motion_fallback","performance_budget","proof_adjacency","responsive_typography"],
-      "risks": ["dot field competing with the offer", "display word illegible at low dot counts", "low-end mobile jank", "reduced-motion path treated as degraded"],
+      "requires": [
+        "content-first hero",
+        "DOM-text CTA",
+        "trust cue",
+        "reduced-motion fallback",
+        "static fallback",
+        "performance budget",
+        "responsive typography"
+      ],
+      "requires_codes": [
+        "visible_h1",
+        "no_primary_content_in_canvas",
+        "dom_text_cta",
+        "reduced_motion_fallback",
+        "performance_budget",
+        "proof_adjacency",
+        "responsive_typography"
+      ],
+      "risks": [
+        "dot field competing with the offer",
+        "display word illegible at low dot counts",
+        "low-end mobile jank",
+        "reduced-motion path treated as degraded"
+      ],
       "accessibility_notes": "Read copy and CTA stay sharp DOM; dot-built display words carry a [data-dot-twin] DOM twin; the canvas is aria-hidden and the engine bails to a static frame under prefers-reduced-motion.",
       "performance_notes": "Procedural dots only — no stored frames. Cap the dot budget, start text before the canvas, and pause rendering when offscreen or hidden.",
-      "examples": ["dot-stage hero with a dot-built wordmark", "procedural lime-on-dark opener"],
-      "modifiers": ["motion"]
+      "examples": [
+        "dot-stage hero with a dot-built wordmark",
+        "procedural lime-on-dark opener"
+      ],
+      "modifiers": [
+        "motion"
+      ]
     },
     {
       "id": "point-cloud-background",
@@ -87,627 +225,1938 @@
     {
       "id": "proof-led-section",
       "type": "conversion_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page"],
-      "good_for": ["trust building", "case evidence", "before-after explanation", "service credibility"],
-      "bad_for": ["pure art direction page", "dense admin workflow"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page"
+      ],
+      "good_for": [
+        "trust building",
+        "case evidence",
+        "before-after explanation",
+        "service credibility"
+      ],
+      "bad_for": [
+        "pure art direction page",
+        "dense admin workflow"
+      ],
       "complexity": 4,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["proof item", "outcome statement", "source or case reference", "CTA continuation"],
-      "requires_codes": ["proof_adjacency","proof_evidence","outcome_statement","source_reference","dom_text_cta","cta_path"],
-      "risks": ["claims without evidence", "logo wall without context", "fake metrics"],
+      "requires": [
+        "proof item",
+        "outcome statement",
+        "source or case reference",
+        "CTA continuation"
+      ],
+      "requires_codes": [
+        "proof_adjacency",
+        "proof_evidence",
+        "outcome_statement",
+        "source_reference",
+        "dom_text_cta",
+        "cta_path"
+      ],
+      "risks": [
+        "claims without evidence",
+        "logo wall without context",
+        "fake metrics"
+      ],
       "accessibility_notes": "Do not encode proof only in images; keep outcomes and labels as readable text.",
       "performance_notes": "Prefer compact media and lazy-load secondary proof visuals.",
-      "examples": ["case strip", "outcome cards", "before-after proof row"]
+      "examples": [
+        "case strip",
+        "outcome cards",
+        "before-after proof row"
+      ]
     },
     {
       "id": "studio-proof-ledger",
       "type": "conversion_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page"],
-      "good_for": ["auditable proof lists", "case outcomes", "studio credibility", "handoff clarity"],
-      "bad_for": ["unsupported claims", "logo-only proof", "pure art direction page"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page"
+      ],
+      "good_for": [
+        "auditable proof lists",
+        "case outcomes",
+        "studio credibility",
+        "handoff clarity"
+      ],
+      "bad_for": [
+        "unsupported claims",
+        "logo-only proof",
+        "pure art direction page"
+      ],
       "complexity": 4,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["auditable proof items", "source/case references", "outcomes", "handoff clarity"],
-      "requires_codes": ["proof_adjacency","proof_evidence","source_reference","outcome_statement","handoff_clarity"],
-      "risks": ["fake metrics", "unsupported claims"],
+      "requires": [
+        "auditable proof items",
+        "source/case references",
+        "outcomes",
+        "handoff clarity"
+      ],
+      "requires_codes": [
+        "proof_adjacency",
+        "proof_evidence",
+        "source_reference",
+        "outcome_statement",
+        "handoff_clarity"
+      ],
+      "risks": [
+        "fake metrics",
+        "unsupported claims"
+      ],
       "accessibility_notes": "Ledger rows must be readable text with source/case references; use proof-led-section for broader narrative proof, not as a substitute for auditable items.",
       "performance_notes": "Prefer compact text-first entries and lazy-load optional case media.",
-      "examples": ["auditable outcomes ledger", "case evidence list"]
+      "examples": [
+        "auditable outcomes ledger",
+        "case evidence list"
+      ]
     },
     {
       "id": "theme-crossed-direction",
       "type": "layout_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
-      "good_for": ["distinct design directions", "creative positioning", "memorable first viewport", "avoiding palette-only variants"],
-      "bad_for": ["checkout", "public_sector critical flow", "dense internal system"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page",
+        "experimental"
+      ],
+      "good_for": [
+        "distinct design directions",
+        "creative positioning",
+        "memorable first viewport",
+        "avoiding palette-only variants"
+      ],
+      "bad_for": [
+        "checkout",
+        "public_sector critical flow",
+        "dense internal system"
+      ],
       "complexity": 6,
       "usability": 7,
       "mobile_quality": 7,
-      "requires": ["primary personality axis", "contrast axis", "product-proof axis", "SEO-readable content", "mobile fallback"],
-      "requires_codes": ["brand_axis","contrast_axis","proof_adjacency","proof_evidence","no_primary_content_in_canvas","seo_readable_content","reduced_motion_fallback","mobile_fallback"],
-      "risks": ["too many moods", "weak offer clarity", "visual style overpowering CTA", "performance budget missing"],
+      "requires": [
+        "primary personality axis",
+        "contrast axis",
+        "product-proof axis",
+        "SEO-readable content",
+        "mobile fallback"
+      ],
+      "requires_codes": [
+        "brand_axis",
+        "contrast_axis",
+        "proof_adjacency",
+        "proof_evidence",
+        "no_primary_content_in_canvas",
+        "seo_readable_content",
+        "reduced_motion_fallback",
+        "mobile_fallback"
+      ],
+      "risks": [
+        "too many moods",
+        "weak offer clarity",
+        "visual style overpowering CTA",
+        "performance budget missing"
+      ],
       "accessibility_notes": "Theme crossing must preserve readable text, heading order, contrast, focus states, and non-motion fallbacks.",
       "performance_notes": "Use static SVG/CSS first; add canvas/3D only after a performance budget and reduced-motion plan.",
-      "examples": ["calm prism focus", "written retro proof", "dopamine demo worlds"],
-      "modifiers": ["motion", "positioning"]
+      "examples": [
+        "calm prism focus",
+        "written retro proof",
+        "dopamine demo worlds"
+      ],
+      "modifiers": [
+        "motion",
+        "positioning"
+      ]
     },
     {
       "id": "seo-readable-art-direction",
       "type": "conversion_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page"],
-      "good_for": ["artistic site direction", "SEO-safe visual storytelling", "proof-led creative work"],
-      "bad_for": ["canvas-only portfolio", "image-only text", "keyword stuffing"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page"
+      ],
+      "good_for": [
+        "artistic site direction",
+        "SEO-safe visual storytelling",
+        "proof-led creative work"
+      ],
+      "bad_for": [
+        "canvas-only portfolio",
+        "image-only text",
+        "keyword stuffing"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["visible H1", "semantic headings", "DOM text CTA", "proof text", "asset alt/provenance"],
-      "requires_codes": ["visible_h1","semantic_headings","dom_text_cta","proof_adjacency","proof_evidence","asset_provenance","accessible_copy"],
-      "risks": ["content hidden in canvas", "decorative text images", "low text density", "indexability unknown"],
+      "requires": [
+        "visible H1",
+        "semantic headings",
+        "DOM text CTA",
+        "proof text",
+        "asset alt/provenance"
+      ],
+      "requires_codes": [
+        "visible_h1",
+        "semantic_headings",
+        "dom_text_cta",
+        "proof_adjacency",
+        "proof_evidence",
+        "asset_provenance",
+        "accessible_copy"
+      ],
+      "risks": [
+        "content hidden in canvas",
+        "decorative text images",
+        "low text density",
+        "indexability unknown"
+      ],
       "accessibility_notes": "Do not duplicate hidden SEO text; make the real visible content accessible and indexable.",
       "performance_notes": "Keep visual assets decorative or supportive and lazy-load secondary media.",
-      "examples": ["editorial proof page", "artistic service landing page"]
+      "examples": [
+        "editorial proof page",
+        "artistic service landing page"
+      ]
     },
     {
       "id": "mascot-progressive-guide",
       "type": "motion_pattern",
-      "use_case": ["marketing_web", "portfolio", "experimental"],
-      "good_for": ["playful trust", "non-technical onboarding", "cursor and scroll guidance", "brand memory"],
-      "bad_for": ["checkout", "lead form fields", "public_sector", "data-heavy dashboard"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "experimental"
+      ],
+      "good_for": [
+        "playful trust",
+        "non-technical onboarding",
+        "cursor and scroll guidance",
+        "brand memory"
+      ],
+      "bad_for": [
+        "checkout",
+        "lead form fields",
+        "public_sector",
+        "data-heavy dashboard"
+      ],
       "complexity": 7,
       "usability": 6,
       "mobile_quality": 6,
-      "requires": ["static fallback", "reduced-motion fallback", "asset license", "performance budget", "no content dependency"],
-      "requires_codes": ["reduced_motion_fallback","demo_fallback","asset_license","asset_provenance","performance_budget","content_readability"],
-      "risks": ["mascot blocks CTA", "WebGL failure", "jank on mobile", "mascot as decoration only"],
+      "requires": [
+        "static fallback",
+        "reduced-motion fallback",
+        "asset license",
+        "performance budget",
+        "no content dependency"
+      ],
+      "requires_codes": [
+        "reduced_motion_fallback",
+        "demo_fallback",
+        "asset_license",
+        "asset_provenance",
+        "performance_budget",
+        "content_readability"
+      ],
+      "risks": [
+        "mascot blocks CTA",
+        "WebGL failure",
+        "jank on mobile",
+        "mascot as decoration only"
+      ],
       "accessibility_notes": "Mascot behavior must not be required to understand or operate the page.",
       "performance_notes": "Load model only on user intent or after idle; keep static HTML and CTA available first.",
-      "examples": ["cat concierge", "section-aware mascot guide"]
+      "examples": [
+        "cat concierge",
+        "section-aware mascot guide"
+      ]
     },
     {
       "id": "service-demo-link",
       "type": "ux_pattern",
-      "use_case": ["marketing_web", "portfolio", "ai_agent_ui"],
-      "good_for": ["showing capability", "reducing abstract claims", "separating main page from demos"],
-      "bad_for": ["checkout", "public_sector critical flow"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "ai_agent_ui"
+      ],
+      "good_for": [
+        "showing capability",
+        "reducing abstract claims",
+        "separating main page from demos"
+      ],
+      "bad_for": [
+        "checkout",
+        "public_sector critical flow"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 7,
-      "requires": ["short service description", "demo link", "fallback screenshot or summary", "clear navigation back"],
-      "requires_codes": ["plain_language","service_taxonomy","demo_fallback","cta_path","navigation_recovery"],
-      "risks": ["demo becoming primary SEO content", "broken external route", "unclear expectation"],
+      "requires": [
+        "short service description",
+        "demo link",
+        "fallback screenshot or summary",
+        "clear navigation back"
+      ],
+      "requires_codes": [
+        "plain_language",
+        "service_taxonomy",
+        "demo_fallback",
+        "cta_path",
+        "navigation_recovery"
+      ],
+      "risks": [
+        "demo becoming primary SEO content",
+        "broken external route",
+        "unclear expectation"
+      ],
       "accessibility_notes": "Link text must describe the demo target; do not rely on icon-only links.",
       "performance_notes": "Keep heavy demos outside the main marketing page and load them on demand.",
-      "examples": ["service card with demo route", "AI tool preview link"]
+      "examples": [
+        "service card with demo route",
+        "AI tool preview link"
+      ]
     },
     {
       "id": "guided-offer-map",
       "type": "ux_pattern",
-      "use_case": ["marketing_web", "landing_page", "portfolio"],
-      "good_for": ["service choice navigation", "offer comparison", "demo/request routing", "CTA clarity"],
-      "bad_for": ["single-offer page", "checkout", "dense internal system"],
+      "use_case": [
+        "marketing_web",
+        "landing_page",
+        "portfolio"
+      ],
+      "good_for": [
+        "service choice navigation",
+        "offer comparison",
+        "demo/request routing",
+        "CTA clarity"
+      ],
+      "bad_for": [
+        "single-offer page",
+        "checkout",
+        "dense internal system"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["clear choice model", "CTA path", "mobile behavior", "SEO-readable labels"],
-      "requires_codes": ["choice_model","cta_path","mobile_behavior","seo_readable_content","accessible_copy"],
-      "risks": ["unclear demo/request routing", "choice overload"],
+      "requires": [
+        "clear choice model",
+        "CTA path",
+        "mobile behavior",
+        "SEO-readable labels"
+      ],
+      "requires_codes": [
+        "choice_model",
+        "cta_path",
+        "mobile_behavior",
+        "seo_readable_content",
+        "accessible_copy"
+      ],
+      "risks": [
+        "unclear demo/request routing",
+        "choice overload"
+      ],
       "accessibility_notes": "Choice labels and CTA text must be readable DOM text with clear focus order and 44px touch targets.",
       "performance_notes": "Use CSS layout and text labels; avoid heavy interactive navigation before the offer path is understandable.",
-      "examples": ["offer map section", "service chooser with CTA routes"]
+      "examples": [
+        "offer map section",
+        "service chooser with CTA routes"
+      ]
     },
     {
       "id": "demo-world-hub",
       "type": "ux_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
-      "good_for": ["interactive demo navigation", "service capability exploration", "creative portfolio hubs", "separating playful demos from core offer"],
-      "bad_for": ["checkout", "serious public-sector context", "critical form", "public benefits application"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page",
+        "experimental"
+      ],
+      "good_for": [
+        "interactive demo navigation",
+        "service capability exploration",
+        "creative portfolio hubs",
+        "separating playful demos from core offer"
+      ],
+      "bad_for": [
+        "checkout",
+        "serious public-sector context",
+        "critical form",
+        "public benefits application"
+      ],
       "complexity": 7,
       "usability": 7,
       "mobile_quality": 6,
-      "requires": ["fallback summary or screenshot", "clear route back to main page", "primary content and SEO text outside demo canvas", "accessible text links for each demo", "reduced-motion fallback"],
-      "requires_codes": ["demo_fallback","navigation_recovery","no_primary_content_in_canvas","seo_readable_content","accessible_links","reduced_motion_fallback"],
-      "risks": ["primary content trapped in canvas", "unclear demo route", "mobile performance issues", "demo novelty overpowering offer"],
+      "requires": [
+        "fallback summary or screenshot",
+        "clear route back to main page",
+        "primary content and SEO text outside demo canvas",
+        "accessible text links for each demo",
+        "reduced-motion fallback"
+      ],
+      "requires_codes": [
+        "demo_fallback",
+        "navigation_recovery",
+        "no_primary_content_in_canvas",
+        "seo_readable_content",
+        "accessible_links",
+        "reduced_motion_fallback"
+      ],
+      "risks": [
+        "primary content trapped in canvas",
+        "unclear demo route",
+        "mobile performance issues",
+        "demo novelty overpowering offer"
+      ],
       "accessibility_notes": "Each demo entry needs a text label and keyboard reachable link; the hub must remain navigable without canvas, pointer motion, or audio.",
       "performance_notes": "Load heavyweight demos on demand and keep a static summary or screenshot visible before any canvas or WebGL code runs.",
-      "examples": ["demo world hub", "interactive service demo launcher"]
+      "examples": [
+        "demo world hub",
+        "interactive service demo launcher"
+      ]
     },
     {
       "id": "cursor-responsive-detail",
       "type": "motion_pattern",
-      "use_case": ["marketing_web", "portfolio", "experimental"],
-      "good_for": ["playful professional feel", "micro-interaction", "highlighting visual anchor"],
-      "bad_for": ["ecommerce checkout", "internal_system", "dashboard", "public_sector"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "experimental"
+      ],
+      "good_for": [
+        "playful professional feel",
+        "micro-interaction",
+        "highlighting visual anchor"
+      ],
+      "bad_for": [
+        "ecommerce checkout",
+        "internal_system",
+        "dashboard",
+        "public_sector"
+      ],
       "complexity": 6,
       "usability": 6,
       "mobile_quality": 5,
-      "requires": ["pointer fallback", "reduced-motion fallback", "keyboard-neutral content", "performance budget"],
-      "requires_codes": ["pointer_fallback","mobile_fallback","reduced_motion_fallback","keyboard_neutral_content","accessible_copy","performance_budget"],
-      "risks": ["decorative motion without value", "mobile mismatch", "pointer-only affordance"],
+      "requires": [
+        "pointer fallback",
+        "reduced-motion fallback",
+        "keyboard-neutral content",
+        "performance budget"
+      ],
+      "requires_codes": [
+        "pointer_fallback",
+        "mobile_fallback",
+        "reduced_motion_fallback",
+        "keyboard_neutral_content",
+        "accessible_copy",
+        "performance_budget"
+      ],
+      "risks": [
+        "decorative motion without value",
+        "mobile mismatch",
+        "pointer-only affordance"
+      ],
       "accessibility_notes": "The interaction must not be required to understand or activate content.",
       "performance_notes": "Use transform/opacity and throttle pointer work; no layout thrashing.",
-      "examples": ["cursor-aware highlight", "subtle service diagram response"]
+      "examples": [
+        "cursor-aware highlight",
+        "subtle service diagram response"
+      ]
     },
     {
       "id": "scroll-linked-proof",
       "type": "motion_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page"],
-      "good_for": ["progressive explanation", "case-study narrative", "service workflow proof"],
-      "bad_for": ["data-heavy dashboard", "critical form", "checkout"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page"
+      ],
+      "good_for": [
+        "progressive explanation",
+        "case-study narrative",
+        "service workflow proof"
+      ],
+      "bad_for": [
+        "data-heavy dashboard",
+        "critical form",
+        "checkout"
+      ],
       "complexity": 7,
       "usability": 7,
       "mobile_quality": 6,
-      "requires": ["non-motion fallback", "content-first DOM order", "section anchors", "performance budget"],
-      "requires_codes": ["reduced_motion_fallback","no_primary_content_in_canvas","content_readability","section_anchors","performance_budget"],
-      "risks": ["scroll hijacking", "low-end mobile jank", "content hidden by animation"],
+      "requires": [
+        "non-motion fallback",
+        "content-first DOM order",
+        "section anchors",
+        "performance budget"
+      ],
+      "requires_codes": [
+        "reduced_motion_fallback",
+        "no_primary_content_in_canvas",
+        "content_readability",
+        "section_anchors",
+        "performance_budget"
+      ],
+      "risks": [
+        "scroll hijacking",
+        "low-end mobile jank",
+        "content hidden by animation"
+      ],
       "accessibility_notes": "Respect prefers-reduced-motion and keep all content readable without scroll animation.",
       "performance_notes": "Avoid scroll event loops; prefer CSS timeline or intersection-driven class changes when available.",
-      "examples": ["step-by-step process reveal", "case proof progression"]
+      "examples": [
+        "step-by-step process reveal",
+        "case proof progression"
+      ]
     },
     {
       "id": "case-study-strip",
       "type": "layout_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page"],
-      "good_for": ["compact proof", "case scanning", "portfolio credibility", "CTA continuation"],
-      "bad_for": ["long-form case narrative", "logo wall", "dense dashboard"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page"
+      ],
+      "good_for": [
+        "compact proof",
+        "case scanning",
+        "portfolio credibility",
+        "CTA continuation"
+      ],
+      "bad_for": [
+        "long-form case narrative",
+        "logo wall",
+        "dense dashboard"
+      ],
       "complexity": 4,
       "usability": 8,
       "mobile_quality": 7,
-      "requires": ["compact case evidence", "mobile stacking", "proof source", "CTA continuation"],
-      "requires_codes": ["proof_adjacency","proof_evidence","mobile_stacking","mobile_behavior","source_reference","dom_text_cta","cta_path"],
-      "risks": ["logo-wall/fake proof"],
+      "requires": [
+        "compact case evidence",
+        "mobile stacking",
+        "proof source",
+        "CTA continuation"
+      ],
+      "requires_codes": [
+        "proof_adjacency",
+        "proof_evidence",
+        "mobile_stacking",
+        "mobile_behavior",
+        "source_reference",
+        "dom_text_cta",
+        "cta_path"
+      ],
+      "risks": [
+        "logo-wall/fake proof"
+      ],
       "accessibility_notes": "Keep case titles, outcomes, and CTA text in DOM order; horizontal layouts need keyboard and touch-safe access.",
       "performance_notes": "Use responsive layout and lazy-load secondary logos or thumbnails.",
-      "examples": ["horizontal case-study strip", "compact proof row"]
+      "examples": [
+        "horizontal case-study strip",
+        "compact proof row"
+      ]
     },
     {
       "id": "mask-reveal",
       "type": "motion_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page", "experimental"],
-      "good_for": ["guided emphasis", "progressive proof reveal", "editorial transitions", "content hierarchy"],
-      "bad_for": ["essential instructions", "checkout", "public-sector critical flow", "dense internal system"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page",
+        "experimental"
+      ],
+      "good_for": [
+        "guided emphasis",
+        "progressive proof reveal",
+        "editorial transitions",
+        "content hierarchy"
+      ],
+      "bad_for": [
+        "essential instructions",
+        "checkout",
+        "public-sector critical flow",
+        "dense internal system"
+      ],
       "complexity": 6,
       "usability": 6,
       "mobile_quality": 6,
-      "requires": ["effect/modifier, not standalone section", "content purpose", "reduced-motion fallback", "content readable without the effect", "no decoration-only reveal"],
-      "requires_codes": ["effect_enhancement_only","content_purpose","reduced_motion_fallback","content_readability"],
-      "risks": ["motion-without-purpose", "content hidden by reveal", "reveal timing blocks reading", "reduced-motion mismatch"],
+      "requires": [
+        "effect/modifier, not standalone section",
+        "content purpose",
+        "reduced-motion fallback",
+        "content readable without the effect",
+        "no decoration-only reveal"
+      ],
+      "requires_codes": [
+        "effect_enhancement_only",
+        "content_purpose",
+        "reduced_motion_fallback",
+        "content_readability"
+      ],
+      "risks": [
+        "motion-without-purpose",
+        "content hidden by reveal",
+        "reveal timing blocks reading",
+        "reduced-motion mismatch"
+      ],
       "accessibility_notes": "Use reveal only as enhancement; DOM order, visible text, focusable controls, and reduced-motion views must expose the same content.",
       "performance_notes": "Prefer CSS mask/clip-path/opacity transforms and avoid per-frame layout work; keep reveal effects optional on low-power devices.",
-      "examples": ["proof quote mask reveal", "section headline reveal modifier"]
+      "examples": [
+        "proof quote mask reveal",
+        "section headline reveal modifier"
+      ]
     },
     {
       "id": "asymmetric-editorial-layout",
       "type": "layout_pattern",
-      "use_case": ["marketing_web", "portfolio", "landing_page"],
-      "good_for": ["distinct visual rhythm", "premium services", "avoiding repeated equal cards"],
-      "bad_for": ["admin_panel", "crm", "data_tool"],
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page"
+      ],
+      "good_for": [
+        "distinct visual rhythm",
+        "premium services",
+        "avoiding repeated equal cards"
+      ],
+      "bad_for": [
+        "admin_panel",
+        "crm",
+        "data_tool"
+      ],
       "complexity": 5,
       "usability": 7,
       "mobile_quality": 7,
-      "requires": ["strong hierarchy", "controlled line length", "mobile stacking plan", "clear CTA path"],
-      "requires_codes": ["visual_hierarchy","line_length","mobile_stacking","mobile_behavior","cta_path"],
-      "risks": ["layout novelty reducing scanability", "mobile ordering mistakes", "overlarge type in compact surfaces"],
+      "requires": [
+        "strong hierarchy",
+        "controlled line length",
+        "mobile stacking plan",
+        "clear CTA path"
+      ],
+      "requires_codes": [
+        "visual_hierarchy",
+        "line_length",
+        "mobile_stacking",
+        "mobile_behavior",
+        "cta_path"
+      ],
+      "risks": [
+        "layout novelty reducing scanability",
+        "mobile ordering mistakes",
+        "overlarge type in compact surfaces"
+      ],
       "accessibility_notes": "Visual asymmetry must not change logical reading order.",
       "performance_notes": "Prefer CSS layout and real text over image-composited typography.",
-      "examples": ["editorial service overview", "portfolio case opener"]
+      "examples": [
+        "editorial service overview",
+        "portfolio case opener"
+      ]
     },
     {
       "id": "product-grid",
       "type": "conversion_pattern",
-      "use_case": ["ecommerce"],
-      "good_for": ["product browsing", "category comparison", "mobile product scanning", "clear price comparison"],
-      "bad_for": ["checkout", "internal_system", "dashboard"],
+      "use_case": [
+        "ecommerce"
+      ],
+      "good_for": [
+        "product browsing",
+        "category comparison",
+        "mobile product scanning",
+        "clear price comparison"
+      ],
+      "bad_for": [
+        "checkout",
+        "internal_system",
+        "dashboard"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["product image alt text", "visible price", "product title", "variant or availability summary", "add-to-cart or detail link"],
-      "requires_codes": ["product_media_text","accessible_copy","pricing_clarity","product_identity","variant_availability_state","purchase_action","cta_path"],
-      "risks": ["fake discounts", "unclear price", "lazy-loaded content hiding SEO", "overlarge cards on mobile"],
+      "requires": [
+        "product image alt text",
+        "visible price",
+        "product title",
+        "variant or availability summary",
+        "add-to-cart or detail link"
+      ],
+      "requires_codes": [
+        "product_media_text",
+        "accessible_copy",
+        "pricing_clarity",
+        "product_identity",
+        "variant_availability_state",
+        "purchase_action",
+        "cta_path"
+      ],
+      "risks": [
+        "fake discounts",
+        "unclear price",
+        "lazy-loaded content hiding SEO",
+        "overlarge cards on mobile"
+      ],
       "accessibility_notes": "Product cards need readable names, prices, and actions in DOM text with 44px minimum touch targets.",
       "performance_notes": "Use responsive images, predictable card heights, and avoid loading all media at maximum resolution.",
-      "examples": ["category product grid", "search results grid"]
+      "examples": [
+        "category product grid",
+        "search results grid"
+      ]
     },
     {
       "id": "product-detail",
       "type": "conversion_pattern",
-      "use_case": ["ecommerce"],
-      "good_for": ["product decision", "variant selection", "price clarity", "trust clarity"],
-      "bad_for": ["marketing-only page", "dashboard", "internal_system"],
+      "use_case": [
+        "ecommerce"
+      ],
+      "good_for": [
+        "product decision",
+        "variant selection",
+        "price clarity",
+        "trust clarity"
+      ],
+      "bad_for": [
+        "marketing-only page",
+        "dashboard",
+        "internal_system"
+      ],
       "complexity": 6,
       "usability": 9,
       "mobile_quality": 8,
-      "requires": ["stable purchase panel", "visible price", "variant state", "stock or shipping summary", "review or trust cues"],
-      "requires_codes": ["purchase_action","pricing_clarity","variant_availability_state","policy_information","review_signal","trust_signal","proof_adjacency"],
-      "risks": ["hidden costs", "unclear variants", "sticky panel overlap", "missing error states"],
+      "requires": [
+        "stable purchase panel",
+        "visible price",
+        "variant state",
+        "stock or shipping summary",
+        "review or trust cues"
+      ],
+      "requires_codes": [
+        "purchase_action",
+        "pricing_clarity",
+        "variant_availability_state",
+        "policy_information",
+        "review_signal",
+        "trust_signal",
+        "proof_adjacency"
+      ],
+      "risks": [
+        "hidden costs",
+        "unclear variants",
+        "sticky panel overlap",
+        "missing error states"
+      ],
       "accessibility_notes": "Variant controls need labels, selected states, disabled states, and error feedback that does not rely on color alone.",
       "performance_notes": "Prioritize product title, price, CTA, and main image before secondary media.",
-      "examples": ["product detail page", "service purchase detail"]
+      "examples": [
+        "product detail page",
+        "service purchase detail"
+      ]
     },
     {
       "id": "cart-drawer",
       "type": "ux_pattern",
-      "use_case": ["ecommerce"],
-      "good_for": ["quick cart review", "preserving browsing context", "small cart edits before checkout"],
-      "bad_for": ["payment step", "dense admin workflow", "public_sector critical form"],
+      "use_case": [
+        "ecommerce"
+      ],
+      "good_for": [
+        "quick cart review",
+        "preserving browsing context",
+        "small cart edits before checkout"
+      ],
+      "bad_for": [
+        "payment step",
+        "dense admin workflow",
+        "public_sector critical form"
+      ],
       "complexity": 6,
       "usability": 8,
       "mobile_quality": 7,
-      "requires": ["quantity controls", "subtotal", "shipping note", "remove or undo", "checkout CTA"],
-      "requires_codes": ["cart_management","pricing_clarity","policy_information","undo_path","dom_text_cta","purchase_action"],
-      "risks": ["stale totals", "focus trap bugs", "keyboard issues", "mobile height overflow"],
+      "requires": [
+        "quantity controls",
+        "subtotal",
+        "shipping note",
+        "remove or undo",
+        "checkout CTA"
+      ],
+      "requires_codes": [
+        "cart_management",
+        "pricing_clarity",
+        "policy_information",
+        "undo_path",
+        "dom_text_cta",
+        "purchase_action"
+      ],
+      "risks": [
+        "stale totals",
+        "focus trap bugs",
+        "keyboard issues",
+        "mobile height overflow"
+      ],
       "accessibility_notes": "Drawer must trap focus while open, restore focus on close, and expose subtotal/quantity changes to assistive tech.",
       "performance_notes": "Keep the drawer lightweight and update totals deterministically from cart state, not from decorative UI state.",
-      "examples": ["mini cart drawer", "cart review overlay"]
+      "examples": [
+        "mini cart drawer",
+        "cart review overlay"
+      ]
     },
     {
       "id": "checkout-steps",
       "type": "logic_pattern",
-      "use_case": ["ecommerce"],
-      "good_for": ["payment state clarity", "delivery state clarity", "reducing abandonment", "recoverable checkout errors"],
-      "bad_for": ["decorative storytelling", "portfolio narrative", "motion showcase"],
+      "use_case": [
+        "ecommerce"
+      ],
+      "good_for": [
+        "payment state clarity",
+        "delivery state clarity",
+        "reducing abandonment",
+        "recoverable checkout errors"
+      ],
+      "bad_for": [
+        "decorative storytelling",
+        "portfolio narrative",
+        "motion showcase"
+      ],
       "complexity": 7,
       "usability": 9,
       "mobile_quality": 8,
-      "requires": ["address step", "shipping step", "payment step", "review step", "error states", "progress indicator"],
-      "requires_codes": ["checkout_step_flow","error_state","progress_indicator"],
-      "risks": ["unverified price logic", "missing payment state", "weak mobile checkout", "unclear recovery path"],
+      "requires": [
+        "address step",
+        "shipping step",
+        "payment step",
+        "review step",
+        "error states",
+        "progress indicator"
+      ],
+      "requires_codes": [
+        "checkout_step_flow",
+        "error_state",
+        "progress_indicator"
+      ],
+      "risks": [
+        "unverified price logic",
+        "missing payment state",
+        "weak mobile checkout",
+        "unclear recovery path"
+      ],
       "accessibility_notes": "Steps need semantic headings, visible progress text, keyboard flow, and persistent validation messages.",
       "performance_notes": "Checkout should avoid heavy animation, 3D, video, and third-party scripts outside payment requirements.",
-      "examples": ["shipping-payment-review checkout", "guest checkout flow"]
+      "examples": [
+        "shipping-payment-review checkout",
+        "guest checkout flow"
+      ]
     },
     {
       "id": "reviews",
       "type": "conversion_pattern",
-      "use_case": ["ecommerce"],
-      "good_for": ["trust", "product uncertainty reduction", "social proof", "post-purchase confidence"],
-      "bad_for": ["internal_system", "critical admin workflow", "unsupported claim"],
+      "use_case": [
+        "ecommerce"
+      ],
+      "good_for": [
+        "trust",
+        "product uncertainty reduction",
+        "social proof",
+        "post-purchase confidence"
+      ],
+      "bad_for": [
+        "internal_system",
+        "critical admin workflow",
+        "unsupported claim"
+      ],
       "complexity": 4,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["rating summary", "review count", "source", "moderation or empty state"],
-      "requires_codes": ["review_signal","source_reference","data_source","empty_loading_error_state"],
-      "risks": ["fake reviews", "missing source", "layout shift", "overwhelming checkout"],
+      "requires": [
+        "rating summary",
+        "review count",
+        "source",
+        "moderation or empty state"
+      ],
+      "requires_codes": [
+        "review_signal",
+        "source_reference",
+        "data_source",
+        "empty_loading_error_state"
+      ],
+      "risks": [
+        "fake reviews",
+        "missing source",
+        "layout shift",
+        "overwhelming checkout"
+      ],
       "accessibility_notes": "Ratings must include text equivalents and review filters must be keyboard reachable.",
       "performance_notes": "Lazy-load long review lists below product decision content and reserve layout space.",
-      "examples": ["rating summary", "review highlights", "verified review list"]
+      "examples": [
+        "rating summary",
+        "review highlights",
+        "verified review list"
+      ]
     },
     {
       "id": "trust-summary",
       "type": "conversion_pattern",
-      "use_case": ["ecommerce", "marketing_web"],
-      "good_for": ["shipping reassurance", "returns reassurance", "payment reassurance", "support confidence"],
-      "bad_for": ["checkout clutter", "unsupported claim", "data-heavy dashboard"],
+      "use_case": [
+        "ecommerce",
+        "marketing_web"
+      ],
+      "good_for": [
+        "shipping reassurance",
+        "returns reassurance",
+        "payment reassurance",
+        "support confidence"
+      ],
+      "bad_for": [
+        "checkout clutter",
+        "unsupported claim",
+        "data-heavy dashboard"
+      ],
       "complexity": 3,
       "usability": 8,
       "mobile_quality": 9,
-      "requires": ["shipping rule", "returns policy", "payment security note", "support or contact cue"],
-      "requires_codes": ["policy_information","trust_signal","support_contact"],
-      "risks": ["vague trust badges", "outdated claims", "hidden policy details", "policy mismatch"],
+      "requires": [
+        "shipping rule",
+        "returns policy",
+        "payment security note",
+        "support or contact cue"
+      ],
+      "requires_codes": [
+        "policy_information",
+        "trust_signal",
+        "support_contact"
+      ],
+      "risks": [
+        "vague trust badges",
+        "outdated claims",
+        "hidden policy details",
+        "policy mismatch"
+      ],
       "accessibility_notes": "Trust claims need concise text labels; icons alone are not enough.",
       "performance_notes": "Use simple inline icons or text, not large decorative media.",
-      "examples": ["policy strip", "checkout reassurance row", "product trust summary"]
+      "examples": [
+        "policy strip",
+        "checkout reassurance row",
+        "product trust summary"
+      ]
     },
     {
       "id": "kpi-overview",
       "type": "data_pattern",
-      "use_case": ["dashboard", "data_tool"],
-      "good_for": ["fast health scan", "trend monitoring", "executive summary", "decision prioritization"],
-      "bad_for": ["data entry", "checkout", "storytelling landing page"],
+      "use_case": [
+        "dashboard",
+        "data_tool"
+      ],
+      "good_for": [
+        "fast health scan",
+        "trend monitoring",
+        "executive summary",
+        "decision prioritization"
+      ],
+      "bad_for": [
+        "data entry",
+        "checkout",
+        "storytelling landing page"
+      ],
       "complexity": 4,
       "usability": 9,
       "mobile_quality": 8,
-      "requires": ["metric definition", "comparison period", "data freshness", "source", "empty/loading/error states"],
-      "requires_codes": ["metric_definition","comparison_context","data_freshness","source_reference","data_source","empty_loading_error_state","error_state"],
-      "risks": ["vanity metrics", "unclear denominator", "stale data", "chart without decision"],
+      "requires": [
+        "metric definition",
+        "comparison period",
+        "data freshness",
+        "source",
+        "empty/loading/error states"
+      ],
+      "requires_codes": [
+        "metric_definition",
+        "comparison_context",
+        "data_freshness",
+        "source_reference",
+        "data_source",
+        "empty_loading_error_state",
+        "error_state"
+      ],
+      "risks": [
+        "vanity metrics",
+        "unclear denominator",
+        "stale data",
+        "chart without decision"
+      ],
       "accessibility_notes": "KPIs need text labels, units, deltas, and non-color status cues.",
       "performance_notes": "Render critical KPI text before secondary charts and avoid client-only metric hydration delays.",
-      "examples": ["dashboard KPI strip", "metric health overview"]
+      "examples": [
+        "dashboard KPI strip",
+        "metric health overview"
+      ]
     },
     {
       "id": "filter-bar",
       "type": "ux_pattern",
-      "use_case": ["dashboard", "data_tool", "admin_panel"],
-      "good_for": ["data exploration", "segment comparison", "repeat analysis", "reducing table noise"],
-      "bad_for": ["simple marketing page", "checkout payment step"],
+      "use_case": [
+        "dashboard",
+        "data_tool",
+        "admin_panel"
+      ],
+      "good_for": [
+        "data exploration",
+        "segment comparison",
+        "repeat analysis",
+        "reducing table noise"
+      ],
+      "bad_for": [
+        "simple marketing page",
+        "checkout payment step"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 7,
-      "requires": ["default filters", "active filter summary", "reset action", "date range", "saved view option"],
-      "requires_codes": ["filter_state","date_range","saved_view"],
-      "risks": ["filter overload", "hidden active filters", "slow queries", "ambiguous default range"],
+      "requires": [
+        "default filters",
+        "active filter summary",
+        "reset action",
+        "date range",
+        "saved view option"
+      ],
+      "requires_codes": [
+        "filter_state",
+        "date_range",
+        "saved_view"
+      ],
+      "risks": [
+        "filter overload",
+        "hidden active filters",
+        "slow queries",
+        "ambiguous default range"
+      ],
       "accessibility_notes": "Filters need labels, visible selected values, keyboard flow, and a clear reset control.",
       "performance_notes": "Debounce expensive filters, preserve URL/state where useful, and show loading state for slow queries.",
-      "examples": ["analytics filter toolbar", "report segment controls"]
+      "examples": [
+        "analytics filter toolbar",
+        "report segment controls"
+      ]
     },
     {
       "id": "drilldown-table",
       "type": "data_pattern",
-      "use_case": ["dashboard", "data_tool", "admin_panel"],
-      "good_for": ["metric explanation", "record-level evidence", "export review", "investigation workflow"],
-      "bad_for": ["emotion-led portfolio", "simple product category grid"],
+      "use_case": [
+        "dashboard",
+        "data_tool",
+        "admin_panel"
+      ],
+      "good_for": [
+        "metric explanation",
+        "record-level evidence",
+        "export review",
+        "investigation workflow"
+      ],
+      "bad_for": [
+        "emotion-led portfolio",
+        "simple product category grid"
+      ],
       "complexity": 7,
       "usability": 8,
       "mobile_quality": 6,
-      "requires": ["sortable columns", "row detail", "pagination or virtualization", "export", "source identifiers"],
-      "requires_codes": ["table_structure","record_summary","pagination_or_virtualization","export_action","source_reference","data_source"],
-      "risks": ["mobile density", "row/detail mismatch", "silent export mismatch", "missing empty state"],
+      "requires": [
+        "sortable columns",
+        "row detail",
+        "pagination or virtualization",
+        "export",
+        "source identifiers"
+      ],
+      "requires_codes": [
+        "table_structure",
+        "record_summary",
+        "pagination_or_virtualization",
+        "export_action",
+        "source_reference",
+        "data_source"
+      ],
+      "risks": [
+        "mobile density",
+        "row/detail mismatch",
+        "silent export mismatch",
+        "missing empty state"
+      ],
       "accessibility_notes": "Tables need headers, keyboard reachable rows/actions, and readable responsive alternatives.",
       "performance_notes": "Use pagination or virtualization for large datasets and keep export logic tied to the active query.",
-      "examples": ["KPI drilldown table", "data quality investigation table"]
+      "examples": [
+        "KPI drilldown table",
+        "data quality investigation table"
+      ]
     },
     {
       "id": "chart-with-source",
       "type": "data_pattern",
-      "use_case": ["dashboard", "data_tool"],
-      "good_for": ["trend explanation", "source-grounded reporting", "decision support", "metric trust"],
-      "bad_for": ["decorative hero", "unverified metric claim"],
+      "use_case": [
+        "dashboard",
+        "data_tool"
+      ],
+      "good_for": [
+        "trend explanation",
+        "source-grounded reporting",
+        "decision support",
+        "metric trust"
+      ],
+      "bad_for": [
+        "decorative hero",
+        "unverified metric claim"
+      ],
       "complexity": 6,
       "usability": 9,
       "mobile_quality": 7,
-      "requires": ["chart title", "metric definition", "data source", "freshness timestamp", "table or text fallback"],
-      "requires_codes": ["chart_summary","accessible_copy","metric_definition","data_source","source_reference","data_freshness","timestamp","text_fallback"],
-      "risks": ["ambiguous chart color", "chart without decision", "inaccessible chart", "unmarked missing data"],
+      "requires": [
+        "chart title",
+        "metric definition",
+        "data source",
+        "freshness timestamp",
+        "table or text fallback"
+      ],
+      "requires_codes": [
+        "chart_summary",
+        "accessible_copy",
+        "metric_definition",
+        "data_source",
+        "source_reference",
+        "data_freshness",
+        "timestamp",
+        "text_fallback"
+      ],
+      "risks": [
+        "ambiguous chart color",
+        "chart without decision",
+        "inaccessible chart",
+        "unmarked missing data"
+      ],
       "accessibility_notes": "Charts require textual summaries, source labels, and non-color encoding for critical states.",
       "performance_notes": "Avoid heavy chart bundles for simple visuals and lazy-load secondary chart detail.",
-      "examples": ["source-labeled trend chart", "metric with table fallback"]
+      "examples": [
+        "source-labeled trend chart",
+        "metric with table fallback"
+      ]
     },
     {
       "id": "alert-feed",
       "type": "data_pattern",
-      "use_case": ["dashboard", "data_tool", "internal_system"],
-      "good_for": ["operational monitoring", "exception triage", "recent change visibility", "decision escalation"],
-      "bad_for": ["marketing hero", "checkout"],
+      "use_case": [
+        "dashboard",
+        "data_tool",
+        "internal_system"
+      ],
+      "good_for": [
+        "operational monitoring",
+        "exception triage",
+        "recent change visibility",
+        "decision escalation"
+      ],
+      "bad_for": [
+        "marketing hero",
+        "checkout"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 7,
-      "requires": ["severity", "timestamp", "owner or next action", "status", "dismiss or acknowledge rule"],
-      "requires_codes": ["severity_label","timestamp","ownership","cta_path","status_state","dismissal_rule"],
-      "risks": ["alert fatigue", "missing ownership", "stale events", "color-only severity"],
+      "requires": [
+        "severity",
+        "timestamp",
+        "owner or next action",
+        "status",
+        "dismiss or acknowledge rule"
+      ],
+      "requires_codes": [
+        "severity_label",
+        "timestamp",
+        "ownership",
+        "cta_path",
+        "status_state",
+        "dismissal_rule"
+      ],
+      "risks": [
+        "alert fatigue",
+        "missing ownership",
+        "stale events",
+        "color-only severity"
+      ],
       "accessibility_notes": "Severity must be text-visible and new alerts should not steal focus unexpectedly.",
       "performance_notes": "Paginate or cap feed length and keep realtime updates optional for low-power devices.",
-      "examples": ["dashboard alert stream", "data anomaly feed"]
+      "examples": [
+        "dashboard alert stream",
+        "data anomaly feed"
+      ]
     },
     {
       "id": "table-first",
       "type": "data_pattern",
-      "use_case": ["internal_system", "crm", "admin_panel", "automation_ui"],
-      "good_for": ["bulk review", "operator throughput", "record triage", "repeatable data work"],
-      "bad_for": ["emotional landing page", "portfolio hero", "checkout"],
+      "use_case": [
+        "internal_system",
+        "crm",
+        "admin_panel",
+        "automation_ui"
+      ],
+      "good_for": [
+        "bulk review",
+        "operator throughput",
+        "record triage",
+        "repeatable data work"
+      ],
+      "bad_for": [
+        "emotional landing page",
+        "portfolio hero",
+        "checkout"
+      ],
       "complexity": 6,
       "usability": 10,
       "mobile_quality": 6,
-      "requires": ["action-oriented columns", "filters", "pagination", "status column", "row detail route"],
-      "requires_codes": ["table_structure","cta_path","filter_state","pagination_or_virtualization","status_state","record_summary"],
-      "risks": ["mobile density", "unclear primary action", "slow large table", "missing empty state"],
+      "requires": [
+        "action-oriented columns",
+        "filters",
+        "pagination",
+        "status column",
+        "row detail route"
+      ],
+      "requires_codes": [
+        "table_structure",
+        "cta_path",
+        "filter_state",
+        "pagination_or_virtualization",
+        "status_state",
+        "record_summary"
+      ],
+      "risks": [
+        "mobile density",
+        "unclear primary action",
+        "slow large table",
+        "missing empty state"
+      ],
       "accessibility_notes": "Tables need semantic headers, focus states, keyboard row actions, and a mobile alternative when density is high.",
       "performance_notes": "Large lists need server-side pagination, stable sorting, and no full-dataset rendering by default.",
-      "examples": ["operator queue", "CRM lead table", "admin record list"]
+      "examples": [
+        "operator queue",
+        "CRM lead table",
+        "admin record list"
+      ]
     },
     {
       "id": "detail-drawer",
       "type": "ux_pattern",
-      "use_case": ["internal_system", "crm", "admin_panel", "automation_ui"],
-      "good_for": ["quick record review", "preserving queue context", "side-by-side edit", "audit inspection"],
-      "bad_for": ["checkout payment", "mobile-only complex editing"],
+      "use_case": [
+        "internal_system",
+        "crm",
+        "admin_panel",
+        "automation_ui"
+      ],
+      "good_for": [
+        "quick record review",
+        "preserving queue context",
+        "side-by-side edit",
+        "audit inspection"
+      ],
+      "bad_for": [
+        "checkout payment",
+        "mobile-only complex editing"
+      ],
       "complexity": 6,
       "usability": 8,
       "mobile_quality": 6,
-      "requires": ["record summary", "editable fields", "save/cancel states", "audit trail", "focus management"],
-      "requires_codes": ["record_summary","edit_state","save_cancel_state","audit_trail","focus_management"],
-      "risks": ["stale record data", "focus trap bugs", "unsaved changes loss", "drawer overflow"],
+      "requires": [
+        "record summary",
+        "editable fields",
+        "save/cancel states",
+        "audit trail",
+        "focus management"
+      ],
+      "requires_codes": [
+        "record_summary",
+        "edit_state",
+        "save_cancel_state",
+        "audit_trail",
+        "focus_management"
+      ],
+      "risks": [
+        "stale record data",
+        "focus trap bugs",
+        "unsaved changes loss",
+        "drawer overflow"
+      ],
       "accessibility_notes": "Drawer must manage focus, announce record context, and warn before discarding unsaved changes.",
       "performance_notes": "Fetch heavy record detail on demand and cache cautiously with clear freshness rules.",
-      "examples": ["record review drawer", "lead detail side panel"]
+      "examples": [
+        "record review drawer",
+        "lead detail side panel"
+      ]
     },
     {
       "id": "status-badges",
       "type": "ux_pattern",
-      "use_case": ["internal_system", "crm", "admin_panel", "automation_ui"],
-      "good_for": ["workflow state clarity", "scanability", "permission-aware actions", "triage"],
-      "bad_for": ["unsupported status model", "decorative tag cloud"],
+      "use_case": [
+        "internal_system",
+        "crm",
+        "admin_panel",
+        "automation_ui"
+      ],
+      "good_for": [
+        "workflow state clarity",
+        "scanability",
+        "permission-aware actions",
+        "triage"
+      ],
+      "bad_for": [
+        "unsupported status model",
+        "decorative tag cloud"
+      ],
       "complexity": 3,
       "usability": 9,
       "mobile_quality": 9,
-      "requires": ["state taxonomy", "state labels", "transition rules", "color plus text", "empty state"],
-      "requires_codes": ["state_taxonomy","status_state","accessible_copy","empty_loading_error_state"],
-      "risks": ["color-only meaning", "undefined transitions", "status drift", "too many labels"],
+      "requires": [
+        "state taxonomy",
+        "state labels",
+        "transition rules",
+        "color plus text",
+        "empty state"
+      ],
+      "requires_codes": [
+        "state_taxonomy",
+        "status_state",
+        "accessible_copy",
+        "empty_loading_error_state"
+      ],
+      "risks": [
+        "color-only meaning",
+        "undefined transitions",
+        "status drift",
+        "too many labels"
+      ],
       "accessibility_notes": "State meaning must be readable as text and not rely on color alone.",
       "performance_notes": "Use simple DOM text and CSS tokens; avoid animated state chips in dense tables.",
-      "examples": ["approval status badges", "CRM deal stage labels"]
+      "examples": [
+        "approval status badges",
+        "CRM deal stage labels"
+      ]
     },
     {
       "id": "bulk-actions",
       "type": "logic_pattern",
-      "use_case": ["internal_system", "crm", "admin_panel", "automation_ui"],
-      "good_for": ["operator efficiency", "batch review", "large queue cleanup", "repeatable admin work"],
-      "bad_for": ["unverified permissions", "irreversible payment action", "public anonymous flow"],
+      "use_case": [
+        "internal_system",
+        "crm",
+        "admin_panel",
+        "automation_ui"
+      ],
+      "good_for": [
+        "operator efficiency",
+        "batch review",
+        "large queue cleanup",
+        "repeatable admin work"
+      ],
+      "bad_for": [
+        "unverified permissions",
+        "irreversible payment action",
+        "public anonymous flow"
+      ],
       "complexity": 8,
       "usability": 8,
       "mobile_quality": 5,
-      "requires": ["selection model", "permission checks", "preview count", "confirmation", "undo or audit log"],
-      "requires_codes": ["selection_model","permission_model","confirmation_state","undo_path","audit_trail"],
-      "risks": ["unverified bulk action", "accidental mass change", "partial failure", "missing audit trail"],
+      "requires": [
+        "selection model",
+        "permission checks",
+        "preview count",
+        "confirmation",
+        "undo or audit log"
+      ],
+      "requires_codes": [
+        "selection_model",
+        "permission_model",
+        "confirmation_state",
+        "undo_path",
+        "audit_trail"
+      ],
+      "risks": [
+        "unverified bulk action",
+        "accidental mass change",
+        "partial failure",
+        "missing audit trail"
+      ],
       "accessibility_notes": "Selection counts, disabled reasons, confirmation text, and partial-failure results must be explicit.",
       "performance_notes": "Batch operations need bounded chunking, progress state, and recoverable partial-failure handling.",
-      "examples": ["approve selected records", "bulk assign owner"]
+      "examples": [
+        "approve selected records",
+        "bulk assign owner"
+      ]
     },
     {
       "id": "saved-filters",
       "type": "ux_pattern",
-      "use_case": ["internal_system", "crm", "admin_panel", "automation_ui", "dashboard"],
-      "good_for": ["repeat workflows", "role-specific queues", "handoff views", "reducing setup time"],
-      "bad_for": ["one-off landing page", "anonymous checkout"],
+      "use_case": [
+        "internal_system",
+        "crm",
+        "admin_panel",
+        "automation_ui",
+        "dashboard"
+      ],
+      "good_for": [
+        "repeat workflows",
+        "role-specific queues",
+        "handoff views",
+        "reducing setup time"
+      ],
+      "bad_for": [
+        "one-off landing page",
+        "anonymous checkout"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 7,
-      "requires": ["named views", "owner or shared scope", "active filter summary", "reset", "result count"],
-      "requires_codes": ["saved_view","ownership","filter_state"],
-      "risks": ["stale saved views", "role privacy mismatch", "hidden filter state", "view proliferation"],
+      "requires": [
+        "named views",
+        "owner or shared scope",
+        "active filter summary",
+        "reset",
+        "result count"
+      ],
+      "requires_codes": [
+        "saved_view",
+        "ownership",
+        "filter_state"
+      ],
+      "risks": [
+        "stale saved views",
+        "role privacy mismatch",
+        "hidden filter state",
+        "view proliferation"
+      ],
       "accessibility_notes": "Saved views must expose the active state and not hide critical filter conditions.",
       "performance_notes": "Persist compact query state and validate role permissions when loading shared views.",
-      "examples": ["operator saved queue", "manager review view", "dashboard saved segment"]
+      "examples": [
+        "operator saved queue",
+        "manager review view",
+        "dashboard saved segment"
+      ]
     },
     {
       "id": "service-finder",
       "type": "ux_pattern",
-      "use_case": ["public_sector"],
-      "good_for": ["citizen task discovery", "service navigation", "office routing", "plain next steps"],
-      "bad_for": ["brand storytelling", "checkout", "decorative portfolio"],
+      "use_case": [
+        "public_sector"
+      ],
+      "good_for": [
+        "citizen task discovery",
+        "service navigation",
+        "office routing",
+        "plain next steps"
+      ],
+      "bad_for": [
+        "brand storytelling",
+        "checkout",
+        "decorative portfolio"
+      ],
       "complexity": 5,
       "usability": 10,
       "mobile_quality": 9,
-      "requires": ["service categories", "search", "plain labels", "owner office", "next action"],
-      "requires_codes": ["service_taxonomy","search_affordance","plain_language","accessible_copy","ownership","office_contact","cta_path"],
-      "risks": ["unclear service owner", "too many choices", "jargon", "missing contact path"],
+      "requires": [
+        "service categories",
+        "search",
+        "plain labels",
+        "owner office",
+        "next action"
+      ],
+      "requires_codes": [
+        "service_taxonomy",
+        "search_affordance",
+        "plain_language",
+        "accessible_copy",
+        "ownership",
+        "office_contact",
+        "cta_path"
+      ],
+      "risks": [
+        "unclear service owner",
+        "too many choices",
+        "jargon",
+        "missing contact path"
+      ],
       "accessibility_notes": "Search and categories need semantic labels, keyboard flow, and no hover-only discovery.",
       "performance_notes": "Service links and labels must render as DOM text before enhancements.",
-      "examples": ["municipal service finder", "public office task directory"]
+      "examples": [
+        "municipal service finder",
+        "public office task directory"
+      ]
     },
     {
       "id": "plain-language-content",
       "type": "ux_pattern",
-      "use_case": ["public_sector", "client_portal"],
-      "good_for": ["non-technical audiences", "legal/process clarity", "trust", "support reduction"],
-      "bad_for": ["vague marketing copy", "dense legal dump"],
+      "use_case": [
+        "public_sector",
+        "client_portal"
+      ],
+      "good_for": [
+        "non-technical audiences",
+        "legal/process clarity",
+        "trust",
+        "support reduction"
+      ],
+      "bad_for": [
+        "vague marketing copy",
+        "dense legal dump"
+      ],
       "complexity": 3,
       "usability": 10,
       "mobile_quality": 10,
-      "requires": ["short headings", "reading order", "definitions", "contact fallback", "last updated date"],
-      "requires_codes": ["semantic_headings","plain_language","content_readability","contact_fallback","support_contact","update_timestamp"],
-      "risks": ["jargon", "buried deadlines", "unowned content", "outdated instructions"],
+      "requires": [
+        "short headings",
+        "reading order",
+        "definitions",
+        "contact fallback",
+        "last updated date"
+      ],
+      "requires_codes": [
+        "semantic_headings",
+        "plain_language",
+        "content_readability",
+        "contact_fallback",
+        "support_contact",
+        "update_timestamp"
+      ],
+      "risks": [
+        "jargon",
+        "buried deadlines",
+        "unowned content",
+        "outdated instructions"
+      ],
       "accessibility_notes": "Use real headings, short paragraphs, descriptive links, and readable line lengths.",
       "performance_notes": "Keep content server-rendered or static; do not hide primary instructions behind client-only widgets.",
-      "examples": ["public information page", "client portal help content"]
+      "examples": [
+        "public information page",
+        "client portal help content"
+      ]
     },
     {
       "id": "accessible-form-flow",
       "type": "logic_pattern",
-      "use_case": ["public_sector", "client_portal"],
-      "good_for": ["applications", "requests", "service intake", "document submission"],
-      "bad_for": ["unverified upload security", "unclear legal requirements"],
+      "use_case": [
+        "public_sector",
+        "client_portal"
+      ],
+      "good_for": [
+        "applications",
+        "requests",
+        "service intake",
+        "document submission"
+      ],
+      "bad_for": [
+        "unverified upload security",
+        "unclear legal requirements"
+      ],
       "complexity": 7,
       "usability": 9,
       "mobile_quality": 8,
-      "requires": ["field labels", "validation states", "save or recovery rule", "confirmation", "error summary"],
-      "requires_codes": ["form_labeling","accessible_copy","validation_state","error_state","save_cancel_state","confirmation_state"],
-      "risks": ["missing validation", "lost progress", "inaccessible file input", "unclear required fields"],
+      "requires": [
+        "field labels",
+        "validation states",
+        "save or recovery rule",
+        "confirmation",
+        "error summary"
+      ],
+      "requires_codes": [
+        "form_labeling",
+        "accessible_copy",
+        "validation_state",
+        "error_state",
+        "save_cancel_state",
+        "confirmation_state"
+      ],
+      "risks": [
+        "missing validation",
+        "lost progress",
+        "inaccessible file input",
+        "unclear required fields"
+      ],
       "accessibility_notes": "Every field needs labels, errors linked to inputs, keyboard flow, and a top error summary.",
       "performance_notes": "Avoid heavy step transitions and preserve form state during validation failures.",
-      "examples": ["public request form", "client information update flow"]
+      "examples": [
+        "public request form",
+        "client information update flow"
+      ]
     },
     {
       "id": "notice-banner",
       "type": "ux_pattern",
-      "use_case": ["public_sector", "client_portal"],
-      "good_for": ["service outage", "deadline", "important status", "account warning"],
-      "bad_for": ["decorative announcement", "always-on clutter"],
+      "use_case": [
+        "public_sector",
+        "client_portal"
+      ],
+      "good_for": [
+        "service outage",
+        "deadline",
+        "important status",
+        "account warning"
+      ],
+      "bad_for": [
+        "decorative announcement",
+        "always-on clutter"
+      ],
       "complexity": 3,
       "usability": 9,
       "mobile_quality": 9,
-      "requires": ["severity", "date", "owner", "clear action", "dismiss or expiry rule"],
-      "requires_codes": ["severity_label","timestamp","ownership","cta_path","dismissal_rule"],
-      "risks": ["alert fatigue", "outdated notice", "color-only severity", "missing owner"],
+      "requires": [
+        "severity",
+        "date",
+        "owner",
+        "clear action",
+        "dismiss or expiry rule"
+      ],
+      "requires_codes": [
+        "severity_label",
+        "timestamp",
+        "ownership",
+        "cta_path",
+        "dismissal_rule"
+      ],
+      "risks": [
+        "alert fatigue",
+        "outdated notice",
+        "color-only severity",
+        "missing owner"
+      ],
       "accessibility_notes": "Severity and action must be text-visible; urgent notices should be announced without trapping focus.",
       "performance_notes": "Render notices cheaply and avoid layout shift by reserving stable space when persistent.",
-      "examples": ["public service alert", "client portal account notice"]
+      "examples": [
+        "public service alert",
+        "client portal account notice"
+      ]
     },
     {
       "id": "contact-office-block",
       "type": "ux_pattern",
-      "use_case": ["public_sector"],
-      "good_for": ["trust", "offline support", "service ownership", "accessibility fallback"],
-      "bad_for": ["anonymous SaaS marketing", "unverified contact info"],
+      "use_case": [
+        "public_sector"
+      ],
+      "good_for": [
+        "trust",
+        "offline support",
+        "service ownership",
+        "accessibility fallback"
+      ],
+      "bad_for": [
+        "anonymous SaaS marketing",
+        "unverified contact info"
+      ],
       "complexity": 3,
       "usability": 9,
       "mobile_quality": 10,
-      "requires": ["office name", "phone or email", "opening hours", "address or area", "service owner"],
-      "requires_codes": ["office_contact","ownership","support_contact","timestamp"],
-      "risks": ["outdated hours", "missing fallback", "phone-only support", "unclear jurisdiction"],
+      "requires": [
+        "office name",
+        "phone or email",
+        "opening hours",
+        "address or area",
+        "service owner"
+      ],
+      "requires_codes": [
+        "office_contact",
+        "ownership",
+        "support_contact",
+        "timestamp"
+      ],
+      "risks": [
+        "outdated hours",
+        "missing fallback",
+        "phone-only support",
+        "unclear jurisdiction"
+      ],
       "accessibility_notes": "Contact links need descriptive text and address/office details must not be image-only.",
       "performance_notes": "Use simple text and links; maps are optional and should load after the core contact path.",
-      "examples": ["office contact panel", "service owner block"]
+      "examples": [
+        "office contact panel",
+        "service owner block"
+      ]
     },
     {
       "id": "account-overview",
       "type": "ux_pattern",
-      "use_case": ["client_portal"],
-      "good_for": ["account status", "next tasks", "recent documents", "support entry", "trust"],
-      "bad_for": ["public anonymous flow", "marketing-only page"],
+      "use_case": [
+        "client_portal"
+      ],
+      "good_for": [
+        "account status",
+        "next tasks",
+        "recent documents",
+        "support entry",
+        "trust"
+      ],
+      "bad_for": [
+        "public anonymous flow",
+        "marketing-only page"
+      ],
       "complexity": 5,
       "usability": 9,
       "mobile_quality": 9,
-      "requires": ["account state", "next actions", "recent activity", "support link", "permission-aware content"],
-      "requires_codes": ["account_state","status_state","cta_path","activity_summary","support_contact","permission_model"],
-      "risks": ["unclear account state", "stale activity", "hidden security state", "role privacy mismatch"],
+      "requires": [
+        "account state",
+        "next actions",
+        "recent activity",
+        "support link",
+        "permission-aware content"
+      ],
+      "requires_codes": [
+        "account_state",
+        "status_state",
+        "cta_path",
+        "activity_summary",
+        "support_contact",
+        "permission_model"
+      ],
+      "risks": [
+        "unclear account state",
+        "stale activity",
+        "hidden security state",
+        "role privacy mismatch"
+      ],
       "accessibility_notes": "Account state and next actions need visible headings, text labels, and predictable focus order.",
       "performance_notes": "Load primary account state first and lazy-load secondary activity lists.",
-      "examples": ["client portal dashboard", "account home"]
+      "examples": [
+        "client portal dashboard",
+        "account home"
+      ]
     },
     {
       "id": "secure-document-list",
       "type": "logic_pattern",
-      "use_case": ["client_portal"],
-      "good_for": ["document access", "download history", "client files", "permission visibility"],
-      "bad_for": ["public file sharing without auth", "decorative gallery"],
+      "use_case": [
+        "client_portal"
+      ],
+      "good_for": [
+        "document access",
+        "download history",
+        "client files",
+        "permission visibility"
+      ],
+      "bad_for": [
+        "public file sharing without auth",
+        "decorative gallery"
+      ],
       "complexity": 6,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["document title", "file type", "date", "access scope", "download/open action"],
-      "requires_codes": ["document_metadata","timestamp","access_scope","permission_model","cta_path"],
-      "risks": ["unclear document access", "stale permissions", "missing empty state", "unsafe file preview"],
+      "requires": [
+        "document title",
+        "file type",
+        "date",
+        "access scope",
+        "download/open action"
+      ],
+      "requires_codes": [
+        "document_metadata",
+        "timestamp",
+        "access_scope",
+        "permission_model",
+        "cta_path"
+      ],
+      "risks": [
+        "unclear document access",
+        "stale permissions",
+        "missing empty state",
+        "unsafe file preview"
+      ],
       "accessibility_notes": "Document rows need descriptive link text, file metadata, and keyboard reachable actions.",
       "performance_notes": "Do not preview large files by default; lazy-load previews and keep download actions explicit.",
-      "examples": ["secure client documents", "project file list"]
+      "examples": [
+        "secure client documents",
+        "project file list"
+      ]
     },
     {
       "id": "support-thread",
       "type": "ux_pattern",
-      "use_case": ["client_portal"],
-      "good_for": ["support continuity", "client communication", "case resolution", "human fallback"],
-      "bad_for": ["unmoderated public chat", "unsupported SLA claims"],
+      "use_case": [
+        "client_portal"
+      ],
+      "good_for": [
+        "support continuity",
+        "client communication",
+        "case resolution",
+        "human fallback"
+      ],
+      "bad_for": [
+        "unmoderated public chat",
+        "unsupported SLA claims"
+      ],
       "complexity": 6,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["thread status", "message timestamps", "owner", "attachment rule", "reply states"],
-      "requires_codes": ["thread_state","status_state","timestamp","ownership","attachment_rule"],
-      "risks": ["missing escalation", "unclear response time", "attachment security", "lost draft"],
+      "requires": [
+        "thread status",
+        "message timestamps",
+        "owner",
+        "attachment rule",
+        "reply states"
+      ],
+      "requires_codes": [
+        "thread_state",
+        "status_state",
+        "timestamp",
+        "ownership",
+        "attachment_rule"
+      ],
+      "risks": [
+        "missing escalation",
+        "unclear response time",
+        "attachment security",
+        "lost draft"
+      ],
       "accessibility_notes": "Messages need readable order, timestamps, focusable reply controls, and clear send/error states.",
       "performance_notes": "Paginate long threads and avoid loading all attachments eagerly.",
-      "examples": ["support case thread", "client project conversation"]
+      "examples": [
+        "support case thread",
+        "client project conversation"
+      ]
     },
     {
       "id": "client-task-timeline",
       "type": "ux_pattern",
-      "use_case": ["client_portal"],
-      "good_for": ["project progress", "handoff clarity", "deadlines", "client tasks"],
-      "bad_for": ["decorative process animation", "unverified deadline claims"],
+      "use_case": [
+        "client_portal"
+      ],
+      "good_for": [
+        "project progress",
+        "handoff clarity",
+        "deadlines",
+        "client tasks"
+      ],
+      "bad_for": [
+        "decorative process animation",
+        "unverified deadline claims"
+      ],
       "complexity": 5,
       "usability": 8,
       "mobile_quality": 8,
-      "requires": ["task status", "due date", "owner", "required client action", "history"],
-      "requires_codes": ["task_timeline","status_state","timestamp","ownership","cta_path","activity_summary"],
-      "risks": ["unclear owner", "stale deadline", "status mismatch", "mobile overflow"],
+      "requires": [
+        "task status",
+        "due date",
+        "owner",
+        "required client action",
+        "history"
+      ],
+      "requires_codes": [
+        "task_timeline",
+        "status_state",
+        "timestamp",
+        "ownership",
+        "cta_path",
+        "activity_summary"
+      ],
+      "risks": [
+        "unclear owner",
+        "stale deadline",
+        "status mismatch",
+        "mobile overflow"
+      ],
       "accessibility_notes": "Timeline order must match DOM order and status must be text-readable.",
       "performance_notes": "Use simple list layout on mobile and avoid scroll-jacked timeline effects.",
-      "examples": ["client onboarding tasks", "project milestone timeline"]
+      "examples": [
+        "client onboarding tasks",
+        "project milestone timeline"
+      ]
     },
     {
       "id": "permission-aware-actions",
       "type": "logic_pattern",
-      "use_case": ["client_portal", "internal_system", "admin_panel"],
-      "good_for": ["secure actions", "role clarity", "disabled-state explanation", "trust"],
-      "bad_for": ["security by UI only", "anonymous public action"],
+      "use_case": [
+        "client_portal",
+        "internal_system",
+        "admin_panel"
+      ],
+      "good_for": [
+        "secure actions",
+        "role clarity",
+        "disabled-state explanation",
+        "trust"
+      ],
+      "bad_for": [
+        "security by UI only",
+        "anonymous public action"
+      ],
       "complexity": 6,
       "usability": 9,
       "mobile_quality": 8,
-      "requires": ["role model", "permission checks", "disabled reason", "audit trail", "server-side enforcement"],
-      "requires_codes": ["permission_model","accessible_copy","audit_trail","server_enforcement"],
-      "risks": ["missing permissions", "security by UI", "ambiguous disabled state", "untracked action"],
+      "requires": [
+        "role model",
+        "permission checks",
+        "disabled reason",
+        "audit trail",
+        "server-side enforcement"
+      ],
+      "requires_codes": [
+        "permission_model",
+        "accessible_copy",
+        "audit_trail",
+        "server_enforcement"
+      ],
+      "risks": [
+        "missing permissions",
+        "security by UI",
+        "ambiguous disabled state",
+        "untracked action"
+      ],
       "accessibility_notes": "Disabled or unavailable actions need accessible explanations and predictable focus handling.",
       "performance_notes": "Permission state should be fetched with account context and not guessed from client UI alone.",
-      "examples": ["client document action permissions", "portal account actions"]
+      "examples": [
+        "client document action permissions",
+        "portal account actions"
+      ]
+    },
+    {
+      "id": "tactile-shadow-hero",
+      "type": "motion_pattern",
+      "use_case": [
+        "marketing_web",
+        "portfolio",
+        "landing_page",
+        "experimental"
+      ],
+      "good_for": [
+        "content-first hero",
+        "craft / trade positioning",
+        "atmospheric brand opener",
+        "local-business landing"
+      ],
+      "bad_for": [
+        "checkout",
+        "dense internal system",
+        "public-sector critical flow",
+        "content-dense reading page"
+      ],
+      "complexity": 7,
+      "usability": 7,
+      "mobile_quality": 7,
+      "requires": [
+        "content-first hero",
+        "DOM-text CTA",
+        "trust cue",
+        "reduced-motion fallback",
+        "static fallback",
+        "performance budget",
+        "responsive typography"
+      ],
+      "requires_codes": [
+        "visible_h1",
+        "no_primary_content_in_canvas",
+        "dom_text_cta",
+        "reduced_motion_fallback",
+        "performance_budget",
+        "proof_adjacency",
+        "responsive_typography"
+      ],
+      "risks": [
+        "text legibility over the stone photo",
+        "light loop reading as decorative",
+        "weak proof if only one image"
+      ],
+      "accessibility_notes": "Headline, CTA, heritage badge and photo caption are sharp DOM text on the stone; the only motion is a CSS light sweep that stops under prefers-reduced-motion (text shows sharp instantly).",
+      "performance_notes": "CSS-only: a single looped light gradient on an isolated ::before layer + a one-shot text de-blur; no JS runtime, no stored frames.",
+      "examples": [
+        "sandstone-wall hero with raking light for a mason",
+        "calm tactile-shadow opener for a craftsman"
+      ],
+      "modifiers": [
+        "motion"
+      ]
     }
   ]
 }

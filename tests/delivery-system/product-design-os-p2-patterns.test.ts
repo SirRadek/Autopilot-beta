@@ -139,7 +139,8 @@ describe("Product Design OS P2 pattern renderers", () => {
       "outcome-cta",
       "point-cloud-background",
       "proof-led-section",
-      "sharp-positioning-hero"
+      "sharp-positioning-hero",
+      "tactile-shadow-hero"
     ]);
   });
 
