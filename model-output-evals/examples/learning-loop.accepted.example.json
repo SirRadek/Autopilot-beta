@@ -1,0 +1,101 @@
+{
+  "record_version": "v0.1",
+  "eval_id": "example-model-output-eval-accepted",
+  "created": "2026-06-11",
+  "project": {
+    "slug": "autopilot-control-plane",
+    "name": "Autopilot Control Plane",
+    "control_plane": true
+  },
+  "task": {
+    "task_type": "evaluation",
+    "summary": "Validate a bounded model-output evaluation record shape.",
+    "risk_level": "medium"
+  },
+  "phase": "learning_immediate_loop",
+  "state": "accepted",
+  "model_or_worker": {
+    "provider": "local",
+    "name": "deterministic-validator",
+    "role": "qa"
+  },
+  "reasoning_profile": {
+    "route": "deterministic_tools",
+    "reasoning_effort": "none",
+    "change_policy": "Do not change model or reasoning route from this fixture."
+  },
+  "token_efficiency_profile": {
+    "mode": "caveman",
+    "context_scope": "Schema, validator, source catalog, and local model-output policy only.",
+    "caveman_applied": true
+  },
+  "provider_best_practice_sources": [
+    "local-agents-md",
+    "token-efficiency-operating-model",
+    "prompt-library-policy"
+  ],
+  "input_packet_summary": {
+    "summary": "Bounded fixture for validating model-output eval record constraints.",
+    "allowed_context": [
+      "model-output-evals/model-output-eval-record.schema.json",
+      "src/data/delivery-system/modelOutputEvaluation.ts"
+    ],
+    "forbidden_context": [
+      "raw prompts",
+      "raw model output",
+      "raw logs",
+      "secrets",
+      "customer data"
+    ],
+    "source_pointers": [
+      "docs/autopilot/model-output-evaluation-operating-model.md",
+      "prompt-library/source-catalog.json"
+    ]
+  },
+  "output_pointer": {
+    "kind": "local_file",
+    "pointer": "model-output-evals/examples/learning-loop.accepted.example.json",
+    "summary": "Example only; not a real model-output acceptance record."
+  },
+  "score_by_dimension": {
+    "task_fit": 92,
+    "instruction_following": 90,
+    "source_grounding": 88,
+    "format_contract": 96,
+    "verification_readiness": 90,
+    "privacy_safety": 100,
+    "handoff_clarity": 88,
+    "token_efficiency": 94,
+    "workflow_compatibility": 91
+  },
+  "failure_labels": [],
+  "prompt_or_input_delta": {
+    "changed": false,
+    "summary": "No prompt or input change is represented by this accepted fixture.",
+    "changed_fields": [],
+    "rollback_path": "Remove this example fixture if the schema changes incompatibly."
+  },
+  "rerun_count": 0,
+  "accepted_state": "accepted",
+  "verification_evidence": [
+    {
+      "type": "local_test",
+      "status": "passed",
+      "evidence": "Validated by scripts/validate-model-output-evals.ts positive sample and example scan.",
+      "source_pointer": "scripts/validate-model-output-evals.ts"
+    }
+  ],
+  "source_pointers": [
+    "docs/autopilot/model-output-evaluation-operating-model.md",
+    "src/data/delivery-system/modelOutputEvaluation.ts",
+    "prompt-library/source-catalog.json"
+  ],
+  "privacy_review": {
+    "redacted_context_only": true,
+    "raw_output_stored": false,
+    "raw_prompt_stored": false,
+    "raw_logs_stored": false,
+    "secrets_or_customer_data_stored": false,
+    "reviewer": "codex-supervisor"
+  }
+}

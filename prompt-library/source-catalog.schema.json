@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/prompt-library/source-catalog.schema.json",
+  "title": "Autopilot Prompt Source Catalog",
+  "type": "object",
+  "required": ["version", "updated", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "number",
+      "enum": [1]
+    },
+    "updated": {
+      "type": "string",
+      "format": "date"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "location", "authority"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "external_reference",
+              "local_docs",
+              "local_mesh",
+              "local_prompt",
+              "official_docs",
+              "official_model_card"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "historical-local",
+              "inspiration-only",
+              "local-contract",
+              "local-evidence",
+              "model-card",
+              "project-source",
+              "provider-specific"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

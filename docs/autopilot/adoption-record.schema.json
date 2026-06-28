@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/adoption-record.schema.json",
+  "title": "Adoption Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "date",
+    "what_was_proposed",
+    "decision",
+    "who_decided",
+    "reason",
+    "files_changed",
+    "evidence"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "what_was_proposed": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["adopted", "rejected", "deferred"]
+    },
+    "who_decided": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "files_changed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "supersedes": {
+      "type": "string"
+    }
+  }
+}

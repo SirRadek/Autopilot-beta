@@ -1,0 +1,18 @@
+{
+  "handoff_id": "hp-20260617-fix-trim-tmp-suffix",
+  "worker_id": "openai_gpt",
+  "created": "2026-06-17T14:55:00.000Z",
+  "files_changed": [
+    ".codex/hooks/autopilot-hook.mjs",
+    "tests/delivery-system/model-output-evaluation-policy.test.ts"
+  ],
+  "tests_run": [
+    "npm.cmd run verify — 254 tests / 38 files / 4 Playwright — all pass"
+  ],
+  "open_questions": [],
+  "blocked_items": [
+    "worker_id is openai_gpt per schema enum; actual execution was supervisor-assisted (Claude Code not Codex App) — disclosed in adoption record"
+  ],
+  "reuse_check_decision": "extend_existing",
+  "verify_result": "pass"
+}

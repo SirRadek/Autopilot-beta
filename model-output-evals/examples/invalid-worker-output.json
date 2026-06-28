@@ -1,0 +1,13 @@
+{
+  "worker_id": "openai_gpt",
+  "created": "2026-06-17T12:00:00.000Z",
+  "files_changed": [
+    "model-output-evals/worker-output.schema.json"
+  ],
+  "tests_run": [],
+  "open_questions": [],
+  "blocked_items": [],
+  "reuse_check_decision": "implement_new",
+  "verify_result": "skipped",
+  "verify_skip_reason": "Negative fixture intentionally omits handoff_id."
+}

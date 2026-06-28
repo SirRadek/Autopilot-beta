@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/worker-output.schema.json",
+  "title": "Worker Output",
+  "type": "object",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": ["verify_result"],
+        "properties": {
+          "verify_result": {
+            "const": "skipped"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "verify_skip_reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["verify_skip_reason"]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["verify_result"],
+        "properties": {
+          "verify_result": {
+            "enum": ["pass", "fail"]
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "not": {
+          "type": "object",
+          "properties": {
+            "verify_skip_reason": {
+              "type": "string"
+            }
+          },
+          "required": ["verify_skip_reason"]
+        }
+      }
+    }
+  ],
+  "required": [
+    "handoff_id",
+    "worker_id",
+    "created",
+    "files_changed",
+    "tests_run",
+    "open_questions",
+    "blocked_items",
+    "reuse_check_decision",
+    "verify_result"
+  ],
+  "properties": {
+    "handoff_id": {
+      "type": "string",
+      "pattern": "^hp-[0-9]{8}-[a-z0-9][a-z0-9-]*$"
+    },
+    "worker_id": {
+      "type": "string",
+      "enum": ["openai_gpt", "qwen_local", "codex_cli", "agy_cli"]
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "files_changed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tests_run": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blocked_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reuse_check_decision": {
+      "type": "string",
+      "enum": ["implement_new", "reuse_existing", "extend_existing"]
+    },
+    "verify_result": {
+      "type": "string",
+      "enum": ["pass", "fail", "skipped"]
+    },
+    "verify_skip_reason": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

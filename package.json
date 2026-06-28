@@ -26,11 +26,14 @@
     "pdos:fit-probe": "tsx product-design-os/qa/fit-probe/check-fit-probe-product-design-os.ts",
     "pdos:visual-qa-browser": "tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts",
     "mesh:related-files-check": "tsx src/lib/mesh-tools/related-files-status-cli.ts",
-    "mesh:gate": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes"
+    "mesh:gate": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes",
+    "mcp": "tsx mcp/server.ts"
   },
   "dependencies": {
     "pngjs": "^7.0.0",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

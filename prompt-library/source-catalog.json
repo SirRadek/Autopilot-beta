@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "updated": "2026-06-20",
+  "sources": [
+    {
+      "id": "business-intelligence-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/business-intelligence-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "analysis-intelligence-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/analysis-intelligence-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "research-intelligence-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/research-intelligence-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "copywriting-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/copywriting-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "design-intelligence-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/design-intelligence-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "anthropic-prompting-best-practices",
+      "kind": "official_docs",
+      "location": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "anthropic-evals",
+      "kind": "official_docs",
+      "location": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "anthropic-reduce-hallucinations",
+      "kind": "official_docs",
+      "location": "https://platform.claude.com/docs/en/build-with-claude/strengthen-guardrails/reduce-hallucinations",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "anthropic-claude-code-setup",
+      "kind": "official_docs",
+      "location": "https://code.claude.com/docs/en/setup",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "anthropic-claude-code-authentication",
+      "kind": "official_docs",
+      "location": "https://code.claude.com/docs/en/iam",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "anthropic-claude-code-memory",
+      "kind": "official_docs",
+      "location": "https://code.claude.com/docs/en/memory",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "anthropic-context-windows",
+      "kind": "official_docs",
+      "location": "https://docs.anthropic.com/en/docs/build-with-claude/context-windows",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "autopilot-supervisor-base",
+      "kind": "local_prompt",
+      "location": "prompt-library/06-supervisor/autopilot-supervisor-base.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "autopilot-v3-prompt-pack",
+      "kind": "local_docs",
+      "location": "docs/autopilot/v3-prompt-pack.md",
+      "authority": "historical-local"
+    },
+    {
+      "id": "cat-mascot-asset-provenance",
+      "kind": "local_docs",
+      "location": "docs/autopilot/cat-mascot-asset-provenance.md",
+      "authority": "local-evidence"
+    },
+    {
+      "id": "decision-mesh-policy",
+      "kind": "local_mesh",
+      "location": "mesh/",
+      "authority": "local-contract"
+    },
+    {
+      "id": "dair-prompting-guide",
+      "kind": "external_reference",
+      "location": "https://www.promptingguide.ai/",
+      "authority": "inspiration-only"
+    },
+    {
+      "id": "deepseek-web-chat",
+      "kind": "official_docs",
+      "location": "https://www.deepseek.com/en/",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "deepseek-first-api-call",
+      "kind": "official_docs",
+      "location": "https://api-docs.deepseek.com/",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "deepseek-pricing",
+      "kind": "official_docs",
+      "location": "https://api-docs.deepseek.com/quick_start/pricing",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "deepseek-deepcode-integration",
+      "kind": "official_docs",
+      "location": "https://api-docs.deepseek.com/quick_start/agent_integrations/deepcode",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "deepseek-function-calling",
+      "kind": "official_docs",
+      "location": "https://api-docs.deepseek.com/guides/function_calling",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "deepseek-json-output",
+      "kind": "official_docs",
+      "location": "https://api-docs.deepseek.com/guides/json_mode",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "deepseek-reasoning-model",
+      "kind": "official_docs",
+      "location": "https://api-docs.deepseek.com/guides/reasoning_model",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "deepseek-thinking-mode",
+      "kind": "official_docs",
+      "location": "https://api-docs.deepseek.com/guides/thinking_mode",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "gemini-input-packet-template",
+      "kind": "local_prompt",
+      "location": "prompt-library/02-gemini/input-packet-template.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "gemini-code-assist-quotas",
+      "kind": "official_docs",
+      "location": "https://developers.google.com/gemini-code-assist/resources/quotas",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "gemini-long-context",
+      "kind": "official_docs",
+      "location": "https://ai.google.dev/gemini-api/docs/long-context",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "gemini-models",
+      "kind": "official_docs",
+      "location": "https://ai.google.dev/gemini-api/docs/models",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "gemini-api-prompting-strategies",
+      "kind": "official_docs",
+      "location": "https://ai.google.dev/gemini-api/docs/prompting-strategies",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "gemini-multimodal-prompt-design",
+      "kind": "official_docs",
+      "location": "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/design-multimodal-prompts",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "gemini-prompt-design-strategies",
+      "kind": "official_docs",
+      "location": "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/prompts/prompt-design-strategies",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "gemini-subscriptions",
+      "kind": "official_docs",
+      "location": "https://gemini.google/subscriptions/",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "github-control-surface",
+      "kind": "local_docs",
+      "location": "docs/autopilot/github-control-surface.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "graphic-agent-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/graphic-agent-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "local-agents-md",
+      "kind": "local_docs",
+      "location": "AGENTS.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "local-worker-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/local-worker-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "openai-prompt-engineering",
+      "kind": "official_docs",
+      "location": "https://platform.openai.com/docs/guides/prompt-engineering",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "openai-evals",
+      "kind": "official_docs",
+      "location": "https://developers.openai.com/api/docs/guides/evals",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "openai-model-optimization",
+      "kind": "official_docs",
+      "location": "https://developers.openai.com/api/docs/guides/model-optimization",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "openai-reasoning-best-practices",
+      "kind": "official_docs",
+      "location": "https://platform.openai.com/docs/guides/reasoning-best-practices",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "openai-structured-outputs",
+      "kind": "official_docs",
+      "location": "https://platform.openai.com/docs/guides/structured-outputs",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "anthropic-tool-use",
+      "kind": "official_docs",
+      "location": "https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "output-validation",
+      "kind": "local_prompt",
+      "location": "prompt-library/00-rules/output-validation.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "product-design-os",
+      "kind": "local_docs",
+      "location": "product-design-os/",
+      "authority": "local-contract"
+    },
+    {
+      "id": "prompt-library-policy",
+      "kind": "local_mesh",
+      "location": "mesh/nodes/prompt_library_policy.yaml",
+      "authority": "local-contract"
+    },
+    {
+      "id": "prompt-source-catalog",
+      "kind": "local_docs",
+      "location": "prompt-library/source-catalog.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "protective-supervision-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/protective-supervision-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "qwen2-5-coder-14b-model-card",
+      "kind": "official_model_card",
+      "location": "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct",
+      "authority": "model-card"
+    },
+    {
+      "id": "qwen-chat-template",
+      "kind": "official_docs",
+      "location": "https://qwen.readthedocs.io/en/v2.0/inference/chat.html",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "qwen-function-calling",
+      "kind": "official_docs",
+      "location": "https://qwen.readthedocs.io/en/latest/framework/function_call.html",
+      "authority": "provider-specific"
+    },
+    {
+      "id": "qwen2-5-7b-model-card",
+      "kind": "official_model_card",
+      "location": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
+      "authority": "model-card"
+    },
+    {
+      "id": "radeq-novel-design-supervisor",
+      "kind": "local_prompt",
+      "location": "prompt-library/06-supervisor/radeq-novel-design-supervisor.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "radeq-project-architecture",
+      "kind": "external_reference",
+      "location": "SirRadek/radeq:.autopilot/architecture.md",
+      "authority": "project-source"
+    },
+    {
+      "id": "radeq-project-mesh",
+      "kind": "external_reference",
+      "location": "SirRadek/radeq:.autopilot/decision-mesh/",
+      "authority": "project-source"
+    },
+    {
+      "id": "radeq-work-log",
+      "kind": "external_reference",
+      "location": "SirRadek/radeq:.autopilot/work-log.md",
+      "authority": "project-source"
+    },
+    {
+      "id": "sources-and-citations",
+      "kind": "local_prompt",
+      "location": "prompt-library/00-rules/sources-and-citations.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "token-efficiency-operating-model",
+      "kind": "local_docs",
+      "location": "docs/autopilot/token-efficiency-operating-model.md",
+      "authority": "local-contract"
+    }
+  ]
+}

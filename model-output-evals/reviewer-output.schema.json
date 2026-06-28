@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/reviewer-output.schema.json",
+  "title": "Reviewer Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "handoff_id",
+    "reviewer_id",
+    "created",
+    "quality_state",
+    "score_by_dimension",
+    "next_action",
+    "verified_facts",
+    "risks"
+  ],
+  "properties": {
+    "handoff_id": {
+      "type": "string",
+      "pattern": "^hp-[0-9]{8}-[a-z0-9][a-z0-9-]*$"
+    },
+    "reviewer_id": {
+      "type": "string",
+      "enum": ["anthropic_claude_subscription"]
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "quality_state": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "retry_with_correction",
+        "escalate_model_route",
+        "owner_decision",
+        "blocked"
+      ]
+    },
+    "score_by_dimension": {
+      "type": "object",
+      "required": [
+        "task_fit",
+        "instruction_following",
+        "source_grounding",
+        "format_contract",
+        "verification_readiness"
+      ],
+      "properties": {
+        "task_fit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "instruction_following": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "source_grounding": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "format_contract": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "verification_readiness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "next_action": {
+      "type": "string"
+    },
+    "verified_facts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "correction_note": {
+      "type": "string"
+    },
+    "iteration_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    }
+  }
+}

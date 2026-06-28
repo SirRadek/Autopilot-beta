@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/prompt-library/prompt.schema.json",
+  "title": "Autopilot Prompt Metadata",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "model_family",
+    "task_type",
+    "version",
+    "status",
+    "last_reviewed",
+    "sources",
+    "risk_level",
+    "expected_output",
+    "evals"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3
+    },
+    "model_family": {
+      "type": "string",
+      "enum": ["gpt", "gemini", "claude", "deepseek", "qwen-local", "provider-neutral"]
+    },
+    "task_type": {
+      "type": "string",
+      "enum": [
+        "rule",
+        "analysis",
+        "planning",
+        "development",
+        "audit",
+        "fix",
+        "brainstorming",
+        "variant-generation",
+        "ux-logic",
+        "copywriting",
+        "document-analysis",
+        "agentic-task",
+        "minimal-patch",
+        "code-review",
+        "test-generation",
+        "evaluation"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "candidate", "approved", "deprecated"]
+    },
+    "last_reviewed": {
+      "type": "string",
+      "format": "date"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "forbidden": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "expected_output": {
+      "type": "string",
+      "minLength": 3
+    },
+    "evals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

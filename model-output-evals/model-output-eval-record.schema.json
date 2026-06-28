@@ -1,0 +1,501 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/model-output-evals/model-output-eval-record.schema.json",
+  "title": "Autopilot Model Output Evaluation Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_version",
+    "eval_id",
+    "created",
+    "project",
+    "task",
+    "phase",
+    "state",
+    "model_or_worker",
+    "reasoning_profile",
+    "token_efficiency_profile",
+    "provider_best_practice_sources",
+    "input_packet_summary",
+    "output_pointer",
+    "score_by_dimension",
+    "failure_labels",
+    "prompt_or_input_delta",
+    "rerun_count",
+    "accepted_state",
+    "verification_evidence",
+    "source_pointers",
+    "privacy_review"
+  ],
+  "properties": {
+    "record_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+$"
+    },
+    "eval_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "created": {
+      "type": "string",
+      "format": "date"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "name", "control_plane"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "control_plane": {
+          "type": "boolean"
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_type", "summary", "risk_level"],
+      "properties": {
+        "task_type": {
+          "type": "string",
+          "enum": [
+            "rule",
+            "analysis",
+            "planning",
+            "development",
+            "audit",
+            "fix",
+            "brainstorming",
+            "variant-generation",
+            "ux-logic",
+            "document-analysis",
+            "agentic-task",
+            "minimal-patch",
+            "code-review",
+            "test-generation",
+            "evaluation",
+            "routing",
+            "supervision",
+            "governance",
+            "handoff"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 3
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        }
+      }
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["learning_immediate_loop", "weekly_batch_tuning"]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "needs_scoring",
+        "accepted",
+        "retry_with_prompt_or_input_tuning",
+        "review_model_or_reasoning_route",
+        "blocked"
+      ]
+    },
+    "model_or_worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "name", "role"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["openai", "anthropic", "google", "qwen", "deepseek", "local", "unknown"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "reasoning_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route", "reasoning_effort", "change_policy"],
+      "properties": {
+        "route": {
+          "type": "string",
+          "enum": [
+            "deterministic_tools",
+            "local_worker",
+            "free_cloud_advisory",
+            "subscription_interactive",
+            "subscription_cli",
+            "api_credit",
+            "self_hosted",
+            "not_applicable"
+          ]
+        },
+        "reasoning_effort": {
+          "type": "string",
+          "enum": ["none", "low", "medium", "high", "large", "model_default", "not_applicable"]
+        },
+        "change_policy": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "token_efficiency_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "context_scope", "caveman_applied"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["caveman", "relevant_subgraph", "agent_packet", "full_context_exception"]
+        },
+        "context_scope": {
+          "type": "string",
+          "minLength": 3
+        },
+        "caveman_applied": {
+          "type": "boolean"
+        }
+      }
+    },
+    "provider_best_practice_sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "input_packet_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "allowed_context", "forbidden_context", "source_pointers"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 3
+        },
+        "allowed_context": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "forbidden_context": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "source_pointers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "output_pointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "pointer", "summary"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "local_file",
+            "work_log_entry",
+            "agent_output_contract",
+            "review_report",
+            "mcp_tool_result",
+            "none_for_blocked"
+          ]
+        },
+        "pointer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "score_by_dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_fit",
+        "instruction_following",
+        "source_grounding",
+        "format_contract",
+        "verification_readiness",
+        "privacy_safety",
+        "handoff_clarity",
+        "token_efficiency",
+        "workflow_compatibility"
+      ],
+      "properties": {
+        "task_fit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "instruction_following": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "source_grounding": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "format_contract": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "verification_readiness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "privacy_safety": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "handoff_clarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "token_efficiency": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "workflow_compatibility": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "failure_labels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "task_mismatch",
+          "instruction_miss",
+          "ungrounded_claim",
+          "format_break",
+          "verification_gap",
+          "privacy_or_safety_risk",
+          "handoff_unclear",
+          "token_waste",
+          "workflow_incompatible",
+          "repeated_failure"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "prompt_or_input_delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "summary", "changed_fields", "rollback_path"],
+      "properties": {
+        "changed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 3
+        },
+        "changed_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "rollback_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "rerun_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20
+    },
+    "accepted_state": {
+      "type": "string",
+      "enum": ["not_accepted", "accepted", "blocked", "needs_review"]
+    },
+    "verification_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "status", "evidence", "source_pointer"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["local_test", "manual_review", "source_check", "mesh_route", "command", "not_applicable"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "skipped", "blocked"]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_pointer": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "uniqueItems": true
+    },
+    "source_pointers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "privacy_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "redacted_context_only",
+        "raw_output_stored",
+        "raw_prompt_stored",
+        "raw_logs_stored",
+        "secrets_or_customer_data_stored",
+        "reviewer"
+      ],
+      "properties": {
+        "redacted_context_only": {
+          "type": "boolean"
+        },
+        "raw_output_stored": {
+          "type": "boolean"
+        },
+        "raw_prompt_stored": {
+          "type": "boolean"
+        },
+        "raw_logs_stored": {
+          "type": "boolean"
+        },
+        "secrets_or_customer_data_stored": {
+          "type": "boolean"
+        },
+        "reviewer": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "route_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trigger", "failure_pattern", "recommended_action", "source_pointers"],
+      "properties": {
+        "trigger": {
+          "type": "string",
+          "minLength": 3
+        },
+        "failure_pattern": {
+          "type": "string",
+          "minLength": 3
+        },
+        "recommended_action": {
+          "type": "string",
+          "minLength": 3
+        },
+        "source_pointers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "weekly_aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window_start", "window_end", "record_count", "failure_patterns", "source_pointers"],
+      "properties": {
+        "window_start": {
+          "type": "string",
+          "format": "date"
+        },
+        "window_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "record_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failure_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "source_pointers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

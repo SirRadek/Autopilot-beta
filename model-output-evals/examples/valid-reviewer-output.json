@@ -1,0 +1,19 @@
+{
+  "handoff_id": "hp-20260617-cx-01",
+  "reviewer_id": "anthropic_claude_subscription",
+  "created": "2026-06-17T12:10:00.000Z",
+  "quality_state": "accepted",
+  "score_by_dimension": {
+    "task_fit": 95,
+    "instruction_following": 95,
+    "source_grounding": 90,
+    "format_contract": 100,
+    "verification_readiness": 90
+  },
+  "next_action": "Proceed to the next bounded task.",
+  "verified_facts": [
+    "Worker output used the expected handoff_id format."
+  ],
+  "risks": [],
+  "iteration_count": 1
+}

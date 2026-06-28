@@ -1,0 +1,29 @@
+{
+  "handoff_id": "hp-20260617-fix-trim-tmp-suffix",
+  "reviewer_id": "anthropic_claude_subscription",
+  "created": "2026-06-17T15:00:00.000Z",
+  "quality_state": "accepted",
+  "score_by_dimension": {
+    "task_fit": 97,
+    "instruction_following": 78,
+    "source_grounding": 100,
+    "format_contract": 100,
+    "verification_readiness": 100
+  },
+  "next_action": "commit — R3 and NEW-1 both verified; note allowed_files scope deviation for future packet construction",
+  "verified_facts": [
+    "trimJsonlIfNeeded line 309 now uses ${path}.${process.pid}.${Date.now()}.${hash(Math.random())}.tmp — matches doSessionWrite reference pattern",
+    "CONTINUITY_PATH write line 383 updated with same unique-suffix pattern",
+    "No other lines changed in .codex/hooks/autopilot-hook.mjs",
+    "3 new tests added for deriveLearningSignal: single_observation, eval_records, cross-type-filter",
+    "EvalRecordSummary import added to test file",
+    "npm.cmd run verify: 254 tests / 38 files / 4 Playwright — all exit 0",
+    "worker output validates against worker-output.schema.json (AJV strict:true, exit 0)",
+    "handoff_id matches across handoff packet, worker output, and this reviewer output"
+  ],
+  "risks": [
+    "Stale unique-suffix .tmp files may accumulate on process crash after writeFileSync before renameSync — same accepted risk as doSessionWrite; 2h stale cleanup handles eventual recovery",
+    "CONTINUITY_PATH write is not tested directly; fix is by inspection only"
+  ],
+  "correction_note": "instruction_following docked: worker edited tests/delivery-system/model-output-evaluation-policy.test.ts which was NOT listed in allowed_files_or_surfaces. The edit is correct and beneficial (NEW-1), but future handoff packets covering both hook fix and test additions must include both files in allowed_files. Scope expansion without supervisor handoff update is the exact stop condition listed in codex_gpt_worker policy."
+}
