@@ -53,10 +53,10 @@ the 10px VOR sweep: set viewport, reduced-motion, `fonts.ready`, measure `[data-
 `scrollWidth`/clipping/font-metrics/overlap/line-length → emit `text_fit` records → invariants → gate at VOR 0%.
 
 ## Verify per phase
-- **F1:** render zednik + the 5 hero variants; existing gates green; visual snapshots at 360 / 1920 / 3840;
+- **F1:** render local-bricklayer + the 5 hero variants; existing gates green; visual snapshots at 360 / 1920 / 3840;
   rebaseline score fixtures if the type-var change moves scoring.
 - **F2:** `fit_safety_lint` runs on all components (warn) + new/changed (block); schema validates; gates green.
-- **F3:** the VOR probe runs on zednik + variants across the sweep → VOR = 0% → gate (once Chromium).
+- **F3:** the VOR probe runs on local-bricklayer + variants across the sweep → VOR = 0% → gate (once Chromium).
 
 ## Sequence
 ```
