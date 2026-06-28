@@ -41,3 +41,41 @@
     }
   ]
 }
+=======
+{
+  "schema": "autopilot-beta/pdos-fit-safety-baseline@1",
+  "generated_on": "2026-06-26",
+  "note": "F2 grandfather baseline: matching component CSS hashes are warn-only for source-level fit-safety lint findings. Missing or changed components block on high-confidence precondition violations.",
+  "components": [
+    {
+      "id": "dot-stage-hero",
+      "css_sha256": "af2135173419ad1a8b45d4854807ab4fc7263ed6a1266f66bcf2f8c6dc33340f",
+      "status": "warn-only",
+      "reason": "Existing F2 component baseline."
+    },
+    {
+      "id": "outcome-cta",
+      "css_sha256": "b87f85d37b3e8a4f202d616ac062344b69e8e8d4c0ceb0a882fd80da88dd9c47",
+      "status": "warn-only",
+      "reason": "Deep-critique wave 2: #kontakt contact block (tel: + mailto form) added."
+    },
+    {
+      "id": "proof-led-section",
+      "css_sha256": "50bb9dba99ab12c6272a70556a2f00043eef4cab39c08eebe6b0874eecc25dea",
+      "status": "warn-only",
+      "reason": "Deep-critique fix: section H2 scale reduced + warm proof-photo filter + solid CTA."
+    },
+    {
+      "id": "sharp-positioning-hero",
+      "css_sha256": "ff8f7ae1dfa1d5d7e20ba2eb0341f40abf09280a700c5a66959566849e2f3e5b",
+      "status": "warn-only",
+      "reason": "Existing F2 component baseline."
+    },
+    {
+      "id": "tactile-shadow-hero",
+      "css_sha256": "92f3c5bc1b12b03f66b696ac7483e3eaeb4204e2c255793c0e37ec91701bb81e",
+      "status": "warn-only",
+      "reason": "Deep-critique fix: solid sage CTA, opaque badge, stronger copy backing band, H1 line-height."
+    }
+  ]
+}

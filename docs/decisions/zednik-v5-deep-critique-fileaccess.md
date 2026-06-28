@@ -80,10 +80,23 @@ agy artifact. This appendix is the durable record.
   pairs and WARNs on text-over-photo. Verified the resolver against this doc's own hand-
   computed numbers: pre-fix badge fill = rgb(131,128,125), pre-fix badge contrast = 3.60:1
   (the value the old gate was blind to). 11 new unit tests; verify EXIT 0 (164 tests).
-- **Deferred** (LOW/NIT, not blocking): cux-5/agy Move 3 (outcome-cta 3-column splits the
-  testimonial from the CTA → cohesion redesign), RF-4 (4K sparseness), SC-3 (dead stone-surface
-  CSS in image variant), RF-5 (70rem copy-wrapper cap), CB6 (sage as H1 body color), cux-6
-  (abstract-SVG proof fallback). Next polish pass.
+- **Wave 4** (deferred LOW/NIT processed): **cux-5/agy Move 3 APPLIED** — outcome-cta moved from a
+  3-column `[proof | heading | CTA]` grid (testimonial separated from the CTA by the whole width)
+  to a 2-column `[proof | heading-over-CTA]` via `grid-template-areas`, so the heading + CTA read
+  as one conversion unit beside the testimonial. Kept the DOM flat (proof/h2/cta siblings) so the
+  `proof_adjacency` render-contract still holds — the first wrapper-div attempt broke it (proof no
+  longer adjacent to h2); grid areas fix it without changing DOM. **SC-3 APPLIED** (comment marking
+  the stone-surface/base-stone CSS as fallback-variant-only, not dead — kept, not removed).
+  - **RF-5 INVESTIGATED → REVERTED**: the finding called the hero `__copy` 70rem cap "dead weight",
+    but at the H1's max font size 24ch ≈ 63rem, so 70rem does bound it; tightening to 40rem forced
+    the approved 3-line H1 to 4 lines. Restored 70rem — the finding was wrong.
+  - **Consciously NOT changed** (decisions, not omissions): **RF-4** (4K sparseness) — the 1180px
+    max-measure is a deliberate, valid line-length cap, and bumping it would change every example
+    page + break a hardcoded 1180px test for a LOW cosmetic; kept. **CB6** (sage H1 body color) —
+    the sage-forward hero is the owner's chosen brand direction (sage CTA confirmed); raw-umber H1
+    would be a brand pivot, not a polish fix; kept. **cux-6** (abstract-SVG proof fallback) — latent
+    only (a real stone photo ships); the abstract fallback is acceptable graceful-degradation; left.
+  Verify EXIT 0 (164 tests), browser fit-probe clean across breakpoints.
 
 ## Meta
 The deterministic gates AND a browser fit-probe were all green on this page, and my own
