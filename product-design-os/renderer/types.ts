@@ -55,6 +55,15 @@ export interface ResolvedAsset {
   readonly inlineContent?: boolean;
   readonly license?: string;
   readonly sourceUrl?: string;
+  /**
+   * Inline non-SVG data payload (e.g. an EncodedPointCloud JSON). Carried as
+   * plain text so a pattern can emit it inside a <script type="application/json">
+   * — NOT a data: URI, which would trip the no_stored_frames guard.
+   */
+  readonly dataRef?: {
+    readonly mime: "application/json";
+    readonly inline: string;
+  };
 }
 
 export interface ResolvedPatternReference {

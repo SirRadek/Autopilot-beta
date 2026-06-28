@@ -24,6 +24,7 @@
     "product-design-os/scripts/route-product-design-os.ts",
     "product-design-os/scripts/check-renderability-product-design-os.ts",
     "product-design-os/scripts/pattern-requirement-taxonomy.ts",
+    "product-design-os/scripts/build-point-cloud-asset.ts",
     "product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
     "product-design-os/qa/fit-probe/**/*.ts",
     "product-design-os/qa/visual-qa-browser/**/*.ts",

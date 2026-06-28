@@ -19,6 +19,7 @@
     "pdos:route": "tsx product-design-os/scripts/route-product-design-os.ts",
     "pdos:report": "tsx product-design-os/scripts/route-product-design-os.ts --report",
     "pdos:library:projects": "tsx product-design-os/scripts/update-project-library.ts",
+    "pdos:build-cloud": "tsx product-design-os/scripts/build-point-cloud-asset.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "test": "vitest run",

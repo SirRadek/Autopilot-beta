@@ -140,7 +140,8 @@
                 "icon",
                 "layout",
                 "hero",
-                "media"
+                "media",
+                "point_cloud"
               ]
             }
           },

@@ -5,6 +5,7 @@ import {
 import { outcomeCtaCss, renderOutcomeCta } from "./components/outcome-cta";
 import { proofLedSectionCss, renderProofLedSection } from "./components/proof-led-section";
 import { dotStageHeroCss, renderDotStageHero } from "./components/dot-stage-hero";
+import { pointCloudBackgroundCss, renderPointCloudBackground } from "./components/point-cloud-background";
 import { renderTactileShadowHero, tactileShadowHeroCss } from "./components/tactile-shadow-hero";
 import type { PatternRenderInput } from "./types";
 export interface PatternComponentRegistryEntry {
@@ -33,6 +34,11 @@ export const patternComponentRegistry = {
   "dot-stage-hero": {
     render: renderDotStageHero,
     css: dotStageHeroCss,
+    rendererKind: "section"
+  },
+  "point-cloud-background": {
+    render: renderPointCloudBackground,
+    css: pointCloudBackgroundCss,
     rendererKind: "section"
   },
   "tactile-shadow-hero": {

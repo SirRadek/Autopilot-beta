@@ -67,6 +67,9 @@ export interface EncodedPointCloud {
     readonly positions: "base64:f32le";
     readonly colors: "base64:u8";
     readonly sizes?: "base64:u8";
+    readonly facetPositions?: "base64:f32le";
+    readonly facetColors?: "base64:u8";
+    readonly edges?: "base64:u16le";
   };
   readonly pointCount: number;
   readonly dims: PointCloudDimensions;
@@ -74,6 +77,24 @@ export interface EncodedPointCloud {
   readonly positions: string;
   readonly colors: string;
   readonly sizes?: string;
+  /**
+   * Optional lowpoly-facet bake: a deterministic build-time DECIMATION of the SAME
+   * selected points into facetCount cell-centroids (mean position + mean colour).
+   * Strictly fewer points than `pointCount`; its bbox is a subset of the full cloud's.
+   * Decorative-only and gated as a bounded re-sample (see check-point-cloud-scene).
+   */
+  readonly facetCount?: number;
+  readonly facetPositions?: string;
+  readonly facetColors?: string;
+  /**
+   * Optional capped k-nearest-neighbour edge list (Uint16 index pairs into the same
+   * point order as `positions`) for the edge-wire / blueprint-ribs line presets.
+   * Built at asset time and payload-capped; a decorative hairline web over the brand
+   * cloud's OWN points, never new geometry. Gated by checkEdges (decimation of the
+   * brand silhouette, only on clouds dense enough to not read as lettering).
+   */
+  readonly edgeCount?: number;
+  readonly edges?: string;
   readonly stats: PointCloudStats;
 }
 
@@ -161,6 +182,19 @@ export interface ImageToPointCloudOptions extends PngDecodeLimits {
    */
   readonly targetCount?: number;
   readonly includeSizes?: boolean;
+  /**
+   * Opt-in lowpoly-facet bake. When > 0, also emit ~facetCount cell-centroid
+   * facets (a deterministic decimation of the SAME selected points) for the
+   * lowpoly-facet scene preset. Off (undefined) by default.
+   */
+  readonly facetCount?: number;
+  /**
+   * Opt-in capped k-NN edge bake for the line presets. edgeNeighbors = k (0..3)
+   * nearest neighbours per point; maxEdges caps the total stored pair count.
+   * Off (undefined / 0) by default.
+   */
+  readonly edgeNeighbors?: number;
+  readonly maxEdges?: number;
   readonly basePointSize?: number;
   readonly histogramBuckets?: number;
   /**

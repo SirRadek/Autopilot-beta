@@ -136,6 +136,60 @@
       "notes": "Seed contract for the calm prism background asset."
     },
     {
+      "id": "asset-brand-portrait-cloud",
+      "schema_version": "1.0.0",
+      "target_kind": "asset",
+      "target_id": "brand-portrait-cloud",
+      "props": [],
+      "slots": [],
+      "output_invariants": [
+        {
+          "code": "no_primary_content_in_canvas",
+          "required": true,
+          "severity": "error",
+          "description": "Primary text is not baked into the point cloud; readable content stays in DOM above the aria-hidden canvas.",
+          "source_floors": ["primary-content-inside-canvas"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
+        },
+        {
+          "code": "reduced_motion_fallback",
+          "required": true,
+          "severity": "error",
+          "description": "Under prefers-reduced-motion the depth field freezes to a static home-pose frame.",
+          "source_floors": ["reduced-motion-missing"],
+          "visual_qa_issue_codes": ["missing_reduced_motion_fallback"]
+        }
+      ],
+      "notes": "Seed contract for the faithful point-cloud depth-field asset. Decorative; readable content stays in DOM. The stored cloud is gated by validatePointCloudScene (check-point-cloud-scene.ts)."
+    },
+    {
+      "id": "asset-radeq-cat-cloud",
+      "schema_version": "1.0.0",
+      "target_kind": "asset",
+      "target_id": "radeq-cat-cloud",
+      "props": [],
+      "slots": [],
+      "output_invariants": [
+        {
+          "code": "no_primary_content_in_canvas",
+          "required": true,
+          "severity": "error",
+          "description": "Primary text is not baked into the cat point cloud; readable content stays in DOM above the aria-hidden canvas.",
+          "source_floors": ["primary-content-inside-canvas"],
+          "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"]
+        },
+        {
+          "code": "reduced_motion_fallback",
+          "required": true,
+          "severity": "error",
+          "description": "Under prefers-reduced-motion the cat depth field freezes to a static home-pose frame.",
+          "source_floors": ["reduced-motion-missing"],
+          "visual_qa_issue_codes": ["missing_reduced_motion_fallback"]
+        }
+      ],
+      "notes": "Contract for RadeQ's own cat formation-target cloud. Decorative; readable content stays in DOM. Gated by validatePointCloudScene."
+    },
+    {
       "id": "asset-proof-strip-case-study",
       "schema_version": "1.0.0",
       "target_kind": "asset",
@@ -851,6 +905,43 @@
         }
       ],
       "notes": "Contract for the procedural dot-stage hero. Dot-specific guards (canvas display words need a DOM twin; no stored frames) are enforced by check-render-contract.ts, self-scoped on the [data-dot-word] and [data-dot-stage] markers the renderer emits."
+    },
+    {
+      "id": "pattern-point-cloud-background",
+      "schema_version": "1.0.0",
+      "target_kind": "pattern",
+      "target_id": "point-cloud-background",
+      "props": [
+        { "name": "eyebrow", "value_type": "string", "required": false, "expected_source": "brand eyebrow" },
+        { "name": "headline", "value_type": "text", "required": true, "min_length": 8, "expected_source": "content-first hero" },
+        { "name": "primary_cta", "value_type": "string", "required": true, "min_length": 3, "expected_source": "DOM-text CTA" },
+        { "name": "trust_cue", "value_type": "string", "required": true, "min_length": 3, "expected_source": "trust cue" },
+        { "name": "cta_href", "value_type": "url", "required": false, "expected_source": "primary CTA destination" },
+        { "name": "parallax_gain", "value_type": "string", "required": false, "description": "Depth parallax multiplier (0..n) for the 2.5D field." },
+        { "name": "scene_preset", "value_type": "string", "required": true, "min_length": 3, "allowed_values": ["architectural-grid", "photographic-drift", "wordmark-gather", "lens-bokeh", "flow-field", "aurora-drift", "depth-field", "pastel-bokeh", "topographic-relief", "lowpoly-facet", "edge-wire", "blueprint-ribs"], "expected_source": "cloud scene preset (topology x physics x density x color x relief x line knobs)" },
+        { "name": "static_fallback_label", "value_type": "string", "required": true, "min_length": 3, "expected_source": "static fallback" }
+      ],
+      "slots": [
+        {
+          "name": "point_cloud",
+          "required": true,
+          "min_items": 1,
+          "max_items": 1,
+          "accepts_target_kinds": ["asset"],
+          "accepts_asset_types": ["point_cloud"],
+          "allowed_asset_ids": ["brand-portrait-cloud", "radeq-cat-cloud"],
+          "description": "The faithful EncodedPointCloud depth field rendered behind the DOM content."
+        }
+      ],
+      "output_invariants": [
+        { "code": "visible_h1", "required": true, "severity": "error", "description": "The readable headline is sharp DOM text above the canvas.", "source_floors": ["content-first hero"], "visual_qa_issue_codes": ["weak_heading_hierarchy", "headings_missing"] },
+        { "code": "dom_text_cta", "required": true, "severity": "error", "description": "The primary CTA is a readable DOM anchor above the canvas.", "source_floors": ["DOM-text CTA"], "visual_qa_issue_codes": ["missing_primary_action", "ctas_missing"] },
+        { "code": "no_primary_content_in_canvas", "required": true, "severity": "error", "description": "The cloud is decorative; all readable content lives in DOM above the aria-hidden canvas.", "source_floors": ["content-first hero"], "visual_qa_issue_codes": ["primary_content_hidden_in_canvas"] },
+        { "code": "reduced_motion_fallback", "required": true, "severity": "error", "description": "Under prefers-reduced-motion the depth field freezes to a static home-pose frame with no parallax.", "source_floors": ["reduced-motion fallback", "static fallback"], "visual_qa_issue_codes": ["missing_reduced_motion_fallback"] },
+        { "code": "performance_budget", "required": true, "severity": "error", "description": "Bounded point budget; procedural draw only, no per-frame allocation.", "source_floors": ["performance budget"] },
+        { "code": "proof_adjacency", "required": false, "severity": "warning", "description": "The section should carry a nearby trust cue.", "source_floors": ["trust cue"] }
+      ],
+      "notes": "Contract for the 2.5D point-cloud-background. The stored EncodedPointCloud is gated by validatePointCloudScene (check-point-cloud-scene.ts); the rendered canvas is stamped [data-point-cloud][data-cloud-contract] so the undeclared_scene_blob net in check-render-contract.ts recognises it as validated."
     },
     {
       "id": "pattern-tactile-shadow-hero",

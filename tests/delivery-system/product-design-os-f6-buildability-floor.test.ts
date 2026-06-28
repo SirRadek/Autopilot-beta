@@ -212,7 +212,7 @@ describe("Product Design OS F6 buildability floor", () => {
     const patterns = getRecordArray(patternManifest.patterns);
     const taxonomyProblems: string[] = [];
 
-    expect(patterns).toHaveLength(44);
+    expect(patterns).toHaveLength(45);
 
     for (const pattern of patterns) {
       const patternId = typeof pattern.id === "string" ? pattern.id : "unknown-pattern";

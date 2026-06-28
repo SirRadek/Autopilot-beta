@@ -67,6 +67,7 @@ describe("Product Design OS F2 fit-safety lint", () => {
     expect(cliRun.report.components.map((component) => component.id).sort()).toEqual([
       "dot-stage-hero",
       "outcome-cta",
+      "point-cloud-background",
       "proof-led-section",
       "sharp-positioning-hero",
       "tactile-shadow-hero"
