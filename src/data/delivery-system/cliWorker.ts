@@ -299,6 +299,12 @@ export interface CliWorkerInput {
   readonly parentSessionHash: string;
   readonly parentTurnHash: string;
   readonly timeoutMs?: number;
+  /** Working directory for the worker (the repo root) — gives the vendor REAL repo access. */
+  readonly cwd?: string;
+  /** Extra directories to grant the worker (agy --add-dir). */
+  readonly addDirs?: readonly string[];
+  /** Image files to attach to the prompt (codex exec -i; agy via the image's dir). */
+  readonly images?: readonly string[];
 }
 
 export interface CliWorkerResult {
@@ -416,6 +422,9 @@ export async function runCliWorker(
     if (input.vendor === "agy_cli") {
       const result = await captureAgyResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
+        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+        ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
+        ...(input.images !== undefined ? { images: input.images } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {})
       });
       exitCode = result.exitCode;
@@ -429,6 +438,9 @@ export async function runCliWorker(
       const result = await captureCodexResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.outputSchemaPath !== undefined ? { outputSchemaPath: input.outputSchemaPath } : {}),
+        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+        ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
+        ...(input.images !== undefined ? { images: input.images } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {})
       });
       exitCode = result.exitCode;

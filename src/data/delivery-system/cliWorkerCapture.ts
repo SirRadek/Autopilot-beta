@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { platform } from "node:process";
 
 // ─── ANSI stripping ───────────────────────────────────────────────────────────
@@ -53,6 +53,10 @@ export function extractJsonFromPtyOutput(clean: string): unknown {
 export interface AgyCaptureOptions {
   readonly model?: string;
   readonly cwd?: string;
+  /** Extra directories to grant the worker (agy --add-dir) — real repo/data access. */
+  readonly addDirs?: readonly string[];
+  /** Image files to attach; their containing dirs are granted via --add-dir. */
+  readonly images?: readonly string[];
   readonly timeoutMs?: number;
 }
 
@@ -108,11 +112,17 @@ export async function captureAgyResponse(
   const pty = ptyModule.default ?? ptyModule;
 
   const agyPath = resolveAgyPath();
+  // Grant real repo/data access: each extra dir + each image's containing dir.
+  const accessDirs = [
+    ...(opts.addDirs ?? []),
+    ...(opts.images ?? []).map((img) => dirname(img))
+  ];
   const args = [
     "--print",
     prompt,
     "--dangerously-skip-permissions",
-    ...(opts.model ? ["--model", opts.model] : [])
+    ...(opts.model ? ["--model", opts.model] : []),
+    ...accessDirs.flatMap((dir) => ["--add-dir", dir])
   ];
 
   const startedAt = Date.now();
@@ -168,6 +178,10 @@ export interface CodexCaptureOptions {
   readonly model?: string;
   readonly outputSchemaPath?: string;
   readonly cwd?: string;
+  /** Extra directories (codex works in cwd; recorded for parity with agy). */
+  readonly addDirs?: readonly string[];
+  /** Image files to attach to the prompt (codex exec -i). */
+  readonly images?: readonly string[];
   readonly timeoutMs?: number;
 }
 
@@ -203,6 +217,7 @@ export async function captureCodexResponse(
 
   const schemaFlag = schemaArgs.length > 0 ? `${schemaArgs[0]} "${schemaArgs[1]}" ` : "";
   const modelFlag = opts.model ? `-m "${opts.model}" ` : "";
+  const imageFlag = (opts.images ?? []).map((img) => `-i "${img.replace(/\\/g, "/")}" `).join("");
   const safeOut = outputFile.replace(/\\/g, "/");
   const safePrompt = promptFile.replace(/\\/g, "/");
 
@@ -211,7 +226,7 @@ export async function captureCodexResponse(
 
   if (bashPath) {
     // Windows: use Git Bash so stdin redirection works reliably
-    const bashCmd = `"${codexPath}" exec ${schemaFlag}${modelFlag}-o "${safeOut}" - < "${safePrompt}"`;
+    const bashCmd = `"${codexPath}" exec ${schemaFlag}${modelFlag}${imageFlag}-o "${safeOut}" - < "${safePrompt}"`;
     result = spawnSync(bashPath, ["-c", bashCmd], {
       encoding: "utf8",
       cwd: opts.cwd ?? process.cwd(),
@@ -222,7 +237,8 @@ export async function captureCodexResponse(
     // POSIX: direct spawnSync with stdin input
     result = spawnSync("codex", [
       "exec", ...schemaArgs, "-o", outputFile,
-      ...(opts.model ? ["-m", opts.model] : []), "-"
+      ...(opts.model ? ["-m", opts.model] : []),
+      ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
     ], {
       input: prompt,
       encoding: "utf8",
