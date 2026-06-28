@@ -58,6 +58,11 @@ describe("related-files-status (bind-point ①)", () => {
     expect(gitBlobHash(Buffer.from("export const real = true;\n"))).toBe(real);
   });
 
+  it("honors a custom nodesSubdir (per-project mesh at .autopilot/decision-mesh/nodes)", () => {
+    expect(computeRelatedFilesStatus(SAMPLE, { nodesSubdir: "mesh/nodes" }).summary.total).toBeGreaterThan(0);
+    expect(computeRelatedFilesStatus(SAMPLE, { nodesSubdir: "does/not/exist" }).summary.total).toBe(0);
+  });
+
   it("parses only the related_files block", () => {
     const yaml = ["name: x", "related_files:", "  - a/b.ts", "  - c/d.ts", "required_checks:", "  - z"].join("\n");
     expect(parseRelatedFiles(yaml)).toEqual(["a/b.ts", "c/d.ts"]);
