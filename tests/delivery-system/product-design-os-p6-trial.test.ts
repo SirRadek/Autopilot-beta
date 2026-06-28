@@ -10,25 +10,25 @@ import { assertRootColorContrastWcagAA } from "../../product-design-os/renderer/
 import { validateJsonSchema } from "../../src/lib/delivery-system/validation";
 
 const pdosRoot = path.join(process.cwd(), "product-design-os");
-const trialSpecFile = path.join(pdosRoot, "specs", "examples", "zednik.composition.json");
+const trialSpecFile = path.join(pdosRoot, "specs", "examples", "local-bricklayer.composition.json");
 const compositionSchemaFile = path.join(pdosRoot, "specs", "composition.schema.json");
 const assetManifestFile = path.join(pdosRoot, "assets", "asset-manifest.json");
-const proofHref = "./assets/sections/zednik-stone-proof.jpg";
+const proofHref = "./assets/sections/local-bricklayer-stone-proof.jpg";
 const proofAlt = "Ručně kladené kamenné zdivo — rekonstrukce staré chalupy";
 const proofSourceUrl = "https://www.flickr.com/photos/58187590@N02/25240639751";
 
-describe("Product Design OS P6 zednik first trial", () => {
+describe("Product Design OS P6 local-bricklayer first trial", () => {
   it("validates the trial composition spec and inline content provenance", () => {
     const spec = readJsonRecord(trialSpecFile);
     const schema = readJson(compositionSchemaFile);
     const assetManifest = readJsonRecord(assetManifestFile);
     const assets = recordArray(assetManifest, "assets");
-    const brickAsset = assets.find((asset) => asset.id === "zednik-brick-proof");
+    const brickAsset = assets.find((asset) => asset.id === "local-bricklayer-brick-proof");
     const inlineContent = inlineProofAssetContent(spec);
 
     expect(validateJsonSchema(spec, schema)).toEqual([]);
     expect(brickAsset).toBeUndefined();
-    expect(recordArrayValue(spec, "asset_ids")).not.toContain("zednik-brick-proof");
+    expect(recordArrayValue(spec, "asset_ids")).not.toContain("local-bricklayer-brick-proof");
     expect(inlineContent).toEqual(
       expect.objectContaining({
         href: proofHref,
@@ -39,7 +39,7 @@ describe("Product Design OS P6 zednik first trial", () => {
     );
   });
 
-  it("renders the zednik page with clean contracts, AA contrast, real stone image, Lora, and CTA priority", () => {
+  it("renders the local-bricklayer page with clean contracts, AA contrast, real stone image, Lora, and CTA priority", () => {
     const result = renderCompositionPage(readJson(trialSpecFile), pdosRoot);
     const root = parse(result.html);
     const proof = requiredElement(root, '[data-pattern-id="proof-led-section"]');

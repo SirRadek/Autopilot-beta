@@ -18,7 +18,7 @@ import {
 
 const repoRoot = process.cwd();
 const buildableSpecPath = "product-design-os/specs/examples/buildable-marketing.composition.json";
-const zednikSpecPath = "product-design-os/specs/examples/zednik.composition.json";
+const localBricklayerSpecPath = "product-design-os/specs/examples/local-bricklayer.composition.json";
 const nonbuildableTargetPath = "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json";
 const patternManifestFile = join(repoRoot, "product-design-os", "patterns", "pattern-manifest.json");
 const patternSchemaFile = join(repoRoot, "product-design-os", "patterns", "pattern.schema.json");
@@ -104,7 +104,7 @@ describe("Product Design OS F6 buildability floor", () => {
       expect(cliRun.report.ok).toBe(true);
       expect(cliRun.report.summary.composition_count).toBe(defaultSpecPaths.length);
       expect(compositionIds).toContain("buildable-marketing");
-      expect(compositionIds).toContain("zednik");
+      expect(compositionIds).toContain("local-bricklayer");
       expect(cliRun.exitCode).toBe(0);
       expect(applyBuildabilityFloorCliExitCode(cliRun.report)).toBe(0);
       expect(process.exitCode).toBe(0);
@@ -114,11 +114,11 @@ describe("Product Design OS F6 buildability floor", () => {
   });
 
   it("lets explicit --spec override the committed-example default", () => {
-    const cliRun = createBuildabilityFloorCliRun(["--spec", zednikSpecPath], repoRoot);
+    const cliRun = createBuildabilityFloorCliRun(["--spec", localBricklayerSpecPath], repoRoot);
 
     expect(cliRun.report.ok).toBe(true);
     expect(cliRun.report.summary.composition_count).toBe(1);
-    expect(cliRun.report.compositions.map((composition) => composition.id)).toEqual(["zednik"]);
+    expect(cliRun.report.compositions.map((composition) => composition.id)).toEqual(["local-bricklayer"]);
     expect(cliRun.exitCode).toBe(0);
   });
 
@@ -132,9 +132,9 @@ describe("Product Design OS F6 buildability floor", () => {
     expect(composition.taxonomy_floor).toEqual([]);
   });
 
-  it("passes inline content slot fills in the committed zednik composition", () => {
-    const report = analyzeBuildabilityFloor({ specPaths: [zednikSpecPath] }, repoRoot);
-    const composition = byId(report, "zednik");
+  it("passes inline content slot fills in the committed local-bricklayer composition", () => {
+    const report = analyzeBuildabilityFloor({ specPaths: [localBricklayerSpecPath] }, repoRoot);
+    const composition = byId(report, "local-bricklayer");
     const structuralCodes = composition.structural_non_buildable.map((issue) => issue.code);
 
     expect(report.ok).toBe(true);

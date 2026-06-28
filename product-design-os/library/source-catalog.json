@@ -168,7 +168,7 @@
       "allowed_uses": ["trial proof imagery", "masonry material reference", "landing-page section media"],
       "blocked_uses": ["using as sole proof without adjacent DOM case text", "shipping without local compression or source record"],
       "adoption_requirements": ["record exact Commons file page", "keep proof claim in DOM text", "serve a resized local copy for performance"],
-      "notes": "Owner-approved CC0 brick-wall proof image for the zednik first-trial composition."
+      "notes": "Owner-approved CC0 brick-wall proof image for the local-bricklayer first-trial composition."
     },
     {
       "id": "lucide-icons",

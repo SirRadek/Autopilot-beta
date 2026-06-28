@@ -2,7 +2,7 @@
 
 Date: 2026-06-27
 Subject: live page https://sirradek.github.io/autopilot-beta-preview/ rendered from
-`product-design-os/specs/examples/zednik.composition.json` (hero =
+`product-design-os/specs/examples/local-bricklayer.composition.json` (hero =
 `tactile-shadow-hero`, picked as variant V5).
 Method: three independent lenses reviewed the **live** page (not the spec), then
 cross-brainstormed. Screenshots `output/v5-desktop.png`, `output/v5-mobile.png`.
@@ -101,7 +101,7 @@ lower the percentages.
 5. `render-composition.ts` global default → `hyphens:auto` becomes `hyphens:manual`
    page-wide (keep `overflow-wrap:break-word`); `hyphens:auto` opt-in via
    `[data-auto-hyphenate]` — fixes hyphenation in proof/CTA sections too.
-6. `zednik.composition.json` headline → **"Stavíme z cihel a kamene. Citlivě
+6. `local-bricklayer.composition.json` headline → **"Stavíme z cihel a kamene. Citlivě
    rekonstruujeme staré chalupy."** (synthesis of agy's shorter copy while preserving
    the rekonstrukce service — the one editorial/owner-reviewable change, reversible).
 

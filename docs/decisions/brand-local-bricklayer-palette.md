@@ -59,4 +59,4 @@ real-asset path renders it via `href` as a sanitized `<img>`). Owner chose a CC0
 ## Next
 Task #6 (first-trial pipeline) builds the full zedník composition spec with these `token_overrides` + the
 CC0 brick photo above. The other 3 palettes (Lom & Křída, Břidlice & Jíl, Pálená Hlína) are kept in
-`output/brand-zednik/agy.md` as runners-up if the owner wants to revisit.
+`output/brand-local-bricklayer/agy.md` as runners-up if the owner wants to revisit.

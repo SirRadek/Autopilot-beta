@@ -1186,7 +1186,7 @@ function parseArgs(args: readonly string[]): {
 function printUsage(): string {
   return [
     "Usage:",
-    "  tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts --composition product-design-os/specs/examples/zednik.composition.json --format markdown",
+    "  tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts --composition product-design-os/specs/examples/local-bricklayer.composition.json --format markdown",
     "  tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts --html output/render/landing-page.html --format json",
     ""
   ].join("\n");

@@ -26,7 +26,7 @@ converting action (a tappable phone) is entirely absent. (agy independently: the
 contact path are broken.)
 
 **HIGH — the proof "real work" image is missing / off-brand (CB2 + CB1).** The proof
-section references `./assets/zednik-brick-proof.jpg`, which is NOT in the render assets dir
+section references `./assets/local-bricklayer-brick-proof.jpg`, which is NOT in the render assets dir
 (only the sandstone wall is) → it renders as a broken/empty frame in the trust-critical
 slot while the hero photo shows. And even when present it is a RED-BRICK stock wall —
 off-brand vs the "Pískovec & Šalvěj" sandstone hero (the brand doc explicitly differentiates

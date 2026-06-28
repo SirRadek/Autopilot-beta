@@ -10,7 +10,7 @@ import type { ComponentContract, TokenPrimitive } from "../../product-design-os/
 
 const pdosRoot = path.join(process.cwd(), "product-design-os");
 const baseCompositionFile = path.join(pdosRoot, "specs", "examples", "buildable-marketing.composition.json");
-const zednikCompositionFile = path.join(pdosRoot, "specs", "examples", "zednik.composition.json");
+const localBricklayerCompositionFile = path.join(pdosRoot, "specs", "examples", "local-bricklayer.composition.json");
 const fluidTypeRoles = ["caption", "kicker", "body", "body-lg", "heading", "display"] as const;
 
 type FluidTypeRole = (typeof fluidTypeRoles)[number];
@@ -116,8 +116,8 @@ describe("Product Design OS P3 full-page rendering", () => {
     expect(result.html).not.toContain("--pdos-type-display: 7.4rem;");
   });
 
-  it('emits lang="cs" for the zednik composition', () => {
-    const result = renderCompositionPage(readJson(zednikCompositionFile), pdosRoot);
+  it('emits lang="cs" for the local-bricklayer composition', () => {
+    const result = renderCompositionPage(readJson(localBricklayerCompositionFile), pdosRoot);
 
     expect(result.html).toContain('<html lang="cs">');
     expect(result.html).not.toContain('<html lang="en">');

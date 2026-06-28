@@ -6,9 +6,9 @@ import { assertRootColorContrastWcagAA } from "./wcag-contrast";
 
 const repoRoot = process.cwd();
 const pdosRoot = path.join(repoRoot, "product-design-os");
-const specPath = path.join(pdosRoot, "specs", "examples", "zednik.composition.json");
+const specPath = path.join(pdosRoot, "specs", "examples", "local-bricklayer.composition.json");
 const outputDir = path.join(repoRoot, "output", "render");
-const outputPath = path.join(outputDir, "zednik-trial.html");
+const outputPath = path.join(outputDir, "local-bricklayer-trial.html");
 
 const result = renderCompositionPage(readJson(specPath), pdosRoot);
 const contrastPairs = assertRootColorContrastWcagAA(result.html);

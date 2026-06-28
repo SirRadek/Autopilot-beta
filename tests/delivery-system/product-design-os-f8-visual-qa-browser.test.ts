@@ -134,9 +134,9 @@ describe("Product Design OS F8 browser visual QA core integration", () => {
   it("groups fake axe violations by impact and blocks serious or critical findings", () => {
     const report = buildVisualQaBrowserReport({
       source_kind: "composition",
-      source_path: "product-design-os/specs/examples/zednik.composition.json",
-      html_path: "output/visual-qa-browser/zednik.visual-qa-browser.html",
-      report_path: "output/visual-qa-browser/zednik.visual-qa-browser.json",
+      source_path: "product-design-os/specs/examples/local-bricklayer.composition.json",
+      html_path: "output/visual-qa-browser/local-bricklayer.visual-qa-browser.html",
+      report_path: "output/visual-qa-browser/local-bricklayer.visual-qa-browser.json",
       checked_viewports: [1440, 390],
       snapshot: snapshot(),
       axe_violations: [

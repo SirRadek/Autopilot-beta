@@ -109,7 +109,7 @@ describe("Product Design OS F3 renderability", () => {
       expect(cliRun.report.ok).toBe(true);
       expect(cliRun.report.summary.target_count).toBe(defaultSpecPaths.length);
       expect(compositionIds).toContain("buildable-marketing");
-      expect(compositionIds).toContain("zednik");
+      expect(compositionIds).toContain("local-bricklayer");
       expect(cliRun.exitCode).toBe(0);
       expect(applyProductDesignRenderabilityCliExitCode(cliRun.report)).toBe(0);
       expect(process.exitCode).toBe(0);
