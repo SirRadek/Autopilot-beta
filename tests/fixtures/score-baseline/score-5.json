@@ -572,6 +572,17 @@
         "penalties": []
       },
       {
+        "id": "point-cloud-background",
+        "score": 52,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7."
+        ],
+        "penalties": []
+      },
+      {
         "id": "tactile-shadow-hero",
         "score": 52,
         "selected": false,
@@ -1033,6 +1044,32 @@
       {
         "id": "motion-background",
         "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "brand-portrait-cloud",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "radeq-cat-cloud",
+        "score": 69,
         "selected": false,
         "reasons": [
           "Compared against route public_sector and recipe public-sector-accessible.",

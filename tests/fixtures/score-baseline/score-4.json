@@ -572,6 +572,18 @@
         "penalties": []
       },
       {
+        "id": "point-cloud-background",
+        "score": 55,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 7/7.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
+      {
         "id": "tactile-shadow-hero",
         "score": 55,
         "selected": false,
@@ -1035,6 +1047,32 @@
       {
         "id": "motion-background",
         "score": 71,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "brand-portrait-cloud",
+        "score": 69,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": [
+          "Asset style conflicts with route priorities."
+        ]
+      },
+      {
+        "id": "radeq-cat-cloud",
+        "score": 69,
         "selected": false,
         "reasons": [
           "Compared against route ecommerce and recipe ecommerce-conversion.",

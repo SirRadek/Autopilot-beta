@@ -80,20 +80,20 @@
         "penalties": []
       },
       {
-        "id": "animated-hero",
-        "score": 107,
+        "id": "point-cloud-background",
+        "score": 109,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe creative-motion.",
           "Pattern use_case matches project type.",
-          "Usability/mobile quality: 7/6.",
+          "Usability/mobile quality: 7/7.",
           "Pattern is preferred by the top recipe.",
           "Motion intent prior applied."
         ],
         "penalties": []
       },
       {
-        "id": "scroll-linked-proof",
+        "id": "animated-hero",
         "score": 107,
         "selected": false,
         "reasons": [
@@ -186,6 +186,19 @@
       }
     ],
     "patterns": [
+      {
+        "id": "scroll-linked-proof",
+        "score": 107,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe creative-motion.",
+          "Pattern use_case matches project type.",
+          "Usability/mobile quality: 7/6.",
+          "Pattern is preferred by the top recipe.",
+          "Motion intent prior applied."
+        ],
+        "penalties": []
+      },
       {
         "id": "mascot-progressive-guide",
         "score": 104,
@@ -675,6 +688,28 @@
       {
         "id": "motion-background",
         "score": 131,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe creative-motion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "brand-portrait-cloud",
+        "score": 129,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe creative-motion.",
+          "Asset use_case matches project type.",
+          "Creativity/trust/motion: 9/6/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "radeq-cat-cloud",
+        "score": 129,
         "selected": false,
         "reasons": [
           "Compared against route marketing_web and recipe creative-motion.",

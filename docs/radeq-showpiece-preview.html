@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RadeQ — Postaveno rukou. Řízeno strojem. (preview)</title>
+<style>
+:root{
+  --ink:#05070b; --panel:#0a0e14; --line:rgba(200,255,50,0.25);
+  --text-primary:#ece7da; --text-muted:#8b958a; --signal:#c8ff32;
+  --font-voice:Georgia,'Times New Roman',serif;
+  --font-mono:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+  --font-sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ink);color:var(--text-primary);font-family:var(--font-sans)}
+.wrap{max-width:1180px;margin:0 auto;padding:clamp(20px,4vw,48px) clamp(16px,4vw,40px)}
+.eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:0.28em;text-transform:uppercase;color:var(--text-muted);margin:0 0 14px}
+.tag{font-size:clamp(28px,5vw,52px);line-height:1.1;margin:0 0 22px;font-weight:400}
+.tag .h{font-family:var(--font-voice);font-style:italic}
+.tag .m{font-family:var(--font-mono);letter-spacing:-0.02em;color:var(--signal)}
+.lead{max-width:60ch;color:var(--text-muted);font-size:16px;line-height:1.7;margin:0 0 26px}
+.stage{position:relative;height:min(72vh,720px);min-height:420px;border-radius:16px;overflow:hidden;background:#05070b;border:0.5px solid rgba(255,255,255,0.06)}
+.cv{width:100%;height:100%;display:block}
+.hud{position:absolute;top:14px;right:14px;font-family:var(--font-mono);font-size:12px;line-height:1.55;color:#cfe6c0;background:rgba(5,7,11,0.55);border:0.5px solid var(--line);border-radius:10px;padding:9px 12px;pointer-events:none;min-width:172px;backdrop-filter:blur(2px)}
+.hud b{color:var(--signal);font-weight:400}
+.off{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:2rem;font-family:var(--font-mono);font-size:15px;line-height:1.6;color:#e8e2d6;background:rgba(5,7,11,0.85)}
+.ctl{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px}
+.ctl button{font-family:var(--font-mono);font-size:13px;color:var(--text-primary);background:transparent;border:0.5px solid rgba(255,255,255,0.18);border-radius:8px;padding:9px 14px;cursor:pointer}
+.ctl button:hover{border-color:var(--signal);color:var(--signal)}
+.ctl input[type=range]{flex:1;min-width:200px;accent-color:var(--signal)}
+.beats{display:flex;justify-content:space-between;gap:4px;margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+.beats span{flex:1;text-align:center;padding:4px 0;border-top:1px solid rgba(255,255,255,0.08)}
+.beats span.on{color:var(--text-primary);border-top-color:var(--signal)}
+.foot{margin-top:26px;color:var(--text-muted);font-size:13px;line-height:1.7;max-width:70ch}
+.foot code{font-family:var(--font-mono);color:#cfe6c0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Studio RadeQ — preview</p>
+  <h1 class="tag"><span class="h">Postaveno rukou.</span> <span class="m">Řízeno strojem.</span></h1>
+  <p class="lead">Jedno zachované pole bodů. Stejné atomy jednou kreslí ruku (portrét), podruhé stroj (značku) — a mezi tím hrají, měří, dýchají a zrychlují. Táhni posuvník nebo spusť <b>Scroll</b>. Vypni dekoraci a stránka zůstane identická — to pravidlo dáváme do každé zakázky.</p>
+  <div class="stage">
+    <canvas class="cv" aria-hidden="true"></canvas>
+    <div class="hud" id="hud">ENGINE <b>Canvas2D</b><br>FPS <b id="fps">--</b><br>BODY <b id="pts">--</b> / <span id="ptsmax">9000</span><br>RENDER <b>2.5D · depth</b><br>BEAT <b id="beat">hra</b></div>
+    <div class="off" id="offn">Dekorace vypnuta — stránka je identická.<br>To pravidlo dáváme do každé zakázky.</div>
+  </div>
+  <div class="ctl">
+    <button type="button" id="play">▶ Scroll</button>
+    <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Postup scrollu sedmi beaty">
+    <button type="button" id="offb">Dekorace: <b id="offs">ON</b></button>
+  </div>
+  <div class="beats" id="beats"><span>hra</span><span>přesnost</span><span>objem</span><span>kvalita</span><span>tok</span><span>rychlost</span><span>RadeQ</span></div>
+  <p class="foot">Preview konceptu — <b>Canvas2D</b>, 0 závislostí, ~9&nbsp;000 bodů, 7 beatů. Body se adaptivně řídí podle FPS (HUD ukazuje reálně kreslené body). Ve finální verzi je značka <b>abstraktní</b> (žádný čitelný text v canvasu — to drží gate <code>no_primary_content_in_canvas</code>); zde je „RADEQ" jen pro názornost. WebGL „Living Hero" a 400vh scrollytelling jsou další stupeň za spouštěčem.</p>
+</div>
+<script>
+(function(){
+  var N=9000,cv=document.querySelector('.cv'),ctx=cv.getContext('2d');
+  document.getElementById('ptsmax').textContent=N.toLocaleString();
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function rnd(n){var x=Math.sin(n*12.9898+1.7)*43758.5453;return x-Math.floor(x);}
+  function sampleShape(draw){var W=160,H=90,oc=document.createElement('canvas');oc.width=W;oc.height=H;var x=oc.getContext('2d');x.fillStyle='#000';x.fillRect(0,0,W,H);x.fillStyle='#fff';draw(x,W,H);var d=x.getImageData(0,0,W,H).data,b=[];for(var py=0;py<H;py++)for(var px=0;px<W;px++){if(d[(py*W+px)*4]>110)b.push([(px+0.5)/W,(py+0.5)/H]);}var o=[];if(!b.length){for(var i=0;i<N;i++)o.push([0.5,0.5]);return o;}for(var i=0;i<N;i++)o.push(b[Math.floor(i*b.length/N)%b.length]);return o;}
+  var cols=Math.ceil(Math.sqrt(N*1.7)),rows=Math.ceil(N/cols);
+  var gx=[],gy=[],wbx=[],wby=[],sx3=[],sy3=[],sz3=[],sty=[],shf=[],sz0=[];
+  for(var i=0;i<N;i++){var c=i%cols,r=Math.floor(i/cols);gx[i]=0.16+c/(cols-1)*0.68;gy[i]=0.2+r/Math.max(1,rows-1)*0.6;wbx[i]=c/(cols-1);wby[i]=r/Math.max(1,rows-1);var u=rnd(i),v=rnd(i+0.37),th=Math.acos(1-2*u),ph=6.2832*v;sx3[i]=Math.sin(th)*Math.cos(ph);sy3[i]=Math.cos(th);sz3[i]=Math.sin(th)*Math.sin(ph);sty[i]=0.2+Math.floor(rnd(i+5)*16)/16*0.6;shf[i]=0.5+rnd(i+3)*0.9;sz0[i]=rnd(i+0.7)*2-1;}
+  var portr=sampleShape(function(x,W,H){x.beginPath();x.ellipse(W*0.5,H*0.38,W*0.145,H*0.27,0,0,6.2832);x.fill();x.beginPath();x.ellipse(W*0.5,H*0.97,W*0.31,H*0.36,0,0,6.2832);x.fill();});
+  var wm=sampleShape(function(x,W,H){x.font='800 '+Math.floor(H*0.5)+'px ui-sans-serif,system-ui,sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText('RADEQ',W*0.5,H*0.52);});
+  var buckets=[[],[],[],[],[],[]];for(var i=0;i<N;i++)buckets[Math.min(5,Math.floor(rnd(i+9)*6))].push(i);
+  var pal=[{bg:[18,14,10],pt:[236,206,166],tr:0.33},{bg:[6,8,12],pt:[200,255,60],tr:1},{bg:[5,7,11],pt:[150,235,130],tr:0.30},{bg:[22,15,10],pt:[214,142,86],tr:0.62},{bg:[16,13,11],pt:[228,182,120],tr:0.35},{bg:[6,8,12],pt:[200,255,60],tr:0.28},{bg:[5,7,11],pt:[205,255,90],tr:1}];
+  var labels=['hra','přesnost','objem','kvalita','tok','rychlost','RadeQ'];
+  var _x,_y,_z,rc=1,rs=0,T=0;
+  function P(pi,i){switch(pi){
+    case 0:{var a=rnd(i)*6.283,r=Math.sqrt(rnd(i+0.3))*0.46;_x=0.5+Math.cos(a)*r*0.96+Math.sin(T*0.0006+i)*0.012;_y=0.5+Math.sin(a)*r*0.82;_z=sz0[i];return;}
+    case 1:_x=gx[i];_y=gy[i];_z=0;return;
+    case 2:{var X=sx3[i],Z=sz3[i];_x=0.5+(X*rc-Z*rs)*0.40;_y=0.5+sy3[i]*0.40;_z=X*rs+Z*rc;return;}
+    case 3:{var p=portr[i];_x=p[0];_y=p[1]+Math.sin(T*0.0008+i)*0.004;_z=(0.4-Math.abs(p[1]-0.45))*2;return;}
+    case 4:{var w=Math.sin(wbx[i]*7+T*0.0009+wby[i]*2);_x=wbx[i]*0.9+0.05;_y=0.2+wby[i]*0.6+w*0.05;_z=w;return;}
+    case 5:{var sp=0.5+rnd(i+2)*0.8;_x=((wbx[i]+T*0.00012*sp)%1)*0.92+0.04;_y=sty[i];_z=rnd(i+0.9)*0.7-0.35;return;}
+    default:_x=wm[i][0];_y=wm[i][1];_z=0;return;}}
+  var W=0,H=0,raf=0,p=reduce?0.5:0,playing=false,dir=1,decor=true,last=0,fr=0,ft=0,fps=60,stride=1,mx=0,my=0,tmx=0,tmy=0;
+  function resize(){var dpr=Math.min(window.devicePixelRatio||1,2);W=cv.clientWidth||720;H=cv.clientHeight||405;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);}
+  function sm(t){return t*t*(3-2*t);}
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function draw(t){
+    T=t;rc=Math.cos(t*0.00026);rs=Math.sin(t*0.00026);mx+=(tmx-mx)*0.06;my+=(tmy-my)*0.06;
+    var seg=Math.min(5,Math.floor(p*6)),lt=p*6-seg,e=sm(lt),dom=Math.round(p*6);
+    var A=pal[seg],B=pal[seg+1];
+    var br=lerp(A.bg[0],B.bg[0],e),bg=lerp(A.bg[1],B.bg[1],e),bb=lerp(A.bg[2],B.bg[2],e),tr=lerp(A.tr,B.tr,e);
+    ctx.globalCompositeOperation='source-over';ctx.globalAlpha=tr;ctx.fillStyle='rgb('+(br|0)+','+(bg|0)+','+(bb|0)+')';ctx.fillRect(0,0,W,H);ctx.globalAlpha=1;
+    var glow=(dom===2||dom===6);ctx.globalCompositeOperation=glow?'lighter':'source-over';
+    var p0=lerp(A.pt[0],B.pt[0],e),p1=lerp(A.pt[1],B.pt[1],e),p2=lerp(A.pt[2],B.pt[2],e);
+    var pad=Math.min(W,H)*0.07,sx=W-2*pad,sy=H-2*pad,par=Math.min(W,H)*0.05;
+    var strk=Math.max(0,1-Math.abs(p-0.833)*7);
+    for(var bk=0;bk<6;bk++){var sh=0.42+bk/5*0.9;ctx.fillStyle='rgb('+Math.min(255,p0*sh)+','+Math.min(255,p1*sh)+','+Math.min(255,p2*sh)+')';var arr=buckets[bk];
+      for(var k=0;k<arr.length;k+=stride){var i=arr[k];P(seg,i);var ax=_x,ay=_y,az=_z;P(seg+1,i);var x=ax+(_x-ax)*e,y=ay+(_y-ay)*e,z=az+(_z-az)*e;var depth=0.6+(z+1)*0.32;var X=pad+x*sx+mx*z*par,Y=pad+y*sy+my*z*par*0.6;var s=(0.5+(shf[i]-0.5)*0.7)*depth;ctx.globalAlpha=glow?(0.16+sh*0.42):(0.3+sh*0.5);if(strk>0.05)ctx.fillRect(X,Y,s+strk*11,s);else ctx.fillRect(X,Y,s,s);}}
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    var gw=Math.max(0,1-Math.abs(p-0.1667)*7);if(gw>0.02){var ly=pad+((t*0.00045)%1)*sy;ctx.globalAlpha=gw*0.55;ctx.fillStyle='rgb(60,150,95)';ctx.fillRect(0,ly,W,1.6);ctx.globalAlpha=1;}
+    var bi=Math.round(p*6);document.getElementById('beat').textContent=labels[bi];var bs=document.querySelectorAll('#beats span');for(var q=0;q<bs.length;q++)bs[q].className=(q===bi?'on':'');
+  }
+  function loop(now){if(!last)last=now;var dt=now-last;last=now;fr++;ft+=dt;
+    if(ft>=420){fps=Math.round(1000*fr/ft);fr=0;ft=0;if(!reduce){if(fps<42&&stride<4)stride++;else if(fps>56&&stride>1)stride--;}document.getElementById('fps').textContent=reduce?'paused':fps;document.getElementById('pts').textContent=Math.round(N/stride).toLocaleString();}
+    if(playing&&!reduce){p+=dir*dt/22000;if(p>=1){p=1;dir=-1;}else if(p<=0){p=0;dir=1;}document.getElementById('scrub').value=Math.round(p*1000);}
+    if(decor)draw(now);raf=requestAnimationFrame(loop);}
+  if(!reduce){cv.addEventListener('pointermove',function(e){var r=cv.getBoundingClientRect();tmx=((e.clientX-r.left)/r.width-0.5)*2;tmy=((e.clientY-r.top)/r.height-0.5)*2;});cv.addEventListener('pointerleave',function(){tmx=0;tmy=0;});}
+  document.getElementById('scrub').addEventListener('input',function(e){p=(+e.target.value)/1000;playing=false;document.getElementById('play').textContent='▶ Scroll';if(!decor){decor=true;document.getElementById('offn').style.display='none';document.getElementById('offs').textContent='ON';document.getElementById('hud').style.opacity='1';}});
+  document.getElementById('play').addEventListener('click',function(){if(reduce)return;playing=!playing;this.textContent=playing?'⏸ Pauza':'▶ Scroll';});
+  document.getElementById('offb').addEventListener('click',function(){decor=!decor;document.getElementById('offs').textContent=decor?'ON':'OFF';document.getElementById('offn').style.display=decor?'none':'flex';document.getElementById('hud').style.opacity=decor?'1':'0.4';if(!decor){ctx.globalCompositeOperation='source-over';ctx.fillStyle='#05070b';ctx.fillRect(0,0,W,H);}});
+  window.addEventListener('resize',resize);
+  if(reduce){document.getElementById('fps').textContent='paused';document.getElementById('hud').innerHTML+='<br>REDUCED-MOTION';}
+  setTimeout(function(){resize();draw(performance.now());raf=requestAnimationFrame(loop);},60);
+})();
+</script>
+</body>
+</html>

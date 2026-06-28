@@ -67,6 +67,37 @@ navyšování rozpočtu" (CB5); marginal muted_text pairs (A11Y-4); 70rem copy-w
 Full verified findings with file:line evidence: `output/critique2/` (workflow output) +
 agy artifact. This appendix is the durable record.
 
+## Resolution log
+- **Wave 1** (landed `ba5eb84`, live): solid sage CTA (cux-2 hero), opaque badge (A11Y-1),
+  stronger hero copy backing (SC-1/A11Y-2), real warm stone proof photo (CB1/CB2), split +
+  resized proof/CTA headings (RF-1/RF-2/RF-6/SC-4), unified `#kontakt` hrefs (CB4), softened
+  over-promise (CB5), refreshed stale probe (CB3), proof CTA solid (cux-2).
+- **Wave 2** (landed `c1e181f`, live): the `#kontakt` contact section — tappable `tel:` +
+  accessible `mailto:` form (cux-1, the CRITICAL). Phone/email are PLACEHOLDERS (owner swaps).
+- **Wave 3** (this pass): **A11Y-4** muted_text override `#6E6962`→`#5F5A53` (4.57→5.87:1 on
+  panel); **A11Y-3** WCAG gate hardened — `resolveColor` now resolves `color-mix()` (incl.
+  transparent-over-backdrop) and the gate HARD-checks the badge + muted-on-panel composited
+  pairs and WARNs on text-over-photo. Verified the resolver against this doc's own hand-
+  computed numbers: pre-fix badge fill = rgb(131,128,125), pre-fix badge contrast = 3.60:1
+  (the value the old gate was blind to). 11 new unit tests; verify EXIT 0 (164 tests).
+- **Wave 4** (deferred LOW/NIT processed): **cux-5/agy Move 3 APPLIED** — outcome-cta moved from a
+  3-column `[proof | heading | CTA]` grid (testimonial separated from the CTA by the whole width)
+  to a 2-column `[proof | heading-over-CTA]` via `grid-template-areas`, so the heading + CTA read
+  as one conversion unit beside the testimonial. Kept the DOM flat (proof/h2/cta siblings) so the
+  `proof_adjacency` render-contract still holds — the first wrapper-div attempt broke it (proof no
+  longer adjacent to h2); grid areas fix it without changing DOM. **SC-3 APPLIED** (comment marking
+  the stone-surface/base-stone CSS as fallback-variant-only, not dead — kept, not removed).
+  - **RF-5 INVESTIGATED → REVERTED**: the finding called the hero `__copy` 70rem cap "dead weight",
+    but at the H1's max font size 24ch ≈ 63rem, so 70rem does bound it; tightening to 40rem forced
+    the approved 3-line H1 to 4 lines. Restored 70rem — the finding was wrong.
+  - **Consciously NOT changed** (decisions, not omissions): **RF-4** (4K sparseness) — the 1180px
+    max-measure is a deliberate, valid line-length cap, and bumping it would change every example
+    page + break a hardcoded 1180px test for a LOW cosmetic; kept. **CB6** (sage H1 body color) —
+    the sage-forward hero is the owner's chosen brand direction (sage CTA confirmed); raw-umber H1
+    would be a brand pivot, not a polish fix; kept. **cux-6** (abstract-SVG proof fallback) — latent
+    only (a real stone photo ships); the abstract fallback is acceptable graceful-degradation; left.
+  Verify EXIT 0 (164 tests), browser fit-probe clean across breakpoints.
+
 ## Meta
 The deterministic gates AND a browser fit-probe were all green on this page, and my own
 screenshot read missed the dead CTAs and the missing proof image entirely. Only giving the

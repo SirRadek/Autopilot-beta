@@ -27,7 +27,7 @@
     },
     "type": {
       "type": "string",
-      "enum": ["component", "section", "background", "typography", "motion", "3d", "avatar", "icon", "layout", "hero", "media"]
+      "enum": ["component", "section", "background", "typography", "motion", "3d", "avatar", "icon", "layout", "hero", "media", "point_cloud"]
     },
     "style": {
       "type": "array",

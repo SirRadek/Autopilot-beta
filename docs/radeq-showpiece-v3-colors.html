@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RadeQ v3 — barvy & tvary (vzory preview)</title>
+<style>
+:root{
+  --ink:#05070b; --text-primary:#ece7da; --text-muted:#8b958a; --signal:#c8ff32;
+  --font-voice:Georgia,'Times New Roman',serif; --font-mono:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+  --font-sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ink);color:var(--text-primary);font-family:var(--font-sans)}
+.wrap{max-width:1180px;margin:0 auto;padding:clamp(20px,4vw,44px) clamp(16px,4vw,40px)}
+.eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:0.26em;text-transform:uppercase;color:var(--text-muted);margin:0 0 12px}
+.tag{font-size:clamp(26px,4.6vw,46px);line-height:1.12;margin:0 0 10px;font-weight:400}
+.tag .h{font-family:var(--font-voice);font-style:italic}
+.tag .m{font-family:var(--font-mono);letter-spacing:-0.02em;color:var(--signal)}
+.lead{max-width:62ch;color:var(--text-muted);font-size:15px;line-height:1.7;margin:0 0 20px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;align-items:center}
+.row .lbl{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.08em;margin-right:4px}
+.chip{font-family:var(--font-mono);font-size:12px;color:var(--text-primary);background:transparent;border:0.5px solid rgba(255,255,255,0.16);border-radius:7px;padding:7px 12px;cursor:pointer}
+.chip:hover{border-color:var(--signal);color:var(--signal)}
+.chip.on{border-color:var(--signal);color:var(--signal);background:rgba(200,255,50,0.08)}
+.stage{position:relative;height:min(68vh,680px);min-height:400px;border-radius:16px;overflow:hidden;background:#05070b;border:0.5px solid rgba(255,255,255,0.06)}
+.cv{width:100%;height:100%;display:block}
+.hud{position:absolute;top:14px;right:14px;font-family:var(--font-mono);font-size:12px;line-height:1.55;color:#cfe6c0;background:rgba(5,7,11,0.55);border:0.5px solid rgba(200,255,50,0.25);border-radius:10px;padding:9px 12px;pointer-events:none;min-width:178px}
+.hud b{color:var(--signal);font-weight:400}
+.off{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:2rem;font-family:var(--font-mono);font-size:14px;line-height:1.6;color:#e8e2d6;background:rgba(5,7,11,0.85)}
+.ctl{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+.ctl input[type=range]{flex:1;min-width:200px;accent-color:var(--signal)}
+.beats{display:flex;justify-content:space-between;gap:4px;margin-top:9px;font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+.beats span{flex:1;text-align:center;padding:4px 0;border-top:1px solid rgba(255,255,255,0.08)}
+.beats span.on{color:var(--text-primary);border-top-color:var(--signal)}
+.foot{margin-top:22px;color:var(--text-muted);font-size:13px;line-height:1.7;max-width:74ch}
+.foot code{font-family:var(--font-mono);color:#cfe6c0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Studio RadeQ — v3 · barvy & tvary z vzorů</p>
+  <h1 class="tag"><span class="h">Postaveno rukou.</span> <span class="m">Řízeno strojem.</span></h1>
+  <p class="lead">Stejné zachované pole bodů, ale teď s novými <b>color-mody</b> (z brand-tokenů, ne natvrdo duha) a <b>efekty</b> ze vzorů. Formation target je tvoje skutečná značka — <b>kočka</b>. Přepínej color-mod a efekty, scrolluj beaty, hýbej myší (parallax). Klidová póza je vždycky brand-cloud; generické vzhledy jen jako přechod.</p>
+
+  <div class="row"><span class="lbl">COLOR</span>
+    <button class="chip on" data-color="aurora">aurora-ramp</button>
+    <button class="chip" data-color="depth">depth-temp</button>
+    <button class="chip" data-color="iris">iridescent</button>
+    <button class="chip" data-color="tri">tri-tone</button>
+    <button class="chip" data-color="mono">mono</button>
+    <button class="chip" data-color="faithful">duotone</button>
+  </div>
+  <div class="row"><span class="lbl">EFEKT</span>
+    <button class="chip" data-fx="glow">additive-glow</button>
+    <button class="chip" data-fx="web">vector-web</button>
+    <button class="chip" data-fx="contour">topo-contour</button>
+  </div>
+
+  <div class="stage">
+    <canvas class="cv" aria-hidden="true"></canvas>
+    <div class="hud" id="hud">ENGINE <b>Canvas2D</b><br>FPS <b id="fps">--</b><br>BODY <b id="pts">--</b> / <span id="ptsmax">6500</span><br>COLOR <b id="hcolor">aurora</b><br>BEAT <b id="beat">hra</b></div>
+    <div class="off" id="offn">Dekorace vypnuta — stránka je identická.<br>To pravidlo dáváme do každé zakázky.</div>
+  </div>
+  <div class="ctl">
+    <button class="chip" id="play">▶ Scroll</button>
+    <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Postup scrollu sedmi beaty">
+    <button class="chip" id="offb">Dekorace: <b id="offs">ON</b></button>
+  </div>
+  <div class="beats" id="beats"><span>hra</span><span>přesnost</span><span>objem</span><span>kvalita</span><span>tok</span><span>rychlost</span><span>kočka</span></div>
+  <p class="foot">Color-mody i tvary jsou <b>bounded enumy z brand-tokenů</b> (zde demo-palety HAND teplá / MACHINE ink+lime). Canvas2D, 0 závislostí, adaptivní throttle (HUD = reálné body). Tvoje reálné radeq.cz jede na Three.js + <code>heroCatPoints</code> (faithful sampling z <code>kocka_body.png</code> — stejná DNA jako autopilot <code>image-point-cloud</code>); WebGL-only mody (true iridescent/glow) jsou tam zdarma, klientům jde gated Canvas2D podmnožina.</p>
+</div>
+<script>
+(function(){
+  var N=6500,cv=document.querySelector('.cv'),ctx=cv.getContext('2d');
+  document.getElementById('ptsmax').textContent=N.toLocaleString();
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function rnd(n){var x=Math.sin(n*12.9898+1.7)*43758.5453;return x-Math.floor(x);}
+  function sampleShape(draw){var W=170,H=100,oc=document.createElement('canvas');oc.width=W;oc.height=H;var x=oc.getContext('2d');x.fillStyle='#000';x.fillRect(0,0,W,H);x.fillStyle='#fff';draw(x,W,H);var d=x.getImageData(0,0,W,H).data,b=[];for(var py=0;py<H;py++)for(var px=0;px<W;px++){if(d[(py*W+px)*4]>110)b.push([(px+0.5)/W,(py+0.5)/H]);}var o=[];if(!b.length){for(var i=0;i<N;i++)o.push([0.5,0.5]);return o;}for(var i=0;i<N;i++)o.push(b[Math.floor(i*b.length/N)%b.length]);return o;}
+  var cols=Math.ceil(Math.sqrt(N*1.7)),rows=Math.ceil(N/cols);
+  var gx=[],gy=[],wbx=[],wby=[],sx3=[],sy3=[],sz3=[],sty=[],shf=[];
+  for(var i=0;i<N;i++){var c=i%cols,r=Math.floor(i/cols);gx[i]=0.16+c/(cols-1)*0.68;gy[i]=0.2+r/Math.max(1,rows-1)*0.6;wbx[i]=c/(cols-1);wby[i]=r/Math.max(1,rows-1);var u=rnd(i),v=rnd(i+0.37),th=Math.acos(1-2*u),ph=6.2832*v;sx3[i]=Math.sin(th)*Math.cos(ph);sy3[i]=Math.cos(th);sz3[i]=Math.sin(th)*Math.sin(ph);sty[i]=0.2+Math.floor(rnd(i+5)*16)/16*0.6;shf[i]=rnd(i+3);}
+  var portr=sampleShape(function(x,W,H){x.beginPath();x.ellipse(W*0.5,H*0.38,W*0.145,H*0.27,0,0,6.2832);x.fill();x.beginPath();x.ellipse(W*0.5,H*0.97,W*0.31,H*0.36,0,0,6.2832);x.fill();});
+  var cat=sampleShape(function(x,W,H){x.beginPath();x.ellipse(W*0.5,H*0.68,W*0.17,H*0.27,0,0,6.2832);x.fill();x.beginPath();x.ellipse(W*0.5,H*0.34,W*0.13,H*0.20,0,0,6.2832);x.fill();x.beginPath();x.moveTo(W*0.40,H*0.23);x.lineTo(W*0.44,H*0.05);x.lineTo(W*0.51,H*0.21);x.closePath();x.fill();x.beginPath();x.moveTo(W*0.49,H*0.21);x.lineTo(W*0.56,H*0.05);x.lineTo(W*0.60,H*0.23);x.closePath();x.fill();x.lineWidth=W*0.055;x.strokeStyle='#fff';x.lineCap='round';x.beginPath();x.moveTo(W*0.65,H*0.82);x.quadraticCurveTo(W*0.88,H*0.72,W*0.82,H*0.40);x.stroke();});
+  var HAND=[[120,90,60],[210,140,85],[240,215,170]],MACH=[[40,95,42],[140,210,70],[205,255,95]];
+  var bp=[0,1,1,0,0,1,1],labels=['hra','přesnost','objem','kvalita','tok','rychlost','kočka'];
+  var _x,_y,_z,rc=1,rs=0,T=0;
+  function P(pi,i){switch(pi){
+    case 0:{var a=rnd(i)*6.283,r=Math.sqrt(rnd(i+0.3))*0.46;_x=0.5+Math.cos(a)*r*0.96+Math.sin(T*0.0006+i)*0.012;_y=0.5+Math.sin(a)*r*0.82;_z=rnd(i+0.7)*2-1;return;}
+    case 1:_x=gx[i];_y=gy[i];_z=0;return;
+    case 2:{var X=sx3[i],Z=sz3[i];_x=0.5+(X*rc-Z*rs)*0.40;_y=0.5+sy3[i]*0.40;_z=X*rs+Z*rc;return;}
+    case 3:{var p=portr[i];_x=p[0];_y=p[1]+Math.sin(T*0.0008+i)*0.004;_z=(0.4-Math.abs(p[1]-0.45))*2;return;}
+    case 4:{var w=Math.sin(wbx[i]*7+T*0.0009+wby[i]*2);_x=wbx[i]*0.9+0.05;_y=0.2+wby[i]*0.6+w*0.05;_z=w;return;}
+    case 5:{var sp=0.5+rnd(i+2)*0.8;_x=((wbx[i]+T*0.00012*sp)%1)*0.92+0.04;_y=sty[i];_z=rnd(i+0.9)*0.7-0.35;return;}
+    default:{var ct=cat[i];_x=ct[0];_y=ct[1];_z=(0.4-Math.abs(ct[1]-0.5))*1.6;return;}}}
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function l3(R,t){return t<0.5?[lerp(R[0][0],R[1][0],t*2),lerp(R[0][1],R[1][1],t*2),lerp(R[0][2],R[1][2],t*2)]:[lerp(R[1][0],R[2][0],t*2-1),lerp(R[1][1],R[2][1],t*2-1),lerp(R[1][2],R[2][2],t*2-1)];}
+  function ramp(seg,e){var A=bp[seg]?MACH:HAND,B=bp[seg+1]?MACH:HAND;return [[lerp(A[0][0],B[0][0],e),lerp(A[0][1],B[0][1],e),lerp(A[0][2],B[0][2],e)],[lerp(A[1][0],B[1][0],e),lerp(A[1][1],B[1][1],e),lerp(A[1][2],B[1][2],e)],[lerp(A[2][0],B[2][0],e),lerp(A[2][1],B[2][1],e),lerp(A[2][2],B[2][2],e)]];}
+  function hsl(h,s,l){h/=360;function f(p,q,t){if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<0.5)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;}var q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;return [Math.round(f(p,q,h+1/3)*255),Math.round(f(p,q,h)*255),Math.round(f(p,q,h-1/3)*255)];}
+  var W=0,H=0,raf=0,p=reduce?0.5:0,playing=false,dir=1,decor=true,last=0,fr=0,ft=0,fps=60,stride=1,mx=0,my=0,tmx=0,tmy=0;
+  var colorMode='aurora',fxGlow=false,fxWeb=false,fxContour=false;
+  function resize(){var dpr=Math.min(window.devicePixelRatio||1,2);W=cv.clientWidth||720;H=cv.clientHeight||405;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);}
+  function sm(t){return t*t*(3-2*t);}
+  function colorOf(R,luma,z){
+    if(colorMode==='mono'){var h=R[2];return 'rgb('+(h[0]|0)+','+(h[1]|0)+','+(h[2]|0)+')';}
+    if(colorMode==='depth'){var t=(z+1)/2,a=R[0],b=R[2];return 'rgb('+(lerp(a[0],b[0],t)|0)+','+(lerp(a[1],b[1],t)|0)+','+(lerp(a[2],b[2],t)|0)+')';}
+    if(colorMode==='iris'){var hu=((z*70+luma*120+T*0.012)%360+360)%360;var c=hsl(hu,0.42,0.74);return 'rgb('+c[0]+','+c[1]+','+c[2]+')';}
+    if(colorMode==='faithful'){var a=R[0],b=R[2],t=luma;return 'rgb('+(lerp(a[0],b[0],t)|0)+','+(lerp(a[1],b[1],t)|0)+','+(lerp(a[2],b[2],t)|0)+')';}
+    if(colorMode==='tri'){var q=luma<0.34?0:(luma<0.67?0.5:1),tc=l3(R,q);return 'rgb('+(tc[0]|0)+','+(tc[1]|0)+','+(tc[2]|0)+')';}
+    var cc=l3(R,luma);return 'rgb('+(cc[0]|0)+','+(cc[1]|0)+','+(cc[2]|0)+')';
+  }
+  function draw(t){
+    T=t;rc=Math.cos(t*0.00026);rs=Math.sin(t*0.00026);mx+=(tmx-mx)*0.06;my+=(tmy-my)*0.06;
+    var seg=Math.min(5,Math.floor(p*6)),lt=p*6-seg,e=sm(lt);
+    var R=ramp(seg,e),bg=bp[seg]?[5,7,11]:[16,12,9],bg2=bp[seg+1]?[5,7,11]:[16,12,9];
+    var br=lerp(bg[0],bg2[0],e),bgg=lerp(bg[1],bg2[1],e),bb=lerp(bg[2],bg2[2],e);
+    ctx.globalCompositeOperation='source-over';ctx.globalAlpha=fxGlow?0.5:0.9;ctx.fillStyle='rgb('+(br|0)+','+(bgg|0)+','+(bb|0)+')';ctx.fillRect(0,0,W,H);ctx.globalAlpha=1;
+    var pad=Math.min(W,H)*0.07,sx=W-2*pad,sy=H-2*pad,par=Math.min(W,H)*0.05;
+    ctx.globalCompositeOperation=fxGlow?'lighter':'source-over';
+    var px2=[],py2=[],bands=fxContour?[[],[],[],[],[],[],[]]:null;
+    for(var i=0;i<N;i+=stride){P(seg,i);var ax=_x,ay=_y,az=_z;P(seg+1,i);var x=ax+(_x-ax)*e,y=ay+(_y-ay)*e,z=az+(_z-az)*e;var depth=0.6+(z+1)*0.32;var X=pad+x*sx+mx*z*par,Y=pad+y*sy+my*z*par*0.6;var lum=fxContour?Math.floor((z+1)*3)/5:shf[i];ctx.fillStyle=colorOf(R,lum,z);ctx.globalAlpha=fxGlow?(0.13+shf[i]*0.4):(0.32+shf[i]*0.5);var s=(0.55+shf[i]*0.7)*depth*(fxGlow?1.5:1);ctx.fillRect(X,Y,s,s);if(fxWeb&&i%9===0&&px2.length<700){px2.push(X);py2.push(Y);}if(bands&&i%4===0){var bd2=Math.max(0,Math.min(6,Math.floor((z+1)*3.5)));bands[bd2].push([X,Y]);}}
+    if(fxWeb){ctx.globalCompositeOperation='source-over';ctx.strokeStyle=colorMode==='iris'?'rgba(200,200,255,0.18)':'rgba('+(R[1][0]|0)+','+(R[1][1]|0)+','+(R[1][2]|0)+',0.16)';ctx.lineWidth=0.5;ctx.beginPath();for(var k=0;k<px2.length-1;k++){var dx=px2[k+1]-px2[k],dy=py2[k+1]-py2[k];if(dx*dx+dy*dy<2600){ctx.moveTo(px2[k],py2[k]);ctx.lineTo(px2[k+1],py2[k+1]);}}ctx.stroke();}
+    if(bands){ctx.globalCompositeOperation=fxGlow?'lighter':'source-over';ctx.lineWidth=1.2;ctx.lineJoin='round';for(var bb2=0;bb2<7;bb2++){var bd=bands[bb2];if(bd.length<4)continue;bd.sort(function(a,b){return a[0]-b[0];});var c2=l3(R,bb2/6);ctx.strokeStyle='rgba('+(c2[0]|0)+','+(c2[1]|0)+','+(c2[2]|0)+',0.28)';ctx.beginPath();ctx.moveTo(bd[0][0],bd[0][1]);for(var k2=1;k2<bd.length-1;k2++){var mxp=(bd[k2][0]+bd[k2+1][0])/2,myp=(bd[k2][1]+bd[k2+1][1])/2;ctx.quadraticCurveTo(bd[k2][0],bd[k2][1],mxp,myp);}ctx.stroke();}}
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    var bi=Math.round(p*6);document.getElementById('beat').textContent=labels[bi];var bs=document.querySelectorAll('#beats span');for(var q=0;q<bs.length;q++)bs[q].className=(q===bi?'on':'');
+  }
+  function loop(now){if(!last)last=now;var dt=now-last;last=now;fr++;ft+=dt;
+    if(ft>=420){fps=Math.round(1000*fr/ft);fr=0;ft=0;if(!reduce){if(fps<40&&stride<5)stride++;else if(fps>56&&stride>1)stride--;}document.getElementById('fps').textContent=reduce?'paused':fps;document.getElementById('pts').textContent=Math.round(N/stride).toLocaleString();}
+    if(playing&&!reduce){p+=dir*dt/22000;if(p>=1){p=1;dir=-1;}else if(p<=0){p=0;dir=1;}document.getElementById('scrub').value=Math.round(p*1000);}
+    if(decor)draw(now);raf=requestAnimationFrame(loop);}
+  if(!reduce){cv.addEventListener('pointermove',function(e){var r=cv.getBoundingClientRect();tmx=((e.clientX-r.left)/r.width-0.5)*2;tmy=((e.clientY-r.top)/r.height-0.5)*2;});cv.addEventListener('pointerleave',function(){tmx=0;tmy=0;});}
+  document.querySelectorAll('[data-color]').forEach(function(b){b.addEventListener('click',function(){colorMode=b.getAttribute('data-color');document.querySelectorAll('[data-color]').forEach(function(o){o.classList.remove('on');});b.classList.add('on');document.getElementById('hcolor').textContent=colorMode;});});
+  document.querySelectorAll('[data-fx]').forEach(function(b){b.addEventListener('click',function(){var f=b.getAttribute('data-fx');if(f==='glow')fxGlow=!fxGlow;if(f==='web')fxWeb=!fxWeb;if(f==='contour')fxContour=!fxContour;b.classList.toggle('on');});});
+  document.getElementById('scrub').addEventListener('input',function(e){p=(+e.target.value)/1000;playing=false;document.getElementById('play').textContent='▶ Scroll';if(!decor){decor=true;document.getElementById('offn').style.display='none';document.getElementById('offs').textContent='ON';document.getElementById('hud').style.opacity='1';}});
+  document.getElementById('play').addEventListener('click',function(){if(reduce)return;playing=!playing;this.textContent=playing?'⏸ Pauza':'▶ Scroll';});
+  document.getElementById('offb').addEventListener('click',function(){decor=!decor;document.getElementById('offs').textContent=decor?'ON':'OFF';document.getElementById('offn').style.display=decor?'none':'flex';document.getElementById('hud').style.opacity=decor?'1':'0.4';if(!decor){ctx.globalCompositeOperation='source-over';ctx.fillStyle='#05070b';ctx.fillRect(0,0,W,H);}});
+  window.addEventListener('resize',resize);
+  if(reduce){document.getElementById('fps').textContent='paused';document.getElementById('hud').innerHTML+='<br>REDUCED-MOTION';}
+  setTimeout(function(){resize();draw(performance.now());raf=requestAnimationFrame(loop);},60);
+})();
+</script>
+</body>
+</html>

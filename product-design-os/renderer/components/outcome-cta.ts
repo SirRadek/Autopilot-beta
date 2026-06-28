@@ -13,6 +13,11 @@ interface ValidOutcomeCtaProps {
   readonly cta_label: string;
   readonly cta_href: string;
   readonly cta_variant: "primary" | "secondary";
+  readonly contact_heading: string;
+  readonly contact_phone: string;
+  readonly contact_phone_href: string;
+  readonly contact_email: string;
+  readonly contact_note: string;
 }
 
 export class OutcomeCtaContractError extends Error {
@@ -44,14 +49,32 @@ export const outcomeCtaCss = `
   gap: var(--space-6);
 }
 
+/* 2-column: proof testimonial spans the left, the heading sits directly above the CTA on
+   the right so they read as one conversion unit. DOM stays flat (proof, h2, cta siblings)
+   so the proof_adjacency render-contract holds; placement is via grid areas only. */
 .outcome-cta__copy {
   display: grid;
-  grid-template-columns: minmax(min(100%, 13rem), 0.36fr) minmax(0, 1fr) minmax(min(100%, 14rem), 0.34fr);
-  gap: var(--pdos-page-section-gap);
-  align-items: center;
+  grid-template-columns: minmax(min(100%, 18rem), 0.4fr) minmax(0, 1fr);
+  grid-template-areas:
+    "proof heading"
+    "proof cta";
+  gap: var(--space-5) var(--pdos-page-section-gap);
+  align-content: center;
+}
+
+.outcome-cta__copy > h2 {
+  grid-area: heading;
+  align-self: end;
+}
+
+.outcome-cta__copy > .cta {
+  grid-area: cta;
+  align-self: start;
+  justify-self: start;
 }
 
 .outcome-cta__proof-context {
+  grid-area: proof;
   min-width: 44px;
   min-height: 44px;
   align-self: center;
@@ -100,14 +123,118 @@ export const outcomeCtaCss = `
   text-transform: var(--style-heading-transform);
 }
 
+.outcome-cta__contact {
+  width: min(100%, 28rem);
+  display: grid;
+  gap: var(--space-4);
+  color: var(--color-text);
+}
+
+.outcome-cta__contact-heading,
+.outcome-cta__contact-note {
+  margin: 0;
+  font-family: var(--type-font-body);
+  line-height: var(--type-line-height-body);
+}
+
+.outcome-cta__contact-heading {
+  color: var(--color-text);
+  font-size: clamp(1rem, 1.2cqi, 1.08rem);
+  font-weight: var(--type-weight-bold);
+}
+
+.outcome-cta__phone {
+  width: fit-content;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-accent);
+  font-family: var(--type-font-heading);
+  font-size: clamp(1.4rem, 3cqi, 2.4rem);
+  font-weight: var(--type-weight-bold);
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-decoration-thickness: max(0.08em, 1px);
+  text-underline-offset: 0.16em;
+}
+
+.outcome-cta__phone:hover {
+  color: color-mix(in srgb, var(--color-accent) 82%, var(--color-text));
+}
+
+.outcome-cta__contact-note {
+  max-width: min(100%, 58ch);
+  color: var(--color-muted-text);
+  font-size: var(--pdos-type-body);
+}
+
+.outcome-cta__form {
+  width: min(100%, 28rem);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.outcome-cta__form label {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-family: var(--type-font-body);
+  font-size: clamp(1rem, 1.2cqi, 1.08rem);
+  font-weight: var(--type-weight-bold);
+  line-height: var(--type-line-height-body);
+}
+
+.outcome-cta__form input,
+.outcome-cta__form textarea {
+  width: 100%;
+  min-height: 44px;
+  border: var(--style-decoration-border-width) solid var(--color-border);
+  border-radius: var(--style-corner-radius);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: clamp(1rem, 1.2cqi, 1.08rem);
+  line-height: var(--type-line-height-body);
+}
+
+.outcome-cta__form textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.outcome-cta__form input:focus-visible,
+.outcome-cta__form textarea:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
+  border-color: var(--color-accent);
+}
+
+.outcome-cta__form button.cta {
+  width: fit-content;
+  min-height: 44px;
+  border: 0;
+  cursor: pointer;
+  font-size: clamp(1rem, 1.2cqi, 1.08rem);
+}
+
 @media (max-width: 960px) {
   .outcome-cta__copy {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "proof"
+      "heading"
+      "cta";
     align-items: stretch;
   }
 
   .outcome-cta__proof-context {
     min-height: 44px;
+  }
+
+  .outcome-cta__copy > .cta {
+    justify-self: stretch;
   }
 
   .outcome-cta h2 {
@@ -116,6 +243,12 @@ export const outcomeCtaCss = `
   }
 
   .outcome-cta .cta {
+    width: 100%;
+  }
+
+  .outcome-cta__contact,
+  .outcome-cta__form,
+  .outcome-cta__form button.cta {
     width: 100%;
   }
 }
@@ -133,7 +266,7 @@ export function renderOutcomeCta(input: PatternRenderInput): string {
   const proofContextId = proofContext?.nodeId ?? proofContext?.id ?? "";
 
   return `
-<section class="outcome-cta" data-pattern-id="outcome-cta" data-contract-id="${escapeAttribute(input.contract.id)}" data-proof-context-id="${escapeAttribute(proofContextId)}" aria-labelledby="outcome-cta-title">
+<section id="kontakt" class="outcome-cta" data-pattern-id="outcome-cta" data-contract-id="${escapeAttribute(input.contract.id)}" data-proof-context-id="${escapeAttribute(proofContextId)}" aria-labelledby="outcome-cta-title">
   <div class="outcome-cta__inner">
     <div class="outcome-cta__copy">
       <div class="outcome-cta__proof-context" data-contract-slot="proof_context" data-slot-target-kind="pattern" data-slot-target-id="${escapeAttribute(proofContextId)}">
@@ -142,6 +275,7 @@ export function renderOutcomeCta(input: PatternRenderInput): string {
       <h2 id="outcome-cta-title" data-contract-prop="outcome_statement">${escapeHtml(props.outcome_statement)}</h2>
       <a class="${ctaClassName(props.cta_variant)}" data-contract-prop="cta_label" href="${escapeAttribute(props.cta_href)}">${escapeHtml(props.cta_label)}</a>
     </div>
+    ${renderContactBlock(props)}
   </div>
 </section>`.trim();
 }
@@ -271,8 +405,50 @@ function normalizeProps(props: PatternRenderInput["props"]): ValidOutcomeCtaProp
     outcome_statement: props.outcome_statement?.trim() ?? "",
     cta_label: props.cta_label?.trim() ?? "",
     cta_href: href,
-    cta_variant: normalizeCtaVariant(props.cta_variant)
+    cta_variant: normalizeCtaVariant(props.cta_variant),
+    contact_heading: props.contact_heading?.trim() ?? "",
+    contact_phone: props.contact_phone?.trim() ?? "",
+    contact_phone_href: props.contact_phone_href?.trim() ?? "",
+    contact_email: props.contact_email?.trim() ?? "",
+    contact_note: props.contact_note?.trim() ?? ""
   };
+}
+
+function renderContactBlock(props: ValidOutcomeCtaProps): string {
+  if (props.contact_phone.length === 0) {
+    return "";
+  }
+
+  const headingMarkup =
+    props.contact_heading.length === 0
+      ? ""
+      : `<p class="outcome-cta__contact-heading" data-contract-prop="contact_heading">${escapeHtml(props.contact_heading)}</p>`;
+  const noteMarkup =
+    props.contact_note.length === 0
+      ? ""
+      : `<p class="outcome-cta__contact-note" data-contract-prop="contact_note">${escapeHtml(props.contact_note)}</p>`;
+
+  return `
+<div class="outcome-cta__contact">
+  ${headingMarkup}
+  <a class="outcome-cta__phone" data-contract-prop="contact_phone" href="${escapeAttribute(props.contact_phone_href)}">${escapeHtml(props.contact_phone)}</a>
+  ${noteMarkup}
+  <form class="outcome-cta__form" action="mailto:${escapeAttribute(props.contact_email)}" method="post" enctype="text/plain">
+    <label>
+      Jméno
+      <input type="text" name="name" autocomplete="name" required>
+    </label>
+    <label>
+      Telefon
+      <input type="tel" name="phone" autocomplete="tel" required>
+    </label>
+    <label>
+      Zpráva
+      <textarea name="message" rows="4"></textarea>
+    </label>
+    <button class="cta" type="submit">Odeslat poptávku</button>
+  </form>
+</div>`.trim();
 }
 
 function firstPattern(slotTargets: readonly ResolvedSlotTarget[] | undefined): ResolvedPatternReference | undefined {
