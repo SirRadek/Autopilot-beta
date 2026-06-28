@@ -129,3 +129,36 @@ export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {
   };
   return { root, entries, summary, snapshot };
 }
+
+/** stable key for an entry (a path can appear under multiple nodes) */
+export function entryKey(e: RelatedFileEntry): string {
+  return `${e.node}::${e.relatedFile}`;
+}
+
+/** the set of currently-MISSING entry keys — the ratchet floor a baseline freezes */
+export function currentMissingKeys(report: RelatedFilesReport): string[] {
+  return report.entries
+    .filter((e) => e.status === "MISSING")
+    .map(entryKey)
+    .sort();
+}
+
+export interface BaselineDiff {
+  /** MISSING now but not in the baseline floor — a regression (a new dead pointer) */
+  newMissing: string[];
+  /** in the baseline floor but no longer MISSING — known rot that got fixed */
+  resolved: string[];
+}
+
+/**
+ * Ratchet gate: compare current rot against a committed baseline floor of known-missing
+ * keys. New rot fails; pre-existing known rot does not (it can only be paid down, never
+ * grown). This lets the gate ship before the 21 canonical dead pointers are fixed.
+ */
+export function diffAgainstBaseline(report: RelatedFilesReport, baselineMissing: readonly string[]): BaselineDiff {
+  const floor = new Set(baselineMissing);
+  const currentMissing = new Set(currentMissingKeys(report));
+  const newMissing = [...currentMissing].filter((k) => !floor.has(k)).sort();
+  const resolved = [...floor].filter((k) => !currentMissing.has(k)).sort();
+  return { newMissing, resolved };
+}

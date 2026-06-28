@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { computeRelatedFilesStatus, gitBlobHash, parseRelatedFiles } from "../../src/lib/mesh-tools/related-files-status";
+import {
+  computeRelatedFilesStatus,
+  currentMissingKeys,
+  diffAgainstBaseline,
+  gitBlobHash,
+  parseRelatedFiles,
+} from "../../src/lib/mesh-tools/related-files-status";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SAMPLE = join(here, "../fixtures/mesh-tools/sample-repo");
@@ -55,5 +61,21 @@ describe("related-files-status (bind-point ①)", () => {
   it("parses only the related_files block", () => {
     const yaml = ["name: x", "related_files:", "  - a/b.ts", "  - c/d.ts", "required_checks:", "  - z"].join("\n");
     expect(parseRelatedFiles(yaml)).toEqual(["a/b.ts", "c/d.ts"]);
+  });
+
+  it("ratchet: a new dead pointer fails vs an empty floor; known rot does not", () => {
+    const report = computeRelatedFilesStatus(SAMPLE);
+    const ownFloor = currentMissingKeys(report);
+    expect(diffAgainstBaseline(report, ownFloor).newMissing).toEqual([]); // same state => no new rot
+    const diff = diffAgainstBaseline(report, []); // nothing known-missing => existing rot reads as new
+    expect(diff.newMissing).toContain("sample.yaml::src/gone.ts");
+  });
+
+  it("ratchet: a known-missing hint that disappears is reported as resolved", () => {
+    const report = computeRelatedFilesStatus(SAMPLE);
+    const floor = [...currentMissingKeys(report), "sample.yaml::src/was-here.ts"];
+    const diff = diffAgainstBaseline(report, floor);
+    expect(diff.resolved).toContain("sample.yaml::src/was-here.ts");
+    expect(diff.newMissing).toEqual([]);
   });
 });
