@@ -1,0 +1,27 @@
+{
+  "generatedFrom": ".",
+  "missing": [
+    "auth_required.yaml::src/api",
+    "auth_required.yaml::src/auth/session.ts",
+    "file_upload.yaml::src/api/upload",
+    "file_upload.yaml::src/components/forms",
+    "file_upload.yaml::src/storage/index.ts",
+    "frontend_form.yaml::src/components/forms",
+    "frontend_form.yaml::src/pages",
+    "payments_checkout.yaml::src/api/checkout",
+    "payments_checkout.yaml::src/billing",
+    "payments_checkout.yaml::src/components/checkout",
+    "public_api.yaml::src/api",
+    "public_api.yaml::src/routes",
+    "qa_upload_tests.yaml::tests/e2e",
+    "qa_upload_tests.yaml::tests/upload",
+    "security_upload.yaml::src/api/upload",
+    "security_upload.yaml::src/storage",
+    "storage_provider.yaml::src/config/storage.ts",
+    "storage_provider.yaml::src/storage/index.ts",
+    "three_d_experience_addon.yaml::docs/superpowers/specs/2026-05-09-radeq-style-matrix-design.md",
+    "user_profile.yaml::src/api/profile.ts",
+    "user_profile.yaml::src/components/profile",
+    "user_profile.yaml::src/db/users"
+  ]
+}

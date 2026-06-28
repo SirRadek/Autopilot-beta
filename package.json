@@ -22,12 +22,13 @@
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "test": "vitest run",
-    "verify": "npm run beta:vendor-check && npm run typecheck && npm run test && npm run pdos:validate && npm run pdos:renderability && npm run pdos:buildability-floor && npm run pdos:fit-safety-lint",
+    "verify": "npm run beta:vendor-check && npm run typecheck && npm run test && npm run pdos:validate && npm run pdos:renderability && npm run pdos:buildability-floor && npm run pdos:fit-safety-lint && npm run mesh:gate:ci",
     "pdos:fit-probe": "tsx product-design-os/qa/fit-probe/check-fit-probe-product-design-os.ts",
     "pdos:visual-qa-browser": "tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts",
     "mesh:related-files-check": "tsx src/lib/mesh-tools/related-files-status-cli.ts",
     "mesh:gate": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes",
-    "mcp": "tsx mcp/server.ts"
+    "mcp": "tsx mcp/server.ts",
+    "mesh:gate:ci": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --baseline mesh/related-files-baseline.json"
   },
   "dependencies": {
     "pngjs": "^7.0.0",
