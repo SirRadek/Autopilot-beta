@@ -1,0 +1,128 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 5,
+            "statusMessage": "Loading Autopilot guardrails"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 3,
+            "statusMessage": "Applying bounded worker scope"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 3,
+            "statusMessage": "Checking Autopilot intake boundaries"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 3,
+            "statusMessage": "Checking tool scope"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 3,
+            "statusMessage": "Recording redacted tool evidence"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 3,
+            "statusMessage": "Saving compact continuity evidence"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 3,
+            "statusMessage": "Restoring compact guardrails"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 3,
+            "statusMessage": "Recording bounded worker completion"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/autopilot-hook.mjs\"",
+            "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$root=(git rev-parse --show-toplevel); & node (Join-Path $root '.codex/hooks/autopilot-hook.mjs')\"",
+            "timeout": 5,
+            "statusMessage": "Checking completion evidence"
+          }
+        ]
+      }
+    ]
+  }
+}
