@@ -1,0 +1,16 @@
+id: sample
+type: routing_policy
+name: Sample node
+question: "Does the related_files status checker classify hints correctly?"
+why: "Fixture mesh node for the bind-point ① status checker test."
+signals:
+  - sample
+related_agents:
+  - architect
+related_files:
+  - src/real.ts
+  - src/area
+  - src/gone.ts
+  - docs/projects/<slug>/architecture.md
+required_checks:
+  - sample_check

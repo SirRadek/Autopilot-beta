@@ -58,7 +58,9 @@
     "src/lib/image-point-cloud/pack.ts",
     "src/lib/image-point-cloud/png.ts",
     "src/lib/image-point-cloud/sampler.ts",
-    "src/lib/image-point-cloud/types.ts"
+    "src/lib/image-point-cloud/types.ts",
+    "src/lib/mesh-tools/related-files-status-cli.ts",
+    "src/lib/mesh-tools/related-files-status.ts"
   ],
   "files": [
     {
