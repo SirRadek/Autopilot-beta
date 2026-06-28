@@ -1,0 +1,80 @@
+id: tool_inventory_policy
+type: routing_policy
+name: Tool inventory policy
+question: "Which plugins, skills, MCP tools, and provider-policy records are actually available for this task?"
+why: "Autopilot can see session-callable plugins, local skills, cached plugin bundles, and model provider policy records; only active session tools are callable, while cached bundles and provider-policy records require availability, credential, cost, and source checks before use."
+signals:
+  - plugin
+  - skill
+  - tool inventory
+  - callable
+  - cached plugin
+  - tool_search
+  - mcp tool
+  - model provider
+  - provider policy
+  - deepseek
+  - api or self-hosted
+  - web chat
+  - manual web login
+  - browser
+  - github
+  - figma
+  - data analytics
+  - cloudflare
+  - vercel
+  - hugging face
+  - product design
+  - clickup
+  - shopify
+  - remotion
+related_agents:
+  - orchestrator
+  - architect
+  - qa
+  - protective-supervisor
+related_files:
+  - src/data/delivery-system/toolInventory.ts
+  - mcp/server.ts
+  - docs/autopilot/delivery-system-model-policy.md
+  - AGENTS.md
+required_checks:
+  - current_session_tools_checked
+  - tool_search_confirms_deferred_tool
+  - skill_workflow_read
+  - cached_plugin_not_treated_as_callable
+  - connector_scope_declared
+  - provider_availability_verified
+  - api_credit_or_self_hosting_cost_confirmed
+  - free_tier_or_no_cost_confirmed
+  - authentication_state_verified_without_token_disclosure
+  - controlled_browser_evidence_required
+  - fresh_chat_started_for_each_mode_test
+  - no_secret_exfiltration
+  - local_verification_required
+stop_conditions:
+  - cached_plugin_treated_as_callable
+  - requested_plugin_unavailable
+  - provider_availability_unverified
+  - paid_model_or_credit_required_without_owner_decision
+  - authentication_missing
+  - browser_session_unavailable
+  - mode_switch_unverified
+  - remote_mutation_without_approval
+  - secret_in_prompt
+  - workflow_requires_unavailable_tool
+must_not_assume:
+  - Do not assume a cached plugin bundle is callable in the current session.
+  - Do not assume a model provider policy record means credentials or runtime access are available.
+  - Do not use a plugin capability until it is exposed by the active tools or tool_search.
+  - Do not call an API/self-hosted provider until availability, cost or self-hosting, redaction, and official-doc checks pass.
+  - Do not treat DeepSeek web chat login as a CLI, API runtime, connector, stable headless contract, or source of truth.
+  - Do not skip the relevant SKILL.md workflow when a skill applies.
+  - Do not treat connector output as source of truth without local, official-docs, test, or connector evidence.
+objective:
+  - Keep plugin and skill routing tied to observed current-session availability.
+  - Prefer session-callable tools over cached-only bundles.
+  - Use cached-only bundles only as installation or availability leads.
+  - Treat model provider records as read-only routing metadata until a separate runtime or connector is verified.
+  - Treat DeepSeek web chat as a manual Browser-login advisory path with fresh-chat and mode-switch evidence.
+  - Expose inventory as read-only routing guidance through MCP.

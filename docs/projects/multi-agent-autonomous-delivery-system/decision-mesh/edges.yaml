@@ -1,0 +1,31 @@
+edges:
+  - from: governance_pipeline
+    to: worker_boundary
+    relation: constrains
+    weight: 0.9
+    why: "Workers must operate inside the governance pipeline."
+  - from: model_routing_boundary
+    to: worker_boundary
+    relation: informs
+    weight: 0.78
+    why: "Model routing determines whether a worker is suitable for a bounded task."
+  - from: model_routing_boundary
+    to: governance_pipeline
+    relation: reports_to
+    weight: 0.72
+    why: "Model choices that affect risk must be disclosed in governance evidence."
+  - from: delivery_observability_boundary
+    to: governance_pipeline
+    relation: diagnoses
+    weight: 0.86
+    why: "Governance failures need project-owned diagnostic evidence and gate context."
+  - from: delivery_observability_boundary
+    to: worker_boundary
+    relation: diagnoses
+    weight: 0.84
+    why: "Worker failures should be localized inside the delivery-system project before fixes."
+  - from: delivery_observability_boundary
+    to: model_routing_boundary
+    relation: audits
+    weight: 0.78
+    why: "Model-routing issues require model choice, cost, redaction, and verification evidence."

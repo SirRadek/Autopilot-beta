@@ -1,0 +1,28 @@
+id: security_upload
+type: risk_detector
+name: Upload security review
+question: "Has the upload surface been reviewed for hostile content and storage abuse?"
+why: "Upload surfaces combine untrusted content, parser exposure, storage cost, and authorization risk."
+signals:
+  - security
+  - malware
+  - sanitize
+  - scan
+  - upload
+related_agents:
+  - security
+  - backend
+  - qa
+related_files:
+  - src/api/upload
+  - src/storage
+required_checks:
+  - validate_file_type
+  - validate_file_size
+  - scan_or_sanitize_file
+  - reject_path_traversal
+stop_conditions:
+  - missing_security_review
+  - no_file_size_limit
+objective:
+  - Block hostile files and abusive storage patterns.

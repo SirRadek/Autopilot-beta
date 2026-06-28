@@ -1,0 +1,27 @@
+id: frontend_form
+type: workflow_area
+name: Frontend form
+question: "Does this change add or alter user input UI?"
+why: "Forms need accessible controls, stable validation states, and aligned API error handling."
+signals:
+  - form
+  - input
+  - avatar
+  - upload
+  - ux
+  - frontend
+related_agents:
+  - frontend
+  - qa
+related_files:
+  - src/components/forms
+  - src/pages
+required_checks:
+  - show_validation_error
+  - preserve_keyboard_flow
+  - test_mobile_layout
+stop_conditions:
+  - inaccessible_file_input
+objective:
+  - Keep user input predictable and accessible.
+  - Surface backend validation errors without losing form state.

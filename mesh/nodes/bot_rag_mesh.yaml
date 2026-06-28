@@ -1,0 +1,34 @@
+id: bot_rag_mesh
+type: capability_module
+name: Bot / RAG Mesh
+question: "Does the task create a bot, assistant, FAQ, knowledge base, or RAG workflow?"
+why: "Knowledge bots need grounded sources, private-data boundaries, answer policy, and escalation to a human or source document when uncertain."
+signals:
+  - bot
+  - rag
+  - knowledge base
+  - faq
+  - assistant
+  - retrieval
+  - chat
+related_agents:
+  - automation
+  - data_processing
+  - security
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - src/data/delivery-system/modelPolicy.ts
+required_checks:
+  - source_grounding
+  - private_data_boundary
+  - fallback_to_human
+  - answer_policy
+stop_conditions:
+  - ungrounded_answers_allowed
+  - private_data_boundary_unknown
+  - no_human_escalation
+must_not_assume:
+  - Do not let the bot answer beyond its approved sources.
+objective:
+  - Make knowledge accessible while keeping answers grounded and bounded.

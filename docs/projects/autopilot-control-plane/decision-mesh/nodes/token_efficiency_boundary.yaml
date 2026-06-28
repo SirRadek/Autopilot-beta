@@ -1,0 +1,42 @@
+id: token_efficiency_boundary
+type: routing_policy
+name: Token efficiency boundary
+question: "Can the task run in Caveman or compact mode before using larger context or stronger models?"
+why: "Autopilot should avoid paid-token waste by using the smallest sufficient context, deterministic tools, and local/no-cost workers before cloud reasoning."
+signals:
+  - caveman
+  - token efficiency
+  - token savings
+  - compact context
+  - small patch
+  - cheap route
+  - context budget
+related_agents:
+  - architect
+  - qa
+  - memory
+related_files:
+  - docs/autopilot/token-efficiency-operating-model.md
+  - src/data/delivery-system/tokenEfficiency.ts
+  - src/data/delivery-system/contextEconomy.ts
+  - src/data/delivery-system/localWorkers.ts
+  - mcp/server.ts
+required_checks:
+  - one_task_only
+  - prefer_relevant_subgraph
+  - prefer_agent_packet
+  - use_rg_before_opening_files
+  - prefer_deterministic_tools_first
+  - prefer_local_worker_before_cloud
+  - summarize_before_adding_context
+stop_conditions:
+  - full_repo_dump_requested_without_reason
+  - context_too_large_for_caveman_mode
+  - long_unstructured_session
+  - repeated_project_explanation
+  - paid_model_or_credit_required
+  - output_used_without_review
+objective:
+  - Save paid tokens without weakening verification.
+  - Route narrow work through Caveman Mode.
+  - Escalate only when risk, ambiguity, or repeated failure justifies it.

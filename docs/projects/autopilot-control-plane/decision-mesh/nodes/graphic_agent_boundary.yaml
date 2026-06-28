@@ -1,0 +1,43 @@
+id: graphic_agent_boundary
+type: execution_boundary
+name: Graphic agent boundary
+question: "Does visual production remain a governed Autopilot role instead of a separate runtime or paid dependency?"
+why: "The Graphic Production Agent may route and specify graphics, motion, models, and storyboards, but Autopilot must keep local/free defaults, allow free cloud tools only after no-cost confirmation, and block paid tools without an owner exception."
+signals:
+  - graphic agent
+  - visual production
+  - motion graphics
+  - background animation
+  - physics visual
+  - model asset
+  - kling
+  - hyperframes
+related_agents:
+  - architect
+  - frontend
+  - design_ux
+  - seo_performance
+  - qa
+related_files:
+  - docs/autopilot/graphic-agent-operating-model.md
+  - src/data/delivery-system/graphicAgent.ts
+  - src/data/delivery-system/roles.ts
+  - mcp/server.ts
+required_checks:
+  - dom_content_first_motion_second
+  - local_free_tool_default
+  - free_tier_or_no_cost_confirmed
+  - read_only_tool_review
+  - owner_cost_decision_for_paid_tools
+  - mobile_fallback
+  - reduced_motion_support
+  - performance_budget
+stop_conditions:
+  - cloud_tool_without_free_tier_confirmation
+  - paid_tool_without_owner_exception
+  - primary_content_hidden_in_canvas
+  - missing_reduced_motion_fallback
+  - missing_mobile_fallback
+  - performance_budget_missing
+objective:
+  - Route visual production through a governed agent contract with local/free defaults and explicit quality gates.

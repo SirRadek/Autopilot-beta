@@ -1,0 +1,132 @@
+id: reasoning_strategy
+type: routing_policy
+name: Strategic reasoning layer
+question: "Does this task need frontier-level reasoning or should it stay with local workers?"
+why: "Large and cloud reasoning models are most useful as strategic advisory, review, audit, planning, and edge-case analysis layers; routine worker workloads should stay local by default."
+signals:
+  - reasoning
+  - frontier
+  - free cloud
+  - gemini
+  - google ai subscription
+  - gemini code assist
+  - subscription cli
+  - claude
+  - anthropic
+  - subscription interactive
+  - openai
+  - gpt
+  - deepseek
+  - web chat
+  - manual web login
+  - quick mode
+  - expert mode
+  - qwen
+  - structured output
+  - function calling
+  - task lane
+  - provider policy
+  - credentialed advisory
+  - provider run
+  - advisory model run
+  - runner artifact
+  - runner log
+  - cli syntax error
+  - missing model output
+  - strategic
+  - deep research
+  - architecture
+  - review
+  - audit
+  - planning
+  - orchestration
+  - edge-case
+  - tradeoff
+  - context7
+  - best practices
+  - local
+  - non local
+  - swarm
+  - tool inventory
+related_agents:
+  - architect
+  - security
+  - business
+  - qa
+related_files:
+  - src/data/delivery-system/modelPolicy.ts
+  - src/data/delivery-system/toolInventory.ts
+  - docs/autopilot/delivery-system-model-policy.md
+  - AGENTS.md
+required_checks:
+  - local_worker_default
+  - provider_run_status_recorded
+  - model_output_presence_verified
+  - free_tier_or_no_cost_confirmed
+  - subscription_entitlement_confirmed_for_subscription_tools
+  - google_ai_subscription_entitlement_confirmed_for_gemini_cli
+  - api_credit_or_self_hosting_cost_confirmed
+  - advisory_trust_hierarchy_applied
+  - claude_broad_read_scope_owner_scoped
+  - lower_trust_advisor_claims_verified_before_adoption
+  - model_output_evaluation_before_model_change
+  - repeated_failure_evidence_before_model_switch
+  - redacted_context_only
+  - controlled_browser_evidence_required
+  - fresh_chat_started_for_each_mode_test
+  - prompt_packet_bounded
+  - context7_or_official_docs_verified
+  - gemini_brainstorm_claims_labeled_and_verified
+  - owner_cost_decision_for_credentialed_provider
+  - authentication_state_verified_without_token_disclosure
+  - no_api_budget_or_credit_claim_for_subscription_tools
+  - no_gemini_api_budget_or_key_claim_for_subscription_cli
+  - frontier_reasoning_only_for_strategy_review_audit
+  - no_frontier_for_boilerplate
+  - verify_external_claims
+stop_conditions:
+  - non_local_worker_dependency
+  - cloud_model_for_routine_worker_loop
+  - frontier_used_for_simple_worker_task
+  - provider_availability_unverified
+  - provider_run_failed_without_blocked_state
+  - model_output_missing_from_artifact
+  - advisory_workflow_continued_after_provider_error
+  - paid_model_or_credit_required
+  - paid_model_or_credit_required_without_owner_decision
+  - subscription_entitlement_unverified
+  - google_ai_subscription_entitlement_unverified
+  - api_credit_path_requested_without_owner_decision
+  - gemini_api_key_or_paid_api_path_requested_without_owner_decision
+  - authentication_missing
+  - browser_session_unavailable
+  - mode_switch_unverified
+  - private_data_not_redacted
+  - model_output_used_as_source_of_truth
+  - technology_claim_without_context7_or_official_docs
+  - gemini_claim_adopted_without_verification
+  - lower_trust_model_overrides_claude_without_verified_evidence
+  - broad_private_context_sent_to_lower_trust_model
+  - model_changed_without_eval_evidence
+  - reasoning_effort_increased_without_failure_pattern
+must_not_assume:
+  - Do not assume a cloud frontier model is available.
+  - Do not continue from a failed provider run unless a separate model output artifact exists.
+  - Do not assume a cloud model is free or safe to receive private context.
+  - Do not treat Claude Code subscription access as metered API-credit access.
+  - Do not treat Gemini CLI / Google AI subscription access as Gemini API budget or API-key access.
+  - Do not treat Gemini, Qwen, or DeepSeek advice as equal weight to scoped Claude Code subscription critique.
+  - Do not give Qwen or DeepSeek broad private repository context by default.
+  - Do not treat DeepSeek web chat as a command-line, API, or headless automation runtime.
+  - Do not treat a cached plugin bundle as callable model/tool availability.
+  - Do not route routine worker tasks to non-local models by default.
+  - Do not treat Gemini brainstorm output as verified technology guidance until Context7 or official docs verify it.
+objective:
+  - Keep routine coding, embeddings, RAG, indexing, automation, and summarization local by default.
+  - Use external advisory reasoning only as redacted critique, brainstorming, validation, or second opinion after matching its entitlement path.
+  - Treat failed provider execution as a control-plane blocker, not as weak content to review.
+  - Use DeepSeek web chat only as a manual free advisory path after login, fresh chat, selected Quick or Expert mode, and controlled browser evidence.
+  - Prefer scoped Claude Code subscription critique over Gemini for high-risk advisory review when Claude is available and authorized; prefer Gemini over Qwen or DeepSeek for external brainstorming weight.
+  - Route reasoning by task lane and provider policy before choosing GPT, Claude, Gemini, DeepSeek, Qwen, or deterministic tools.
+  - Verify technology and best-practice claims through Context7 when connected, or official documentation as fallback.
+  - Escalate to frontier reasoning only for deep research, architecture, review, audit, orchestration, and hard edge-case analysis.

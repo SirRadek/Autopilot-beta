@@ -1,0 +1,27 @@
+id: lead_capture_pipeline
+type: project_pipeline
+name: Radeq lead capture pipeline
+question: "Does the lead capture form validate on client and server before D1 storage?"
+why: "Radeq's lead form writes to Cloudflare D1; unvalidated input corrupts leads and invites abuse, so both client and server validation are required before persistence."
+signals:
+  - lead capture
+  - lead
+  - form
+  - validation
+  - d1
+  - storage
+related_agents:
+  - backend_database
+  - qa
+related_files:
+  - src/pages/api/lead.ts
+  - src/components/LeadForm.tsx
+required_checks:
+  - client_validation
+  - server_validation
+  - d1_write_bounded
+stop_conditions:
+  - missing_server_validation
+  - unvalidated_lead_written_to_d1
+objective:
+  - Keep lead capture validated on both client and server before D1 persistence.

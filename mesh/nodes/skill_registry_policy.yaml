@@ -1,0 +1,44 @@
+id: skill_registry_policy
+type: governance_policy
+name: Skill registry policy
+question: "Should a platform skill, plugin, or custom local skill handle this task?"
+why: "Skill selection must respect current session availability, adopted replacements, eval evidence, token cost, and project awareness before activating platform tools."
+signals:
+  - plugin
+  - skill
+  - replacement
+  - tool inventory
+  - custom skill
+  - platform skill
+related_agents:
+  - architect
+  - qa
+  - memory
+  - automation
+related_files:
+  - src/data/delivery-system/toolInventory.ts
+  - docs/autopilot/skill-registry.json
+  - prompt-library/
+required_checks:
+  - skill_registry_loaded
+  - adopted_replacements_checked
+  - tool_search_confirms_callable
+  - skill_workflow_read
+  - eval_recorded_after_skill_use
+stop_conditions:
+  - skill_registry_file_missing_at_startup
+  - cached_plugin_treated_as_callable
+  - platform_plugin_used_when_adopted_replacement_exists
+  - replacement_status_skipped_proposed_to_adopted
+must_not_assume:
+  - Do not treat cached plugin bundles as callable tools.
+  - Do not bypass an adopted custom local skill replacement without recording why.
+  - Do not use a skill before reading its SKILL.md workflow.
+objective:
+  - Prefer verified current-session tools and adopted local replacements.
+  - Keep plugin and skill activation cost, privacy, and capability checks visible.
+  - Feed usage outcomes back into model-output eval records when relevant.
+failure_modes:
+  - platform_plugin_used_when_adopted_replacement_exists
+  - skill_registry_file_missing_at_startup
+  - replacement_status_skipped_proposed_to_adopted

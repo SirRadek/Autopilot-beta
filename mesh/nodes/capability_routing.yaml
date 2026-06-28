@@ -1,0 +1,43 @@
+id: capability_routing
+type: routing_policy
+name: Capability routing
+question: "Which Autopilot capability modules should this task activate?"
+why: "Capability routing keeps tasks bounded, selects only relevant service meshes, and prevents the system from treating every request as a full-stack or 3D task."
+signals:
+  - capability
+  - routing
+  - select_capabilities
+  - task classification
+  - service module
+  - workstream
+  - package
+  - optimization
+  - web
+  - data
+related_agents:
+  - architect
+  - web_architect
+  - seo_performance
+  - data_processing
+  - automation
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - src/lib/decision-mesh/query.ts
+  - mcp/server.ts
+  - AGENTS.md
+required_checks:
+  - classify_task
+  - select_capabilities
+  - avoid_unneeded_capabilities
+  - keep_parallel_system_as_future_decision
+stop_conditions:
+  - parallel_system_without_decision
+  - conflicting_sources_of_truth
+  - unbounded_new_runtime_scope
+must_not_assume:
+  - Do not create a parallel runtime without an architecture decision.
+  - Do not activate 3D by default.
+objective:
+  - Select the smallest useful capability set before planning or building.
+  - Keep Autopilot's current path on the existing mesh/MCP/governance layer.

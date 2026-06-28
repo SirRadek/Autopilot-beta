@@ -1,0 +1,28 @@
+id: control_plane_boundary
+type: project_boundary
+name: Autopilot control-plane boundary
+question: "Does this change keep Autopilot as a supervision and governance layer instead of product runtime?"
+why: "Autopilot coordinates, audits, and records work, but must not become a product runtime or remote mutation surface without a later architecture decision."
+signals:
+  - autopilot
+  - control plane
+  - governance
+  - runtime
+  - product code
+  - remote mutation
+related_agents:
+  - architect
+  - security
+  - qa
+related_files:
+  - docs/projects/autopilot-control-plane/architecture.md
+  - docs/autopilot/repository-separation-policy.md
+required_checks:
+  - repository_boundary_review
+  - no_product_runtime_code
+  - no_remote_mutation_without_approval
+stop_conditions:
+  - product_runtime_added_to_autopilot
+  - remote_mutation_without_approval
+objective:
+  - Keep Autopilot as the governed control plane for supervised project work.

@@ -1,0 +1,103 @@
+id: model_output_evaluation_boundary
+type: governance_policy
+name: Model output evaluation boundary
+question: "Does Autopilot score model output and tune prompts or input packets from verified eval evidence instead of raw model preference?"
+why: "The control plane is in a learning phase: bad model output should be evaluated immediately, prompt/input packets should change with evidence, and repeated similar failures should trigger a reviewed reasoning/model route."
+signals:
+  - model output
+  - output evaluation
+  - score output
+  - eval record
+  - bad output
+  - repeated failure
+  - prompt tuning
+  - input tuning
+  - rerun
+  - weekly tuning
+  - model change
+  - reasoning change
+  - provider best practices
+  - caveman
+  - context7
+  - handoff clarity
+  - codex workflow
+  - advisory model run
+  - provider run
+  - runner artifact
+  - runner log
+  - cli error
+  - cli syntax error
+  - prompt only
+  - no model output
+  - missing model output
+related_agents:
+  - architect
+  - qa
+  - memory
+  - protective-supervisor
+related_files:
+  - src/data/delivery-system/modelOutputEvaluation.ts
+  - scripts/validate-model-output-evals.ts
+  - model-output-evals/model-output-eval-record.schema.json
+  - model-output-evals/records/
+  - src/data/delivery-system/modelPolicy.ts
+  - src/data/delivery-system/modelSpend.ts
+  - src/data/delivery-system/promptLibrary.ts
+  - src/data/delivery-system/tokenEfficiency.ts
+  - src/data/delivery-system/toolInventory.ts
+  - docs/autopilot/model-output-evaluation-operating-model.md
+  - docs/autopilot/delivery-system-model-policy.md
+  - prompt-library/source-catalog.md
+  - prompt-library/source-catalog.json
+  - mcp/server.ts
+required_checks:
+  - model_output_scored_before_acceptance
+  - score_dimensions_recorded
+  - runner_artifact_contract_verified
+  - provider_run_status_recorded
+  - model_output_presence_verified
+  - blocked_state_recorded_when_output_missing
+  - caveman_or_token_efficiency_route_selected
+  - provider_best_practice_sources_checked
+  - context7_or_official_docs_verified
+  - prompt_or_input_delta_recorded_before_rerun
+  - retry_loop_until_acceptable_or_blocked
+  - repeated_failure_triggers_model_or_reasoning_review
+  - weekly_tuning_uses_collected_eval_records
+  - workflow_handoff_clarity_checked
+  - plugin_or_skill_compatibility_checked
+  - privacy_redaction_checked
+  - model_output_eval_schema_validated
+  - model_output_eval_records_validated
+  - source_pointers_recorded
+stop_conditions:
+  - output_accepted_without_score
+  - provider_run_failed_without_blocked_state
+  - model_output_missing_from_artifact
+  - advisory_workflow_continued_after_provider_error
+  - prompt_or_runner_log_treated_as_model_output
+  - score_dimensions_missing
+  - bad_output_retried_without_prompt_or_input_delta
+  - repeated_bad_output_without_model_or_reasoning_review
+  - provider_best_practice_claim_unverified
+  - context7_or_official_docs_missing_for_provider_claim
+  - weekly_tuning_without_eval_records
+  - raw_model_output_promoted_to_prompt_authority
+  - private_context_in_eval_record
+  - invalid_model_output_eval_record
+  - raw_content_in_model_output_eval_record
+  - workflow_handoff_unclear_after_retry
+  - automation_runtime_added_without_architecture_decision
+must_not_assume:
+  - Do not treat raw model output as a prompt or routing authority.
+  - Do not treat a provider runner log, prompt echo, shell transcript, or CLI error as model output.
+  - Do not change prompt defaults without an eval record, source pointer, and rollback path.
+  - Do not change model/reasoning route after one bad output unless a blocker or safety failure requires it.
+  - Do not store raw private context, raw logs, secrets, or customer data in eval records.
+objective:
+  - Add a scoring and tuning loop for model output while keeping the control plane report-first.
+  - Block advisory workflows when provider execution failed, output is missing, or the artifact contains only a prompt/log transcript.
+  - Use Caveman/compact routing, Context7 or official docs, provider best practices, and plugin/skill compatibility checks before prompt/input changes.
+  - During learning, immediately tune and rerun poor outputs until acceptable or blocked.
+  - After repeated similar failures, reroute reasoning/model selection through verified provider guidance and local tests.
+  - After the learning baseline, make weekly prompt/input changes from collected eval records and repeated failure patterns.

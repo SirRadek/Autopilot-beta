@@ -1,0 +1,29 @@
+id: user_profile
+type: domain_surface
+name: User profile
+question: "Does this change alter user profile data or display identity?"
+why: "Profile changes affect account identity, user-visible state, and frontend/backend data contracts."
+signals:
+  - profile
+  - avatar
+  - user
+  - account
+related_agents:
+  - backend
+  - frontend
+  - qa
+related_files:
+  - src/api/profile.ts
+  - src/components/profile
+  - src/db/users
+required_checks:
+  - preserve_profile_contract
+  - test_profile_update
+  - handle_missing_avatar
+stop_conditions:
+  - unknown_profile_schema
+must_not_assume:
+  - Do not assume user table has avatar_url.
+objective:
+  - Keep profile API and UI state aligned.
+  - Preserve existing account identity behavior.

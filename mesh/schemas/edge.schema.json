@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/decision-mesh-edge.schema.json",
+  "title": "Decision Mesh Edge",
+  "type": "object",
+  "required": ["from", "to", "relation", "weight", "why"],
+  "properties": {
+    "from": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "to": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "relation": { "type": "string" },
+    "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+    "why": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

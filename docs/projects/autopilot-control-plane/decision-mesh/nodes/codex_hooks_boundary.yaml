@@ -1,0 +1,61 @@
+id: codex_hooks_boundary
+type: execution_boundary
+name: Codex hooks boundary
+question: "Do Autopilot's project-local Codex hooks remain deterministic, report-first, redacted, and subordinate to Decision Mesh and project records?"
+why: "Autopilot benefits from lifecycle checks, but hooks must not become a hidden worker, approval authority, raw log store, or remote mutation path."
+signals:
+  - hook
+  - hooks.json
+  - session start
+  - tool use
+  - compaction
+  - stop hook
+  - lifecycle guardrail
+  - completion evidence
+  - failed tool
+  - investigation handoff
+  - restart session
+  - continuity
+related_agents:
+  - architect
+  - qa
+  - security
+  - memory
+related_files:
+  - .codex/hooks.json
+  - .codex/hooks/autopilot-hook.mjs
+  - .codex/state/investigation-queue.jsonl
+  - docs/autopilot/codex-hooks-operating-model.md
+  - docs/projects/autopilot-control-plane/architecture.md
+  - docs/projects/autopilot-control-plane/work-log.md
+required_checks:
+  - official_codex_hooks_contract_verified
+  - exact_hook_definition_trusted
+  - report_first_default
+  - redacted_metadata_only
+  - no_raw_project_log_storage
+  - no_remote_mutation_without_approval
+  - no_cloud_worker_in_hook
+  - failed_tool_investigator_handoff_redacted
+  - stop_or_drain_before_failed_process_fix_recorded
+  - restart_and_continuity_resume_required_after_fix
+  - hook_tests_pass
+  - runtime_activation_evidence_separate
+stop_conditions:
+  - raw_prompt_command_response_or_log_persisted
+  - duplicate_runtime_queue
+  - automatic_investigator_spawn_from_hook
+  - remote_mutation_from_hook
+  - paid_or_cloud_required_for_hook
+  - untrusted_hook_claimed_active
+  - blocking_rule_without_owner_approval
+  - automatic_process_stop_or_restart_from_hook
+  - fix_applied_to_running_process_without_stop_or_drain
+  - session_restarted_without_continuity_update
+  - runtime_activation_claim_without_evidence
+objective:
+  - Keep Codex lifecycle hooks as a local deterministic guardrail.
+  - Record only redacted control-plane metadata and compact continuity evidence.
+  - Queue failed-tool investigation handoffs as redacted evidence for Protective Supervision.
+  - Require supervisor-controlled stop/drain, fix, restart, continuity update, and resume for failed-process repairs.
+  - Preserve Decision Mesh, architecture records, work logs, and explicit owner decisions as authority.

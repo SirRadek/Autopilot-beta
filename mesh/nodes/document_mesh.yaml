@@ -1,0 +1,30 @@
+id: document_mesh
+type: capability_module
+name: Document Mesh
+question: "Does the task reconstruct, extract, clean, or digitize documents or PDFs?"
+why: "Document reconstruction needs original preservation, uncertainty marking, extraction validation, and reviewable structured output."
+signals:
+  - document
+  - pdf
+  - ocr
+  - scan
+  - reconstruction
+  - extract
+  - digitize
+related_agents:
+  - data_processing
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+required_checks:
+  - preserve_original
+  - mark_uncertain_values
+  - validate_extraction
+  - export_review
+stop_conditions:
+  - original_document_not_preserved
+  - uncertain_extraction_unmarked
+must_not_assume:
+  - Do not treat uncertain OCR or extraction as verified fact.
+objective:
+  - Convert messy documents into traceable structured information.

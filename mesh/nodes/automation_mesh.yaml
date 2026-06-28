@@ -1,0 +1,34 @@
+id: automation_mesh
+type: capability_module
+name: Automation Mesh
+question: "Does the task digitize a manual workflow or connect forms, APIs, CRM, sheets, notifications, or reports?"
+why: "Automation must map inputs, outputs, failure points, retries, logs, alerts, and manual override before implementation."
+signals:
+  - automation
+  - workflow
+  - crm
+  - google sheets
+  - api integration
+  - notifications
+  - scraping
+  - monitoring
+related_agents:
+  - automation
+  - backend_database
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+required_checks:
+  - process_mapping
+  - retry_policy
+  - error_logging
+  - manual_override
+  - test_data
+stop_conditions:
+  - unmapped_failure_points
+  - no_manual_override
+  - missing_error_logging
+must_not_assume:
+  - Do not automate a process before mapping failure and handoff paths.
+objective:
+  - Save manual time while keeping failures visible and recoverable.

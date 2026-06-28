@@ -1,0 +1,29 @@
+id: worker_boundary
+type: execution_boundary
+name: Worker boundary
+question: "Is worker execution bounded, reviewed, and forbidden from business or architecture approval?"
+why: "Workers can produce implementation and tests, but they cannot approve their own work, change scope, or bypass governance."
+signals:
+  - worker
+  - execution
+  - agent
+  - implementation
+  - approval
+related_agents:
+  - orchestrator
+  - architect
+  - security
+  - qa
+related_files:
+  - src/data/delivery-system/roles.ts
+  - docs/autopilot/delivery-system-governance.md
+required_checks:
+  - bounded_file_scope
+  - no_self_approval
+  - reviewer_is_independent
+stop_conditions:
+  - approve_own_work
+  - unbounded_execution_scope
+  - architecture_change_without_review
+objective:
+  - Keep worker output useful but non-authoritative until reviewed.

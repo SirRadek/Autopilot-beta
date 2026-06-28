@@ -1,0 +1,29 @@
+id: storage_provider
+type: dependency
+name: Storage provider
+question: "Where is user content stored and how are URLs generated?"
+why: "Upload behavior depends on storage provider guarantees, object permissions, retention, and URL stability."
+signals:
+  - storage
+  - bucket
+  - object
+  - cdn
+  - url
+related_agents:
+  - backend
+  - security
+related_files:
+  - src/storage/index.ts
+  - src/config/storage.ts
+required_checks:
+  - verify_storage_provider
+  - reject_public_write_access
+  - return_stable_url
+stop_conditions:
+  - unknown_storage_provider
+  - public_write_bucket
+must_not_assume:
+  - Do not assume S3.
+objective:
+  - Use the existing storage provider contract.
+  - Avoid public write access and unstable URLs.

@@ -1,0 +1,26 @@
+id: capability_routing_layer
+type: routing_policy
+name: Capability routing layer
+question: "Does this task use existing Autopilot capability routing instead of creating a new parallel system?"
+why: "Autopilot should improve the existing mesh/MCP/governance layer first while preserving the option for a later parallel system through explicit architecture decision."
+signals:
+  - capability
+  - routing
+  - select_capabilities
+  - parallel system
+  - production studio
+related_agents:
+  - architect
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - AGENTS.md
+required_checks:
+  - select_capabilities_before_planning
+  - explicit_decision_for_parallel_system
+  - no_duplicate_source_of_truth
+stop_conditions:
+  - parallel_system_without_decision
+  - conflicting_sources_of_truth
+objective:
+  - Extend the existing Autopilot operating mesh before creating separate architecture.

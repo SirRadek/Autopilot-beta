@@ -1,0 +1,52 @@
+id: subscription_worker_boundary
+type: governance_policy
+name: Subscription worker boundary
+question: "Is this delegated worker or advisory provider session inside a tracked subscription boundary?"
+why: "Subscription workers must stay serial, bounded by handoff packet scope, and explicit about tier exhaustion, rate limits, and unavailable provider states."
+signals:
+  - subscription
+  - worker session
+  - rate limit
+  - parallel
+  - serial
+  - quota
+  - gemini tier
+  - tier switch
+  - flash
+  - pro tier
+related_agents:
+  - architect
+  - qa
+  - security
+  - backend
+related_files:
+  - src/data/delivery-system/subscriptionBudget.ts
+  - src/data/delivery-system/fallbackChains.ts
+  - src/data/delivery-system/modelPolicy.ts
+  - .codex/hooks/autopilot-hook.mjs
+required_checks:
+  - handoff_packet_received_before_start
+  - serial_task_delegation_required
+  - subscription_entitlement_confirmed_for_subscription_tools
+  - gemini_session_budget_tracked
+  - worker_lock_checked
+  - provider_run_status_recorded
+stop_conditions:
+  - handoff_packet_missing_before_session_open
+  - parallel_subscription_calls_attempted
+  - worker_lock_already_held
+  - provider_unavailable
+  - tier_exhausted_no_backoff
+must_not_assume:
+  - Do not assume a subscription provider can run parallel worker sessions.
+  - Do not silently substitute Gemini with GPT when Gemini tiers are exhausted.
+  - Do not treat subscription access as API credit or per-token budget.
+objective:
+  - Keep worker delegation serial and explicitly scoped.
+  - Track provider tier and rate-limit states before continuing.
+  - Convert provider failures into blocked or waiting_owner states instead of weak content review.
+failure_modes:
+  - worker_lock_already_held
+  - parallel_session_detected
+  - tier_exhausted_no_backoff
+  - handoff_packet_missing_before_session_open

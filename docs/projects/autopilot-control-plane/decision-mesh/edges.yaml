@@ -1,0 +1,216 @@
+edges:
+  - from: capability_routing_layer
+    to: control_plane_boundary
+    relation: preserves
+    weight: 0.86
+    why: "Capability routing should keep Autopilot's control-plane scope bounded."
+  - from: read_only_mcp_boundary
+    to: control_plane_boundary
+    relation: enforces
+    weight: 0.9
+    why: "Read-only MCP tools help prevent Autopilot from becoming a mutation runtime."
+  - from: control_plane_observability_boundary
+    to: control_plane_boundary
+    relation: preserves
+    weight: 0.9
+    why: "Diagnostics must not turn Autopilot into a product runtime or log warehouse."
+  - from: control_plane_observability_boundary
+    to: read_only_mcp_boundary
+    relation: audits
+    weight: 0.82
+    why: "MCP and mesh diagnostics remain read-only routing evidence, not execution authority."
+  - from: control_plane_observability_boundary
+    to: capability_routing_layer
+    relation: routes_project_scope
+    weight: 0.84
+    why: "A symptom must be classified as Autopilot or project-owned before capability routing continues."
+  - from: control_plane_observability_boundary
+    to: model_output_evaluation_boundary
+    relation: classifies_failed_provider_run
+    weight: 0.86
+    why: "Control-plane diagnostics for provider runner logs must verify model-output presence before content evaluation."
+  - from: control_plane_observability_boundary
+    to: protective_supervision_boundary
+    relation: reports_blocker
+    weight: 0.82
+    why: "Missing provider output should become a blocked or waiting_owner progress state before the next handoff."
+  - from: capability_routing_layer
+    to: read_only_mcp_boundary
+    relation: exposed_through
+    weight: 0.8
+    why: "Capability selection is exposed through the same local read-only MCP server."
+  - from: graphic_agent_boundary
+    to: capability_routing_layer
+    relation: routed_by
+    weight: 0.84
+    why: "Visual production must use existing capability routing and must not create a parallel design runtime."
+  - from: graphic_agent_boundary
+    to: control_plane_boundary
+    relation: preserves
+    weight: 0.82
+    why: "The graphic agent defines visual-production governance without adding product runtime or remote mutation."
+  - from: design_intelligence_boundary
+    to: graphic_agent_boundary
+    relation: reviews
+    weight: 0.86
+    why: "Design intelligence analyzes and critiques visual work independently from the production agent."
+  - from: design_intelligence_boundary
+    to: capability_routing_layer
+    relation: informs
+    weight: 0.78
+    why: "Technology research and architecture library recommendations must feed existing capability routing instead of bypassing it."
+  - from: model_reasoning_boundary
+    to: capability_routing_layer
+    relation: refines
+    weight: 0.82
+    why: "Model routing should refine capability routing without making any provider mandatory."
+  - from: model_reasoning_boundary
+    to: read_only_mcp_boundary
+    relation: exposed_through
+    weight: 0.76
+    why: "Model routing can be exposed as a read-only MCP recommendation without creating execution authority."
+  - from: tool_inventory_boundary
+    to: read_only_mcp_boundary
+    relation: exposed_through
+    weight: 0.8
+    why: "Plugin and skill inventory is exposed as read-only routing guidance, not a connector execution authority."
+  - from: tool_inventory_boundary
+    to: capability_routing_layer
+    relation: refines
+    weight: 0.8
+    why: "Capability routing must know whether a plugin or skill is session-callable before depending on it."
+  - from: tool_inventory_boundary
+    to: model_reasoning_boundary
+    relation: constrains
+    weight: 0.76
+    why: "Model and provider routing must distinguish available tools, subscription-interactive tools, API/self-hosted providers, and cached-only bundles."
+  - from: model_reasoning_boundary
+    to: design_intelligence_boundary
+    relation: supports
+    weight: 0.74
+    why: "Free/no-cost advisory models can support independent critique and research synthesis when claims are verified."
+  - from: local_worker_boundary
+    to: model_reasoning_boundary
+    relation: complements
+    weight: 0.86
+    why: "Local workers save paid tokens first, while free-cloud reasoning remains advisory for higher-value critique."
+  - from: local_worker_boundary
+    to: read_only_mcp_boundary
+    relation: exposed_through
+    weight: 0.8
+    why: "Local worker routing is exposed as a read-only MCP recommendation, not execution authority."
+  - from: local_worker_boundary
+    to: capability_routing_layer
+    relation: refines
+    weight: 0.78
+    why: "Worker selection should follow capability routing, task scope, and stop conditions."
+  - from: token_efficiency_boundary
+    to: local_worker_boundary
+    relation: prioritizes
+    weight: 0.88
+    why: "Token efficiency prefers deterministic tools and local workers before any cloud reasoning."
+  - from: token_efficiency_boundary
+    to: model_reasoning_boundary
+    relation: constrains
+    weight: 0.84
+    why: "Cloud advisory reasoning should only happen after compact/local routes are insufficient or review value is clear."
+  - from: token_efficiency_boundary
+    to: read_only_mcp_boundary
+    relation: exposed_through
+    weight: 0.8
+    why: "Token-efficiency routing is a read-only MCP recommendation, not an execution surface."
+  - from: model_output_evaluation_boundary
+    to: model_reasoning_boundary
+    relation: feeds_route_review
+    weight: 0.88
+    why: "Repeated weak outputs should trigger a reviewed reasoning or model route change instead of blind reruns."
+  - from: model_output_evaluation_boundary
+    to: prompt_library_boundary
+    relation: feeds_prompt_updates
+    weight: 0.86
+    why: "Scored outputs and failure patterns provide evidence for prompt version changes, evals, and rollback."
+  - from: model_output_evaluation_boundary
+    to: token_efficiency_boundary
+    relation: requires
+    weight: 0.84
+    why: "Every model-output retry should start from Caveman or compact routing before adding context or spend."
+  - from: model_output_evaluation_boundary
+    to: protective_supervision_boundary
+    relation: reports
+    weight: 0.82
+    why: "Protective supervision tracks blocked, retry, accepted, and weekly tuning states with source pointers."
+  - from: model_output_evaluation_boundary
+    to: tool_inventory_boundary
+    relation: checks_compatibility
+    weight: 0.78
+    why: "Prompt and handoff tuning must account for available plugins, skills, MCP tools, and Codex workflow compatibility."
+  - from: model_output_evaluation_boundary
+    to: read_only_mcp_boundary
+    relation: exposed_through
+    weight: 0.8
+    why: "Model-output evaluation routing is exposed as a read-only MCP recommendation, not an execution surface."
+  - from: prompt_library_boundary
+    to: model_reasoning_boundary
+    relation: constrains
+    weight: 0.86
+    why: "Reusable prompts must respect free-cloud advisory limits, redaction, and official-doc verification."
+  - from: prompt_library_boundary
+    to: local_worker_boundary
+    relation: configures
+    weight: 0.82
+    why: "Qwen and other local worker prompts must be bounded drafts with review and tests."
+  - from: prompt_library_boundary
+    to: token_efficiency_boundary
+    relation: supports
+    weight: 0.78
+    why: "Prompt contracts reduce repeated context and support Caveman/compact routing."
+  - from: prompt_library_boundary
+    to: control_plane_boundary
+    relation: preserves
+    weight: 0.78
+    why: "The prompt library is governance and memory, not a product runtime or external prompt-management dependency."
+  - from: protective_supervision_boundary
+    to: control_plane_boundary
+    relation: preserves
+    weight: 0.9
+    why: "Protective supervision reports and sequences work without adding product runtime or remote mutation authority."
+  - from: protective_supervision_boundary
+    to: control_plane_observability_boundary
+    relation: summarizes
+    weight: 0.84
+    why: "Progress and blocker review may summarize diagnostic evidence while keeping raw project logs outside Autopilot."
+  - from: protective_supervision_boundary
+    to: prompt_library_boundary
+    relation: feeds
+    weight: 0.82
+    why: "Currentness sentinel findings can propose prompt updates only after source authority, evals, and rollback are recorded."
+  - from: protective_supervision_boundary
+    to: read_only_mcp_boundary
+    relation: exposed_through
+    weight: 0.8
+    why: "The protective supervision route is exposed as a read-only MCP recommendation, not an execution surface."
+  - from: protective_supervision_boundary
+    to: token_efficiency_boundary
+    relation: compacts
+    weight: 0.82
+    why: "Handoff compilation turns long agent outputs into small scoped packets before the next agent sees them."
+  - from: codex_hooks_boundary
+    to: protective_supervision_boundary
+    relation: feeds_redacted_evidence
+    weight: 0.9
+    why: "Codex lifecycle hooks provide compact local evidence and warnings without becoming a supervisor runtime."
+  - from: codex_hooks_boundary
+    to: control_plane_observability_boundary
+    relation: reports
+    weight: 0.86
+    why: "Hook events are Autopilot control-plane diagnostics and must remain redacted and separate from project runtime logs."
+  - from: codex_hooks_boundary
+    to: control_plane_boundary
+    relation: preserves
+    weight: 0.88
+    why: "Report-first hooks enforce control-plane reminders without adding product runtime or remote mutation authority."
+  - from: codex_hooks_boundary
+    to: token_efficiency_boundary
+    relation: supports
+    weight: 0.78
+    why: "Lifecycle checks use deterministic local scripts and preserve compact continuity without model spend."

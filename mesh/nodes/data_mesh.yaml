@@ -1,0 +1,36 @@
+id: data_mesh
+type: capability_module
+name: Data Mesh
+question: "Does the task involve data cleaning, migration, CSV/XLSX/PDF processing, schema inference, reporting, or dashboards?"
+why: "Data quality often determines the quality of the whole project; original data must be preserved and every transformation must be traceable."
+signals:
+  - data
+  - database
+  - csv
+  - xlsx
+  - migration
+  - duplicate
+  - schema
+  - report
+related_agents:
+  - data_processing
+  - backend_database
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - docs/autopilot/product-brief-template.md
+required_checks:
+  - preserve_original
+  - infer_schema
+  - validate_data
+  - transformation_log
+  - backup
+stop_conditions:
+  - original_data_not_preserved
+  - silent_row_drop
+  - uncertain_values_unmarked
+must_not_assume:
+  - Do not overwrite source data.
+  - Do not silently drop rows or uncertain values.
+objective:
+  - Preserve source data and produce a validated, documented transformation.

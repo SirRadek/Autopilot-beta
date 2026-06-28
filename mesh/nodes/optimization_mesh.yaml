@@ -1,0 +1,36 @@
+id: optimization_mesh
+type: capability_module
+name: Optimization Mesh
+question: "Is the main problem speed, SEO health, UX friction, conversion, technical errors, or bottlenecks?"
+why: "Optimization is a primary commercial service, but changes must start from a measured baseline, target metric, backup, and rollback plan."
+signals:
+  - slow
+  - performance
+  - optimize
+  - core web vitals
+  - conversion
+  - ux friction
+  - caching
+  - bottleneck
+related_agents:
+  - seo_performance
+  - frontend
+  - backend_database
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - docs/autopilot/product-brief-template.md
+required_checks:
+  - baseline_metric
+  - target_metric
+  - backup
+  - rollback_plan
+  - performance_check
+stop_conditions:
+  - no_baseline_metric
+  - no_target_metric
+  - no_backup_or_rollback_plan
+must_not_assume:
+  - Do not optimize before measuring.
+objective:
+  - Measure first, then improve the highest-impact bottleneck.

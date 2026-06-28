@@ -1,0 +1,38 @@
+id: payments_checkout
+type: risk_detector
+name: Payments and checkout
+question: "Does this change affect checkout, subscriptions, invoices, billing, or revenue?"
+why: "Checkout affects revenue and payment flow."
+signals:
+  - checkout
+  - subscription
+  - billing
+  - invoice
+  - payment
+  - stripe
+  - revenue
+related_agents:
+  - architect
+  - backend
+  - frontend
+  - security
+  - business
+  - qa
+related_files:
+  - src/api/checkout
+  - src/billing
+  - src/components/checkout
+required_checks:
+  - verify_payment_provider_contract
+  - test_successful_checkout
+  - test_failed_checkout
+  - verify_webhook_authenticity
+stop_conditions:
+  - unknown_payment_provider
+  - missing_webhook_verification
+  - unapproved_revenue_logic_change
+must_not_assume:
+  - Do not assume payment provider state from UI state.
+objective:
+  - Preserve revenue-critical behavior.
+  - Keep frontend and backend payment contracts aligned.

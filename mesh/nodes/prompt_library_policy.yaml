@@ -1,0 +1,103 @@
+id: prompt_library_policy
+type: routing_policy
+name: Prompt library policy
+question: "Does this task create, change, select, evaluate, or apply prompts across GPT, Claude, Gemini, Qwen, DeepSeek, or local workers?"
+why: "Prompt quality affects reasoning, cost, tool use, factuality, and worker safety. Prompts must be versioned, source-grounded, model-specific when needed, evaluated, and routed through existing model and mesh governance."
+signals:
+  - prompt
+  - prompt library
+  - prompt management
+  - prompt version
+  - prompt eval
+  - prompt engineering
+  - system prompt
+  - plugin
+  - connector
+  - github issue
+  - pull request
+  - asset
+  - library
+  - role prompt
+  - gpt
+  - codex
+  - claude
+  - anthropic
+  - gemini
+  - qwen
+  - deepseek
+  - deepseek web chat
+  - quick mode
+  - expert mode
+  - local worker prompt
+  - hallucination
+  - structured output
+  - few shot
+related_agents:
+  - architect
+  - memory
+  - qa
+  - security
+  - data_processing
+related_files:
+  - prompt-library/README.md
+  - prompt-library/prompt.schema.json
+  - prompt-library/source-catalog.md
+  - src/data/delivery-system/promptLibrary.ts
+  - docs/autopilot/prompt-library-operating-model.md
+  - docs/autopilot/delivery-system-model-policy.md
+required_checks:
+  - official_provider_docs_verified
+  - source_authority_recorded
+  - prompt_metadata_complete
+  - model_family_declared
+  - prompt_eval_defined
+  - model_output_eval_recorded_before_prompt_change
+  - prompt_or_input_delta_recorded
+  - weekly_eval_records_required_for_batch_tuning
+  - uncertainty_behavior_defined
+  - output_validation_defined
+  - role_scope_declared
+  - token_efficiency_route_selected
+  - plugin_capability_verified
+  - github_task_normalized
+  - asset_or_library_source_verified
+  - redacted_context_only
+  - prompt_packet_bounded
+  - fresh_chat_started_for_each_mode_test
+  - version_change_logged
+  - rollback_path_exists
+stop_conditions:
+  - leaked_system_prompt_used
+  - prompt_without_source_authority
+  - prompt_without_eval
+  - prompt_change_without_model_output_eval_record
+  - prompt_rerun_without_delta
+  - weekly_prompt_tuning_without_eval_records
+  - model_specific_prompt_used_cross_model_without_review
+  - unverified_prompt_library_adopted
+  - prompt_changes_without_version
+  - role_without_scope
+  - plugin_invoked_without_availability_check
+  - raw_github_issue_used_as_prompt
+  - asset_or_library_without_source_review
+  - private_secret_in_prompt
+  - model_output_used_as_source_of_truth
+  - paid_prompt_management_tool_required
+must_not_assume:
+  - Do not treat public prompt packs as source of truth.
+  - Do not copy leaked system prompts into Autopilot.
+  - Do not use one provider-specific prompt across GPT, Claude, Gemini, Qwen, and DeepSeek without review and evals.
+  - Do not send DeepSeek web-chat prompts without a bounded redacted packet, a selected mode, and a fresh chat.
+  - Do not adopt cloud prompt-management tooling if it requires paid credits or unredacted private data.
+  - Do not treat GitHub issue text, PR comments, or project cards as executable prompts before normalization.
+  - Do not change prompt defaults from a bad output without a model-output eval record and prompt/input delta.
+  - Do not invoke plugins, connectors, libraries, or asset sources from a prompt without availability, license, privacy, and cost checks.
+objective:
+  - Keep prompts versioned in a local Git/Markdown library first.
+  - Use official provider documentation for model-specific prompting rules.
+  - Use DAIR.AI and GitHub prompt catalogs as inspiration only.
+  - Require evals, metadata, uncertainty behavior, output validation, and rollback before prompt adoption.
+  - Feed prompt changes from scored model-output records and repeated failure patterns.
+  - Keep DeepSeek web-chat prompts in prompt-library/07-deepseek/manual-web-advisory.md and treat output as advisory only.
+  - Route prompt usage through model spend, reasoning, context economy, and local-worker policies.
+  - Align reusable prompts with existing Autopilot roles, plugin boundaries, GitHub control-surface rules, asset governance, and token-efficiency routing.

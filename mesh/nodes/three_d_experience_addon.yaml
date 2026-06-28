@@ -1,0 +1,38 @@
+id: three_d_experience_addon
+type: capability_addon
+name: 3D Experience Add-on
+question: "Would 3D or WebGL materially explain the product, process, data, or system state?"
+why: "3D can be a premium enhancement, but it should never be decorative by default or harm speed, SEO, mobile usability, accessibility, or conversion."
+signals:
+  - 3d
+  - webgl
+  - r3f
+  - three
+  - animation
+  - product reveal
+  - scroll storytelling
+  - interactive visual
+related_agents:
+  - design_ux
+  - frontend
+  - seo_performance
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - docs/autopilot/product-brief-template.md
+  - docs/superpowers/specs/2026-05-09-radeq-style-matrix-design.md
+required_checks:
+  - performance_budget
+  - mobile_fallback
+  - reduced_motion_support
+  - seo_content_outside_canvas
+stop_conditions:
+  - seo_content_hidden_in_canvas
+  - no_mobile_fallback
+  - no_reduced_motion_support
+  - performance_budget_missing
+must_not_assume:
+  - Do not add 3D just as decoration.
+  - Do not put primary SEO content inside canvas.
+objective:
+  - Use 3D only when it improves understanding or premium product presentation.

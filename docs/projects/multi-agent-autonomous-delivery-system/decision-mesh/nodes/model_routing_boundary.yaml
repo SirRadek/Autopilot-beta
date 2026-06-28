@@ -1,0 +1,39 @@
+id: model_routing_boundary
+type: routing_policy
+name: Model routing boundary
+question: "Does model routing keep routine work local and use free cloud reasoning only as advisory review?"
+why: "The system should optimize cost, latency, and reliability by using local or low-cost workers for routine tasks, while Gemini or other free/no-cost cloud models are advisory only for high-value reasoning."
+signals:
+  - model
+  - routing
+  - local worker
+  - frontier
+  - free cloud
+  - gemini
+  - reasoning
+  - provider
+related_agents:
+  - architect
+  - security
+  - qa
+related_files:
+  - src/data/delivery-system/modelPolicy.ts
+  - src/data/delivery-system/modelSpend.ts
+  - docs/autopilot/delivery-system-model-policy.md
+required_checks:
+  - provider_availability_verified
+  - free_tier_or_no_cost_confirmed
+  - redacted_context_only
+  - factual_claims_verified
+  - smallest_safe_model_class
+  - frontier_used_only_for_reasoning
+stop_conditions:
+  - provider_availability_unverified
+  - paid_model_or_credit_required
+  - cloud_model_for_routine_worker_loop
+  - frontier_used_for_simple_worker_task
+  - non_local_worker_dependency
+  - private_data_not_redacted
+  - model_output_used_as_source_of_truth
+objective:
+  - Keep model routing provider-neutral, local-first, free/no-cost, and review-oriented.

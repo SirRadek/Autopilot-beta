@@ -1,0 +1,38 @@
+id: delivery_observability_boundary
+type: diagnostics_boundary
+name: Delivery observability boundary
+question: "Does the symptom belong to the delivery-system project rather than the Autopilot control plane?"
+why: "Delivery-system worker, governance, model-routing, and verification symptoms need their own project evidence instead of being merged into Autopilot operational diagnostics."
+signals:
+  - delivery system
+  - worker log
+  - gate result
+  - model routing
+  - verification failure
+  - workflow incident
+  - governance failure
+related_agents:
+  - architect
+  - qa
+  - security
+related_files:
+  - docs/projects/multi-agent-autonomous-delivery-system/architecture.md
+  - docs/projects/multi-agent-autonomous-delivery-system/work-log.md
+  - docs/projects/multi-agent-autonomous-delivery-system/decision-mesh/
+required_checks:
+  - problem_scope_classified
+  - project_slug_confirmed
+  - evidence_window_defined
+  - redacted_log_summary
+  - gate_or_worker_layer_identified
+  - reproduction_or_counterexample
+  - fix_verification
+stop_conditions:
+  - ambiguous_problem_owner
+  - raw_project_logs_copied_to_autopilot
+  - gate_failure_without_evidence
+  - worker_issue_debugged_as_autopilot_issue
+  - production_mutation_without_approval
+objective:
+  - Keep multi-agent delivery-system diagnostics separate from Autopilot control-plane diagnostics.
+  - Localize failures to governance pipeline, worker boundary, model routing, or verification evidence before fixes.

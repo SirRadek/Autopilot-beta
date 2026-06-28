@@ -1,0 +1,37 @@
+id: web_build_mesh
+type: capability_module
+name: Web Build Mesh
+question: "Is this a new website, landing page, web app, portal, or admin surface?"
+why: "Web build work needs intake, goals, sitemap/content structure, implementation, SEO basics, performance, analytics, and deployment checks."
+signals:
+  - website
+  - landing
+  - web app
+  - frontend
+  - company website
+  - portfolio
+  - portal
+  - admin
+related_agents:
+  - web_architect
+  - frontend
+  - seo_performance
+  - qa
+related_files:
+  - docs/autopilot/product-brief-template.md
+  - docs/autopilot/workstream-plan.md
+  - src/data/delivery-system/capabilities.ts
+required_checks:
+  - responsive_check
+  - accessibility_check
+  - seo_metadata_check
+  - speed_check
+  - mobile_check
+stop_conditions:
+  - missing_product_goal
+  - missing_target_audience
+  - missing_acceptance_criteria
+must_not_assume:
+  - Do not start implementation without product goal and first-screen purpose.
+objective:
+  - Build the actual usable web surface first, not a marketing shell around an empty app.

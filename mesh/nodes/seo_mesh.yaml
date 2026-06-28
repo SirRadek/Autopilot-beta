@@ -1,0 +1,38 @@
+id: seo_mesh
+type: capability_module
+name: SEO Mesh
+question: "Does the task involve technical SEO, content structure, indexability, local SEO, ecommerce categories, or migration recovery?"
+why: "SEO depends on technical health, content structure, indexability, internal links, metadata, schema, and performance working together."
+signals:
+  - seo
+  - index
+  - metadata
+  - canonical
+  - sitemap
+  - schema
+  - broken links
+  - local seo
+related_agents:
+  - seo_performance
+  - frontend
+  - content
+  - qa
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - docs/autopilot/product-brief-template.md
+required_checks:
+  - titles
+  - descriptions
+  - headings
+  - canonical
+  - robots
+  - sitemap
+  - indexability
+stop_conditions:
+  - indexability_unknown
+  - migration_without_url_map
+  - seo_claim_without_current_serp_research
+must_not_assume:
+  - Do not make current SERP or keyword claims without current research.
+objective:
+  - Improve technical SEO and content structure without hiding core content in scripts or canvas.

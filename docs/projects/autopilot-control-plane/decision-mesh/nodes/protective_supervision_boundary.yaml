@@ -1,0 +1,85 @@
+id: protective_supervision_boundary
+type: governance_policy
+name: Protective supervision boundary
+question: "Does Autopilot supervision keep currentness, agent handoffs, progress states, and blockers source-grounded without becoming a runtime queue?"
+why: "Autopilot needs a guardrail above multi-agent work so stale guidance, raw agent outputs, hidden blockers, and waiting states do not drift into the next step."
+signals:
+  - protective supervision
+  - guard hand
+  - sentinel
+  - currentness
+  - agent output
+  - handoff packet
+  - next agent
+  - progress ledger
+  - done
+  - missing
+  - waiting
+  - blocker
+  - dependency
+  - stop condition
+  - advisory model run
+  - provider run
+  - runner artifact
+  - missing model output
+  - no model output
+  - failed process
+  - restart
+  - session resume
+related_agents:
+  - architect
+  - memory
+  - qa
+  - security
+related_files:
+  - src/data/delivery-system/protectiveSupervision.ts
+  - docs/autopilot/protective-supervision-operating-model.md
+  - docs/autopilot/agent-handoff-packet-template.md
+  - docs/autopilot/project-progress-ledger-template.md
+  - docs/projects/autopilot-control-plane/architecture.md
+  - docs/projects/autopilot-control-plane/work-log.md
+  - AGENTS.md
+required_checks:
+  - project_scope_classified
+  - official_docs_or_context7_for_currentness
+  - source_pointer_recorded
+  - redacted_context_only
+  - agent_output_normalized
+  - next_agent_scope_declared
+  - progress_state_updated
+  - blocker_owner_declared
+  - waiting_dependency_declared
+  - provider_run_status_recorded
+  - model_output_presence_verified
+  - blocked_state_recorded_when_output_missing
+  - failure_reproduced_or_failure_pointer_recorded
+  - affected_process_identified
+  - progress_checkpoint_created_before_fix
+  - affected_process_stopped_or_drained_before_fix
+  - session_restarted_after_fix
+  - continuity_updated_and_work_resumed
+  - no_raw_project_log_storage
+  - no_remote_mutation_without_approval
+stop_conditions:
+  - currentness_claim_without_source
+  - raw_agent_output_used_as_next_prompt
+  - missing_next_agent_scope
+  - stale_progress_ledger
+  - blocker_without_owner
+  - waiting_state_without_dependency
+  - duplicate_runtime_queue
+  - remote_mutation_without_approval
+  - paid_or_cloud_required_for_guardrail
+  - provider_run_failed_without_blocked_state
+  - advisory_workflow_continued_after_provider_error
+  - raw_project_logs_copied_to_autopilot
+  - fix_applied_to_running_process_without_stop_or_drain
+  - session_restart_missing_after_process_fix
+  - continuity_missing_after_restart
+objective:
+  - Keep protective supervision as a read-only report-first guardrail until owner-approved scoped writes.
+  - Normalize agent outputs into compact next-agent packets.
+  - Track done, missing, waiting, blocked, and next sequence with source pointers.
+  - Convert missing provider output into blocked or waiting_owner state before any next-agent handoff.
+  - For failed-process investigations, checkpoint state, stop or drain the affected process, apply the fix, restart or refresh the session, update continuity, and resume from the last verified state.
+  - Route currentness findings into prompt, mesh, model, and architecture governance without silent adoption.

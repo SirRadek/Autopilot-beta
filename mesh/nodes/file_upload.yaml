@@ -1,0 +1,37 @@
+id: file_upload
+type: risk_detector
+name: File upload
+question: "Does this change accept files from the user?"
+why: "Upload accepts untrusted user content and can introduce malware, oversized payloads, parser attacks, and storage abuse."
+signals:
+  - upload
+  - avatar
+  - image
+  - file
+  - multipart
+  - storage
+related_agents:
+  - backend
+  - frontend
+  - security
+  - qa
+related_files:
+  - src/api/upload
+  - src/storage/index.ts
+  - src/components/forms
+required_checks:
+  - validate_file_type
+  - validate_file_size
+  - reject_unauthenticated
+  - scan_or_sanitize_file
+  - test_invalid_upload
+stop_conditions:
+  - unknown_storage_provider
+  - missing_auth_check
+  - no_file_size_limit
+must_not_assume:
+  - Do not assume S3.
+  - Do not assume user table has avatar_url.
+objective:
+  - Accept only authenticated, bounded, expected file uploads.
+  - Return a stable file URL or explicit storage error.

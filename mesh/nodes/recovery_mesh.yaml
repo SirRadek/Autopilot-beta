@@ -1,0 +1,35 @@
+id: recovery_mesh
+type: capability_module
+name: Recovery Mesh
+question: "Is this a broken, hacked, migrated, slow, or SEO-damaged website/system rescue task?"
+why: "Recovery work must preserve current state before fixes, diagnose platform/DNS/SSL/content/security, and avoid blind updates or deletion."
+signals:
+  - recovery
+  - rescue
+  - broken website
+  - hacked
+  - failed migration
+  - lost content
+  - seo drop
+  - wordpress
+related_agents:
+  - qa_recovery
+  - security
+  - seo_performance
+  - backend_database
+related_files:
+  - src/data/delivery-system/capabilities.ts
+  - docs/autopilot/product-brief-template.md
+required_checks:
+  - backup_current_state
+  - identify_platform
+  - crawl_current_site
+  - scan_basic_security
+stop_conditions:
+  - no_current_backup
+  - update_everything_blindly
+  - migrate_without_url_map
+must_not_assume:
+  - Do not update, delete, migrate, or redesign first.
+objective:
+  - Stabilize, diagnose, and prioritize repair by risk.

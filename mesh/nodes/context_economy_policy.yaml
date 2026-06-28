@@ -1,0 +1,38 @@
+id: context_economy_policy
+type: routing_policy
+name: Context economy policy
+question: "Can the task be solved with a compact packet instead of loading broad project context?"
+why: "Small targeted context reduces repeated explanations, model drift, cost, latency, and accidental use of unrelated project details."
+signals:
+  - context
+  - token
+  - session
+  - summary
+  - restart
+  - compact
+  - packet
+  - full repo
+  - long chat
+related_agents:
+  - architect
+  - qa
+  - memory
+related_files:
+  - src/data/delivery-system/contextEconomy.ts
+  - AGENTS.md
+  - GEMINI.md
+required_checks:
+  - prefer_relevant_subgraph
+  - prefer_agent_packet
+  - avoid_full_repo_dump
+  - summarize_before_restart
+stop_conditions:
+  - full_repo_dump_requested_without_reason
+  - long_unstructured_session
+  - repeated_project_explanation
+must_not_assume:
+  - Do not treat a long chat as reliable source of truth.
+  - Do not load unrelated project files by default.
+objective:
+  - Use the smallest sufficient context for the active task.
+  - Compress or restart sessions when context becomes noisy.

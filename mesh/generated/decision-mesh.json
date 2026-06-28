@@ -1,0 +1,624 @@
+{
+  "nodes": [
+    {
+      "id": "auth_required",
+      "group": "control",
+      "risk": 0.7,
+      "label": "Auth required"
+    },
+    {
+      "id": "automation_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Automation Mesh"
+    },
+    {
+      "id": "bot_rag_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Bot / RAG Mesh"
+    },
+    {
+      "id": "capability_routing",
+      "group": "routing_policy",
+      "risk": 0.7,
+      "label": "Capability routing"
+    },
+    {
+      "id": "codex_hooks_guardrail",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Codex hooks guardrail"
+    },
+    {
+      "id": "context_economy_policy",
+      "group": "routing_policy",
+      "risk": 0.7,
+      "label": "Context economy policy"
+    },
+    {
+      "id": "data_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Data Mesh"
+    },
+    {
+      "id": "document_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Document Mesh"
+    },
+    {
+      "id": "file_upload",
+      "group": "risk_detector",
+      "risk": 0.9,
+      "label": "File upload"
+    },
+    {
+      "id": "frontend_form",
+      "group": "workflow_area",
+      "risk": 0.7,
+      "label": "Frontend form"
+    },
+    {
+      "id": "model_output_evaluation_policy",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Model output evaluation policy"
+    },
+    {
+      "id": "model_spend_policy",
+      "group": "routing_policy",
+      "risk": 0.7,
+      "label": "Model spend policy"
+    },
+    {
+      "id": "observability_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Observability Mesh"
+    },
+    {
+      "id": "optimization_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Optimization Mesh"
+    },
+    {
+      "id": "payments_checkout",
+      "group": "risk_detector",
+      "risk": 0.9,
+      "label": "Payments and checkout"
+    },
+    {
+      "id": "project_mesh_lifecycle",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Project mesh lifecycle"
+    },
+    {
+      "id": "prompt_library_policy",
+      "group": "routing_policy",
+      "risk": 0.7,
+      "label": "Prompt library policy"
+    },
+    {
+      "id": "protective_supervision_policy",
+      "group": "routing_policy",
+      "risk": 0.7,
+      "label": "Protective supervision policy"
+    },
+    {
+      "id": "public_api",
+      "group": "risk_detector",
+      "risk": 0.9,
+      "label": "Public API"
+    },
+    {
+      "id": "qa_upload_tests",
+      "group": "quality_gate",
+      "risk": 0.7,
+      "label": "Upload QA tests"
+    },
+    {
+      "id": "reasoning_strategy",
+      "group": "routing_policy",
+      "risk": 0.7,
+      "label": "Strategic reasoning layer"
+    },
+    {
+      "id": "recovery_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Recovery Mesh"
+    },
+    {
+      "id": "reuse_gate",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Reuse gate"
+    },
+    {
+      "id": "security_upload",
+      "group": "risk_detector",
+      "risk": 0.9,
+      "label": "Upload security review"
+    },
+    {
+      "id": "seo_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "SEO Mesh"
+    },
+    {
+      "id": "skill_registry_policy",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Skill registry policy"
+    },
+    {
+      "id": "storage_provider",
+      "group": "dependency",
+      "risk": 0.7,
+      "label": "Storage provider"
+    },
+    {
+      "id": "subscription_worker_boundary",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Subscription worker boundary"
+    },
+    {
+      "id": "supervisor_execution_loop",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Supervisor execution loop"
+    },
+    {
+      "id": "three_d_experience_addon",
+      "group": "capability_addon",
+      "risk": 0.7,
+      "label": "3D Experience Add-on"
+    },
+    {
+      "id": "tool_inventory_policy",
+      "group": "routing_policy",
+      "risk": 0.7,
+      "label": "Tool inventory policy"
+    },
+    {
+      "id": "user_profile",
+      "group": "domain_surface",
+      "risk": 0.7,
+      "label": "User profile"
+    },
+    {
+      "id": "web_build_mesh",
+      "group": "capability_module",
+      "risk": 0.7,
+      "label": "Web Build Mesh"
+    }
+  ],
+  "links": [
+    {
+      "source": "file_upload",
+      "target": "auth_required",
+      "relation": "requires",
+      "weight": 0.97
+    },
+    {
+      "source": "file_upload",
+      "target": "storage_provider",
+      "relation": "depends_on",
+      "weight": 0.93
+    },
+    {
+      "source": "file_upload",
+      "target": "security_upload",
+      "relation": "requires",
+      "weight": 0.92
+    },
+    {
+      "source": "file_upload",
+      "target": "qa_upload_tests",
+      "relation": "validates_with",
+      "weight": 0.86
+    },
+    {
+      "source": "file_upload",
+      "target": "user_profile",
+      "relation": "touches",
+      "weight": 0.8
+    },
+    {
+      "source": "file_upload",
+      "target": "frontend_form",
+      "relation": "touches",
+      "weight": 0.74
+    },
+    {
+      "source": "file_upload",
+      "target": "public_api",
+      "relation": "may_expose",
+      "weight": 0.7
+    },
+    {
+      "source": "payments_checkout",
+      "target": "public_api",
+      "relation": "may_expose",
+      "weight": 0.82
+    },
+    {
+      "source": "payments_checkout",
+      "target": "auth_required",
+      "relation": "requires",
+      "weight": 0.78
+    },
+    {
+      "source": "public_api",
+      "target": "security_upload",
+      "relation": "escalates_when_combined",
+      "weight": 0.76
+    },
+    {
+      "source": "reasoning_strategy",
+      "target": "payments_checkout",
+      "relation": "escalates_for_review",
+      "weight": 0.82
+    },
+    {
+      "source": "reasoning_strategy",
+      "target": "public_api",
+      "relation": "escalates_for_review",
+      "weight": 0.8
+    },
+    {
+      "source": "reasoning_strategy",
+      "target": "security_upload",
+      "relation": "escalates_for_audit",
+      "weight": 0.78
+    },
+    {
+      "source": "project_mesh_lifecycle",
+      "target": "reasoning_strategy",
+      "relation": "informs",
+      "weight": 0.72
+    },
+    {
+      "source": "project_mesh_lifecycle",
+      "target": "public_api",
+      "relation": "tracks_project_surface",
+      "weight": 0.68
+    },
+    {
+      "source": "project_mesh_lifecycle",
+      "target": "payments_checkout",
+      "relation": "tracks_project_surface",
+      "weight": 0.66
+    },
+    {
+      "source": "capability_routing",
+      "target": "web_build_mesh",
+      "relation": "activates",
+      "weight": 0.84
+    },
+    {
+      "source": "capability_routing",
+      "target": "optimization_mesh",
+      "relation": "activates",
+      "weight": 0.88
+    },
+    {
+      "source": "capability_routing",
+      "target": "data_mesh",
+      "relation": "activates",
+      "weight": 0.85
+    },
+    {
+      "source": "capability_routing",
+      "target": "seo_mesh",
+      "relation": "activates",
+      "weight": 0.86
+    },
+    {
+      "source": "capability_routing",
+      "target": "automation_mesh",
+      "relation": "activates",
+      "weight": 0.8
+    },
+    {
+      "source": "capability_routing",
+      "target": "recovery_mesh",
+      "relation": "activates",
+      "weight": 0.8
+    },
+    {
+      "source": "capability_routing",
+      "target": "observability_mesh",
+      "relation": "activates",
+      "weight": 0.84
+    },
+    {
+      "source": "capability_routing",
+      "target": "document_mesh",
+      "relation": "activates",
+      "weight": 0.76
+    },
+    {
+      "source": "capability_routing",
+      "target": "bot_rag_mesh",
+      "relation": "activates",
+      "weight": 0.76
+    },
+    {
+      "source": "capability_routing",
+      "target": "three_d_experience_addon",
+      "relation": "optional_addon",
+      "weight": 0.62
+    },
+    {
+      "source": "web_build_mesh",
+      "target": "seo_mesh",
+      "relation": "requires",
+      "weight": 0.84
+    },
+    {
+      "source": "optimization_mesh",
+      "target": "seo_mesh",
+      "relation": "coordinates_with",
+      "weight": 0.82
+    },
+    {
+      "source": "optimization_mesh",
+      "target": "data_mesh",
+      "relation": "may_require",
+      "weight": 0.68
+    },
+    {
+      "source": "observability_mesh",
+      "target": "optimization_mesh",
+      "relation": "informs",
+      "weight": 0.86
+    },
+    {
+      "source": "observability_mesh",
+      "target": "recovery_mesh",
+      "relation": "sequences_into",
+      "weight": 0.78
+    },
+    {
+      "source": "observability_mesh",
+      "target": "automation_mesh",
+      "relation": "audits",
+      "weight": 0.74
+    },
+    {
+      "source": "observability_mesh",
+      "target": "public_api",
+      "relation": "may_trace",
+      "weight": 0.72
+    },
+    {
+      "source": "observability_mesh",
+      "target": "model_output_evaluation_policy",
+      "relation": "classifies_failed_provider_run",
+      "weight": 0.86
+    },
+    {
+      "source": "observability_mesh",
+      "target": "protective_supervision_policy",
+      "relation": "reports_blocker",
+      "weight": 0.82
+    },
+    {
+      "source": "project_mesh_lifecycle",
+      "target": "observability_mesh",
+      "relation": "separates_scope",
+      "weight": 0.84
+    },
+    {
+      "source": "recovery_mesh",
+      "target": "optimization_mesh",
+      "relation": "sequences_into",
+      "weight": 0.78
+    },
+    {
+      "source": "recovery_mesh",
+      "target": "seo_mesh",
+      "relation": "sequences_into",
+      "weight": 0.76
+    },
+    {
+      "source": "document_mesh",
+      "target": "data_mesh",
+      "relation": "depends_on",
+      "weight": 0.8
+    },
+    {
+      "source": "bot_rag_mesh",
+      "target": "data_mesh",
+      "relation": "depends_on",
+      "weight": 0.82
+    },
+    {
+      "source": "three_d_experience_addon",
+      "target": "web_build_mesh",
+      "relation": "enhances",
+      "weight": 0.64
+    },
+    {
+      "source": "context_economy_policy",
+      "target": "capability_routing",
+      "relation": "precedes",
+      "weight": 0.8
+    },
+    {
+      "source": "context_economy_policy",
+      "target": "project_mesh_lifecycle",
+      "relation": "informs",
+      "weight": 0.72
+    },
+    {
+      "source": "model_spend_policy",
+      "target": "reasoning_strategy",
+      "relation": "refines",
+      "weight": 0.82
+    },
+    {
+      "source": "model_output_evaluation_policy",
+      "target": "reasoning_strategy",
+      "relation": "feeds_route_review",
+      "weight": 0.88
+    },
+    {
+      "source": "model_output_evaluation_policy",
+      "target": "model_spend_policy",
+      "relation": "constrains",
+      "weight": 0.84
+    },
+    {
+      "source": "model_output_evaluation_policy",
+      "target": "prompt_library_policy",
+      "relation": "feeds_prompt_updates",
+      "weight": 0.86
+    },
+    {
+      "source": "model_output_evaluation_policy",
+      "target": "context_economy_policy",
+      "relation": "requires",
+      "weight": 0.82
+    },
+    {
+      "source": "model_output_evaluation_policy",
+      "target": "protective_supervision_policy",
+      "relation": "reports",
+      "weight": 0.82
+    },
+    {
+      "source": "model_output_evaluation_policy",
+      "target": "tool_inventory_policy",
+      "relation": "checks_compatibility",
+      "weight": 0.76
+    },
+    {
+      "source": "tool_inventory_policy",
+      "target": "capability_routing",
+      "relation": "refines",
+      "weight": 0.82
+    },
+    {
+      "source": "tool_inventory_policy",
+      "target": "reasoning_strategy",
+      "relation": "constrains",
+      "weight": 0.78
+    },
+    {
+      "source": "model_spend_policy",
+      "target": "tool_inventory_policy",
+      "relation": "coordinates_with",
+      "weight": 0.74
+    },
+    {
+      "source": "prompt_library_policy",
+      "target": "reasoning_strategy",
+      "relation": "constrains",
+      "weight": 0.86
+    },
+    {
+      "source": "prompt_library_policy",
+      "target": "model_spend_policy",
+      "relation": "constrains",
+      "weight": 0.84
+    },
+    {
+      "source": "prompt_library_policy",
+      "target": "context_economy_policy",
+      "relation": "supports",
+      "weight": 0.78
+    },
+    {
+      "source": "prompt_library_policy",
+      "target": "bot_rag_mesh",
+      "relation": "supports",
+      "weight": 0.72
+    },
+    {
+      "source": "protective_supervision_policy",
+      "target": "project_mesh_lifecycle",
+      "relation": "updates",
+      "weight": 0.88
+    },
+    {
+      "source": "protective_supervision_policy",
+      "target": "observability_mesh",
+      "relation": "summarizes",
+      "weight": 0.84
+    },
+    {
+      "source": "protective_supervision_policy",
+      "target": "context_economy_policy",
+      "relation": "compacts",
+      "weight": 0.86
+    },
+    {
+      "source": "protective_supervision_policy",
+      "target": "reasoning_strategy",
+      "relation": "guards",
+      "weight": 0.82
+    },
+    {
+      "source": "protective_supervision_policy",
+      "target": "prompt_library_policy",
+      "relation": "feeds",
+      "weight": 0.8
+    },
+    {
+      "source": "codex_hooks_guardrail",
+      "target": "protective_supervision_policy",
+      "relation": "feeds_redacted_evidence",
+      "weight": 0.88
+    },
+    {
+      "source": "codex_hooks_guardrail",
+      "target": "observability_mesh",
+      "relation": "reports_control_plane_events",
+      "weight": 0.84
+    },
+    {
+      "source": "codex_hooks_guardrail",
+      "target": "context_economy_policy",
+      "relation": "preserves_compaction_context",
+      "weight": 0.82
+    },
+    {
+      "source": "codex_hooks_guardrail",
+      "target": "project_mesh_lifecycle",
+      "relation": "checks_boundary",
+      "weight": 0.8
+    },
+    {
+      "source": "supervisor_execution_loop",
+      "target": "subscription_worker_boundary",
+      "relation": "requires",
+      "weight": 0.95
+    },
+    {
+      "source": "supervisor_execution_loop",
+      "target": "reuse_gate",
+      "relation": "requires",
+      "weight": 0.88
+    },
+    {
+      "source": "supervisor_execution_loop",
+      "target": "skill_registry_policy",
+      "relation": "informs",
+      "weight": 0.75
+    },
+    {
+      "source": "subscription_worker_boundary",
+      "target": "model_spend_policy",
+      "relation": "depends_on",
+      "weight": 0.9
+    }
+  ]
+}

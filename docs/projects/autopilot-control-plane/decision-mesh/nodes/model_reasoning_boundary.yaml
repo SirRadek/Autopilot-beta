@@ -1,0 +1,126 @@
+id: model_reasoning_boundary
+type: routing_policy
+name: External reasoning boundary
+question: "Does model routing use subscription, free/no-cost, API, or self-hosted external reasoning only as verified advisory support?"
+why: "Gemini, Claude, and other external reasoning models can improve brainstorming, critique, validation, and second opinions, but Autopilot must keep routine worker loops local and block wrong entitlement paths, unredacted private context, and model output as source of truth."
+signals:
+  - gemini
+  - google ai subscription
+  - gemini code assist
+  - subscription cli
+  - claude
+  - anthropic
+  - subscription interactive
+  - openai
+  - gpt
+  - deepseek
+  - web chat
+  - manual web login
+  - quick mode
+  - expert mode
+  - qwen
+  - structured output
+  - function calling
+  - task lane
+  - free model
+  - credentialed advisory
+  - provider run
+  - advisory model run
+  - runner artifact
+  - runner log
+  - cli syntax error
+  - missing model output
+  - cloud reasoning
+  - brainstorming
+  - critique
+  - context7
+  - best practices
+  - second opinion
+  - agent validation
+  - model routing
+  - tool inventory
+related_agents:
+  - architect
+  - security
+  - qa
+  - design-critic
+  - visual-analyst
+related_files:
+  - src/data/delivery-system/modelPolicy.ts
+  - src/data/delivery-system/modelSpend.ts
+  - src/data/delivery-system/toolInventory.ts
+  - docs/autopilot/delivery-system-model-policy.md
+  - AGENTS.md
+  - GEMINI.md
+  - mcp/server.ts
+required_checks:
+  - provider_availability_verified
+  - provider_run_status_recorded
+  - model_output_presence_verified
+  - free_tier_or_no_cost_confirmed
+  - subscription_entitlement_confirmed_for_subscription_tools
+  - google_ai_subscription_entitlement_confirmed_for_gemini_cli
+  - api_credit_or_self_hosting_cost_confirmed
+  - owner_cost_decision_for_credentialed_provider
+  - authentication_state_verified_without_token_disclosure
+  - no_api_budget_or_credit_claim_for_subscription_tools
+  - no_gemini_api_budget_or_key_claim_for_subscription_cli
+  - advisory_trust_hierarchy_applied
+  - claude_broad_read_scope_owner_scoped
+  - lower_trust_advisor_claims_verified_before_adoption
+  - model_output_evaluation_before_model_change
+  - repeated_failure_evidence_before_model_switch
+  - redacted_context_only
+  - controlled_browser_evidence_required
+  - fresh_chat_started_for_each_mode_test
+  - prompt_packet_bounded
+  - context7_or_official_docs_verified
+  - gemini_brainstorm_claims_labeled_and_verified
+  - factual_claims_verified
+  - smallest_safe_model_class
+  - disclose_model_choice_when_risk_affects_delivery
+stop_conditions:
+  - provider_availability_unverified
+  - provider_run_failed_without_blocked_state
+  - model_output_missing_from_artifact
+  - advisory_workflow_continued_after_provider_error
+  - paid_model_or_credit_required
+  - paid_model_or_credit_required_without_owner_decision
+  - subscription_entitlement_unverified
+  - google_ai_subscription_entitlement_unverified
+  - api_credit_path_requested_without_owner_decision
+  - gemini_api_key_or_paid_api_path_requested_without_owner_decision
+  - authentication_missing
+  - browser_session_unavailable
+  - mode_switch_unverified
+  - cloud_model_for_routine_worker_loop
+  - private_data_not_redacted
+  - model_output_used_as_source_of_truth
+  - technology_claim_without_context7_or_official_docs
+  - gemini_claim_adopted_without_verification
+  - lower_trust_model_overrides_claude_without_verified_evidence
+  - broad_private_context_sent_to_lower_trust_model
+  - model_changed_without_eval_evidence
+  - reasoning_effort_increased_without_failure_pattern
+  - model_choice_affects_risk_without_disclosure
+must_not_assume:
+  - Do not assume Claude Code subscription access is an API-credit budget.
+  - Do not continue from a failed provider run unless a separate model output artifact exists.
+  - Do not assume Gemini CLI / Google AI subscription access is Gemini API budget or API-key access.
+  - Do not treat Gemini, Qwen, or DeepSeek advice as equal weight to scoped Claude Code subscription critique.
+  - Do not give Qwen or DeepSeek broad private repository context by default.
+  - Do not treat DeepSeek web chat as a command-line, API, or headless automation runtime.
+  - Do not assume any external model is available, free, or safe for private context.
+  - Do not assume a cached plugin bundle is callable in the current session.
+  - Do not route routine worker loops to GPT, Claude, Gemini, DeepSeek, or another cloud model by default.
+objective:
+  - Use Gemini, Claude, and other external models as advisory reasoning when they add measurable review value and pass entitlement/auth/privacy checks.
+  - Treat failed provider execution as a control-plane blocker, not as weak content to review.
+  - Treat Claude Code as a subscription-interactive advisory provider unless an owner explicitly routes work to API credits.
+  - Treat Gemini CLI as a Google AI subscription CLI provider unless an owner explicitly routes work to Gemini API credits.
+  - Use DeepSeek web chat only as a manual free advisory path after login, fresh chat, selected Quick or Expert mode, and controlled browser evidence.
+  - Use Claude Code subscription as the higher-trust broad-read advisory reviewer when owner-scoped and available; keep Gemini below Claude but above Qwen and DeepSeek drafts.
+  - Route GPT/OpenAI, Claude, Gemini, DeepSeek, Qwen, and deterministic tools by task lane and provider policy.
+  - Verify external technology and best-practice brainstorm claims through Context7 when connected, or official documentation as fallback.
+  - Preserve local workers as the default execution path.
+  - Keep local tests, architecture records, and owner decisions as the source of truth.

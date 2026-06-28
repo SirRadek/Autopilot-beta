@@ -1,0 +1,31 @@
+id: public_api
+type: risk_detector
+name: Public API
+question: "Does this change expose a public route or API contract?"
+why: "Public APIs accept untrusted traffic and need explicit auth, rate limiting, validation, and error contracts."
+signals:
+  - public
+  - api
+  - endpoint
+  - route
+  - webhook
+  - external
+related_agents:
+  - architect
+  - backend
+  - security
+  - qa
+related_files:
+  - src/api
+  - src/routes
+required_checks:
+  - validate_request_body
+  - define_error_contract
+  - rate_limit_or_document_exception
+  - test_invalid_request
+stop_conditions:
+  - public_endpoint_without_rate_limit
+  - missing_input_validation
+objective:
+  - Keep public contracts explicit and bounded.
+  - Reject invalid or unauthenticated traffic before side effects.

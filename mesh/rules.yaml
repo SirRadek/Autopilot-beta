@@ -1,0 +1,238 @@
+rules:
+  - id: SEC-UPLOAD-001
+    title: Upload input must be bounded
+    applies_to:
+      - file_upload
+      - security_upload
+    instruction: "Validate file type, size, auth, and storage behavior before accepting uploads."
+    severity: blocker
+    must_not_assume:
+      - Do not assume S3.
+  - id: SEC-AUTH-003
+    title: User mutations require explicit auth
+    applies_to:
+      - auth_required
+      - user_profile
+    instruction: "Bind mutations to the active session user and test unauthenticated requests."
+    severity: blocker
+  - id: API-ERROR-002
+    title: Public API errors must be explicit
+    applies_to:
+      - public_api
+      - frontend_form
+    instruction: "Define validation and error contracts for invalid requests."
+    severity: major
+  - id: PAY-CHECKOUT-001
+    title: Payment flow changes need business and security review
+    applies_to:
+      - payments_checkout
+    instruction: "Review revenue impact, provider contract, webhook authenticity, and failed payment paths."
+    severity: blocker
+  - id: AI-REASON-001
+    title: Cloud reasoning is strategic advisory only
+    applies_to:
+      - reasoning_strategy
+    instruction: "Use local workers for routine coding, RAG, embeddings, automation, indexing, and summaries; use free/no-cost cloud reasoning only for redacted brainstorming, critique, validation, deep research, architecture, review, audit, orchestration, and hard edge-case analysis."
+    severity: major
+  - id: AI-LOCAL-001
+    title: Routine loops stay local
+    applies_to:
+      - reasoning_strategy
+    instruction: "If a task cannot run locally and is not strategic reasoning or review, do not route it to a cloud worker by default. Stop when cloud use requires paid credits, unknown pricing, private unredacted data, or source-of-truth authority."
+    severity: blocker
+  - id: AI-CONTEXT7-001
+    title: Context7 verifies advisory technology claims
+    applies_to:
+      - reasoning_strategy
+      - model_spend_policy
+    instruction: "For Gemini or other advisory brainstorming about frameworks, libraries, SDKs, APIs, browser features, cloud services, SEO, accessibility, or best practices, use Context7 first when connected; otherwise record official-docs fallback before adopting the claim."
+    severity: major
+  - id: MESH-PROJECT-001
+    title: Every project needs its own mesh
+    applies_to:
+      - project_mesh_lifecycle
+    instruction: "Autopilot's mesh is only for Autopilot operations. Create a separate project mesh during project architecture onboarding when one does not exist."
+    severity: blocker
+  - id: MESH-PROJECT-002
+    title: Project mesh must be updated after work
+    applies_to:
+      - project_mesh_lifecycle
+    instruction: "After every meaningful completed work slice, update the affected project's mesh or record why there is no mesh impact."
+    severity: major
+  - id: CAP-ROUTE-001
+    title: Select capabilities before planning
+    applies_to:
+      - capability_routing
+    instruction: "Classify the task and call select_capabilities before planning when the task may touch web builds, optimization, data, SEO, automation, recovery, documents, bots, or 3D."
+    severity: major
+  - id: CAP-PARALLEL-001
+    title: Parallel system requires decision
+    applies_to:
+      - capability_routing
+    instruction: "Keep improving the existing Autopilot mesh/MCP/governance layer. A parallel AI Production Studio remains possible only after an explicit architecture decision with interop or migration plan."
+    severity: major
+    must_not_assume:
+      - Do not create duplicate sources of truth.
+      - Do not create an unscoped parallel runtime.
+  - id: OBS-SCOPE-001
+    title: Observability keeps Autopilot and project problems separate
+    applies_to:
+      - observability_mesh
+      - project_mesh_lifecycle
+    instruction: "Classify every diagnostic task as an Autopilot control-plane problem or a supervised project problem before reading logs. Keep raw project logs in the project or source system; Autopilot may store only redacted summaries, source pointers, and routing decisions."
+    severity: blocker
+    must_not_assume:
+      - Do not diagnose product runtime problems from Autopilot operational logs.
+      - Do not copy raw project logs into the Autopilot mesh or work log.
+  - id: OBS-EVIDENCE-001
+    title: Diagnostics need bounded evidence
+    applies_to:
+      - observability_mesh
+    instruction: "Define symptom, time window, source inventory, correlation ID or fallback, baseline metric, suspected layer, reproduction/counterexample, and fix verification before changing runtime behavior."
+    severity: major
+  - id: CTX-ECON-001
+    title: Use compact context packets
+    applies_to:
+      - context_economy_policy
+    instruction: "Do not load the full project by default. Prefer select_capabilities, relevant subgraph, compact agent packet, and session summary/restart when context gets noisy."
+    severity: major
+  - id: MODEL-SPEND-001
+    title: Use the smallest safe free/no-cost model class
+    applies_to:
+      - model_spend_policy
+      - reasoning_strategy
+    instruction: "Use local or low-cost workers for routine work; use free/no-cost cloud advisory models only when provider availability, no-cost use, redaction, and factual verification are confirmed."
+    severity: major
+    must_not_assume:
+      - Do not assume any provider is connected or available.
+  - id: MODEL-EVAL-001
+    title: Score model output before accepting or tuning it
+    applies_to:
+      - model_output_evaluation_policy
+      - prompt_library_policy
+      - reasoning_strategy
+      - model_spend_policy
+    instruction: "Before accepting a model output or changing a prompt, record a bounded score by dimension, source pointers, verification evidence, and the prompt/input delta. During learning, rerun immediately after a meaningful prompt/input change; after repeated similar failures, reroute reasoning or model selection through verified provider guidance."
+    severity: major
+    must_not_assume:
+      - Do not rerun a bad output with no prompt or input change.
+      - Do not switch models without repeated failure evidence, entitlement checks, and provider best-practice verification.
+  - id: MODEL-EVAL-002
+    title: Weekly prompt tuning needs collected eval records
+    applies_to:
+      - model_output_evaluation_policy
+      - prompt_library_policy
+      - protective_supervision_policy
+    instruction: "After the learning baseline, prompt and input updates should be batched from weekly eval summaries and repeated failure patterns. Do not make weekly prompt changes from anecdotes without source-linked eval records."
+    severity: major
+  - id: MODEL-EVAL-003
+    title: Advisory provider runs need valid output artifacts
+    applies_to:
+      - model_output_evaluation_policy
+      - reasoning_strategy
+      - observability_mesh
+      - protective_supervision_policy
+    instruction: "External advisory runs must record provider run status, runner artifact type, and model-output presence separately. If the provider command fails, the artifact is prompt/log-only, or no model output is present, set blocked or waiting_owner and do not continue into content review."
+    severity: blocker
+    must_not_assume:
+      - Do not treat shell logs, prompt echoes, CLI syntax errors, or provider availability failures as model output.
+      - Do not continue a multi-model brainstorm by silently dropping an unavailable provider.
+  - id: PROMPT-LIB-001
+    title: Prompts need source authority and evals
+    applies_to:
+      - prompt_library_policy
+      - reasoning_strategy
+      - model_spend_policy
+    instruction: "Before adopting a prompt, record official provider guidance or local evidence, complete prompt metadata, define evals, and keep a rollback path. Treat DAIR.AI and GitHub prompt catalogs as inspiration only."
+    severity: major
+    must_not_assume:
+      - Do not treat public prompt packs as source of truth.
+      - Do not reuse one provider-specific prompt across models without review.
+  - id: PROMPT-LIB-002
+    title: Leaked prompts are not allowed
+    applies_to:
+      - prompt_library_policy
+    instruction: "Do not copy leaked system prompts, private prompts without permission, or undated prompt packs into Autopilot. Use official provider docs, local evals, and reviewed prompt contracts instead."
+    severity: blocker
+  - id: PROTECT-SUP-001
+    title: Agent outputs must become bounded handoff packets
+    applies_to:
+      - protective_supervision_policy
+      - prompt_library_policy
+      - context_economy_policy
+    instruction: "Never pass raw agent output as the next prompt. Normalize it into verified facts, assumptions, decisions, risks, open questions, next-agent scope, forbidden actions, required checks, expected output, and source pointers."
+    severity: blocker
+    must_not_assume:
+      - Do not treat agent output as prompt authority.
+  - id: PROTECT-SUP-002
+    title: Progress ledgers need owners and dependencies
+    applies_to:
+      - protective_supervision_policy
+      - project_mesh_lifecycle
+      - observability_mesh
+    instruction: "Every progress state must record done, missing, waiting, blocked, next sequence, evidence, and source pointers. Every blocker needs an owner or source needed to unblock it."
+    severity: major
+  - id: PROTECT-SUP-003
+    title: Currentness sentinel is source-grounded and report-first
+    applies_to:
+      - protective_supervision_policy
+      - reasoning_strategy
+      - prompt_library_policy
+      - model_spend_policy
+    instruction: "Use Context7 when connected, official docs, local evidence, tests, or controlled browser evidence for unstable claims. Report recommendations first; do not silently change defaults or require paid/cloud-only tooling."
+    severity: major
+    must_not_assume:
+      - Do not assume a provider, plugin, or current docs source is available.
+  - id: CODEX-HOOK-001
+    title: Codex hooks are report-first guardrails
+    applies_to:
+      - codex_hooks_guardrail
+      - protective_supervision_policy
+      - observability_mesh
+    instruction: "Keep project-local Codex hooks deterministic, fast, redacted, and report-first. They may classify risk and preserve compact evidence, but they may not approve delivery, mutate remotes, call cloud workers, or become another runtime queue."
+    severity: blocker
+    must_not_assume:
+      - Do not claim hooks are active before exact-definition trust review and runtime evidence.
+      - Do not treat PreToolUse as a complete enforcement boundary.
+  - id: CODEX-HOOK-002
+    title: Hook state never stores raw content
+    applies_to:
+      - codex_hooks_guardrail
+      - observability_mesh
+    instruction: "Persist only hashes, classifications, event names, result classes, and bounded source pointers. Never store raw prompts, commands, tool responses, transcripts, credentials, customer data, or supervised-project runtime logs."
+    severity: blocker
+  - id: CODEX-HOOK-003
+    title: Blocking hooks require measured false-positive safety
+    applies_to:
+      - codex_hooks_guardrail
+    instruction: "Keep new rules report-only until an owner approves blocking behavior, focused deny tests pass, false-positive evidence is reviewed, and rollback is documented."
+    severity: major
+  - id: OPT-MEASURE-001
+    title: Measure before optimization
+    applies_to:
+      - optimization_mesh
+    instruction: "Do not optimize without a baseline, target metric, backup, and rollback plan."
+    severity: blocker
+  - id: DATA-SAFE-001
+    title: Preserve source data
+    applies_to:
+      - data_mesh
+      - document_mesh
+    instruction: "Preserve originals, mark uncertain values, validate transforms, and keep a transformation log."
+    severity: blocker
+  - id: THREE-D-001
+    title: 3D is a premium add-on
+    applies_to:
+      - three_d_experience_addon
+    instruction: "Use 3D only when it improves product, process, data, or system understanding; keep SEO content in HTML and require performance, mobile, and reduced-motion fallbacks."
+    severity: major
+  - id: WORKER-CLI-001
+    title: Worker CLI delegation requires runCliWorker
+    applies_to:
+      - supervisor_execution_loop
+      - subscription_worker_boundary
+    instruction: "Delegate bounded worker tasks by calling runCliWorker() with the correct vendor: codex_cli for implementation/code/tests, agy_cli for analysis/brainstorming. Never use a Claude agent to roleplay as a vendor worker. A Claude-impersonating vendor produces unverified output with no evidence record, no worker lock, and no subagent trace."
+    severity: blocker
+    must_not_assume:
+      - Do not assume Claude can act as codex_cli or agy_cli.
+      - Do not skip runCliWorker() for a vendor task because it is small or fast.

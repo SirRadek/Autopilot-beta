@@ -1,0 +1,30 @@
+id: auth_required
+type: control
+name: Auth required
+question: "Does this change require a signed-in user?"
+why: "Authenticated user actions must reject anonymous requests and bind every mutation to the active session."
+signals:
+  - auth
+  - authenticated
+  - session
+  - user
+  - profile
+related_agents:
+  - backend
+  - security
+  - qa
+related_files:
+  - src/auth/session.ts
+  - src/api
+required_checks:
+  - reject_unauthenticated
+  - bind_action_to_session_user
+  - test_expired_session
+stop_conditions:
+  - missing_auth_check
+  - unknown_session_source
+must_not_assume:
+  - Do not assume auth middleware already protects the route.
+objective:
+  - Verify session identity before accepting the change.
+  - Preserve existing auth conventions.

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/decision-mesh-node.schema.json",
+  "title": "Decision Mesh Node",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "name",
+    "question",
+    "why",
+    "signals",
+    "related_agents",
+    "related_files",
+    "required_checks"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "type": { "type": "string" },
+    "name": { "type": "string" },
+    "question": { "type": "string" },
+    "why": { "type": "string", "minLength": 1 },
+    "signals": { "type": "array", "items": { "type": "string" } },
+    "related_agents": { "type": "array", "items": { "type": "string" } },
+    "related_files": { "type": "array", "items": { "type": "string" } },
+    "required_checks": { "type": "array", "items": { "type": "string" } },
+    "stop_conditions": { "type": "array", "items": { "type": "string" } },
+    "must_not_assume": { "type": "array", "items": { "type": "string" } },
+    "objective": { "type": "array", "items": { "type": "string" } },
+    "failure_modes": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

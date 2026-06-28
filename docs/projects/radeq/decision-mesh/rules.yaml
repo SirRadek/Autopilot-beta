@@ -1,0 +1,13 @@
+rules:
+  - id: RAD-LEADS-001
+    title: Lead capture requires client and server validation
+    applies_to:
+      - lead_capture_pipeline
+    instruction: "Client and server validation are both required before a lead is written to D1; never trust client-only validation."
+    severity: blocker
+  - id: RAD-OBS-001
+    title: Runtime diagnostics stay scoped and redacted
+    applies_to:
+      - runtime_observability_boundary
+    instruction: "Keep Radeq deploy logs, console errors, and D1 lead API diagnostics inside the project; Autopilot stores only redacted summaries and source pointers."
+    severity: major

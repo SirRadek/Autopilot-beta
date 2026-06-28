@@ -1,0 +1,6 @@
+edges:
+  - from: lead_capture_pipeline
+    to: runtime_observability_boundary
+    relation: monitored_by
+    weight: 0.7
+    why: "Lead API failures and D1 write errors surface through runtime diagnostics."

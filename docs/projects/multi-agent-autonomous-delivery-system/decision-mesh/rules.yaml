@@ -1,0 +1,25 @@
+rules:
+  - id: MAS-GOV-001
+    title: Governance evidence is required
+    applies_to:
+      - governance_pipeline
+    instruction: "Do not claim delivery without gate result, verification evidence, work-log update, and independent review where required."
+    severity: blocker
+  - id: MAS-WORKER-001
+    title: Workers cannot self-approve
+    applies_to:
+      - worker_boundary
+    instruction: "Worker output must be independently reviewed before governance approval."
+    severity: blocker
+  - id: MAS-OBS-001
+    title: Delivery diagnostics stay project-scoped
+    applies_to:
+      - delivery_observability_boundary
+    instruction: "Diagnose delivery-system worker, governance, model-routing, and verification symptoms in this project mesh. Autopilot may store only redacted summaries and source pointers."
+    severity: blocker
+  - id: MAS-MODEL-001
+    title: Model routing is local-first
+    applies_to:
+      - model_routing_boundary
+    instruction: "Routine worker tasks stay local or low-cost by default; frontier models are reserved for strategic reasoning, review, audit, planning, and hard edge cases."
+    severity: major

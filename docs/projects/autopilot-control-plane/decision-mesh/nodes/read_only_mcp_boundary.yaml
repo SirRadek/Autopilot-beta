@@ -1,0 +1,29 @@
+id: read_only_mcp_boundary
+type: execution_boundary
+name: Read-only MCP boundary
+question: "Does this MCP or tool change remain read-only and local?"
+why: "The current Autopilot MCP server is approved only for compact context routing, not connector mutation, execution, deployment, or product repository access."
+signals:
+  - mcp
+  - tool
+  - server
+  - connector
+  - mutation
+  - execution
+related_agents:
+  - architect
+  - security
+  - qa
+related_files:
+  - mcp/server.ts
+  - docs/autopilot/decision-mesh-mcp-decision.md
+required_checks:
+  - read_only_tool_review
+  - no_connector_client
+  - no_execution_api
+stop_conditions:
+  - mutating_mcp_tool
+  - connector_client_added
+  - product_repo_access_from_mcp
+objective:
+  - Keep MCP tools local, read-only, and bounded to Autopilot context routing.

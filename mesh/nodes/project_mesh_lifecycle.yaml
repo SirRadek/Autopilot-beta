@@ -1,0 +1,40 @@
+id: project_mesh_lifecycle
+type: governance_policy
+name: Project mesh lifecycle
+question: "Does this project have its own Decision Mesh, separate from Autopilot's mesh?"
+why: "Autopilot's mesh describes how Autopilot routes and governs work internally; every supervised project needs its own project-specific mesh created with its architecture and updated after meaningful work."
+signals:
+  - project mesh
+  - decision mesh
+  - project
+  - architecture onboarding
+  - onboarding
+  - architecture start
+  - new project
+  - update mesh
+  - completion
+  - completed
+related_agents:
+  - architect
+  - qa
+related_files:
+  - docs/autopilot/project-architecture-standard.md
+  - docs/projects/<project-slug>/architecture.md
+  - docs/projects/<project-slug>/work-log.md
+  - docs/projects/<project-slug>/decision-mesh/
+required_checks:
+  - create_project_mesh_at_architecture_start
+  - keep_autopilot_mesh_separate
+  - update_project_mesh_after_completed_work
+  - record_project_mesh_status_in_handoff
+stop_conditions:
+  - missing_project_mesh
+  - project_mesh_not_updated_after_work
+  - autopilot_mesh_used_as_product_mesh
+must_not_assume:
+  - Do not reuse Autopilot's mesh as the product project's mesh.
+  - Do not finish a project work slice without updating that project's mesh or recording why no mesh impact exists.
+objective:
+  - Create a project-specific Decision Mesh when project architecture starts.
+  - Update the project mesh after every meaningful completed work slice.
+  - Keep Autopilot's operational mesh separate from product/project meshes.

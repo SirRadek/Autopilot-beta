@@ -1,0 +1,27 @@
+id: runtime_observability_boundary
+type: project_boundary
+name: Radeq runtime observability boundary
+question: "Do runtime diagnostics stay scoped to Radeq with redacted summaries, not raw logs copied into Autopilot?"
+why: "Radeq runs on Cloudflare with D1; deploy logs, client console errors, lead API failures, and Core Web Vitals diagnostics must stay project-scoped and redacted."
+signals:
+  - diagnose
+  - deploy logs
+  - console errors
+  - d1
+  - lead api
+  - core web vitals
+  - observability
+  - runtime
+related_agents:
+  - qa
+  - seo_performance
+related_files:
+  - docs/projects/radeq/architecture.md
+required_checks:
+  - project_slug_confirmed
+  - redacted_log_summary
+  - suspect_layer_identified
+stop_conditions:
+  - raw_project_logs_copied_to_autopilot
+objective:
+  - Keep Radeq runtime diagnostics scoped and redacted inside the Radeq project mesh.

@@ -1,0 +1,46 @@
+id: local_worker_boundary
+type: routing_policy
+name: Local worker boundary
+question: "Does the task route to deterministic tools, Qwen 7B, Qwen 14B, or review escalation based on scope and evidence?"
+why: "Autopilot should save paid tokens by using local/no-cost workers, but local LLMs must stay bounded, reviewed, and backed by deterministic checks."
+signals:
+  - local worker
+  - qwen
+  - qwen2.5 coder
+  - ollama
+  - token savings
+  - local model
+  - bounded worker
+  - deterministic verification
+related_agents:
+  - architect
+  - qa
+  - frontend
+  - security
+related_files:
+  - docs/autopilot/local-worker-operating-model.md
+  - src/data/delivery-system/localWorkers.ts
+  - src/data/delivery-system/modelPolicy.ts
+  - src/data/delivery-system/modelSpend.ts
+  - mcp/server.ts
+required_checks:
+  - prefer_deterministic_tools_first
+  - model_available_locally
+  - hardware_budget_verified
+  - bounded_file_scope
+  - diff_review_required
+  - tests_required
+  - record_model_choice_when_risk_affects_delivery
+stop_conditions:
+  - local_model_unavailable
+  - hardware_budget_unverified
+  - context_too_large_for_local_worker
+  - task_requires_architecture_decision
+  - private_secret_in_prompt
+  - output_used_without_review
+  - test_failure_untriaged
+objective:
+  - Save paid tokens with local/no-cost workers.
+  - Use Qwen2.5-Coder 7B for fast small coding drafts.
+  - Use Qwen2.5-Coder 14B only as the maximum bounded local coding worker after install and hardware checks.
+  - Keep deterministic checks and human/supervisor review as acceptance evidence.

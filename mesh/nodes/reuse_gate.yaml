@@ -1,0 +1,44 @@
+id: reuse_gate
+type: governance_policy
+name: Reuse gate
+question: "Has existing code, policy, or package capability been checked before writing new implementation?"
+why: "Bounded coding should not create duplicate utilities or parallel abstractions when existing code, local policy, or packages already solve the problem."
+signals:
+  - implement
+  - new function
+  - new component
+  - new utility
+  - add feature
+  - write code
+related_agents:
+  - backend
+  - frontend
+  - qa
+  - architect
+related_files:
+  - src/data/delivery-system/dependencyFreshness.ts
+  - src/data/delivery-system/checkCompletionMatrix.ts
+  - docs/autopilot/agent-handoff-packet-template.md
+required_checks:
+  - rg_search_before_new_code
+  - reuse_check_recorded
+  - dependency_freshness_checked_when_relevant
+  - token_saving_estimate_recorded
+  - package_capability_checked_before_utility
+stop_conditions:
+  - implementation_started_without_rg_search
+  - duplicate_code_written_when_existing_match_found
+  - package_not_checked_before_implementing_utility
+  - new_code_written_when_library_update_would_provide_it
+must_not_assume:
+  - Do not add a new utility before searching existing modules.
+  - Do not treat no-op checks as optional for bounded coding tasks.
+  - Do not auto-update dependencies while checking freshness.
+objective:
+  - Reduce duplicate code and unnecessary abstractions.
+  - Make reuse decisions explicit in handoff packets.
+  - Keep dependency checks advisory and owner-controlled.
+failure_modes:
+  - implementation_started_without_rg_search
+  - duplicate_code_written_when_existing_match_found
+  - package_not_checked_before_implementing_utility

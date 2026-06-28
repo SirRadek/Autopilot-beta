@@ -1,0 +1,164 @@
+rules:
+  - id: ACP-BOUNDARY-001
+    title: Control plane is not product runtime
+    applies_to:
+      - control_plane_boundary
+    instruction: "Do not add product runtime, deployment, connector mutation, or autonomous execution to Autopilot without an explicit architecture decision."
+    severity: blocker
+  - id: ACP-MCP-001
+    title: MCP remains read-only
+    applies_to:
+      - read_only_mcp_boundary
+    instruction: "Autopilot MCP tools may route context but must not mutate connectors, run workflows, deploy, or read product repositories."
+    severity: blocker
+  - id: ACP-OBS-001
+    title: Diagnostics keep Autopilot and project ownership separate
+    applies_to:
+      - control_plane_observability_boundary
+    instruction: "Classify every symptom as Autopilot control-plane or supervised-project runtime before reading logs. Autopilot may store redacted summaries and source pointers only; raw project logs stay in the project or source system."
+    severity: blocker
+  - id: ACP-OBS-002
+    title: Project runtime problems route into project mesh
+    applies_to:
+      - control_plane_observability_boundary
+      - capability_routing_layer
+    instruction: "When evidence belongs to a supervised project, use that project's architecture record and decision mesh before implementation planning continues."
+    severity: major
+  - id: ACP-CAP-001
+    title: Extend existing capability routing first
+    applies_to:
+      - capability_routing_layer
+    instruction: "Improve the current mesh/MCP/governance path before creating a parallel system; keep the parallel option behind a decision record."
+    severity: major
+  - id: ACP-GRAPHIC-001
+    title: Graphic agent uses local/free defaults and free cloud when verified
+    applies_to:
+      - graphic_agent_boundary
+    instruction: "Route graphics, motion, models, and storyboards through the Graphic Production Agent policy; allow cloud tools when free/no-cost is confirmed, and block paid tools without owner exception."
+    severity: major
+  - id: ACP-GRAPHIC-002
+    title: Motion cannot hide primary content
+    applies_to:
+      - graphic_agent_boundary
+    instruction: "Keep primary content in the DOM and require reduced-motion, mobile fallback, and performance budget evidence for motion or canvas work."
+    severity: blocker
+  - id: ACP-DESIGN-001
+    title: Design critic is independent
+    applies_to:
+      - design_intelligence_boundary
+    instruction: "Design critique must be performed by a different role or actor than the visual producer, and findings must be evidence-based."
+    severity: blocker
+  - id: ACP-DESIGN-002
+    title: Architecture library is advisory
+    applies_to:
+      - design_intelligence_boundary
+    instruction: "Context7, official docs, GitHub projects, and local architecture library entries may recommend technologies but do not approve runtime adoption."
+    severity: major
+  - id: ACP-DESIGN-003
+    title: Context7 verifies reasoning and Gemini brainstorm claims
+    applies_to:
+      - design_intelligence_boundary
+      - model_reasoning_boundary
+    instruction: "Use Context7 first when connected for current framework, library, SDK, API, browser, cloud, SEO, accessibility, and best-practice claims; if unavailable, record an official-docs fallback before adopting Gemini or other advisory model suggestions."
+    severity: major
+  - id: ACP-MODEL-001
+    title: Free cloud reasoning is advisory
+    applies_to:
+      - model_reasoning_boundary
+    instruction: "Use Gemini and other free/no-cost cloud models only for redacted brainstorming, critique, validation, and second opinions; keep paid credits, routine worker loops, and source-of-truth authority blocked."
+    severity: major
+  - id: ACP-WORKER-001
+    title: Local workers save tokens but do not approve work
+    applies_to:
+      - local_worker_boundary
+    instruction: "Prefer deterministic tools and local/no-cost workers such as Qwen2.5-Coder 7B or 14B for bounded drafts, but require install, hardware, scope, review, and test evidence before accepting output."
+    severity: major
+  - id: ACP-TOKEN-001
+    title: Caveman mode minimizes context before model spend
+    applies_to:
+      - token_efficiency_boundary
+    instruction: "For narrow tasks, use Caveman Mode: one task, minimal files, rg first, deterministic tools first, local worker before cloud, and stop instead of guessing."
+    severity: major
+  - id: ACP-PROMPT-001
+    title: Prompt library is local and versioned first
+    applies_to:
+      - prompt_library_boundary
+      - model_reasoning_boundary
+      - local_worker_boundary
+    instruction: "Store reusable prompts as local Git/Markdown contracts with metadata, sources, evals, and rollback before using them as defaults. Do not adopt leaked prompts or paid prompt-management tooling without an owner decision."
+    severity: major
+  - id: ACP-PROMPT-002
+    title: Provider-specific prompt claims need official sources
+    applies_to:
+      - prompt_library_boundary
+      - model_reasoning_boundary
+    instruction: "Use official OpenAI, Anthropic, Google, or Qwen documentation for provider-specific prompting behavior; use DAIR.AI and GitHub catalogs only as inspiration until verified."
+    severity: major
+  - id: ACP-MODEL-EVAL-001
+    title: Score model output before accepting or tuning it
+    applies_to:
+      - model_output_evaluation_boundary
+      - prompt_library_boundary
+      - model_reasoning_boundary
+      - token_efficiency_boundary
+    instruction: "Before accepting a model output or changing a prompt/input packet, record a score by dimension, source pointers, verification evidence, and the exact delta. During learning, rerun immediately after a meaningful prompt/input change; after repeated similar failures, review reasoning/model routing through verified provider guidance."
+    severity: major
+  - id: ACP-MODEL-EVAL-002
+    title: Weekly tuning needs eval records
+    applies_to:
+      - model_output_evaluation_boundary
+      - prompt_library_boundary
+      - protective_supervision_boundary
+    instruction: "After the learning baseline, weekly prompt/input updates must be based on collected eval records and repeated failure patterns, not anecdotes or raw model preference."
+    severity: major
+  - id: ACP-MODEL-RUN-001
+    title: Advisory provider runs need valid output artifacts
+    applies_to:
+      - control_plane_observability_boundary
+      - model_output_evaluation_boundary
+      - model_reasoning_boundary
+      - protective_supervision_boundary
+    instruction: "External advisory runs must record provider run status, runner artifact type, and model-output presence separately. If the provider command fails, the artifact is prompt/log-only, or no model output is present, set blocked or waiting_owner and do not continue into content review."
+    severity: blocker
+    must_not_assume:
+      - Do not treat shell logs, prompt echoes, CLI syntax errors, or provider availability failures as model output.
+      - Do not continue a multi-model brainstorm by silently dropping an unavailable provider.
+  - id: ACP-PROTECT-001
+    title: Protective supervision is report-first
+    applies_to:
+      - protective_supervision_boundary
+      - control_plane_boundary
+    instruction: "Use Protective Supervision to report currentness gaps, normalize handoffs, track progress, and surface blockers. Do not let it mutate remotes, approve delivery, or become a second runtime queue."
+    severity: blocker
+    must_not_assume:
+      - Do not treat the sentinel as an autonomous worker.
+  - id: ACP-PROTECT-002
+    title: Handoffs and progress need source pointers
+    applies_to:
+      - protective_supervision_boundary
+      - control_plane_observability_boundary
+      - prompt_library_boundary
+      - token_efficiency_boundary
+    instruction: "Every handoff and progress delta must include source pointers, stop-condition audit, next-agent scope, forbidden actions, and verification gaps."
+    severity: major
+  - id: ACP-HOOK-001
+    title: Codex hooks remain local report-first guardrails
+    applies_to:
+      - codex_hooks_boundary
+      - protective_supervision_boundary
+      - control_plane_observability_boundary
+    instruction: "Use project-local Codex hooks for deterministic lifecycle warnings, compact continuity, and redacted evidence only. Do not let hooks approve work, call cloud workers, mutate remotes, or become a second execution queue."
+    severity: blocker
+  - id: ACP-HOOK-002
+    title: Hook activation requires trust and runtime evidence
+    applies_to:
+      - codex_hooks_boundary
+    instruction: "Do not claim the Codex App or CLI loaded project hooks until the exact definitions were reviewed and trusted and a refreshed session produced lifecycle evidence."
+    severity: major
+  - id: ACP-HOOK-003
+    title: Hook state excludes raw content
+    applies_to:
+      - codex_hooks_boundary
+      - control_plane_observability_boundary
+    instruction: "Store only redacted metadata and hashes. Raw prompts, commands, responses, transcripts, credentials, customer data, and project runtime logs are forbidden in Autopilot hook state."
+    severity: blocker

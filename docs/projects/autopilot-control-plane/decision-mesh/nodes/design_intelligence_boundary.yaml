@@ -1,0 +1,46 @@
+id: design_intelligence_boundary
+type: review_boundary
+name: Design intelligence boundary
+question: "Does visual analysis and critique remain independent from production and grounded in current research evidence?"
+why: "Autopilot needs a Visual Analyst and Design Critic to judge visual direction, tool choices, UX quality, accessibility, performance, and maintainability without producing assets or approving their own work."
+signals:
+  - design critic
+  - visual analyst
+  - critique
+  - design review
+  - visual analysis
+  - context7
+  - github research
+  - architecture library
+related_agents:
+  - visual-analyst
+  - design-critic
+  - design_ux
+  - frontend
+  - seo_performance
+  - qa
+related_files:
+  - docs/autopilot/design-intelligence-operating-model.md
+  - src/data/delivery-system/designIntelligence.ts
+  - src/data/delivery-system/roles.ts
+  - mcp/server.ts
+required_checks:
+  - independent_design_critique
+  - current_primary_docs_or_context7
+  - context7_or_official_docs_verified
+  - gemini_brainstorm_claims_labeled_and_verified
+  - github_license_activity_review
+  - free_tier_or_no_cost_confirmed
+  - architecture_library_status_check
+  - no_self_approval
+stop_conditions:
+  - critic_is_same_actor_as_producer
+  - unverified_technology_claim
+  - gemini_claim_adopted_without_context7_or_official_docs
+  - license_unknown_for_adoption
+  - cloud_dependency_without_free_tier_confirmation
+  - paid_dependency_without_owner_exception
+  - runtime_scope_not_approved
+objective:
+  - Keep design analysis, critique, and technology library recommendations evidence-based and separate from asset production.
+  - Route Gemini design and technology brainstorming through Context7 when connected, or official-docs fallback when Context7 is unavailable.

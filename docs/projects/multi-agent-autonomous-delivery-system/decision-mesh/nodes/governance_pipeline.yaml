@@ -1,0 +1,29 @@
+id: governance_pipeline
+type: project_boundary
+name: Governance pipeline
+question: "Does this change preserve the governed delivery pipeline from intake through verification and handoff?"
+why: "The multi-agent delivery system is defined by auditable stages, independent review, governance gates, and work-log evidence."
+signals:
+  - governance
+  - pipeline
+  - gate
+  - intake
+  - handoff
+  - verification
+related_agents:
+  - orchestrator
+  - architect
+  - qa
+related_files:
+  - docs/projects/multi-agent-autonomous-delivery-system/architecture.md
+  - docs/autopilot/delivery-system-governance.md
+required_checks:
+  - gate_result_recorded
+  - work_log_updated
+  - independent_review_evidence
+stop_conditions:
+  - self_approval
+  - missing_gate_result
+  - missing_work_log_evidence
+objective:
+  - Preserve auditable delivery flow before execution runtime exists.

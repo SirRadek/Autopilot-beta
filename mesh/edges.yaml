@@ -1,0 +1,351 @@
+edges:
+  - from: file_upload
+    to: auth_required
+    relation: requires
+    weight: 0.97
+    why: "Uploads must reject anonymous users before accepting content."
+  - from: file_upload
+    to: storage_provider
+    relation: depends_on
+    weight: 0.93
+    why: "Uploaded files need a known storage provider and URL contract."
+  - from: file_upload
+    to: security_upload
+    relation: requires
+    weight: 0.92
+    why: "Uploads receive untrusted content and need security review."
+  - from: file_upload
+    to: qa_upload_tests
+    relation: validates_with
+    weight: 0.86
+    why: "Uploads need positive and negative test coverage."
+  - from: file_upload
+    to: user_profile
+    relation: touches
+    weight: 0.8
+    why: "Avatar uploads usually update or display profile state."
+  - from: file_upload
+    to: frontend_form
+    relation: touches
+    weight: 0.74
+    why: "User uploads usually need a form and error states."
+  - from: file_upload
+    to: public_api
+    relation: may_expose
+    weight: 0.7
+    why: "Upload endpoints can become public API surfaces."
+  - from: payments_checkout
+    to: public_api
+    relation: may_expose
+    weight: 0.82
+    why: "Checkout and webhook routes are public contract surfaces."
+  - from: payments_checkout
+    to: auth_required
+    relation: requires
+    weight: 0.78
+    why: "Customer checkout state must bind to an authenticated or verified identity."
+  - from: public_api
+    to: security_upload
+    relation: escalates_when_combined
+    weight: 0.76
+    why: "Public routes that accept files raise upload security risk."
+  - from: reasoning_strategy
+    to: payments_checkout
+    relation: escalates_for_review
+    weight: 0.82
+    why: "Revenue-critical payment work can justify strategic reasoning review."
+  - from: reasoning_strategy
+    to: public_api
+    relation: escalates_for_review
+    weight: 0.8
+    why: "Public API contracts can justify architecture and security reasoning."
+  - from: reasoning_strategy
+    to: security_upload
+    relation: escalates_for_audit
+    weight: 0.78
+    why: "Security-sensitive upload surfaces can justify frontier-level audit."
+  - from: project_mesh_lifecycle
+    to: reasoning_strategy
+    relation: informs
+    weight: 0.72
+    why: "Project meshes should capture when work requires strategic reasoning or local-worker routing decisions."
+  - from: project_mesh_lifecycle
+    to: public_api
+    relation: tracks_project_surface
+    weight: 0.68
+    why: "Project meshes should record public API surfaces and their stop conditions."
+  - from: project_mesh_lifecycle
+    to: payments_checkout
+    relation: tracks_project_surface
+    weight: 0.66
+    why: "Project meshes should record project-specific revenue and checkout risks when they exist."
+  - from: capability_routing
+    to: web_build_mesh
+    relation: activates
+    weight: 0.84
+    why: "New website and web app tasks should route through web build checks before implementation."
+  - from: capability_routing
+    to: optimization_mesh
+    relation: activates
+    weight: 0.88
+    why: "Slow, broken, or conversion-related tasks should begin with measured optimization."
+  - from: capability_routing
+    to: data_mesh
+    relation: activates
+    weight: 0.85
+    why: "Data cleanup, migration, reporting, and knowledge tasks require data safety rules."
+  - from: capability_routing
+    to: seo_mesh
+    relation: activates
+    weight: 0.86
+    why: "Web, recovery, and optimization tasks often need technical SEO routing."
+  - from: capability_routing
+    to: automation_mesh
+    relation: activates
+    weight: 0.8
+    why: "Manual process digitization should route through automation failure and handoff checks."
+  - from: capability_routing
+    to: recovery_mesh
+    relation: activates
+    weight: 0.8
+    why: "Broken or hacked site tasks need recovery-first sequencing."
+  - from: capability_routing
+    to: observability_mesh
+    relation: activates
+    weight: 0.84
+    why: "Log, tracing, monitoring, and incident tasks must first classify ownership and evidence boundaries."
+  - from: capability_routing
+    to: document_mesh
+    relation: activates
+    weight: 0.76
+    why: "Document reconstruction should route through preservation and uncertainty checks."
+  - from: capability_routing
+    to: bot_rag_mesh
+    relation: activates
+    weight: 0.76
+    why: "Bot and RAG tasks need source grounding and privacy boundaries."
+  - from: capability_routing
+    to: three_d_experience_addon
+    relation: optional_addon
+    weight: 0.62
+    why: "3D is available as a premium enhancement only when it improves understanding or product presentation."
+  - from: web_build_mesh
+    to: seo_mesh
+    relation: requires
+    weight: 0.84
+    why: "New web builds need SEO basics and content structure."
+  - from: optimization_mesh
+    to: seo_mesh
+    relation: coordinates_with
+    weight: 0.82
+    why: "SEO and performance optimization reinforce each other."
+  - from: optimization_mesh
+    to: data_mesh
+    relation: may_require
+    weight: 0.68
+    why: "Performance bottlenecks can come from data and database issues."
+  - from: observability_mesh
+    to: optimization_mesh
+    relation: informs
+    weight: 0.86
+    why: "Diagnostics should provide baseline and bottleneck evidence before optimization changes."
+  - from: observability_mesh
+    to: recovery_mesh
+    relation: sequences_into
+    weight: 0.78
+    why: "Incident evidence can route a problem into recovery when the system is broken or unsafe."
+  - from: observability_mesh
+    to: automation_mesh
+    relation: audits
+    weight: 0.74
+    why: "Automation failures require logs, retries, alerts, and manual handoff evidence."
+  - from: observability_mesh
+    to: public_api
+    relation: may_trace
+    weight: 0.72
+    why: "Public API diagnostics often need request IDs, status codes, and bounded error contracts."
+  - from: observability_mesh
+    to: model_output_evaluation_policy
+    relation: classifies_failed_provider_run
+    weight: 0.86
+    why: "Control-plane diagnostics for provider runner logs must verify model-output presence before content evaluation."
+  - from: observability_mesh
+    to: protective_supervision_policy
+    relation: reports_blocker
+    weight: 0.82
+    why: "Missing provider output should become a blocked or waiting_owner progress state before the next handoff."
+  - from: project_mesh_lifecycle
+    to: observability_mesh
+    relation: separates_scope
+    weight: 0.84
+    why: "Project meshes own project runtime diagnostics; Autopilot only routes and records redacted evidence."
+  - from: recovery_mesh
+    to: optimization_mesh
+    relation: sequences_into
+    weight: 0.78
+    why: "Recovery diagnosis often leads to prioritized optimization fixes."
+  - from: recovery_mesh
+    to: seo_mesh
+    relation: sequences_into
+    weight: 0.76
+    why: "Rescue work often needs SEO recovery, URL maps, and indexability checks."
+  - from: document_mesh
+    to: data_mesh
+    relation: depends_on
+    weight: 0.8
+    why: "Document extraction output should become validated structured data."
+  - from: bot_rag_mesh
+    to: data_mesh
+    relation: depends_on
+    weight: 0.82
+    why: "Knowledge bots need curated and traceable source data."
+  - from: three_d_experience_addon
+    to: web_build_mesh
+    relation: enhances
+    weight: 0.64
+    why: "3D should enhance a web build rather than replace the page's HTML content and conversion flow."
+  - from: context_economy_policy
+    to: capability_routing
+    relation: precedes
+    weight: 0.8
+    why: "Selecting capabilities reduces the context needed for planning and execution."
+  - from: context_economy_policy
+    to: project_mesh_lifecycle
+    relation: informs
+    weight: 0.72
+    why: "Project meshes help provide compact project-specific context instead of full project dumps."
+  - from: model_spend_policy
+    to: reasoning_strategy
+    relation: refines
+    weight: 0.82
+    why: "Model spend rules refine when frontier reasoning is justified and when work should stay local."
+  - from: model_output_evaluation_policy
+    to: reasoning_strategy
+    relation: feeds_route_review
+    weight: 0.88
+    why: "Repeated weak outputs should trigger a reviewed reasoning or model route change instead of blind reruns."
+  - from: model_output_evaluation_policy
+    to: model_spend_policy
+    relation: constrains
+    weight: 0.84
+    why: "Changing models after poor output must still respect entitlement, cost, redaction, and smallest-safe-model rules."
+  - from: model_output_evaluation_policy
+    to: prompt_library_policy
+    relation: feeds_prompt_updates
+    weight: 0.86
+    why: "Scored outputs and failure patterns provide evidence for prompt version updates, evals, and rollback."
+  - from: model_output_evaluation_policy
+    to: context_economy_policy
+    relation: requires
+    weight: 0.82
+    why: "Every model-output retry should start from Caveman or compact routing before adding context or spend."
+  - from: model_output_evaluation_policy
+    to: protective_supervision_policy
+    relation: reports
+    weight: 0.82
+    why: "Protective supervision tracks blocked, retry, accepted, and weekly tuning states with source pointers."
+  - from: model_output_evaluation_policy
+    to: tool_inventory_policy
+    relation: checks_compatibility
+    weight: 0.76
+    why: "Prompt and handoff tuning must account for available plugins, skills, MCP tools, and Codex workflow compatibility."
+  - from: tool_inventory_policy
+    to: capability_routing
+    relation: refines
+    weight: 0.82
+    why: "Tool inventory rules distinguish active session plugins and skills from cached-only bundles before capability routing relies on them."
+  - from: tool_inventory_policy
+    to: reasoning_strategy
+    relation: constrains
+    weight: 0.78
+    why: "Reasoning model and plugin claims must use only verified callable tools or clearly marked cached/installation candidates."
+  - from: model_spend_policy
+    to: tool_inventory_policy
+    relation: coordinates_with
+    weight: 0.74
+    why: "Provider selection must account for whether a tool is local, session-callable, subscription-interactive, API-backed, or unavailable."
+  - from: prompt_library_policy
+    to: reasoning_strategy
+    relation: constrains
+    weight: 0.86
+    why: "Prompt contracts must follow reasoning model routing and cannot turn advisory output into source-of-truth decisions."
+  - from: prompt_library_policy
+    to: model_spend_policy
+    relation: constrains
+    weight: 0.84
+    why: "Prompt selection must respect provider-neutral, cost-aware, free/no-cost model routing."
+  - from: prompt_library_policy
+    to: context_economy_policy
+    relation: supports
+    weight: 0.78
+    why: "Reusable prompt contracts reduce repeated context and help build compact task packets."
+  - from: prompt_library_policy
+    to: bot_rag_mesh
+    relation: supports
+    weight: 0.72
+    why: "Knowledge and RAG prompts need source grounding, privacy boundaries, and answer policy."
+  - from: protective_supervision_policy
+    to: project_mesh_lifecycle
+    relation: updates
+    weight: 0.88
+    why: "Protective supervision keeps per-project progress, blockers, and waiting dependencies visible in the affected project mesh or work log."
+  - from: protective_supervision_policy
+    to: observability_mesh
+    relation: summarizes
+    weight: 0.84
+    why: "Sentinel and blocker review may summarize diagnostics, but raw project logs remain project-owned."
+  - from: protective_supervision_policy
+    to: context_economy_policy
+    relation: compacts
+    weight: 0.86
+    why: "Handoff compilation turns noisy agent outputs into compact next-agent packets."
+  - from: protective_supervision_policy
+    to: reasoning_strategy
+    relation: guards
+    weight: 0.82
+    why: "Currentness and handoff checks keep advisory model output separate from verified facts and delivery authority."
+  - from: protective_supervision_policy
+    to: prompt_library_policy
+    relation: feeds
+    weight: 0.8
+    why: "Recurring currentness findings can propose prompt-library updates after sources, evals, and rollback paths are recorded."
+  - from: codex_hooks_guardrail
+    to: protective_supervision_policy
+    relation: feeds_redacted_evidence
+    weight: 0.88
+    why: "Lifecycle hooks can provide compact redacted event evidence to protective supervision without becoming a worker or approval authority."
+  - from: codex_hooks_guardrail
+    to: observability_mesh
+    relation: reports_control_plane_events
+    weight: 0.84
+    why: "Hook evidence belongs to Autopilot control-plane observability and must not absorb raw supervised-project runtime logs."
+  - from: codex_hooks_guardrail
+    to: context_economy_policy
+    relation: preserves_compaction_context
+    weight: 0.82
+    why: "Pre- and post-compaction hooks preserve a compact source-grounded continuity reminder."
+  - from: codex_hooks_guardrail
+    to: project_mesh_lifecycle
+    relation: checks_boundary
+    weight: 0.8
+    why: "Lifecycle warnings can remind the orchestrator to load the supervised project's own mesh before implementation."
+  - from: supervisor_execution_loop
+    to: subscription_worker_boundary
+    relation: requires
+    weight: 0.95
+    why: "Every supervisor delegation must go through subscription worker boundary checks."
+  - from: supervisor_execution_loop
+    to: reuse_gate
+    relation: requires
+    weight: 0.88
+    why: "Reuse check is mandatory before any bounded_coding task delegation."
+  - from: supervisor_execution_loop
+    to: skill_registry_policy
+    relation: informs
+    weight: 0.75
+    why: "Supervisor checks skill registry before activating platform plugins."
+  - from: subscription_worker_boundary
+    to: model_spend_policy
+    relation: depends_on
+    weight: 0.9
+    why: "Subscription worker boundary inherits all model spend guardrails."

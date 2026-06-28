@@ -1,0 +1,27 @@
+id: qa_upload_tests
+type: quality_gate
+name: Upload QA tests
+question: "Are upload failure and success paths covered by tests?"
+why: "Upload work needs tests for file type, file size, auth, storage failures, and UI error behavior."
+signals:
+  - test
+  - qa
+  - upload
+  - invalid
+  - e2e
+related_agents:
+  - qa
+  - backend
+  - security
+related_files:
+  - tests/upload
+  - tests/e2e
+required_checks:
+  - test_valid_upload
+  - test_invalid_upload
+  - test_oversized_upload
+  - test_unauthenticated_upload
+stop_conditions:
+  - no_negative_upload_tests
+objective:
+  - Prove upload behavior with positive and negative tests.

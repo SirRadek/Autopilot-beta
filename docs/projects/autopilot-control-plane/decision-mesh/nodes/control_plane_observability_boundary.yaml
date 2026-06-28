@@ -1,0 +1,62 @@
+id: control_plane_observability_boundary
+type: diagnostics_boundary
+name: Control-plane observability boundary
+question: "Is this an Autopilot control-plane symptom, or does the evidence belong to a supervised project?"
+why: "Autopilot can route, summarize, and govern diagnostics, but product runtime logs and bottlenecks must remain owned by the affected project mesh or source system."
+signals:
+  - autopilot log
+  - mcp error
+  - mesh query
+  - command center
+  - governance test
+  - work log
+  - project log
+  - runtime log
+  - deploy log
+  - ci log
+  - advisory model run
+  - provider run
+  - runner log
+  - cli error
+  - cli syntax error
+  - prompt only
+  - no model output
+  - missing model output
+related_agents:
+  - architect
+  - qa
+  - security
+  - memory
+related_files:
+  - docs/projects/autopilot-control-plane/architecture.md
+  - docs/projects/autopilot-control-plane/work-log.md
+  - docs/autopilot/delivery-system-connector-snapshots.md
+  - mcp/server.ts
+  - src/lib/decision-mesh/
+  - tests/
+required_checks:
+  - problem_scope_classified
+  - autopilot_vs_project_boundary
+  - project_slug_or_control_plane_identified
+  - provider_run_status_recorded
+  - runner_artifact_contract_verified
+  - model_output_presence_verified
+  - redacted_log_summary
+  - source_pointer_recorded
+  - no_raw_project_log_storage
+  - reproduction_or_counterexample
+  - fix_verification
+stop_conditions:
+  - ambiguous_problem_owner
+  - project_runtime_debugged_as_autopilot_issue
+  - autopilot_issue_blamed_on_project_without_evidence
+  - raw_project_logs_copied_to_autopilot
+  - provider_run_failed_without_blocked_state
+  - model_output_missing_from_artifact
+  - advisory_workflow_continued_after_provider_error
+  - production_mutation_without_approval
+objective:
+  - Keep Autopilot operational diagnostics separate from supervised project runtime diagnostics.
+  - Store only redacted project log summaries and pointers in Autopilot.
+  - Verify provider run status and model-output presence before content review continues.
+  - Route project problems back into that project's mesh before implementation planning.
