@@ -103,6 +103,34 @@ function resolveCodexCommand(): { codexPath: string; bashPath: string | null } {
   return { codexPath, bashPath };
 }
 
+/**
+ * Allowlisted environment for vendor CLI spawns. Passing the full `process.env`
+ * leaks host secrets (API keys, tokens, cloud creds) into the vendor's shell, which
+ * runs with --dangerously-skip-permissions / an external sandbox. The vendor CLIs
+ * authenticate via their own config dirs (~/.codex, ~/.gemini) reached through
+ * HOME/USERPROFILE/APPDATA — not through env secrets — so an OS-essentials allowlist
+ * keeps them working while default-denying everything else (GITHUB_TOKEN, *_API_KEY, …).
+ */
+function buildVendorEnv(): NodeJS.ProcessEnv {
+  const allow = new Set([
+    "path", "pathext", "home", "userprofile", "homedrive", "homepath",
+    "appdata", "localappdata", "programdata",
+    "systemroot", "systemdrive", "windir", "comspec",
+    "temp", "tmp", "tmpdir",
+    "username", "user", "logname",
+    "os", "lang", "lc_all", "term",
+    "programfiles", "programfiles(x86)", "programw6432",
+    "number_of_processors", "processor_architecture"
+  ]);
+  const out: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && allow.has(key.toLowerCase())) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 export async function captureAgyResponse(
   prompt: string,
   opts: AgyCaptureOptions = {}
@@ -135,7 +163,7 @@ export async function captureAgyResponse(
       cols: 220,
       rows: 30,
       cwd: opts.cwd ?? process.cwd(),
-      env: process.env as Record<string, string>
+      env: buildVendorEnv() as Record<string, string>
     });
 
     proc.onData((data: string) => {
@@ -231,7 +259,7 @@ export async function captureCodexResponse(
       encoding: "utf8",
       cwd: opts.cwd ?? process.cwd(),
       timeout: opts.timeoutMs ?? 120000,
-      env: process.env
+      env: buildVendorEnv()
     });
   } else {
     // POSIX: direct spawnSync with stdin input
@@ -244,7 +272,7 @@ export async function captureCodexResponse(
       encoding: "utf8",
       cwd: opts.cwd ?? process.cwd(),
       timeout: opts.timeoutMs ?? 120000,
-      env: process.env
+      env: buildVendorEnv()
     });
   }
 
