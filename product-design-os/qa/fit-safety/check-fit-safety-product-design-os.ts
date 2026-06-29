@@ -20,6 +20,7 @@ export type PdosFitSafetyPreconditionCode =
   | "viewport_width_overflow_risk"
   | "fixed_min_width_over_viewport"
   | "fixed_height_floor_risk"
+  | "sticky_background_opacity_missing"
   | "page_lang_missing"
   | "page_lang_invalid";
 
@@ -305,6 +306,22 @@ function lintComponentCss(component: PdosFitSafetyComponentSource): readonly Raw
   for (const rule of rules) {
     if (isRuleIgnored(rule.selector, component.html)) {
       continue;
+    }
+
+    const stickyPositionDeclaration = rule.declarations.find((declaration) => {
+      return declaration.property.toLowerCase() === "position" && /\b(?:sticky|fixed)\b/i.test(declaration.value);
+    });
+    if (stickyPositionDeclaration !== undefined && !hasOpaqueBackgroundColor(rule, customProperties)) {
+      findings.push({
+        code: "sticky_background_opacity_missing",
+        source: "component_css",
+        precondition: "Sticky/fixed elements must declare an opaque background-color fallback so content cannot bleed through without backdrop-filter.",
+        message: `${component.id} ${rule.selector} uses position: ${stickyPositionDeclaration.value} without an opaque background-color fallback.`,
+        selector: rule.selector,
+        property: stickyPositionDeclaration.property,
+        snippet: declarationSnippet(rule, stickyPositionDeclaration),
+        path: component.sourcePath
+      });
     }
 
     for (const declaration of rule.declarations) {
@@ -866,6 +883,112 @@ function isFixedInlineCap(value: string): boolean {
     return false;
   }
   return /^-?(?:\d+|\d*\.\d+)(?:px|rem)$/.test(normalized);
+}
+
+function hasOpaqueBackgroundColor(rule: CssRule, customProperties: ReadonlyMap<string, string>): boolean {
+  return rule.declarations.some((declaration) => {
+    return declaration.property.toLowerCase() === "background-color" && isOpaqueCssBackgroundColor(declaration.value, customProperties);
+  });
+}
+
+function isOpaqueCssBackgroundColor(value: string, customProperties: ReadonlyMap<string, string>, depth = 0): boolean {
+  if (depth > 6) {
+    return false;
+  }
+
+  const trimmed = stripCssImportant(value).trim();
+  const normalized = trimmed.toLowerCase();
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  const varMatch = /^var\(\s*(--[a-z0-9-_]+)(?:\s*,\s*([\s\S]+))?\)$/i.exec(trimmed);
+  if (varMatch !== null) {
+    const variableName = varMatch[1];
+    if (variableName === undefined) {
+      return false;
+    }
+    const resolved = customProperties.get(variableName) ?? varMatch[2];
+    return resolved !== undefined && isOpaqueCssBackgroundColor(resolved, customProperties, depth + 1);
+  }
+
+  if (["transparent", "none", "inherit", "initial", "unset", "revert", "revert-layer"].includes(normalized)) {
+    return false;
+  }
+
+  if (/^#[0-9a-f]{3}$/i.test(trimmed) || /^#[0-9a-f]{6}$/i.test(trimmed)) {
+    return true;
+  }
+  if (/^#[0-9a-f]{4}$/i.test(trimmed)) {
+    return normalized[4] === "f";
+  }
+  if (/^#[0-9a-f]{8}$/i.test(trimmed)) {
+    return normalized.slice(7) === "ff";
+  }
+
+  if (/^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/i.test(trimmed)) {
+    return hasOpaqueCssColorAlpha(trimmed);
+  }
+
+  if (/\b(?:gradient|color-mix)\s*\(/i.test(trimmed)) {
+    return false;
+  }
+
+  return /^[a-z][a-z0-9-]*$/i.test(trimmed);
+}
+
+function hasOpaqueCssColorAlpha(value: string): boolean {
+  const openParen = value.indexOf("(");
+  if (openParen === -1) {
+    return false;
+  }
+  const closeParen = findMatchingParen(value, openParen);
+  if (closeParen === -1) {
+    return false;
+  }
+
+  const functionName = value.slice(0, openParen).trim().toLowerCase();
+  const body = value.slice(openParen + 1, closeParen);
+  const slash = topLevelCharacterIndex(body, "/");
+  if (slash !== -1) {
+    const alpha = parseCssAlpha(body.slice(slash + 1));
+    return alpha !== undefined && alpha >= 1;
+  }
+
+  const commaParts = splitTopLevelComma(body);
+  if (commaParts.length >= 4) {
+    const alpha = parseCssAlpha(commaParts[3] ?? "");
+    return alpha !== undefined && alpha >= 1;
+  }
+
+  return functionName !== "rgba" && functionName !== "hsla";
+}
+
+function topLevelCharacterIndex(value: string, needle: string): number {
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth -= 1;
+    } else if (character === needle && depth === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function parseCssAlpha(value: string): number | undefined {
+  const normalized = stripCssImportant(value).trim();
+  const percentageMatch = /^(-?(?:\d+|\d*\.\d+))%$/.exec(normalized);
+  if (percentageMatch?.[1] !== undefined) return Number(percentageMatch[1]) / 100;
+  const numberMatch = /^(-?(?:\d+|\d*\.\d+))$/.exec(normalized);
+  return numberMatch?.[1] === undefined ? undefined : Number(numberMatch[1]);
+}
+
+function stripCssImportant(value: string): string {
+  return value.replace(/\s*!important\s*$/i, "");
 }
 
 function isTextishSelector(selector: string): boolean {

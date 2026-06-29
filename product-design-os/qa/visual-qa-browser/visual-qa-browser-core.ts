@@ -266,6 +266,7 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
     height?: number;
     heading_count?: number;
     cta_count?: number;
+    min_cta_target_px?: number;
     visible_text_characters?: number;
     repeated_card_count?: number;
     text_overlap?: boolean;
@@ -287,6 +288,7 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
   assignDefined(output, "height", viewport.height);
   assignDefined(output, "heading_count", viewport.heading_count);
   assignDefined(output, "cta_count", viewport.cta_count);
+  assignDefined(output, "min_cta_target_px", viewport.min_cta_target_px);
   assignDefined(output, "visible_text_characters", viewport.visible_text_characters);
   assignDefined(output, "repeated_card_count", viewport.repeated_card_count);
   assignDefined(output, "text_overlap", viewport.text_overlap);

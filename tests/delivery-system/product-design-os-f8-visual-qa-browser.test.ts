@@ -131,6 +131,49 @@ describe("Product Design OS F8 browser visual QA core integration", () => {
     );
   });
 
+  it("flags mobile CTA touch targets below 44px and accepts 44px", () => {
+    const failingReport = buildVisualQaBrowserReport({
+      source_kind: "html",
+      source_path: "fixture.html",
+      html_path: "fixture.html",
+      report_path: "output/visual-qa-browser/fixture.visual-qa-browser.json",
+      checked_viewports: [1440, 390],
+      snapshot: snapshot([
+        viewport(),
+        viewport({ name: "mobile-390", width: 390, height: 844, cta_target_min_44: false, min_cta_target_px: 40 })
+      ]),
+      axe_violations: []
+    });
+
+    expect(failingReport.status).toBe("failed");
+    expect(failingReport.analyzer?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "touch_target_below_44px",
+          severity: "error",
+          viewport: "mobile-390"
+        })
+      ])
+    );
+    expect(failingReport.blocking_reasons).toContain("analyzer_error:touch_target_below_44px:mobile-390");
+
+    const passingReport = buildVisualQaBrowserReport({
+      source_kind: "html",
+      source_path: "fixture.html",
+      html_path: "fixture.html",
+      report_path: "output/visual-qa-browser/fixture.visual-qa-browser.json",
+      checked_viewports: [1440, 390],
+      snapshot: snapshot([
+        viewport(),
+        viewport({ name: "mobile-390", width: 390, height: 844, cta_target_min_44: true, min_cta_target_px: 44 })
+      ]),
+      axe_violations: []
+    });
+
+    expect(passingReport.status).toBe("passed");
+    expect(passingReport.analyzer?.issues.map((issue) => issue.code)).not.toContain("touch_target_below_44px");
+  });
+
   it("groups fake axe violations by impact and blocks serious or critical findings", () => {
     const report = buildVisualQaBrowserReport({
       source_kind: "composition",

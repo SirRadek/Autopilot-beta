@@ -120,6 +120,45 @@ describe("Product Design OS F2 fit-safety lint", () => {
     expect(report.components[0]?.status).toBe("fail");
   });
 
+  it("flags R7 sticky/fixed rules without an opaque background fallback", () => {
+    const unsafeCss = `
+.synthetic-sticky .bar {
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(18px);
+}
+`.trim();
+    const safeCss = `
+.synthetic-sticky-solid .bar {
+  position: sticky;
+  top: 0;
+  background-color: rgb(255 255 255);
+  backdrop-filter: blur(18px);
+}
+`.trim();
+    const report = analyzeFitSafetyLint(
+      {
+        components: [
+          { id: "synthetic-sticky", css: unsafeCss },
+          { id: "synthetic-sticky-solid", css: safeCss }
+        ],
+        pages: [],
+        baseline: { schema: "test", generated_on: "test", note: "empty", components: [] }
+      },
+      repoRoot
+    );
+
+    const reportsById = new Map(report.components.map((component) => [component.id, component]));
+    expect(reportsById.get("synthetic-sticky")?.findings.map((finding) => finding.code)).toContain(
+      "sticky_background_opacity_missing"
+    );
+    expect(reportsById.get("synthetic-sticky")?.status).toBe("fail");
+    expect(reportsById.get("synthetic-sticky-solid")?.findings.map((finding) => finding.code)).not.toContain(
+      "sticky_background_opacity_missing"
+    );
+    expect(reportsById.get("synthetic-sticky-solid")?.status).toBe("pass");
+  });
+
   it("honors data-fit-lint ignore markers with reasons", () => {
     const css = `
 .synthetic-title {

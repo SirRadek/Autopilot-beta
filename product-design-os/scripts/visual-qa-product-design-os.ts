@@ -10,6 +10,7 @@ export interface PdosVisualViewportInput {
   readonly height?: number;
   readonly heading_count?: number;
   readonly cta_count?: number;
+  readonly min_cta_target_px?: number;
   readonly visible_text_characters?: number;
   readonly repeated_card_count?: number;
   readonly text_overlap?: boolean;
@@ -164,6 +165,15 @@ function validateViewports(input: PdosVisualQaInput): readonly PdosVisualIssue[]
         viewport: viewport.name
       });
     }
+    if (
+      viewport.width !== undefined &&
+      viewport.width <= 480 &&
+      viewport.min_cta_target_px !== undefined &&
+      viewport.min_cta_target_px > 0 &&
+      viewport.min_cta_target_px < 44
+    ) {
+      issues.push({ code: "touch_target_below_44px", severity: "error", message: `Mobile viewport has a CTA/touch target below 44px (${viewport.min_cta_target_px}px).`, viewport: viewport.name });
+    }
     if (viewport.text_fit === false) {
       issues.push({
         code: "text_fit_probe_failed",
@@ -313,6 +323,8 @@ function suggestActions(issues: readonly PdosVisualIssue[], templateRiskScore: n
       actions.add("Move primary content into readable DOM text.");
     } else if (issue.code === "missing_reduced_motion_fallback") {
       actions.add("Add prefers-reduced-motion fallback before release.");
+    } else if (issue.code === "touch_target_below_44px") {
+      actions.add("Increase mobile CTA/touch target hit areas to at least 44px.");
     } else if (issue.code.includes("heading")) {
       actions.add("Strengthen heading hierarchy and reading order.");
     } else if (issue.code.includes("cta") || issue.code === "missing_primary_action") {
@@ -404,6 +416,7 @@ function toViewportInput(value: Record<string, unknown>): PdosVisualViewportInpu
     height?: number;
     heading_count?: number;
     cta_count?: number;
+    min_cta_target_px?: number;
     visible_text_characters?: number;
     repeated_card_count?: number;
     text_overlap?: boolean;
@@ -424,6 +437,7 @@ function toViewportInput(value: Record<string, unknown>): PdosVisualViewportInpu
   assignIfNumber(output, "height", value.height);
   assignIfNumber(output, "heading_count", value.heading_count);
   assignIfNumber(output, "cta_count", value.cta_count);
+  assignIfNumber(output, "min_cta_target_px", value.min_cta_target_px);
   assignIfNumber(output, "visible_text_characters", value.visible_text_characters);
   assignIfNumber(output, "repeated_card_count", value.repeated_card_count);
   assignIfBoolean(output, "text_overlap", value.text_overlap);
