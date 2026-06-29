@@ -1,0 +1,14 @@
+id: sibling_project_mesh
+type: governance_policy
+name: Sibling project mesh
+question: "Does the project mesh load from the sibling project repository?"
+why: "The fixture proves build_project_mesh_packet can bind to a supervised project's repo-local mesh instead of only the control-plane docs mirror."
+signals:
+  - sibling project mesh
+  - project root binding
+related_agents:
+  - architect
+related_files:
+  - .autopilot/decision-mesh/
+required_checks:
+  - load_sibling_project_mesh

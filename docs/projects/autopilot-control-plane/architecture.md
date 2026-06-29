@@ -63,7 +63,8 @@ In this project:
 - Decision Mesh YAML/JSON source under `mesh/`
 - pure Decision Mesh query library under `src/lib/decision-mesh/`
 - local read-only stdio MCP server under `mcp/server.ts`
-- project-specific Decision Mesh seed graphs under `docs/projects/*/decision-mesh/`
+- project-specific Decision Mesh seed or mirror graphs under `docs/projects/*/decision-mesh/`
+  and repo-local supervised project meshes under `.autopilot/decision-mesh/`
 - deterministic mesh artifact generator under `scripts/generate-decision-mesh.ts`
 - static read-only command center with 2D Decision Mesh graph and project delivery workflow at `src/pages/autopilot.astro`
 - tests under `tests/delivery-system/`
@@ -160,6 +161,7 @@ Current data is Markdown-first with a minimal typed governance mirror:
 - capability routing, context economy, and model spend policy data under `src/data/delivery-system/`
 - deterministic contract validation under `scripts/validate-contracts.ts`
 - seeded project-specific Decision Mesh records under `docs/projects/<project-slug>/decision-mesh/`
+  and repo-local supervised project meshes under `.autopilot/decision-mesh/`
 - Vitest contract tests under `tests/delivery-system/`
 - Vitest Decision Mesh tests under `tests/decision-mesh/`
 - static `/autopilot` command-center page with deterministic 2D Decision Mesh visualization and ordered project-delivery workflow under `src/pages/`
@@ -183,7 +185,7 @@ Decision Mesh:
 
 - `mesh/` is the human-readable source of truth.
 - The root `mesh/` is Autopilot's own operational mesh, not the project mesh for every supervised product.
-- Each supervised project must create and maintain its own `docs/projects/<project-slug>/decision-mesh/` during project architecture onboarding.
+- Each supervised project must create and maintain its own project-specific Decision Mesh during project architecture onboarding. The local MCP resolver first checks the sibling project repo at `<ProjectsDir>/<project-slug>/.autopilot/decision-mesh/`, where `ProjectsDir` defaults to the control-plane parent's `Projects` directory and may be overridden by `AUTOPILOT_PROJECTS_DIR`; if no sibling mesh exists, it falls back to the control-plane `docs/projects/<project-slug>/decision-mesh/` mirror.
 - `mesh/generated/decision-mesh.json` is derived and must pass `npm run mesh:check`.
 - MCP tools return compact JSON context and never approve work.
 - The `/autopilot` page may render a read-only SVG view of `mesh/generated/decision-mesh.json`; the visualization is a control surface only and does not become a new mesh source of truth.
