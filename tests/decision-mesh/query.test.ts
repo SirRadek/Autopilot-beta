@@ -66,6 +66,21 @@ describe("Decision Mesh queries", () => {
     expect(packet.relevant_nodes.length).toBeLessThan(mesh.nodes.length);
   });
 
+  it("never drops a task-relevant blocker to token-budget truncation (AF4)", () => {
+    const task = "Add authenticated avatar upload";
+    const blockerIds = new Set(
+      mesh.rules.filter((rule) => rule.severity === "blocker").map((rule) => rule.id)
+    );
+    const full = buildAgentPacket(mesh, { task, agent: "backend", token_budget: 8000 });
+    const tiny = buildAgentPacket(mesh, { task, agent: "backend", token_budget: 1000 }); // maxNodes = 4
+    const fullBlockers = full.rules.filter((id) => blockerIds.has(id));
+    expect(fullBlockers.length).toBeGreaterThan(0); // meaningful: there are blockers to protect
+    // the tiny budget keeps only the top-4 nodes by score, but no relevant blocker may be lost
+    for (const blocker of fullBlockers) {
+      expect(tiny.rules).toContain(blocker);
+    }
+  });
+
   it("explains a node with its connected risks and outbound requirements", () => {
     const explanation = explainNode(mesh, "file_upload");
 

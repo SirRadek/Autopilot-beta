@@ -82,6 +82,29 @@ export function getRelevantSubgraph(mesh: DecisionMesh, input: RelevantSubgraphI
   return input.agent ? { ...result, agent: input.agent } : result;
 }
 
+/**
+ * Severity-aware packet construction. getRelevantSubgraph keeps only the top-N scored
+ * nodes for the token budget, and packet rules/stop_conditions are derived from selected
+ * nodes only — so a BLOCKER relevant to the task could be silently truncated away before
+ * the agent ever sees it. Re-attach any task-relevant (score > 0) node that carries a
+ * blocker rule but fell outside the score cut, so a relevant blocker is never dropped.
+ */
+function withRelevantBlockerNodes(
+  mesh: DecisionMesh,
+  baseNodes: readonly DecisionMeshNode[],
+  task: string,
+  agent: string | undefined
+): readonly DecisionMeshNode[] {
+  const have = new Set(baseNodes.map((node) => node.id));
+  const blockerNodeIds = new Set(
+    mesh.rules.filter((rule) => rule.severity === "blocker").flatMap((rule) => rule.applies_to)
+  );
+  const forced = mesh.nodes.filter(
+    (node) => !have.has(node.id) && blockerNodeIds.has(node.id) && scoreNode(node, task, agent) > 0
+  );
+  return forced.length > 0 ? [...baseNodes, ...forced] : baseNodes;
+}
+
 export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): AgentPacket {
   const maxNodes = Math.max(4, Math.min(7, Math.floor((input.token_budget ?? 7000) / 1000)));
   const subgraph = getRelevantSubgraph(mesh, {
@@ -89,25 +112,26 @@ export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): A
     agent: input.agent,
     max_nodes: maxNodes
   });
-  const selectedIds = new Set(subgraph.relevant_nodes.map((node) => node.id));
+  const nodes = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
 
   return {
     agent: input.agent,
     task: input.task,
     objective: unique(
-      subgraph.relevant_nodes.flatMap((node) => node.objective ?? [`Answer: ${node.question}`])
+      nodes.flatMap((node) => node.objective ?? [`Answer: ${node.question}`])
     ),
     rules: rules.map((rule) => rule.id),
-    relevant_nodes: subgraph.relevant_nodes.map((node) => node.id),
-    required_agents: subgraph.required_agents,
-    must_read: unique(subgraph.relevant_nodes.flatMap((node) => node.related_files)),
+    relevant_nodes: nodes.map((node) => node.id),
+    required_agents: orderAgents(unique(nodes.flatMap((node) => node.related_agents))),
+    must_read: unique(nodes.flatMap((node) => node.related_files)),
     must_not_assume: unique([
-      ...subgraph.relevant_nodes.flatMap((node) => node.must_not_assume ?? []),
+      ...nodes.flatMap((node) => node.must_not_assume ?? []),
       ...rules.flatMap((rule) => rule.must_not_assume ?? [])
     ]),
-    required_checks: unique(subgraph.relevant_nodes.flatMap((node) => node.required_checks)),
-    stop_conditions: unique(subgraph.relevant_nodes.flatMap((node) => node.stop_conditions ?? []))
+    required_checks: unique(nodes.flatMap((node) => node.required_checks)),
+    stop_conditions: unique(nodes.flatMap((node) => node.stop_conditions ?? []))
   };
 }
 
@@ -117,23 +141,24 @@ export function buildProjectMeshPacket(mesh: DecisionMesh, input: ProjectMeshPac
     max_nodes: input.max_nodes ?? DEFAULT_MAX_NODES
   };
   const subgraph = getRelevantSubgraph(mesh, input.agent ? { ...subgraphInput, agent: input.agent } : subgraphInput);
-  const selectedIds = new Set(subgraph.relevant_nodes.map((node) => node.id));
+  const nodes = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
 
   const packet: ProjectMeshPacket = {
     project_slug: input.project_slug,
     task: input.task,
-    relevant_nodes: subgraph.relevant_nodes.map((node) => node.id),
+    relevant_nodes: nodes.map((node) => node.id),
     rules: rules.map(toProjectMeshPacketRule),
-    required_agents: subgraph.required_agents,
-    must_read: unique(subgraph.relevant_nodes.flatMap((node) => node.related_files)),
+    required_agents: orderAgents(unique(nodes.flatMap((node) => node.related_agents))),
+    must_read: unique(nodes.flatMap((node) => node.related_files)),
     must_not_assume: unique([
-      ...subgraph.relevant_nodes.flatMap((node) => node.must_not_assume ?? []),
+      ...nodes.flatMap((node) => node.must_not_assume ?? []),
       ...rules.flatMap((rule) => rule.must_not_assume ?? [])
     ]),
-    required_checks: unique(subgraph.relevant_nodes.flatMap((node) => node.required_checks)),
-    stop_conditions: unique(subgraph.relevant_nodes.flatMap((node) => node.stop_conditions ?? [])),
-    why: unique(subgraph.relevant_nodes.map((node) => node.why))
+    required_checks: unique(nodes.flatMap((node) => node.required_checks)),
+    stop_conditions: unique(nodes.flatMap((node) => node.stop_conditions ?? [])),
+    why: unique(nodes.map((node) => node.why))
   };
 
   return input.agent ? { ...packet, agent: input.agent } : packet;
