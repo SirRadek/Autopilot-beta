@@ -209,7 +209,12 @@ const dynamicImport = new Function("specifier", "return import(specifier)") as <
 const nodeRequire = createRequire(import.meta.url);
 const browserViewports: readonly BrowserViewportInput[] = [
   { name: "desktop-1440", width: 1440, height: 900 },
-  { name: "mobile-390", width: 390, height: 844 }
+  { name: "mobile-414", width: 414, height: 896 },
+  { name: "mobile-390", width: 390, height: 844 },
+  // Phone floor cohort so the R1a fluid_floor (<=360) + R5 touch-target analyzers actually
+  // run — they were dead before because the runner only captured 1440/390.
+  { name: "mobile-360", width: 360, height: 640 },
+  { name: "mobile-320", width: 320, height: 568 }
 ];
 
 export async function createVisualQaBrowserCliRun(
