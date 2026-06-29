@@ -17,6 +17,9 @@ export type PdosFitSafetyPreconditionCode =
   | "grid_track_overflow_risk"
   | "fixed_text_container_inline_cap"
   | "text_wrap_safety_missing"
+  | "viewport_width_overflow_risk"
+  | "fixed_min_width_over_viewport"
+  | "fixed_height_floor_risk"
   | "page_lang_missing"
   | "page_lang_invalid";
 
@@ -284,6 +287,16 @@ function analyzeRenderedPage(page: PdosFitSafetyPageSource): PdosFitSafetyPageRe
   };
 }
 
+// R2/R8: a PURE fixed unit (e.g. "600px", "100vh") — not inside clamp/calc/min/max/var — returns its number.
+function fixedUnit(value: string, unit: "px" | "vh"): number | undefined {
+  const trimmed = value.trim();
+  if (/\b(?:clamp|calc|min|max|var)\s*\(/i.test(trimmed)) {
+    return undefined;
+  }
+  const match = new RegExp(`^(\\d+(?:\\.\\d+)?)${unit}$`, "i").exec(trimmed);
+  return match && match[1] !== undefined ? Number.parseFloat(match[1]) : undefined;
+}
+
 function lintComponentCss(component: PdosFitSafetyComponentSource): readonly RawFitSafetyFinding[] {
   const rules = parseCssRules(component.css);
   const customProperties = extractCustomProperties(component.css);
@@ -321,6 +334,59 @@ function lintComponentCss(component: PdosFitSafetyComponentSource): readonly Raw
           snippet: declarationSnippet(rule, declaration),
           path: component.sourcePath
         });
+      }
+
+      // R3: 100vw on a content width includes the scrollbar gutter -> horizontal overflow (calc(100vw - …) is OK).
+      if (
+        (declaration.property === "width" || declaration.property === "min-width") &&
+        /\b100vw\b/.test(declaration.value) &&
+        !/\b(?:calc|clamp|min|max|var)\s*\(/i.test(declaration.value)
+      ) {
+        findings.push({
+          code: "viewport_width_overflow_risk",
+          source: "component_css",
+          precondition: "Content width must not use 100vw (it includes the scrollbar gutter and overflows horizontally); use 100%.",
+          message: `${component.id} ${rule.selector} uses ${declaration.property}: ${declaration.value}.`,
+          selector: rule.selector,
+          property: declaration.property,
+          snippet: declarationSnippet(rule, declaration),
+          path: component.sourcePath
+        });
+      }
+
+      // R2: a fixed min-width wider than the smallest phone viewport (320px) forces horizontal scroll.
+      if (declaration.property === "min-width") {
+        const px = fixedUnit(declaration.value, "px");
+        if (px !== undefined && px > 320) {
+          findings.push({
+            code: "fixed_min_width_over_viewport",
+            source: "component_css",
+            precondition: "Content must not set a fixed min-width above the 320px viewport floor; wide tables/media use an overflow wrapper.",
+            message: `${component.id} ${rule.selector} sets min-width: ${declaration.value} (> 320px).`,
+            selector: rule.selector,
+            property: declaration.property,
+            snippet: declarationSnippet(rule, declaration),
+            path: component.sourcePath
+          });
+        }
+      }
+
+      // R8: fixed px/vh height floors on content clip copy that wraps to more lines on narrow screens.
+      if (declaration.property === "height" || declaration.property === "min-height") {
+        const px = fixedUnit(declaration.value, "px");
+        const vh = fixedUnit(declaration.value, "vh");
+        if ((px !== undefined && px >= 240) || (vh !== undefined && vh >= 100)) {
+          findings.push({
+            code: "fixed_height_floor_risk",
+            source: "component_css",
+            precondition: "Content heights should follow content, not fixed px/vh floors that clip copy on narrow screens.",
+            message: `${component.id} ${rule.selector} uses ${declaration.property}: ${declaration.value}.`,
+            selector: rule.selector,
+            property: declaration.property,
+            snippet: declarationSnippet(rule, declaration),
+            path: component.sourcePath
+          });
+        }
       }
     }
   }

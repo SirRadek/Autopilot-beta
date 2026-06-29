@@ -98,6 +98,28 @@ describe("Product Design OS F2 fit-safety lint", () => {
     expect(report.components[0]?.findings.every((finding) => finding.severity === "error")).toBe(true);
   });
 
+  it("flags R2/R3/R8 mobile violations on a synthetic new component (100vw, fixed min-width, fixed height floor)", () => {
+    const css = `
+.synthetic-mobile .full { width: 100vw; }
+.synthetic-mobile .wide { min-width: 600px; }
+.synthetic-mobile .tall { min-height: 100vh; }
+`.trim();
+    const report = analyzeFitSafetyLint(
+      {
+        components: [{ id: "synthetic-mobile", css }],
+        pages: [],
+        baseline: { schema: "test", generated_on: "test", note: "empty", components: [] }
+      },
+      repoRoot
+    );
+
+    const codes = report.components[0]?.findings.map((finding) => finding.code) ?? [];
+    expect(codes).toContain("viewport_width_overflow_risk");
+    expect(codes).toContain("fixed_min_width_over_viewport");
+    expect(codes).toContain("fixed_height_floor_risk");
+    expect(report.components[0]?.status).toBe("fail");
+  });
+
   it("honors data-fit-lint ignore markers with reasons", () => {
     const css = `
 .synthetic-title {

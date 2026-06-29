@@ -122,7 +122,11 @@ const DEFAULT_OUTPUT_DIR = "output/playwright/product-design-os";
 
 const DEFAULT_VIEWPORTS: readonly ElementMapViewportInput[] = [
   { name: "desktop", width: 1440, height: 900 },
-  { name: "mobile", width: 390, height: 844 }
+  { name: "mobile", width: 390, height: 844 },
+  // R10: verify the real render across the phone cohort, not just 390.
+  { name: "mobile-320", width: 320, height: 568 },
+  { name: "mobile-360", width: 360, height: 640 },
+  { name: "mobile-414", width: 414, height: 896 }
 ];
 
 export async function captureElementMap(input: ElementMapInput): Promise<ElementMap> {
