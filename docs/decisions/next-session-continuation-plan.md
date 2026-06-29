@@ -39,14 +39,22 @@ access. Remote `main` is reconciled with the **point-cloud-background** pattern 
    `related_files` include it, and auto-surface that node's `stop_conditions` / blocker context — **no LLM
    classification**. *Falsifiable test:* editing a `file_upload`-related file surfaces
    `escalates_when_combined` + the blocker rule without any tool call.
-2. **Operationalize the mobile rules** (`docs/autopilot/autopilot-mobile-responsive-rules.md`): turn R1–R10
-   from prose into real checks — R1/R2/R3/R4/R8 are statically lintable in `fit-safety-lint`; **add the
-   320 / 360 / 414 viewports to `visual-qa-browser`** (today only 390) per R10.
+2. ✅ **DONE (2026-06-29) — E5 + mobile rules operationalized + components measured clean.** R2/R3/R4/R5/R7/R8
+   are enforced static fit-safety checks; R1 (fluid mechanism + container-query collapse) + R5/R6 runtime
+   checks (`fluid_floor_overflow` / `fluid_floor_clipped_text` / `touch_target_below_44px` at 320/360) shipped;
+   320/360/414 viewports added; gates wired into git pre-commit/pre-push hooks (dogfooded). A REAL Playwright
+   browser measurement @320/360/390/414 found the 6 components CLEAN — no overflow, tap ≥ 44, CTA above fold,
+   main reading column 226–265px — so **R1b/R6/R9 component rewrites are NOT needed** (the @media 540–960
+   collapses them to single-column before phone widths). R1 was reframed: `transform: scale()` rejected for
+   interactive/content (WCAG zoom + tap-target). 3-vendor design (codex/agy/Opus, proposal-only); codex
+   implemented, Opus reviewed + applied. `origin/main` `7b61a11`.
 3. **Only behind measured pain:** E7 learning plane (thin append-only eval-store keyed to
    `{mesh_node_id, discovery_subgraph_rev}`), then E3 self-maint lane (static node + deny-test only).
 
 ## Open loose ends
-- R1–R10 enforcement (lint + viewports above).
+- R1–R10 are enforced (static + runtime + git hooks) and the 6 components measured clean on real phones —
+  no component fixes needed; the runtime checks catch future regressions. (R9 cumulative-padding is a
+  runtime-only concern, covered by the browser probe — no static check.)
 - The 22 inherent generic-hint `MISSING` in the mesh are ratchet-frozen (gate stays green). Optional cleanup:
   repoint those nodes at real autopilot files, or mark them generic.
 - `Projects/` git-init only when actually onboarding a project (E2 is low-value until then).
