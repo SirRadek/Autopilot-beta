@@ -12,7 +12,12 @@ export function loadDecisionMeshFromRoot(root: string): DecisionMesh {
 export function loadProjectDecisionMeshFromRoot(root: string, projectSlug: string): DecisionMesh {
   assertSafeProjectSlug(projectSlug);
   // v0.2 (E1): per-project mesh lives in the project repo at <repo>/.autopilot/decision-mesh.
-  // Legacy fallback: the old autopilot-root docs/projects/<slug>/decision-mesh layout.
+  // Slug-respecting resolution (closes the slug-collapse where a shared repo-local mesh was
+  // returned for EVERY slug, so slug X and slug Y yielded byte-identical packets): a
+  // slug-specific subdir wins first, then the single-project shared mesh, then the legacy
+  // autopilot-root docs/projects/<slug>/decision-mesh layout.
+  const repoLocalSlug = join(root, ".autopilot", "decision-mesh", projectSlug);
+  if (existsSync(join(repoLocalSlug, "nodes"))) return loadDecisionMesh(repoLocalSlug);
   const repoLocal = join(root, ".autopilot", "decision-mesh");
   if (existsSync(join(repoLocal, "nodes"))) return loadDecisionMesh(repoLocal);
   return loadDecisionMesh(join(root, "docs", "projects", projectSlug, "decision-mesh"));
