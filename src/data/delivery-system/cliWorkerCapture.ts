@@ -111,7 +111,7 @@ function resolveCodexCommand(): { codexPath: string; bashPath: string | null } {
  * HOME/USERPROFILE/APPDATA — not through env secrets — so an OS-essentials allowlist
  * keeps them working while default-denying everything else (GITHUB_TOKEN, *_API_KEY, …).
  */
-function buildVendorEnv(): NodeJS.ProcessEnv {
+export function buildVendorEnv(): NodeJS.ProcessEnv {
   const allow = new Set([
     "path", "pathext", "home", "userprofile", "homedrive", "homepath",
     "appdata", "localappdata", "programdata",

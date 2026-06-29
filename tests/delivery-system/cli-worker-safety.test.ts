@@ -12,6 +12,7 @@ import {
   aggregateCliCallTelemetryIntoBudget,
   type SubscriptionSessionBudget
 } from "../../src/data/delivery-system/subscriptionBudget";
+import { buildVendorEnv } from "../../src/data/delivery-system/cliWorkerCapture";
 
 const baseLock: WorkerLockRecord = {
   schema_version: "v1",
@@ -200,5 +201,32 @@ describe("CLI worker token telemetry", () => {
       sessionCallCount: 3,
       lastAttemptedAt: "2026-06-25T12:00:00.000Z"
     });
+  });
+});
+
+// AF5 — containment (not just accounting): the exec lane must not leak host secrets
+// into the vendor shell. Covers the env-scrub shipped in AF2.
+describe("CLI worker exec containment", () => {
+  it("scrubs host secrets from the vendor spawn env but keeps OS essentials", () => {
+    const SECRET = "GITHUB_TOKEN";
+    const SENTINEL = "ghp_sentinel_must_not_leak_to_vendor";
+    const prior = process.env[SECRET];
+    process.env[SECRET] = SENTINEL;
+    try {
+      const env = buildVendorEnv();
+      // the secret must not reach the vendor shell, by key or by value
+      expect(env[SECRET]).toBeUndefined();
+      expect(Object.values(env)).not.toContain(SENTINEL);
+      // no secret-ish key survives the allowlist
+      for (const key of Object.keys(env)) {
+        expect(/token|api[_-]?key|secret|password|aws|credential/i.test(key)).toBe(false);
+      }
+      // but the OS essentials the CLI needs to run are preserved
+      const lowerKeys = Object.keys(env).map((key) => key.toLowerCase());
+      expect(lowerKeys).toContain("path");
+    } finally {
+      if (prior === undefined) delete process.env[SECRET];
+      else process.env[SECRET] = prior;
+    }
   });
 });
