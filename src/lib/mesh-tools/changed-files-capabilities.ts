@@ -95,6 +95,12 @@ function uniq(xs: readonly string[]): string[] {
   return [...new Set(xs)];
 }
 
+/** Blocker ids left after removing the acknowledged ones — the set a --fail-on-blocker gate must fail on. */
+export function unacknowledgedBlockers(blockers: readonly string[], acked: readonly string[]): string[] {
+  const ackSet = new Set(acked);
+  return blockers.filter((b) => !ackSet.has(b));
+}
+
 function severityRank(s: DecisionMeshRule["severity"]): number {
   return s === "blocker" ? 0 : s === "major" ? 1 : s === "minor" ? 2 : 3;
 }

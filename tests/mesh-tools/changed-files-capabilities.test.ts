@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { loadDecisionMesh } from "../../src/lib/decision-mesh";
-import { activateForChangedFiles, hintCovers } from "../../src/lib/mesh-tools/changed-files-capabilities";
+import {
+  activateForChangedFiles,
+  hintCovers,
+  unacknowledgedBlockers
+} from "../../src/lib/mesh-tools/changed-files-capabilities";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MESH = join(here, "../fixtures/mesh-tools/changed-files/mesh");
@@ -95,5 +99,13 @@ describe("hintCovers — trailing-slash normalization (regression)", () => {
   it("rejects placeholder hints and degenerate slash-only hints", () => {
     expect(hintCovers("docs/projects/x/y.md", "docs/projects/<slug>/architecture.md")).toBe(false);
     expect(hintCovers("anything", "/")).toBe(false);
+  });
+});
+
+describe("unacknowledgedBlockers", () => {
+  it("removes only explicitly acknowledged blocker ids", () => {
+    expect(unacknowledgedBlockers(["A", "B"], ["A"])).toEqual(["B"]);
+    expect(unacknowledgedBlockers(["A"], ["A"])).toEqual([]);
+    expect(unacknowledgedBlockers(["A", "B"], [])).toEqual(["A", "B"]);
   });
 });
