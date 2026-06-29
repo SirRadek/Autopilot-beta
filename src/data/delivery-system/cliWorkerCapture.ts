@@ -262,6 +262,8 @@ export interface CodexCaptureOptions {
   /** Image files to attach to the prompt (codex exec -i). */
   readonly images?: readonly string[];
   readonly timeoutMs?: number;
+  /** Retries on a transient empty-output exit (default 1; timeouts are never retried). */
+  readonly retries?: number;
 }
 
 export interface CodexCaptureResult {
@@ -272,6 +274,8 @@ export interface CodexCaptureResult {
   readonly durationMs: number;
   readonly errorOutput: string;
   readonly timedOut: boolean;
+  /** How many spawn attempts ran (1 = succeeded first try; >1 = a transient empty-output retry). */
+  readonly attempts: number;
 }
 
 export async function captureCodexResponse(
@@ -283,7 +287,6 @@ export async function captureCodexResponse(
 
   const outputDir = join(tmpdir(), "autopilot-codex-captures");
   mkdirSync(outputDir, { recursive: true });
-  const outputFile = join(outputDir, `codex-${Date.now()}.json`);
   const schemaArgs = opts.outputSchemaPath
     ? ["--output-schema", opts.outputSchemaPath]
     : [];
@@ -294,49 +297,65 @@ export async function captureCodexResponse(
   const promptFile = join(outputDir, `prompt-${Date.now()}.txt`);
   writeFileSync(promptFile, prompt, "utf8");
 
+  // codex sometimes exits non-zero with an EMPTY -o on a transient sandbox/exec hiccup — the
+  // exact failure that needed manual reruns this session. Retry once, bounded, with a fresh
+  // output file; a timeout is never retried (it would just time out again).
+  const maxAttempts = Math.max(1, (opts.retries ?? 1) + 1);
   const startedAt = Date.now();
-  let result: ReturnType<typeof spawnSync>;
+  let result!: ReturnType<typeof spawnSync>;
+  let outputFile = "";
+  let rawFileContent = "";
+  let parsedJson: unknown = null;
+  let attempts = 0;
 
-  if (bashPath) {
-    // Windows: use Git Bash so stdin redirection works reliably. Read-only sandbox +
-    // never-approve are forced and every caller value is shq-escaped (see buildCodexBashCommand).
-    const bashCmd = buildCodexBashCommand(codexPath, opts, outputFile, promptFile);
-    result = spawnSync(bashPath, ["-c", bashCmd], {
-      encoding: "utf8",
-      cwd: opts.cwd ?? process.cwd(),
-      timeout: opts.timeoutMs ?? 120000,
-      env: buildVendorEnv()
-    });
-  } else {
-    // POSIX: direct spawnSync with stdin input (read-only sandbox + never-approve forced)
-    result = spawnSync("codex", [
-      "exec",
-      "-c", "sandbox_mode=read-only",
-      "-c", "approval_policy=never",
-      ...schemaArgs, "-o", outputFile,
-      ...(opts.model ? ["-m", opts.model] : []),
-      ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
-    ], {
-      input: prompt,
-      encoding: "utf8",
-      cwd: opts.cwd ?? process.cwd(),
-      timeout: opts.timeoutMs ?? 120000,
-      env: buildVendorEnv()
-    });
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    attempts = attempt;
+    outputFile = join(outputDir, `codex-${Date.now()}-${attempt}.json`);
+
+    if (bashPath) {
+      // Windows: Git Bash for reliable stdin redirection. Read-only sandbox + never-approve
+      // are forced and every caller value is shq-escaped (see buildCodexBashCommand).
+      const bashCmd = buildCodexBashCommand(codexPath, opts, outputFile, promptFile);
+      result = spawnSync(bashPath, ["-c", bashCmd], {
+        encoding: "utf8",
+        cwd: opts.cwd ?? process.cwd(),
+        timeout: opts.timeoutMs ?? 120000,
+        env: buildVendorEnv()
+      });
+    } else {
+      // POSIX: direct spawnSync with stdin input (read-only sandbox + never-approve forced)
+      result = spawnSync("codex", [
+        "exec",
+        "-c", "sandbox_mode=read-only",
+        "-c", "approval_policy=never",
+        ...schemaArgs, "-o", outputFile,
+        ...(opts.model ? ["-m", opts.model] : []),
+        ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
+      ], {
+        input: prompt,
+        encoding: "utf8",
+        cwd: opts.cwd ?? process.cwd(),
+        timeout: opts.timeoutMs ?? 120000,
+        env: buildVendorEnv()
+      });
+    }
+
+    rawFileContent = "";
+    parsedJson = null;
+    try {
+      rawFileContent = readFileSync(outputFile, "utf8").trim();
+      if (rawFileContent) {
+        parsedJson = JSON.parse(rawFileContent);
+      }
+    } catch {
+      // file absent or not valid JSON — caller checks exitCode
+    }
+
+    const emptyOutput = rawFileContent.length === 0;
+    if (!emptyOutput || isSpawnTimeout(result.error) || attempt === maxAttempts) break;
   }
 
   const durationMs = Date.now() - startedAt;
-  let rawFileContent = "";
-  let parsedJson: unknown = null;
-
-  try {
-    rawFileContent = readFileSync(outputFile, "utf8").trim();
-    if (rawFileContent) {
-      parsedJson = JSON.parse(rawFileContent);
-    }
-  } catch {
-    // file absent or not valid JSON — caller checks exitCode
-  }
 
   return {
     exitCode: result.status ?? 1,
@@ -345,7 +364,8 @@ export async function captureCodexResponse(
     parsedJson,
     durationMs,
     errorOutput: collectSpawnErrorOutput(result),
-    timedOut: isSpawnTimeout(result.error)
+    timedOut: isSpawnTimeout(result.error),
+    attempts
   };
 }
 
