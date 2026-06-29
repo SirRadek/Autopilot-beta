@@ -26,7 +26,7 @@ Hard boundaries:
 
 Useful local checks (all verified to exist in `package.json`):
 
-- `npm.cmd run verify` (aggregate gate: vendor-check + typecheck + tests + pdos:validate + renderability + fit-safety + mesh:gate:ci)
+- `npm.cmd run verify` (aggregate gate: vendor-check + typecheck + tests + pdos:validate + renderability + buildability + fit-safety + mesh:gate:ci)
 - `npm.cmd run mesh:gate:ci` (bind-point ① related_files ratchet)
 - `npm.cmd run mesh:changed -- --since origin/main --fail-on-blocker` (bind-point ② changed-file governance)
 - `npm.cmd run pdos:validate`

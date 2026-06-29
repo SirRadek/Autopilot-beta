@@ -5,9 +5,9 @@ Next review: 2026-06-24
 Status: active process layer
 Release: `v0.2.0`
 Slug: `autopilot-control-plane`
-Canonical local root: `C:\Programování\Codex`
-Canonical remote repository: `SirRadek/autopilot`
-Local workspace: `C:\Programování\Codex`
+Canonical local root: `C:\Programování\autopilot-beta` (the single self-contained source of truth; the former canonical `autopilot` at `C:\Programování\Codex` / `SirRadek/autopilot` is archived/dead)
+Canonical remote repository: `SirRadek/Autopilot-beta`
+Local workspace: `C:\Programování\autopilot-beta`
 Separation status: `separated`
 Visibility: dedicated control-plane repository, with private inventory redacted when needed
 
@@ -186,7 +186,7 @@ Decision Mesh:
 - `mesh/` is the human-readable source of truth.
 - The root `mesh/` is Autopilot's own operational mesh, not the project mesh for every supervised product.
 - Each supervised project must create and maintain its own project-specific Decision Mesh during project architecture onboarding. The local MCP resolver first checks the sibling project repo at `<ProjectsDir>/<project-slug>/.autopilot/decision-mesh/`, where `ProjectsDir` defaults to the control-plane parent's `Projects` directory and may be overridden by `AUTOPILOT_PROJECTS_DIR`; if no sibling mesh exists, it falls back to the control-plane `docs/projects/<project-slug>/decision-mesh/` mirror.
-- `mesh/generated/decision-mesh.json` is derived and must pass `npm run mesh:check`.
+- `mesh/generated/decision-mesh.json` is derived from the YAML source and validated by the decision-mesh test suite (there is no `mesh:check` script); the related_files ratchet gate is `npm run mesh:gate:ci`.
 - MCP tools return compact JSON context and never approve work.
 - The `/autopilot` page may render a read-only SVG view of `mesh/generated/decision-mesh.json`; the visualization is a control surface only and does not become a new mesh source of truth.
 - The `/autopilot` page may also render the owner-to-closeout delivery workflow, including agent handoffs, communication order, mesh checkpoints, outputs, and gates. This workflow view is read-only and does not become an execution engine.
@@ -209,7 +209,7 @@ Decision Mesh:
 - External advisory reasoning models are allowed as redacted advisory support for brainstorming, critique, validation, and second opinions across agents. Routine worker loops remain local by default, paid credits are blocked, subscription and license tools require entitlement checks, API/self-hosted tools require cost or infrastructure checks, and model output is never source-of-truth evidence without local verification.
 - Model-output evaluation is modeled explicitly: outputs that affect prompts, handoffs, routing, governance, architecture, security, or delivery decisions must be scored by dimension before acceptance. During learning, poor outputs trigger prompt/input deltas and reruns until acceptable or blocked; repeated similar failures trigger token-efficiency and reasoning-model route review before changing reasoning or provider; later weekly tuning uses collected eval records and failure patterns.
 - Advisory provider execution is modeled separately from model output. Provider runner logs, prompt echoes, CLI syntax errors, trust-flag failures, login failures, and provider availability failures are control-plane diagnostics. If no model output artifact is present, Protective Supervision must set `blocked` or `waiting_owner` and content review must not continue until the owner changes scope or a valid output exists.
-- Model-output eval records are deterministic local JSON contracts. `npm run model-output:validate` checks the schema, examples, provider source IDs, score dimensions, privacy review, retry deltas, repeated-failure route review, and weekly aggregates; it is included in `npm run verify`.
+- Model-output eval records are deterministic local JSON contracts validated by `scripts/validate-model-output-evals.ts` (the schema, examples, provider source IDs, score dimensions, privacy review, retry deltas, repeated-failure route review, and weekly aggregates). NOTE: there is no `model-output:validate` npm script and this validator is NOT yet wired into `npm run verify` or the test suite — running it is currently manual.
 - Plugin, skill, and provider-policy inventory is modeled explicitly. Current-session callable plugins and local skills can be routed through their exposed tools/workflows; cached plugin bundles are only availability leads until `tool_search` or active tools expose them. Model provider records such as DeepSeek are read-only routing metadata until credentialed runtime access, or manual web-login availability for web chat, is separately verified.
 - Context7 is the preferred docs-verification lane for reasoning, Gemini brainstorming, design critique, architecture-library review, and technology/best-practice recommendations when it is connected. If Context7 is unavailable or does not cover the topic, the handoff must record the fallback and verify the claim through official documentation, local files, tests, or controlled browser evidence.
 - Context7 is configured as a global local Codex MCP server via `npx.cmd -y @upstash/context7-mcp`, but a running thread may need restart or reload before the `mcp__context7` tools appear in the available tool list.
@@ -368,12 +368,7 @@ Documentation verification:
 
 ```powershell
 rg -n "Project Architecture" docs
-npm run mesh:check
-npm run prompt:validate
-npm run model-output:validate
-npm run pdos:validate
-npm run contracts:validate
-npm run audit:deps
+npm run verify
 git diff --check
 ```
 

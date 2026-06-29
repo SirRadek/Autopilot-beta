@@ -57,6 +57,12 @@ Verified fact: `autopilot-beta` has **no** `mesh/`, `mcp/`, or `src/lib/decision
 require migrating the whole governance into beta before the smallest fix — backwards.
 **Y wins (2/3 vendors + the fact):** fix `load.ts` where it lives; the vendor-manifest
 patch model carries it to beta cleanly later.
+
+> **Update — superseded (consolidation done):** the v0.2 cutover has since landed.
+> `autopilot-beta` now contains `mesh/`, `mcp/`, and `src/lib/decision-mesh/` as the single
+> self-contained source of truth, and canonical `autopilot` is archived/dead. The section-5
+> "Verified fact" describes the **pre-consolidation** state and is retained only as the decision's
+> historical rationale — it is no longer current truth.
 **Owner constraint (2026-06-27):** no direct writes to canonical `autopilot`; E1 runs in
 a **git worktree of the canonical repo on a new branch** (canonical main untouched).
 
