@@ -75,6 +75,7 @@ export interface CliCallTelemetryRecord {
   readonly total_tokens: number;
   readonly token_source: CliWorkerTokenSource;
   readonly duration_seconds: number;
+  readonly attempt_count: number;
   readonly exit_code: number;
   readonly lock_status: CliWorkerResult["lockStatus"];
   readonly outcome: CliWorkerTelemetryOutcome;
@@ -93,6 +94,7 @@ export interface BuildCliCallTelemetryRecordInput {
   readonly prompt: string;
   readonly rawOutput: string;
   readonly durationSeconds: number;
+  readonly attempt_count?: number;
   readonly exitCode: number;
   readonly lockStatus: CliWorkerResult["lockStatus"];
   readonly outcome: CliWorkerTelemetryOutcome;
@@ -191,6 +193,7 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
     total_tokens: totalTokens,
     token_source: providerUsage ? "provider_reported" : "estimated_chars",
     duration_seconds: input.durationSeconds,
+    attempt_count: input.attempt_count ?? 1,
     exit_code: input.exitCode,
     lock_status: input.lockStatus,
     outcome: input.outcome,
@@ -364,6 +367,7 @@ export async function runCliWorker(
       prompt: input.prompt,
       rawOutput: "",
       durationSeconds: 0,
+      attempt_count: 1,
       exitCode: -1,
       lockStatus: "already_locked",
       outcome: "already_locked",
@@ -413,6 +417,7 @@ export async function runCliWorker(
   let rawOutput = "";
   let parsedJson: unknown = null;
   let durationSeconds = 0;
+  let attemptCount = 1;
   let workerOutputPath: string | null = null;
   let errorReason: string | null = null;
   let captureErrorText: string | null = null;
@@ -431,6 +436,7 @@ export async function runCliWorker(
       rawOutput = result.cleanOutput;
       parsedJson = result.parsedJson;
       durationSeconds = result.durationMs / 1000;
+      attemptCount = 1;
 
       // Persist the clean output to a file as the worker_output artifact
       workerOutputPath = writeResponseFile(result.cleanOutput, workerRunId, stateDir);
@@ -447,6 +453,7 @@ export async function runCliWorker(
       rawOutput = result.rawFileContent;
       parsedJson = result.parsedJson;
       durationSeconds = result.durationMs / 1000;
+      attemptCount = result.attempts;
       workerOutputPath = result.outputFilePath;
       captureErrorText = result.errorOutput;
       captureTimedOut = result.timedOut;
@@ -491,6 +498,7 @@ export async function runCliWorker(
     prompt: input.prompt,
     rawOutput,
     durationSeconds,
+    attempt_count: attemptCount,
     exitCode,
     lockStatus,
     outcome: classification.outcome,

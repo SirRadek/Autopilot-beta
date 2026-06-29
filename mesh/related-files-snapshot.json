@@ -38,6 +38,6 @@
   "docs/autopilot/skill-registry.json": "3373ac38d88bb401ce1653367443cd7b7f6f17dc",
   "src/data/delivery-system/subscriptionBudget.ts": "2906c7e222d46ad35f6ba90081e39384fe83d7b6",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
-  "src/data/delivery-system/cliWorker.ts": "b0ff5465a8c3bf84b50e070fb86e49b5b6dae656",
+  "src/data/delivery-system/cliWorker.ts": "ee1a2dfaed55614406c9fff4951040da439b9e79",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
 }
