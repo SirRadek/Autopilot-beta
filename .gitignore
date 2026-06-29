@@ -6,4 +6,5 @@ output/
 state/
 radeq_tmp/
 *.stackdump
+.codex/state/
 .claude/

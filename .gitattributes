@@ -3,3 +3,8 @@
 # identically to autopilot@<canonical_sha>. Without this, autocrlf would
 # rewrite line endings on checkout and break the hash gate on a fresh clone.
 * -text
+
+# Git hook scripts must keep LF for Git Bash shebang execution.
+scripts/git-hooks/pre-commit text eol=lf
+scripts/git-hooks/pre-push text eol=lf
+scripts/git-hooks/lib.sh text eol=lf

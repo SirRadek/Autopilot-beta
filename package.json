@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Clean-install beta of the autopilot product-design-os floor (vendored from autopilot@<base-sha>). Separate product line; no shared git history with canonical.",
   "scripts": {
+    "prepare": "node scripts/git-hooks/install.mjs",
+    "hooks:install": "node scripts/git-hooks/install.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pdos:validate": "tsx product-design-os/scripts/validate-product-design-os.ts",
     "pdos:score": "tsx product-design-os/scripts/score-product-design-os.ts",
