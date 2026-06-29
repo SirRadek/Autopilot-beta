@@ -5,12 +5,35 @@
 // file, and surface that node's governance WITHOUT any LLM classification:
 // its rules (severity-ranked), blocker ids, required_checks, stop_conditions,
 // must_not_assume, and the escalation edges leaving it (escalates_when_combined,
-// escalates_for_review, requires, …). Deterministic, fail-closed on no match.
+// escalates_for_review, requires, …). Deterministic.
+//
+// No-match posture: an unmapped file PASSES (fail-open) — the mesh only governs
+// surfaces a node hints at — EXCEPT a file under a sensitive governance root, which
+// is surfaced as `ungovernedSensitive` so a caller can fail-CLOSED on it (the gate
+// must never silently wave through an ungoverned change to the vendor exec lane,
+// the MCP server, the mesh/engine, the runtime hooks, or the gate scripts).
 
 import type { DecisionMesh, DecisionMeshRule } from "../decision-mesh";
 
 // Templated hints (docs/projects/<slug>/…) never match a concrete changed file.
 const PLACEHOLDER_RE = /[<>*]/;
+
+// Surfaces where an ungoverned change is a real risk. A changed file under one of
+// these that NO node covers is reported as `ungovernedSensitive` (deny-able), instead
+// of silently passing. Kept narrow + security-critical on purpose.
+const SENSITIVE_ROOTS = [
+  "src/data/delivery-system",
+  "mcp",
+  "mesh",
+  "src/lib/decision-mesh",
+  "src/lib/mesh-tools",
+  ".codex/hooks",
+  "scripts/git-hooks"
+] as const;
+
+function underSensitiveRoot(file: string): boolean {
+  return SENSITIVE_ROOTS.some((root) => file === root || file.startsWith(`${root}/`));
+}
 
 /** A related_files hint covers a changed file if it equals it, is a dir prefix of it, or vice-versa. */
 function hintCovers(changedFile: string, hint: string): boolean {
@@ -43,6 +66,8 @@ export interface ChangedFilesActivation {
   readonly mustNotAssume: readonly string[];
   /** edges leaving an activated node — the governance escalations */
   readonly escalations: readonly Escalation[];
+  /** changed files under a sensitive governance root that NO node covers — deny-able (fail-closed) */
+  readonly ungovernedSensitive: readonly string[];
 }
 
 function uniq(xs: readonly string[]): string[] {
@@ -84,5 +109,19 @@ export function activateForChangedFiles(
     .filter((e) => activatedIds.has(e.from))
     .map((e) => ({ from: e.from, to: e.to, relation: e.relation, why: e.why }));
 
-  return { changedFiles, activatedNodes, rules, blockers, requiredChecks, stopConditions, mustNotAssume, escalations };
+  // Fail-closed signal: a changed file under a sensitive root that no node covers.
+  const coveredFiles = new Set(activatedNodes.flatMap((a) => [...a.matchedFiles]));
+  const ungovernedSensitive = changedFiles.filter((f) => !coveredFiles.has(f) && underSensitiveRoot(f));
+
+  return {
+    changedFiles,
+    activatedNodes,
+    rules,
+    blockers,
+    requiredChecks,
+    stopConditions,
+    mustNotAssume,
+    escalations,
+    ungovernedSensitive
+  };
 }

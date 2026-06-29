@@ -27,6 +27,11 @@ function arg(name: string): string | undefined {
 const root = arg("--root") ?? process.cwd();
 const meshDir = arg("--mesh-dir") ?? join(root, "mesh");
 const failOnBlocker = process.argv.includes("--fail-on-blocker");
+// Opt-in: also fail when an ungoverned change touches a sensitive root. Separate from
+// --fail-on-blocker so the existing hooks keep their current (blocker-only) behaviour
+// until a seeded baseline is wired (else every change to the control plane's own
+// sensitive dirs — which no node covers — would self-block).
+const failOnUngoverned = process.argv.includes("--fail-on-ungoverned");
 
 function resolveChangedFiles(): string[] {
   const filesArg = arg("--files");
@@ -60,5 +65,10 @@ for (const e of r.escalations) {
 }
 if (r.stopConditions.length > 0) console.log(`  STOP      ${r.stopConditions.join(", ")}`);
 if (r.requiredChecks.length > 0) console.log(`  CHECKS    ${r.requiredChecks.join(", ")}`);
+for (const f of r.ungovernedSensitive) {
+  console.log(`  UNGOVERNED ${f} (under a sensitive root, no node covers it)`);
+}
 
-process.exit(failOnBlocker && r.blockers.length > 0 ? 1 : 0);
+const blockerFail = failOnBlocker && r.blockers.length > 0;
+const ungovernedFail = failOnUngoverned && r.ungovernedSensitive.length > 0;
+process.exit(blockerFail || ungovernedFail ? 1 : 0);

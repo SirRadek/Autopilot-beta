@@ -28,11 +28,23 @@ describe("changed-files-capabilities (bind-point ②)", () => {
     expect(r.activatedNodes.find((n) => n.id === "upload")?.matchedFiles).toContain("src/storage/index.ts");
   });
 
-  it("no activation, no blockers, no false positives when nothing matches (no LLM)", () => {
+  it("no activation, no blockers when a NON-sensitive unmapped file changes (fail-open is intentional there)", () => {
     const r = activateForChangedFiles(mesh, ["README.md", "unrelated/file.txt"]);
     expect(r.activatedNodes).toEqual([]);
     expect(r.blockers).toEqual([]);
     expect(r.rules).toEqual([]);
+    // non-sensitive unmapped files are NOT a fail-closed signal
+    expect(r.ungovernedSensitive).toEqual([]);
+  });
+
+  it("flags an ungoverned change under a sensitive root as a fail-closed signal", () => {
+    const r = activateForChangedFiles(mesh, [
+      "src/data/delivery-system/cliWorkerCapture.ts", // vendor exec lane — sensitive, uncovered
+      "docs/notes.md" // non-sensitive
+    ]);
+    expect(r.activatedNodes).toEqual([]); // fixture mesh covers neither
+    expect(r.ungovernedSensitive).toContain("src/data/delivery-system/cliWorkerCapture.ts");
+    expect(r.ungovernedSensitive).not.toContain("docs/notes.md");
   });
 
   it("ignores placeholder/templated hints (never matches a concrete file)", () => {
