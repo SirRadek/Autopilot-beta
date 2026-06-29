@@ -20,3 +20,15 @@ status="$?"
 if [ "$status" -ne 0 ]; then
   autopilot_fail "$status" "staged changed-files blocker gate failed; commit blocked."
 fi
+
+# AF3: a NEWLY ADDED file under a sensitive governance root with no covering mesh node is
+# blocked (modifying an existing file never trips this — only additions, so it can't self-block).
+added_files="$(git diff --cached --name-only --diff-filter=A)"
+if [ -n "$added_files" ]; then
+  printf '\n[autopilot:pre-commit] checking newly added files for ungoverned sensitive surfaces\n'
+  printf '%s\n' "$added_files" | autopilot_npm run mesh:changed -- --root . --fail-on-ungoverned
+  status="$?"
+  if [ "$status" -ne 0 ]; then
+    autopilot_fail "$status" "a newly-added file touches a sensitive governance root with no covering mesh node; add a related_files hint to a mesh node (or move the file), then re-commit."
+  fi
+fi
