@@ -58,6 +58,13 @@ export interface AgyCaptureOptions {
   /** Image files to attach; their containing dirs are granted via --add-dir. */
   readonly images?: readonly string[];
   readonly timeoutMs?: number;
+  /**
+   * Opt in to agy's `--dangerously-skip-permissions` (full host-permission bypass). Default OFF:
+   * agy runs without it, the secure default the audit asked for. `--add-dir` is kept independent
+   * (it's an explicit access grant, not a bypass), so only set this when a caller has proven agy
+   * needs the bypass — keeping any bypass visible at the call site.
+   */
+  readonly dangerouslySkipPermissions?: boolean;
 }
 
 export interface AgyCaptureResult {
@@ -181,6 +188,26 @@ function killProcessTree(pid: number | undefined): void {
   }
 }
 
+/**
+ * Build the agy `--print` argv. `--dangerously-skip-permissions` (full host-permission bypass) is
+ * OFF by default — opt in via opts.dangerouslySkipPermissions. `--add-dir` access grants stay
+ * independent of the bypass, so any bypass is explicit at the call site.
+ */
+export function buildAgyArgs(prompt: string, opts: AgyCaptureOptions = {}): string[] {
+  // Grant real repo/data access: each extra dir + each image's containing dir.
+  const accessDirs = [
+    ...(opts.addDirs ?? []),
+    ...(opts.images ?? []).map((img) => dirname(img))
+  ];
+  return [
+    "--print",
+    prompt,
+    ...(opts.dangerouslySkipPermissions === true ? ["--dangerously-skip-permissions"] : []),
+    ...(opts.model ? ["--model", opts.model] : []),
+    ...accessDirs.flatMap((dir) => ["--add-dir", dir])
+  ];
+}
+
 export async function captureAgyResponse(
   prompt: string,
   opts: AgyCaptureOptions = {}
@@ -190,18 +217,7 @@ export async function captureAgyResponse(
   const pty = ptyModule.default ?? ptyModule;
 
   const agyPath = resolveAgyPath();
-  // Grant real repo/data access: each extra dir + each image's containing dir.
-  const accessDirs = [
-    ...(opts.addDirs ?? []),
-    ...(opts.images ?? []).map((img) => dirname(img))
-  ];
-  const args = [
-    "--print",
-    prompt,
-    "--dangerously-skip-permissions",
-    ...(opts.model ? ["--model", opts.model] : []),
-    ...accessDirs.flatMap((dir) => ["--add-dir", dir])
-  ];
+  const args = buildAgyArgs(prompt, opts);
 
   const startedAt = Date.now();
   let collected = "";

@@ -15,6 +15,7 @@ import {
 import {
   buildVendorEnv,
   buildCodexBashCommand,
+  buildAgyArgs,
   shq
 } from "../../src/data/delivery-system/cliWorkerCapture";
 
@@ -251,5 +252,18 @@ describe("CLI worker exec containment", () => {
     // the model reaches the command line ONLY as a fully-escaped single-quoted token
     expect(cmd).toContain(`-m ${shq(evil)}`);
     expect(shq(evil)).toBe(`'m'\\''; rm -rf ~ #'`);
+  });
+
+  it("agy runs WITHOUT --dangerously-skip-permissions by default (bypass is opt-in)", () => {
+    const args = buildAgyArgs("ping", { addDirs: ["/repo"] });
+    expect(args).not.toContain("--dangerously-skip-permissions");
+    // --add-dir access grant stays independent of the bypass
+    expect(args).toContain("--add-dir");
+    expect(args).toContain("/repo");
+  });
+
+  it("agy includes the permission bypass only when explicitly opted in", () => {
+    const args = buildAgyArgs("ping", { dangerouslySkipPermissions: true });
+    expect(args).toContain("--dangerously-skip-permissions");
   });
 });
