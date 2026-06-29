@@ -21,10 +21,13 @@ const PLACEHOLDER_RE = /[<>*]/;
 // Surfaces where an ungoverned change is a real risk. A changed file under one of
 // these that NO node covers is reported as `ungovernedSensitive` (deny-able), instead
 // of silently passing. Kept narrow + security-critical on purpose.
+// Executable / security surfaces where a NEW ungoverned file is a real risk. Deliberately
+// the runtime code paths — NOT mesh/ itself: the mesh is hand-authored governance source +
+// generated ratchet artifacts (baseline, snapshot) that are MEANT to grow, so a new node or a
+// regenerated snapshot must not be flagged as an ungoverned surface.
 const SENSITIVE_ROOTS = [
   "src/data/delivery-system",
   "mcp",
-  "mesh",
   "src/lib/decision-mesh",
   "src/lib/mesh-tools",
   ".codex/hooks",

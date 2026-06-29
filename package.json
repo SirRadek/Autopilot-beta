@@ -31,7 +31,8 @@
     "mesh:related-files-check": "tsx src/lib/mesh-tools/related-files-status-cli.ts",
     "mesh:gate": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes",
     "mcp": "tsx mcp/server.ts",
-    "mesh:gate:ci": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --baseline mesh/related-files-baseline.json",
+    "mesh:gate:ci": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --baseline mesh/related-files-baseline.json --prior mesh/related-files-snapshot.json",
+    "mesh:snapshot:regen": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --regen-snapshot mesh/related-files-snapshot.json",
     "mesh:changed": "tsx src/lib/mesh-tools/changed-files-capabilities-cli.ts"
   },
   "dependencies": {
