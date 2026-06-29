@@ -15,8 +15,9 @@
 // diffs cleanly against the pinned canonical baseline, so merge-back is a patch
 // (git format-patch), not a manual reimplementation (plan §2.3).
 
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,24 +37,25 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function walk(dir, acc) {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      walk(full, acc);
-    } else if (st.isFile()) {
-      acc.push(full);
-    }
-  }
-  return acc;
-}
-
 function collectVendoredFiles() {
   const files = [];
   for (const root of VENDOR_ROOTS) {
     const abs = join(ROOT, root);
-    if (existsSync(abs)) walk(abs, files);
+    if (!existsSync(abs)) continue;
+    // git ls-files honors .gitignore: tracked (--cached) + untracked-but-not-ignored
+    // (--others --exclude-standard). Gitignored crash litter (e.g. *.stackdump) is excluded
+    // so it can't turn the gate red, while a genuinely untracked vendored file still reaches
+    // the UNTRACKED provenance check below. -z keeps paths with odd chars intact.
+    const out = execFileSync(
+      "git",
+      ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", root],
+      { cwd: ROOT, encoding: "utf8" }
+    );
+    for (const rel of out.split("\0")) {
+      if (!rel) continue;
+      const full = join(ROOT, rel);
+      if (existsSync(full) && statSync(full).isFile()) files.push(full);
+    }
   }
   // POSIX-style relative paths so the manifest is OS-stable.
   return files
