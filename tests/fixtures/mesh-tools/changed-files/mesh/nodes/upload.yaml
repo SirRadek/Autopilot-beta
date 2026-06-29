@@ -1,0 +1,18 @@
+id: upload
+type: governance_policy
+name: Upload ingest
+question: "Is upload input bounded, authed, and validated before storage?"
+why: "Uploads receive untrusted content and must be bounded before persistence."
+signals:
+  - upload
+related_agents:
+  - security
+related_files:
+  - src/api/upload
+  - src/storage/index.ts
+required_checks:
+  - validate_upload
+stop_conditions:
+  - unbounded_upload
+must_not_assume:
+  - Do not assume a storage provider.

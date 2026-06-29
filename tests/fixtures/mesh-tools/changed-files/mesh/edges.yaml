@@ -1,0 +1,6 @@
+edges:
+  - from: upload
+    to: security
+    relation: escalates_when_combined
+    weight: 0.9
+    why: "Uploads receive untrusted content and need a security review."

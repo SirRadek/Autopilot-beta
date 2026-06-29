@@ -1,0 +1,16 @@
+rules:
+  - id: SEC-UPLOAD-001
+    title: Upload input must be bounded
+    applies_to:
+      - upload
+    instruction: "Validate file type, size, auth, and storage behavior before accepting uploads."
+    severity: blocker
+    must_not_assume:
+      - Do not assume S3.
+  - id: SEC-REVIEW-002
+    title: Security surfaces need review
+    applies_to:
+      - security
+    instruction: "Untrusted surfaces require an explicit security review before merge."
+    severity: major
+    must_not_assume: []

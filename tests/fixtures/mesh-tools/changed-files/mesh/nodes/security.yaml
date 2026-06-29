@@ -1,0 +1,13 @@
+id: security
+type: governance_policy
+name: Security review
+question: "Has the untrusted surface been security reviewed?"
+why: "Untrusted input surfaces need an explicit security review."
+signals:
+  - security
+related_agents:
+  - security
+related_files:
+  - src/security
+required_checks:
+  - security_review
