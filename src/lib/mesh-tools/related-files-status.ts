@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-export type RelatedFileStatus = "VERIFIED" | "STALE" | "MISSING" | "PLACEHOLDER";
+export type RelatedFileStatus = "VERIFIED" | "STALE" | "MISSING" | "PLACEHOLDER" | "UNSNAPSHOTTED";
 
 export interface RelatedFileEntry {
   /** node yaml file name the hint came from */
@@ -33,6 +33,8 @@ export interface RelatedFilesSummary {
   stale: number;
   missing: number;
   placeholder: number;
+  /** existing file hints absent from a SUPPLIED prior snapshot — drift-blind coverage gaps (fail-closed) */
+  unsnapshotted: number;
 }
 
 export interface RelatedFilesReport {
@@ -92,6 +94,10 @@ function listNodeFiles(nodesDir: string): string[] {
 export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {}): RelatedFilesReport {
   const nodesDir = join(root, opts.nodesSubdir ?? "mesh/nodes");
   const prior = opts.prior ?? {};
+  // Whether a prior snapshot was SUPPLIED (vs the default empty object). When supplied, a current
+  // file hint with no entry in it is a coverage gap (UNSNAPSHOTTED), not a free pass — otherwise the
+  // drift gate would silently go blind on every newly-added hint until someone remembered to regen.
+  const hasPrior = opts.prior !== undefined;
   const entries: RelatedFileEntry[] = [];
   const snapshot: Record<string, string> = {};
 
@@ -115,7 +121,15 @@ export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {
       const blobHash = gitBlobHash(readFileSync(abs));
       snapshot[relatedFile] = blobHash;
       const priorHash = prior[relatedFile];
-      const status: RelatedFileStatus = priorHash !== undefined && priorHash !== blobHash ? "STALE" : "VERIFIED";
+      let status: RelatedFileStatus;
+      if (priorHash === undefined) {
+        // No baseline hash for this file. With no prior supplied at all we cannot judge drift, so it
+        // is VERIFIED; but when a prior WAS supplied, an existing file hint missing from it means the
+        // snapshot has fallen out of coverage — surface it as a fail-closed signal, never a silent pass.
+        status = hasPrior ? "UNSNAPSHOTTED" : "VERIFIED";
+      } else {
+        status = priorHash !== blobHash ? "STALE" : "VERIFIED";
+      }
       entries.push({ node, relatedFile, status, blobHash });
     }
   }
@@ -126,6 +140,7 @@ export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {
     stale: entries.filter((e) => e.status === "STALE").length,
     missing: entries.filter((e) => e.status === "MISSING").length,
     placeholder: entries.filter((e) => e.status === "PLACEHOLDER").length,
+    unsnapshotted: entries.filter((e) => e.status === "UNSNAPSHOTTED").length,
   };
   return { root, entries, summary, snapshot };
 }

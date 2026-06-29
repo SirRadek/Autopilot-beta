@@ -19,6 +19,9 @@ import type {
 import { selectCapabilityModules } from "../../data/delivery-system/capabilities";
 
 const DEFAULT_MAX_NODES = 12;
+// buildAgentPacket caps the packet at this many nodes for ANY token budget; it is also the ceiling
+// against which blocker protection is computed, so a tiny packet surfaces the same blockers a full one would.
+const AGENT_PACKET_MAX_NODES = 7;
 const AGENT_ORDER = [
   "architect",
   "web_architect",
@@ -86,33 +89,53 @@ export function getRelevantSubgraph(mesh: DecisionMesh, input: RelevantSubgraphI
  * Severity-aware packet construction. getRelevantSubgraph keeps only the top-N scored
  * nodes for the token budget, and packet rules/stop_conditions are derived from selected
  * nodes only — so a BLOCKER relevant to the task could be silently truncated away before
- * the agent ever sees it. Re-attach any task-relevant (score > 0) node that carries a
- * blocker rule but fell outside the score cut, so a relevant blocker is never dropped.
+ * the agent ever sees it.
+ *
+ * The fix must be BUDGET-INDEPENDENT within the builder's range: a blocker present in the
+ * WIDEST packet this builder can produce must also be present in a tight one. So blocker
+ * protection is computed against a fixed CEILING subgraph (getRelevantSubgraph at the builder's
+ * maximum node count), not against the already-truncated base. Any blocker carrier the ceiling
+ * subgraph contains — including one reached only via a mesh edge (the escalates_when_combined
+ * case a directly-scored-only test would miss) — is re-attached if the tighter base dropped it.
+ * This makes full-packet blockers ⊆ tiny-packet blockers hold, while never surfacing a blocker
+ * the widest packet itself would not (which an unbounded 1-hop frontier would wrongly do).
  */
 function withRelevantBlockerNodes(
   mesh: DecisionMesh,
   baseNodes: readonly DecisionMeshNode[],
   task: string,
-  agent: string | undefined
+  agent: string | undefined,
+  ceilingMaxNodes: number
 ): readonly DecisionMeshNode[] {
   const have = new Set(baseNodes.map((node) => node.id));
   const blockerNodeIds = new Set(
     mesh.rules.filter((rule) => rule.severity === "blocker").flatMap((rule) => rule.applies_to)
   );
+  const ceiling = getRelevantSubgraph(
+    mesh,
+    agent ? { task, agent, max_nodes: ceilingMaxNodes } : { task, max_nodes: ceilingMaxNodes }
+  );
+  const ceilingIds = new Set(ceiling.relevant_nodes.map((node) => node.id));
   const forced = mesh.nodes.filter(
-    (node) => !have.has(node.id) && blockerNodeIds.has(node.id) && scoreNode(node, task, agent) > 0
+    (node) => !have.has(node.id) && blockerNodeIds.has(node.id) && ceilingIds.has(node.id)
   );
   return forced.length > 0 ? [...baseNodes, ...forced] : baseNodes;
 }
 
 export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): AgentPacket {
-  const maxNodes = Math.max(4, Math.min(7, Math.floor((input.token_budget ?? 7000) / 1000)));
+  const maxNodes = Math.max(4, Math.min(AGENT_PACKET_MAX_NODES, Math.floor((input.token_budget ?? 7000) / 1000)));
   const subgraph = getRelevantSubgraph(mesh, {
     task: input.task,
     agent: input.agent,
     max_nodes: maxNodes
   });
-  const nodes = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const nodes = withRelevantBlockerNodes(
+    mesh,
+    subgraph.relevant_nodes,
+    input.task,
+    input.agent,
+    AGENT_PACKET_MAX_NODES
+  );
   const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
 
@@ -141,7 +164,13 @@ export function buildProjectMeshPacket(mesh: DecisionMesh, input: ProjectMeshPac
     max_nodes: input.max_nodes ?? DEFAULT_MAX_NODES
   };
   const subgraph = getRelevantSubgraph(mesh, input.agent ? { ...subgraphInput, agent: input.agent } : subgraphInput);
-  const nodes = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const nodes = withRelevantBlockerNodes(
+    mesh,
+    subgraph.relevant_nodes,
+    input.task,
+    input.agent,
+    Math.max(input.max_nodes ?? DEFAULT_MAX_NODES, DEFAULT_MAX_NODES)
+  );
   const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
 

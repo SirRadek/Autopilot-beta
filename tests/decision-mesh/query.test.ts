@@ -81,6 +81,23 @@ describe("Decision Mesh queries", () => {
     }
   });
 
+  it("never drops an EDGE-reachable blocker to truncation (AF4 frontier, budget-independent)", () => {
+    // A blocker whose carrier scores 0 on the task but is one edge from a directly-scored node
+    // (the escalates_when_combined frontier) used to be truncated at a tight budget. The blocker
+    // set must now be budget-independent: every blocker at a generous budget survives at a tiny one.
+    const task = "work on reasoning strategy";
+    const blockerIds = new Set(
+      mesh.rules.filter((rule) => rule.severity === "blocker").map((rule) => rule.id)
+    );
+    const generous = buildAgentPacket(mesh, { task, agent: "architect", token_budget: 12000 });
+    const tiny = buildAgentPacket(mesh, { task, agent: "architect", token_budget: 1000 }); // maxNodes = 4
+    const generousBlockers = generous.rules.filter((id) => blockerIds.has(id));
+    expect(generousBlockers.length).toBeGreaterThan(0); // non-vacuous: this task pulls in blockers
+    for (const blocker of generousBlockers) {
+      expect(tiny.rules).toContain(blocker);
+    }
+  });
+
   it("explains a node with its connected risks and outbound requirements", () => {
     const explanation = explainNode(mesh, "file_upload");
 

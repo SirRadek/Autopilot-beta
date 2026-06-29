@@ -1,9 +1,11 @@
 {
   "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
   "src/data/delivery-system/modelPolicy.ts": "a6c0b66b722f458c3ecf84914a50c8c1f496e270",
-  "src/lib/decision-mesh/query.ts": "7e39cce5a63eb49b3082bb90825dd38651526a17",
+  "src/lib/decision-mesh/query.ts": "232f06173ac7f7de0f797a307694133ec545a5ab",
   "mcp/server.ts": "3e59dd5de4a51c8c7f3f70c479fe77e808bffa9f",
   "AGENTS.md": "b0e3c20d892ea42f450e74e789fb9b70eb51d9a9",
+  "mesh/rules.yaml": "39ff1db1f19ada3d392c4a281fd4f9713c940761",
+  "mesh/edges.yaml": "0761193d1699ee0fc92ed271252f401f66273b24",
   ".codex/hooks.json": "dd37d1633446888857a3693eecbbd640e45cba8c",
   ".codex/hooks/autopilot-hook.mjs": "59eef8f87dbdc68c8b91fad7f20fd675bca7ed9b",
   "docs/autopilot/codex-hooks-operating-model.md": "bef0e099d4430ee4d26512ef2e926e130e1f3794",
