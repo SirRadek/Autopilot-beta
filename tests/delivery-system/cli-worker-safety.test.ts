@@ -12,7 +12,11 @@ import {
   aggregateCliCallTelemetryIntoBudget,
   type SubscriptionSessionBudget
 } from "../../src/data/delivery-system/subscriptionBudget";
-import { buildVendorEnv } from "../../src/data/delivery-system/cliWorkerCapture";
+import {
+  buildVendorEnv,
+  buildCodexBashCommand,
+  shq
+} from "../../src/data/delivery-system/cliWorkerCapture";
 
 const baseLock: WorkerLockRecord = {
   schema_version: "v1",
@@ -228,5 +232,24 @@ describe("CLI worker exec containment", () => {
       if (prior === undefined) delete process.env[SECRET];
       else process.env[SECRET] = prior;
     }
+  });
+
+  it("shq wraps a value and escapes embedded single quotes", () => {
+    expect(shq("plain")).toBe("'plain'");
+    expect(shq("a'b")).toBe("'a'\\''b'");
+  });
+
+  it("forces a read-only sandbox + never-approve on the codex command", () => {
+    const cmd = buildCodexBashCommand("codex", { model: "gpt-5-codex" }, "/tmp/out.json", "/tmp/p.txt");
+    expect(cmd).toContain("-c sandbox_mode=read-only");
+    expect(cmd).toContain("-c approval_policy=never");
+  });
+
+  it("shq-escapes caller-supplied codex values so they cannot inject a command", () => {
+    const evil = `m'; rm -rf ~ #`;
+    const cmd = buildCodexBashCommand("codex", { model: evil }, "/tmp/o.json", "/tmp/p.txt");
+    // the model reaches the command line ONLY as a fully-escaped single-quoted token
+    expect(cmd).toContain(`-m ${shq(evil)}`);
+    expect(shq(evil)).toBe(`'m'\\''; rm -rf ~ #'`);
   });
 });

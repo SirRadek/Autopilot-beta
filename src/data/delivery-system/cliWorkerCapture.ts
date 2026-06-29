@@ -131,6 +131,56 @@ export function buildVendorEnv(): NodeJS.ProcessEnv {
   return out;
 }
 
+/**
+ * POSIX single-quote escape: wrap in '…' and rewrite each ' as '\'' so a caller-supplied
+ * value can never break out of the quotes into shell command position.
+ */
+export function shq(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Build the Git-Bash `-c` command line for `codex exec`. Two hardenings vs the old inline
+ * string: (1) read-only sandbox + never-approve are forced as args, so the vendor is
+ * proposal-only BY CONSTRUCTION rather than trusting an ambient ~/.codex/config.toml; and
+ * (2) every caller-supplied value (model, images, schema, paths) is shq-escaped, closing the
+ * Windows command-injection sink the audit flagged. The prompt is still passed via `< file`.
+ */
+export function buildCodexBashCommand(
+  codexPath: string,
+  opts: { readonly model?: string; readonly outputSchemaPath?: string; readonly images?: readonly string[] },
+  outFile: string,
+  promptFile: string
+): string {
+  const parts = [
+    shq(codexPath),
+    "exec",
+    "-c",
+    "sandbox_mode=read-only",
+    "-c",
+    "approval_policy=never"
+  ];
+  if (opts.outputSchemaPath) parts.push("--output-schema", shq(opts.outputSchemaPath.replace(/\\/g, "/")));
+  if (opts.model) parts.push("-m", shq(opts.model));
+  for (const img of opts.images ?? []) parts.push("-i", shq(img.replace(/\\/g, "/")));
+  parts.push("-o", shq(outFile.replace(/\\/g, "/")), "-", "<", shq(promptFile.replace(/\\/g, "/")));
+  return parts.join(" ");
+}
+
+/**
+ * Windows: a PTY child's `kill()` does NOT terminate the ConPTY grandchildren, which keep
+ * handles open and hang the supervising task after the answer is already captured. Tree-kill
+ * by pid. No-op on POSIX (the group is handled by the caller) and when the tree is already gone.
+ */
+function killProcessTree(pid: number | undefined): void {
+  if (!pid || platform !== "win32") return;
+  try {
+    execSync(`taskkill /PID ${pid} /T /F`, { stdio: "ignore" });
+  } catch {
+    // tree may already be gone
+  }
+}
+
 export async function captureAgyResponse(
   prompt: string,
   opts: AgyCaptureOptions = {}
@@ -178,6 +228,7 @@ export async function captureAgyResponse(
         } catch {
           // process may already be dead
         }
+        killProcessTree(proc.pid); // proc.kill() leaves ConPTY grandchildren alive
         reject(new Error(`agy capture timed out after ${opts.timeoutMs ?? 120000}ms`));
       }
     }, opts.timeoutMs ?? 120000);
@@ -243,18 +294,13 @@ export async function captureCodexResponse(
   const promptFile = join(outputDir, `prompt-${Date.now()}.txt`);
   writeFileSync(promptFile, prompt, "utf8");
 
-  const schemaFlag = schemaArgs.length > 0 ? `${schemaArgs[0]} "${schemaArgs[1]}" ` : "";
-  const modelFlag = opts.model ? `-m "${opts.model}" ` : "";
-  const imageFlag = (opts.images ?? []).map((img) => `-i "${img.replace(/\\/g, "/")}" `).join("");
-  const safeOut = outputFile.replace(/\\/g, "/");
-  const safePrompt = promptFile.replace(/\\/g, "/");
-
   const startedAt = Date.now();
   let result: ReturnType<typeof spawnSync>;
 
   if (bashPath) {
-    // Windows: use Git Bash so stdin redirection works reliably
-    const bashCmd = `"${codexPath}" exec ${schemaFlag}${modelFlag}${imageFlag}-o "${safeOut}" - < "${safePrompt}"`;
+    // Windows: use Git Bash so stdin redirection works reliably. Read-only sandbox +
+    // never-approve are forced and every caller value is shq-escaped (see buildCodexBashCommand).
+    const bashCmd = buildCodexBashCommand(codexPath, opts, outputFile, promptFile);
     result = spawnSync(bashPath, ["-c", bashCmd], {
       encoding: "utf8",
       cwd: opts.cwd ?? process.cwd(),
@@ -262,9 +308,12 @@ export async function captureCodexResponse(
       env: buildVendorEnv()
     });
   } else {
-    // POSIX: direct spawnSync with stdin input
+    // POSIX: direct spawnSync with stdin input (read-only sandbox + never-approve forced)
     result = spawnSync("codex", [
-      "exec", ...schemaArgs, "-o", outputFile,
+      "exec",
+      "-c", "sandbox_mode=read-only",
+      "-c", "approval_policy=never",
+      ...schemaArgs, "-o", outputFile,
       ...(opts.model ? ["-m", opts.model] : []),
       ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
     ], {
