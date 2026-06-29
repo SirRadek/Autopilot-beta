@@ -120,6 +120,33 @@ describe("Product Design OS F2 fit-safety lint", () => {
     expect(report.components[0]?.status).toBe("fail");
   });
 
+  it("flags transform scale on interactive textish selectors", () => {
+    const css = `
+.synthetic-scale .cta {
+  transform: translateY(1px) scale(0.9);
+}
+`.trim();
+    const report = analyzeFitSafetyLint(
+      {
+        components: [{ id: "synthetic-scale", css }],
+        pages: [],
+        baseline: { schema: "test", generated_on: "test", note: "empty", components: [] }
+      },
+      repoRoot
+    );
+
+    expect(report.components[0]?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "transform_scale_on_interactive",
+          selector: ".synthetic-scale .cta",
+          property: "transform"
+        })
+      ])
+    );
+    expect(report.components[0]?.status).toBe("fail");
+  });
+
   it("flags R7 sticky/fixed rules without an opaque background fallback", () => {
     const unsafeCss = `
 .synthetic-sticky .bar {

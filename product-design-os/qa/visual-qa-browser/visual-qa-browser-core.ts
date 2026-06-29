@@ -260,6 +260,7 @@ export function applyVisualQaBrowserCliExitCode(report: VisualQaBrowserReport): 
 }
 
 function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisualViewportInput {
+  const horizontalOverflow = viewport.horizontal_overflow === true || viewport.overflow_px > 1;
   const output: {
     name: string;
     width?: number;
@@ -292,7 +293,7 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
   assignDefined(output, "visible_text_characters", viewport.visible_text_characters);
   assignDefined(output, "repeated_card_count", viewport.repeated_card_count);
   assignDefined(output, "text_overlap", viewport.text_overlap);
-  assignDefined(output, "horizontal_overflow", viewport.horizontal_overflow);
+  assignDefined(output, "horizontal_overflow", horizontalOverflow);
   assignDefined(output, "low_contrast", viewport.low_contrast);
   assignDefined(output, "primary_content_in_canvas", viewport.primary_content_in_canvas);
   assignDefined(output, "motion_level", viewport.motion_level);

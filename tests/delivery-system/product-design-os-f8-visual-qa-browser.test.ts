@@ -131,6 +131,64 @@ describe("Product Design OS F8 browser visual QA core integration", () => {
     );
   });
 
+  it("adds blocking fluid-floor issues for 320px overflow and clipped text", () => {
+    const failingReport = buildVisualQaBrowserReport({
+      source_kind: "html",
+      source_path: "fixture.html",
+      html_path: "fixture.html",
+      report_path: "output/visual-qa-browser/fixture.visual-qa-browser.json",
+      checked_viewports: [320],
+      snapshot: snapshot([
+        viewport({
+          name: "mobile-320",
+          width: 320,
+          height: 568,
+          overflow_px: 12,
+          clipped_text_count: 1,
+          text_fit: false
+        })
+      ]),
+      axe_violations: []
+    });
+
+    expect(failingReport.status).toBe("failed");
+    expect(failingReport.analyzer?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "fluid_floor_overflow",
+          severity: "error",
+          viewport: "mobile-320"
+        }),
+        expect.objectContaining({
+          code: "fluid_floor_clipped_text",
+          severity: "error",
+          viewport: "mobile-320"
+        })
+      ])
+    );
+    expect(failingReport.blocking_reasons).toEqual(
+      expect.arrayContaining([
+        "analyzer_error:fluid_floor_overflow:mobile-320",
+        "analyzer_error:fluid_floor_clipped_text:mobile-320"
+      ])
+    );
+
+    const cleanReport = buildVisualQaBrowserReport({
+      source_kind: "html",
+      source_path: "fixture.html",
+      html_path: "fixture.html",
+      report_path: "output/visual-qa-browser/fixture.visual-qa-browser.json",
+      checked_viewports: [320],
+      snapshot: snapshot([viewport({ name: "mobile-320", width: 320, height: 568 })]),
+      axe_violations: []
+    });
+    const cleanCodes = cleanReport.analyzer?.issues.map((issue) => issue.code) ?? [];
+
+    expect(cleanReport.status).toBe("passed");
+    expect(cleanCodes).not.toContain("fluid_floor_overflow");
+    expect(cleanCodes).not.toContain("fluid_floor_clipped_text");
+  });
+
   it("flags mobile CTA touch targets below 44px and accepts 44px", () => {
     const failingReport = buildVisualQaBrowserReport({
       source_kind: "html",

@@ -82,6 +82,10 @@ describe("Product Design OS P3 full-page rendering", () => {
 
     expect(countOccurrences(result.html, ":root{")).toBe(1);
     expect(countOccurrences(result.html, "--pdos-page-container-max: 1180px;")).toBe(1);
+    const styleIndex = result.html.indexOf("<style>");
+    const fluidUtilityIndex = result.html.indexOf(".pdos-fluid-grid {");
+    const componentCssIndex = result.html.indexOf(".sharp-positioning-hero {");
+
     expect(result.html).toContain("width: min(100%, var(--pdos-page-container-max));");
     expect(result.html).toContain("font-size: var(--pdos-type-display);");
     // The heading type role is emitted in :root as the default scale; sections may
@@ -89,6 +93,11 @@ describe("Product Design OS P3 full-page rendering", () => {
     // not that a specific component consumes it.
     expect(result.html).toContain("--pdos-type-heading: clamp(");
     expect(result.html).not.toContain("width: min(100%, 1180px)");
+    expect(styleIndex).toBeGreaterThanOrEqual(0);
+    expect(fluidUtilityIndex).toBeGreaterThan(styleIndex);
+    expect(componentCssIndex).toBeGreaterThan(fluidUtilityIndex);
+    expect(result.html).toContain("@container (max-width: 380px)");
+    expect(result.html).toContain("@container (max-width: 360px)");
   });
 
   it("emits fluid type clamps from structured typography tokens", () => {

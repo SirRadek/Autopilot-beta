@@ -21,6 +21,7 @@ export type PdosFitSafetyPreconditionCode =
   | "fixed_min_width_over_viewport"
   | "fixed_height_floor_risk"
   | "sticky_background_opacity_missing"
+  | "transform_scale_on_interactive"
   | "page_lang_missing"
   | "page_lang_invalid";
 
@@ -334,6 +335,23 @@ function lintComponentCss(component: PdosFitSafetyComponentSource): readonly Raw
         if (gridIssue !== undefined) {
           findings.push(gridIssue);
         }
+      }
+
+      if (
+        declaration.property === "transform" &&
+        isTextishSelector(rule.selector) &&
+        /\bscale\s*\(/i.test(declaration.value)
+      ) {
+        findings.push({
+          code: "transform_scale_on_interactive",
+          source: "component_css",
+          precondition: "Interactive/text-ish selectors must not use transform scale() as a fit fix; use responsive sizing and layout instead.",
+          message: `${component.id} ${rule.selector} uses ${declaration.property}: ${declaration.value}.`,
+          selector: rule.selector,
+          property: declaration.property,
+          snippet: declarationSnippet(rule, declaration),
+          path: component.sourcePath
+        });
       }
 
       if (

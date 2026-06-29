@@ -413,6 +413,22 @@ svg {
   overflow-wrap: break-word;
 }
 
+.pdos-fluid-grid {
+  container-type: inline-size;
+}
+
+@container (max-width: 380px) {
+  .pdos-fluid-grid > * {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container (max-width: 360px) {
+  .pdos-fluid-section {
+    --pdos-page-gutter: var(--space-3);
+  }
+}
+
 .pdos-panel-grid,
 [data-pdos-panel-grid] {
   display: grid;

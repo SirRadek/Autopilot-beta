@@ -125,11 +125,22 @@ function validateViewports(input: PdosVisualQaInput): readonly PdosVisualIssue[]
   }
 
   for (const viewport of input.viewports) {
+    const isFluidFloorViewport = viewport.width !== undefined && viewport.width <= 360;
+    const clippedTextCount = viewport.clipped_text_count ?? 0;
+
     if (viewport.horizontal_overflow) {
       issues.push({
         code: "horizontal_overflow",
         severity: "error",
         message: "Viewport has horizontal overflow.",
+        viewport: viewport.name
+      });
+    }
+    if (isFluidFloorViewport && viewport.horizontal_overflow) {
+      issues.push({
+        code: "fluid_floor_overflow",
+        severity: "error",
+        message: "Viewport at the 360px fluid floor has horizontal overflow.",
         viewport: viewport.name
       });
     }
@@ -182,11 +193,19 @@ function validateViewports(input: PdosVisualQaInput): readonly PdosVisualIssue[]
         viewport: viewport.name
       });
     }
-    if ((viewport.clipped_text_count ?? 0) > 0) {
+    if (clippedTextCount > 0) {
       issues.push({
         code: "clipped_text_detected",
         severity: "warning",
         message: "Viewport text-fit probe reported clipped text.",
+        viewport: viewport.name
+      });
+    }
+    if (isFluidFloorViewport && clippedTextCount > 0) {
+      issues.push({
+        code: "fluid_floor_clipped_text",
+        severity: "error",
+        message: "Viewport at the 360px fluid floor has clipped text.",
         viewport: viewport.name
       });
     }
@@ -307,7 +326,9 @@ function calculateTemplateRisk(input: PdosVisualQaInput, issues: readonly PdosVi
 function suggestActions(issues: readonly PdosVisualIssue[], templateRiskScore: number): readonly string[] {
   const actions = new Set<string>();
   for (const issue of issues) {
-    if (issue.code === "horizontal_overflow" || issue.code === "text_overlap") {
+    if (issue.code === "fluid_floor_overflow" || issue.code === "fluid_floor_clipped_text") {
+      actions.add("Fix 320-360px fluid floor layout failures before release.");
+    } else if (issue.code === "horizontal_overflow" || issue.code === "text_overlap") {
       actions.add("Fix responsive layout before visual polish.");
     } else if (
       issue.code === "text_fit_probe_failed" ||
