@@ -24,15 +24,14 @@ Hard boundaries:
 - For supervised project work, use that project's architecture record and
   `docs/projects/<project-slug>/decision-mesh/` before implementation planning.
 
-Useful local checks:
+Useful local checks (all verified to exist in `package.json`):
 
-- `npm.cmd run mesh:check`
-- `npm.cmd run prompt:validate`
+- `npm.cmd run verify` (aggregate gate: vendor-check + typecheck + tests + pdos:validate + renderability + fit-safety + mesh:gate:ci)
+- `npm.cmd run mesh:gate:ci` (bind-point ① related_files ratchet)
+- `npm.cmd run mesh:changed -- --since origin/main --fail-on-blocker` (bind-point ② changed-file governance)
 - `npm.cmd run pdos:validate`
 - `npm.cmd run typecheck`
 - `npm.cmd test -- <target>`
-- `npm.cmd run build`
-- `npm.cmd run diff:check`
 
 Use `npm.cmd`, not `npm`, from PowerShell in this Windows environment because
 PowerShell script execution policy may block `npm.ps1`.
