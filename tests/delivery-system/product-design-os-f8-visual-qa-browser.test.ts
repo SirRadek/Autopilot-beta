@@ -9,10 +9,14 @@ import {
 } from "../../product-design-os/qa/visual-qa-browser/visual-qa-browser-core";
 
 function viewport(input: Partial<VisualQaBrowserViewportSnapshot> = {}): VisualQaBrowserViewportSnapshot {
+  const height = input.height ?? 900;
+  const viewportHeightPx = input.viewport_height_px ?? height;
+  const ctaTopPx = input.cta_top_px ?? 120;
+
   return {
     name: input.name ?? "desktop-1440",
     width: input.width ?? 1440,
-    height: input.height ?? 900,
+    height,
     heading_count: input.heading_count ?? 2,
     cta_count: input.cta_count ?? 2,
     visible_text_characters: input.visible_text_characters ?? 520,
@@ -31,6 +35,9 @@ function viewport(input: Partial<VisualQaBrowserViewportSnapshot> = {}): VisualQ
     h1_visible: input.h1_visible ?? true,
     cta_target_min_44: input.cta_target_min_44 ?? true,
     min_cta_target_px: input.min_cta_target_px ?? 44,
+    cta_top_px: ctaTopPx,
+    viewport_height_px: viewportHeightPx,
+    above_fold_mobile: input.above_fold_mobile ?? ctaTopPx < viewportHeightPx,
     overlap_count: input.overlap_count ?? 0,
     overflow_px: input.overflow_px ?? 0,
     canvas_count: input.canvas_count ?? 0,
@@ -230,6 +237,49 @@ describe("Product Design OS F8 browser visual QA core integration", () => {
 
     expect(passingReport.status).toBe("passed");
     expect(passingReport.analyzer?.issues.map((issue) => issue.code)).not.toContain("touch_target_below_44px");
+  });
+
+  it("flags a mobile primary CTA below the initial fold and accepts an above-fold CTA", () => {
+    const failingReport = buildVisualQaBrowserReport({
+      source_kind: "html",
+      source_path: "fixture.html",
+      html_path: "fixture.html",
+      report_path: "output/visual-qa-browser/fixture.visual-qa-browser.json",
+      checked_viewports: [1440, 360],
+      snapshot: snapshot([
+        viewport(),
+        viewport({ name: "mobile-360", width: 360, height: 640, cta_top_px: 720, viewport_height_px: 640 })
+      ]),
+      axe_violations: []
+    });
+
+    expect(failingReport.status).toBe("failed");
+    expect(failingReport.analyzer?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "cta_below_fold_mobile",
+          severity: "error",
+          viewport: "mobile-360"
+        })
+      ])
+    );
+    expect(failingReport.blocking_reasons).toContain("analyzer_error:cta_below_fold_mobile:mobile-360");
+
+    const passingReport = buildVisualQaBrowserReport({
+      source_kind: "html",
+      source_path: "fixture.html",
+      html_path: "fixture.html",
+      report_path: "output/visual-qa-browser/fixture.visual-qa-browser.json",
+      checked_viewports: [1440, 390],
+      snapshot: snapshot([
+        viewport(),
+        viewport({ name: "mobile-390", width: 390, height: 844, cta_top_px: 420, viewport_height_px: 844 })
+      ]),
+      axe_violations: []
+    });
+
+    expect(passingReport.status).toBe("passed");
+    expect(passingReport.analyzer?.issues.map((issue) => issue.code)).not.toContain("cta_below_fold_mobile");
   });
 
   it("groups fake axe violations by impact and blocks serious or critical findings", () => {

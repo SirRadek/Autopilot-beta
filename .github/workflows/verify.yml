@@ -17,4 +17,6 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run pdos:visual-qa-browser -- --composition product-design-os/specs/examples/buildable-marketing.composition.json
       - run: npm run verify

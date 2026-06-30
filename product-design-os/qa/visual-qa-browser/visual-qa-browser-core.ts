@@ -24,6 +24,9 @@ export interface VisualQaBrowserViewportSnapshot extends PdosVisualViewportInput
   readonly h1_visible: boolean;
   readonly cta_target_min_44: boolean;
   readonly min_cta_target_px: number;
+  readonly cta_top_px: number;
+  readonly viewport_height_px: number;
+  readonly above_fold_mobile: boolean;
   readonly overlap_count: number;
   readonly overflow_px: number;
   readonly canvas_count: number;
@@ -268,6 +271,9 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
     heading_count?: number;
     cta_count?: number;
     min_cta_target_px?: number;
+    cta_top_px?: number;
+    viewport_height_px?: number;
+    above_fold_mobile?: boolean;
     visible_text_characters?: number;
     repeated_card_count?: number;
     text_overlap?: boolean;
@@ -290,6 +296,9 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
   assignDefined(output, "heading_count", viewport.heading_count);
   assignDefined(output, "cta_count", viewport.cta_count);
   assignDefined(output, "min_cta_target_px", viewport.min_cta_target_px);
+  assignDefined(output, "cta_top_px", viewport.cta_top_px);
+  assignDefined(output, "viewport_height_px", viewport.viewport_height_px);
+  assignDefined(output, "above_fold_mobile", viewport.above_fold_mobile);
   assignDefined(output, "visible_text_characters", viewport.visible_text_characters);
   assignDefined(output, "repeated_card_count", viewport.repeated_card_count);
   assignDefined(output, "text_overlap", viewport.text_overlap);
@@ -338,6 +347,7 @@ function formatViewportSnapshot(viewports: readonly VisualQaBrowserViewportSnaps
       `low_contrast=${String(viewport.low_contrast)}(${viewport.contrast_failures.length})`,
       `h1=${String(viewport.h1_visible)}`,
       `cta44=${String(viewport.cta_target_min_44)}`,
+      `cta_fold=${String(viewport.above_fold_mobile)}(${viewport.cta_top_px}/${viewport.viewport_height_px}px)`,
       `canvas_primary=${String(viewport.primary_content_in_canvas)}`,
       `motion=${viewport.motion_level ?? 0}`,
       `reduced_motion=${String(viewport.reduced_motion_supported)}`

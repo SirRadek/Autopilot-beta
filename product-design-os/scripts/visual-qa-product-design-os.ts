@@ -11,6 +11,9 @@ export interface PdosVisualViewportInput {
   readonly heading_count?: number;
   readonly cta_count?: number;
   readonly min_cta_target_px?: number;
+  readonly cta_top_px?: number;
+  readonly viewport_height_px?: number;
+  readonly above_fold_mobile?: boolean;
   readonly visible_text_characters?: number;
   readonly repeated_card_count?: number;
   readonly text_overlap?: boolean;
@@ -126,6 +129,9 @@ function validateViewports(input: PdosVisualQaInput): readonly PdosVisualIssue[]
 
   for (const viewport of input.viewports) {
     const isFluidFloorViewport = viewport.width !== undefined && viewport.width <= 360;
+    const isPrimaryCtaFoldViewport =
+      (viewport.width === 360 && viewport.height === 640) ||
+      (viewport.width === 390 && viewport.height === 844);
     const clippedTextCount = viewport.clipped_text_count ?? 0;
 
     if (viewport.horizontal_overflow) {
@@ -184,6 +190,24 @@ function validateViewports(input: PdosVisualQaInput): readonly PdosVisualIssue[]
       viewport.min_cta_target_px < 44
     ) {
       issues.push({ code: "touch_target_below_44px", severity: "error", message: `Mobile viewport has a CTA/touch target below 44px (${viewport.min_cta_target_px}px).`, viewport: viewport.name });
+    }
+    if (isPrimaryCtaFoldViewport && (viewport.cta_count ?? 0) > 0) {
+      const viewportHeightPx = viewport.viewport_height_px ?? viewport.height;
+      const isBelowFold =
+        viewport.above_fold_mobile === false ||
+        (
+          viewport.cta_top_px !== undefined &&
+          viewportHeightPx !== undefined &&
+          viewport.cta_top_px >= viewportHeightPx
+        );
+      if (isBelowFold) {
+        issues.push({
+          code: "cta_below_fold_mobile",
+          severity: "error",
+          message: "Mobile primary CTA starts below the initial viewport fold.",
+          viewport: viewport.name
+        });
+      }
     }
     if (viewport.text_fit === false) {
       issues.push({
@@ -344,6 +368,8 @@ function suggestActions(issues: readonly PdosVisualIssue[], templateRiskScore: n
       actions.add("Move primary content into readable DOM text.");
     } else if (issue.code === "missing_reduced_motion_fallback") {
       actions.add("Add prefers-reduced-motion fallback before release.");
+    } else if (issue.code === "cta_below_fold_mobile") {
+      actions.add("Move the primary mobile CTA into the initial 360/390px viewport before release.");
     } else if (issue.code === "touch_target_below_44px") {
       actions.add("Increase mobile CTA/touch target hit areas to at least 44px.");
     } else if (issue.code.includes("heading")) {
@@ -438,6 +464,9 @@ function toViewportInput(value: Record<string, unknown>): PdosVisualViewportInpu
     heading_count?: number;
     cta_count?: number;
     min_cta_target_px?: number;
+    cta_top_px?: number;
+    viewport_height_px?: number;
+    above_fold_mobile?: boolean;
     visible_text_characters?: number;
     repeated_card_count?: number;
     text_overlap?: boolean;
@@ -459,6 +488,9 @@ function toViewportInput(value: Record<string, unknown>): PdosVisualViewportInpu
   assignIfNumber(output, "heading_count", value.heading_count);
   assignIfNumber(output, "cta_count", value.cta_count);
   assignIfNumber(output, "min_cta_target_px", value.min_cta_target_px);
+  assignIfNumber(output, "cta_top_px", value.cta_top_px);
+  assignIfNumber(output, "viewport_height_px", value.viewport_height_px);
+  assignIfBoolean(output, "above_fold_mobile", value.above_fold_mobile);
   assignIfNumber(output, "visible_text_characters", value.visible_text_characters);
   assignIfNumber(output, "repeated_card_count", value.repeated_card_count);
   assignIfBoolean(output, "text_overlap", value.text_overlap);
