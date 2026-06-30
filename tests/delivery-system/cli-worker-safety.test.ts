@@ -167,6 +167,7 @@ describe("CLI worker token telemetry", () => {
       output_tokens: 4,
       total_tokens: 7,
       token_source: "estimated_chars",
+      lock_source: "supervisor_spawn",
       duration_seconds: 1.25,
       attempt_count: 2,
       exit_code: 0,

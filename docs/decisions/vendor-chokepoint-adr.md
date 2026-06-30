@@ -30,10 +30,14 @@ dispatchHandoff(handoff) -> CliWorkerResult
 ```
 
 `dispatchHandoff` is the single gate every vendor call passes through. It MUST, in order:
-1. **Verify mesh-packet provenance.** Recompute the agent packet from the live Decision Mesh for the
+1. **Verify live-route consistency.** Recompute the agent packet from the live Decision Mesh for the
    handoff's `{task, agent}` (`buildAgentPacket` / `buildProjectMeshPacket`) and compare a stable hash
-   against the `packet_hash` the caller submitted. Reject if it cannot reproduce the route — a caller
-   cannot forge a governed route it never requested through the read-only mesh tools.
+   against the `packet_hash` the caller submitted. Reject on mismatch — so dispatch always governs the
+   *current* route and a caller cannot act on a stale/mismatched governance packet. NOTE: this hash is a
+   consistency/freshness guard, **not** cryptographic authentication (it is deterministic over public
+   inputs — anyone can compute it). True **unforgeable** provenance — an HMAC-signed route token the
+   governed core issues when the packet is built — is a Phase-2 hardening; in Phase 1 the *structural*
+   bypass-prevention is the dependency boundary (layer 1 below), not this hash.
 2. **Consult routing/budget policy.** Call `buildSupervisorRoutingDecision` and refuse on a
    budget-exhausted / open-circuit / disallowed-route decision (closes the model-policy-deadcode finding).
    Stamp the resolved `tier_id` into telemetry instead of `null`.
@@ -59,12 +63,17 @@ It is a **separate package** with NO dependency on autopilot-beta's spawn code �
 UI to `cliWorker.ts` literally cannot exist (different module graph). The UI cannot spawn a vendor; it can
 only ask the governed core to, and only with a route the core can reproduce.
 
-## Bypass-prevention — by construction, three layers
-1. **Missing dependency edge** — the UI process has no import path to the spawn lane (separate package +
-   spawn surface unexported), so it cannot call a vendor directly.
-2. **Unforgeable provenance** — the governed core recomputes the mesh route and rejects any handoff whose
-   packet it cannot reproduce, so the UI cannot smuggle an ungoverned task in.
-3. **Verified `lock_source`** — the provenance claim is checked, not self-asserted.
+## Bypass-prevention — what is structural vs a guard
+1. **Missing dependency edge (STRUCTURAL, by construction)** — the spawn lane is reachable only through
+   governed-core dispatch: the surface is unexported and a dependency-boundary test fails the build if any
+   module outside `src/governed-core/` (or the lane's own dir) imports it; in Phase 2 the UI is a separate
+   package with no import edge at all. This is the real bypass-prevention.
+2. **Live-route consistency (GUARD, not authentication)** — the governed core recomputes the mesh route and
+   rejects a handoff whose packet hash does not match the live mesh, so it always governs the current route.
+   This is a freshness/consistency guard; it is NOT unforgeable (the hash is deterministic over public
+   inputs). Unforgeable provenance via an HMAC-signed route token is a Phase-2 hardening.
+3. **Verified `lock_source`** — dispatch stamps `governed_dispatch_verified`; the lane no longer hard-codes
+   the self-asserted `supervisor_spawn` string, so telemetry distinguishes a governed spawn from an ad-hoc one.
 
 What is still by-convention (and out of scope here): the owner's interactive raw-CLI / `.cjs` habit. That
 lane is closed only by **routing the owner's supervisor session through `dispatchHandoff`** instead of raw

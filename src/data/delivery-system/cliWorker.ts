@@ -74,6 +74,7 @@ export interface CliCallTelemetryRecord {
   readonly output_tokens: number;
   readonly total_tokens: number;
   readonly token_source: CliWorkerTokenSource;
+  readonly lock_source: string;
   readonly duration_seconds: number;
   readonly attempt_count: number;
   readonly exit_code: number;
@@ -101,6 +102,7 @@ export interface BuildCliCallTelemetryRecordInput {
   readonly failureSignals: readonly CliWorkerFailureSignal[];
   readonly errorReason: string | null;
   readonly parsedJson: unknown;
+  readonly lockSource?: string;
   readonly providerUsage?: CliWorkerProviderUsage;
 }
 
@@ -192,6 +194,7 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
     output_tokens: outputTokens,
     total_tokens: totalTokens,
     token_source: providerUsage ? "provider_reported" : "estimated_chars",
+    lock_source: input.lockSource ?? "supervisor_spawn",
     duration_seconds: input.durationSeconds,
     attempt_count: input.attempt_count ?? 1,
     exit_code: input.exitCode,
@@ -213,7 +216,7 @@ export interface WorkerLockRecord {
   readonly model: string | null;
   readonly pid: number | null;
   readonly started_at: string;
-  readonly lock_source: "supervisor_spawn";
+  readonly lock_source: string;
   readonly ttl_minutes: number;
 }
 
@@ -308,6 +311,7 @@ export interface CliWorkerInput {
   readonly addDirs?: readonly string[];
   /** Image files to attach to the prompt (codex exec -i; agy via the image's dir). */
   readonly images?: readonly string[];
+  readonly lockSource?: string;
 }
 
 export interface CliWorkerResult {
@@ -331,6 +335,7 @@ export async function runCliWorker(
   const handoffSlug = (input.handoffId as string).replace(/^hp-/, "hp-");
   const workerRunId = buildWorkerRunId(input.vendor, handoffSlug);
   const startedAt = new Date().toISOString();
+  const lockSource = input.lockSource ?? "supervisor_spawn";
 
   // Write handoff prompt to temp file (artifact pointer for evidence)
   const handoffFilePath = writePromptFile(input.prompt, handoffSlug);
@@ -344,7 +349,7 @@ export async function runCliWorker(
     model: input.model ?? null,
     pid: null,
     started_at: startedAt,
-    lock_source: "supervisor_spawn",
+    lock_source: lockSource,
     ttl_minutes: 30
   };
 
@@ -373,7 +378,8 @@ export async function runCliWorker(
       outcome: "already_locked",
       failureSignals: [],
       errorReason: busyErrorReason,
-      parsedJson: null
+      parsedJson: null,
+      lockSource
     }), stateDir);
 
     return {
@@ -504,7 +510,8 @@ export async function runCliWorker(
     outcome: classification.outcome,
     failureSignals: classification.failure_signals,
     errorReason,
-    parsedJson
+    parsedJson,
+    lockSource
   }), stateDir);
 
   for (const trigger of alertTriggersForCliWorkerOutcome(classification)) {
