@@ -11,6 +11,8 @@
     "product-design-os/assets/sections/local-bricklayer-brick-proof.jpg",
     "product-design-os/assets/sections/local-bricklayer-sandstone-wall.jpg",
     "product-design-os/assets/sections/proof-strip-case-study.svg",
+    "product-design-os/briefs/motion-brief-template.md",
+    "product-design-os/briefs/motion-brief.schema.json",
     "product-design-os/composition/composition-target.schema.json",
     "product-design-os/contracts/component-contract-manifest.json",
     "product-design-os/contracts/component-contract.schema.json",
@@ -21,6 +23,9 @@
     "product-design-os/qa/fit-probe/fit-probe-core.ts",
     "product-design-os/qa/fit-safety/check-fit-safety-product-design-os.ts",
     "product-design-os/qa/fit-safety/fit-safety-baseline.json",
+    "product-design-os/qa/profile-check-matrix.json",
+    "product-design-os/qa/profile-check-matrix.schema.json",
+    "product-design-os/qa/profile-check-matrix.ts",
     "product-design-os/qa/renderability/fixtures/buildable-marketing.json",
     "product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json",
     "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json",
@@ -28,6 +33,7 @@
     "product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts",
     "product-design-os/qa/visual-qa-browser/visual-qa-browser-core.ts",
     "product-design-os/recipes/recipe.schema.json",
+    "product-design-os/recipes/standard-web-fast.json",
     "product-design-os/renderer/check-point-cloud-scene.ts",
     "product-design-os/renderer/check-render-contract.ts",
     "product-design-os/renderer/components/dot-stage-hero.ts",
@@ -205,12 +211,14 @@
     {
       "source_path": "product-design-os/briefs/brief-template.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "8109199c2a76f25349eeb599c54639a325646e0549339e71d784ed0ab6c97717"
+      "content_hash": "8109199c2a76f25349eeb599c54639a325646e0549339e71d784ed0ab6c97717",
+      "patched_by": "page-profile-p0"
     },
     {
       "source_path": "product-design-os/briefs/project-brief.schema.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "4d5dff848376c3fcf1d1c126159b798939ddf5d138b48c2890e0953c6c3fe81b"
+      "content_hash": "4d5dff848376c3fcf1d1c126159b798939ddf5d138b48c2890e0953c6c3fe81b",
+      "patched_by": "page-profile-p0"
     },
     {
       "source_path": "product-design-os/library/README.md",
@@ -507,7 +515,8 @@
     {
       "source_path": "product-design-os/rules/design-seo-tradeoff.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "b7f698637f1778f697ce2ca1da9c01160c550b4245a19bf4c0da8659dfc0641a"
+      "content_hash": "b7f698637f1778f697ce2ca1da9c01160c550b4245a19bf4c0da8659dfc0641a",
+      "patched_by": "page-profile-p0"
     },
     {
       "source_path": "product-design-os/rules/logic-first.md",

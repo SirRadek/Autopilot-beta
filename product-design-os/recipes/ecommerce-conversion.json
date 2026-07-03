@@ -4,6 +4,7 @@
   "priorities": ["product-clarity", "trust", "conversion", "mobile-checkout", "performance"],
   "logic_priority": 8,
   "design_priority": 6,
+  "page_profile": "seo_led",
   "motion_level": 2,
   "visual_energy": 4,
   "allowed_pattern_ids": ["product-grid", "product-detail", "cart-drawer", "checkout-steps", "reviews", "trust-summary"],

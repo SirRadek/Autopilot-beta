@@ -55,12 +55,12 @@
         "penalties": []
       },
       {
-        "id": "ecommerce-conversion",
-        "score": 38,
+        "id": "standard-web-fast",
+        "score": 66,
         "selected": false,
         "reasons": [
-          "Project type marketing_web is not a primary fit.",
-          "Logic/design/motion fit: 6/6/3."
+          "Project type marketing_web is supported.",
+          "Logic/design/motion fit: 7/4/2."
         ],
         "penalties": []
       }
@@ -144,6 +144,16 @@
   },
   "rejected": {
     "recipes": [
+      {
+        "id": "ecommerce-conversion",
+        "score": 38,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is not a primary fit.",
+          "Logic/design/motion fit: 6/6/3."
+        ],
+        "penalties": []
+      },
       {
         "id": "client-portal-trust",
         "score": 34,

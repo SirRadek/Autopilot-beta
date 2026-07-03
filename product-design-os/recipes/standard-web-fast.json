@@ -1,0 +1,45 @@
+{
+  "id": "standard-web-fast",
+  "project_types": ["marketing_web", "landing_page", "public_sector"],
+  "priorities": ["speed", "clarity", "findability", "conversion", "plain-language"],
+  "logic_priority": 7,
+  "design_priority": 4,
+  "seo_priority": 8,
+  "page_profile": "seo_led",
+  "motion_level": 1,
+  "visual_energy": 3,
+  "allowed_pattern_ids": [
+    "sharp-positioning-hero",
+    "outcome-cta",
+    "proof-led-section",
+    "plain-language-content",
+    "accessible-form-flow",
+    "case-study-strip"
+  ],
+  "blocked_assets": [
+    "generic-saas-grid",
+    "fake-dashboard",
+    "motion-without-purpose",
+    "heavy-3d",
+    "particles",
+    "scroll-storytelling",
+    "decorative-video-bg"
+  ],
+  "minimum_seo_floor": [
+    "clear_offer_in_first_view",
+    "title_and_description",
+    "heading_hierarchy",
+    "indexability_decision",
+    "canonical_decision",
+    "service_content_as_html",
+    "primary_cta_as_html_link_or_button",
+    "mobile_readable_layout"
+  ],
+  "tests_required": ["performance", "responsive", "seo-floor", "copy-clarity", "a11y"],
+  "stop_conditions": [
+    "poor_mobile_performance",
+    "primary_content_inside_canvas",
+    "unclear_offer",
+    "missing_indexability_decision"
+  ]
+}

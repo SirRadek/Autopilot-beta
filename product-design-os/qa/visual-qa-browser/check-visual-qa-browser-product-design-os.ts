@@ -17,6 +17,7 @@ import {
   type VisualQaBrowserSourceKind,
   type VisualQaBrowserViewportSnapshot
 } from "./visual-qa-browser-core";
+import { DEFAULT_PAGE_PROFILE, parsePageProfile, type PageProfile } from "../profile-check-matrix";
 
 declare const document: BrowserDocument;
 declare const window: BrowserWindow;
@@ -28,6 +29,7 @@ export interface VisualQaBrowserRunInput {
   readonly sourceKind: VisualQaBrowserSourceKind;
   readonly outputDir?: string;
   readonly format?: VisualQaBrowserFormat;
+  readonly profile?: PageProfile;
 }
 
 export interface VisualQaBrowserCliRun {
@@ -222,6 +224,7 @@ export async function createVisualQaBrowserCliRun(
   repoRoot = process.cwd()
 ): Promise<VisualQaBrowserCliRun> {
   const args = parseArgs(cliArgs);
+  const profile = args.profile === undefined ? DEFAULT_PAGE_PROFILE : parsePageProfile(args.profile);
   if (args.sourcePath === undefined || args.sourceKind === undefined) {
     const report = skippedVisualQaBrowserReport({
       source_kind: "composition",
@@ -229,7 +232,8 @@ export async function createVisualQaBrowserCliRun(
       html_path: "",
       report_path: toRepoPath(repoRoot, resolve(repoRoot, args.outputDir ?? "output/visual-qa-browser")),
       checked_viewports: browserViewports.map((viewport) => viewport.width),
-      message: "Missing input. Use --composition <file> or --html <file>."
+      message: "Missing input. Use --composition <file> or --html <file>.",
+      profile
     });
     return {
       report,
@@ -243,9 +247,11 @@ export async function createVisualQaBrowserCliRun(
     sourceKind: VisualQaBrowserSourceKind;
     outputDir?: string;
     format?: VisualQaBrowserFormat;
+    profile: PageProfile;
   } = {
     sourcePath: args.sourcePath,
-    sourceKind: args.sourceKind
+    sourceKind: args.sourceKind,
+    profile
   };
   if (args.outputDir !== undefined) {
     runInput.outputDir = args.outputDir;
@@ -268,6 +274,7 @@ export async function runVisualQaBrowser(
 ): Promise<VisualQaBrowserReport> {
   const prepared = prepareVisualQaBrowserSource(input, repoRoot);
   const checkedViewports = browserViewports.map((viewport) => viewport.width);
+  const profile = input.profile ?? DEFAULT_PAGE_PROFILE;
   const playwright = await optionalImport<PlaywrightModule>("@playwright/test");
 
   if (playwright.status === "missing" || playwright.module.chromium === undefined) {
@@ -279,7 +286,8 @@ export async function runVisualQaBrowser(
         html_path: toRepoPath(repoRoot, prepared.htmlPath),
         report_path: toRepoPath(repoRoot, prepared.reportPath),
         checked_viewports: checkedViewports,
-        message: `Playwright is unavailable: ${playwright.message}`
+        message: `Playwright is unavailable: ${playwright.message}`,
+        profile
       }),
       input.format
     );
@@ -297,7 +305,8 @@ export async function runVisualQaBrowser(
         html_path: toRepoPath(repoRoot, prepared.htmlPath),
         report_path: toRepoPath(repoRoot, prepared.reportPath),
         checked_viewports: checkedViewports,
-        message: `axe-core is unavailable: ${errorMessage(error)}`
+        message: `axe-core is unavailable: ${errorMessage(error)}`,
+        profile
       }),
       input.format
     );
@@ -333,7 +342,8 @@ export async function runVisualQaBrowser(
       report_path: toRepoPath(repoRoot, prepared.reportPath),
       checked_viewports: checkedViewports,
       snapshot,
-      axe_violations: mergeAxeViolations(axeViolations)
+      axe_violations: mergeAxeViolations(axeViolations),
+      profile
     });
 
     return writeReport(prepared.reportPath, report, input.format);
@@ -346,7 +356,8 @@ export async function runVisualQaBrowser(
         html_path: toRepoPath(repoRoot, prepared.htmlPath),
         report_path: toRepoPath(repoRoot, prepared.reportPath),
         checked_viewports: checkedViewports,
-        message: `Playwright browser visual QA failed: ${errorMessage(error)}`
+        message: `Playwright browser visual QA failed: ${errorMessage(error)}`,
+        profile
       }),
       input.format
     );
@@ -1154,12 +1165,14 @@ function parseArgs(args: readonly string[]): {
   readonly sourcePath?: string;
   readonly outputDir?: string;
   readonly format?: VisualQaBrowserFormat;
+  readonly profile?: string;
 } {
   const result: {
     sourceKind?: VisualQaBrowserSourceKind;
     sourcePath?: string;
     outputDir?: string;
     format?: VisualQaBrowserFormat;
+    profile?: string;
   } = {};
 
   for (let index = 0; index < args.length; index += 1) {
@@ -1182,6 +1195,9 @@ function parseArgs(args: readonly string[]): {
     } else if (key === "--format" && (value === "json" || value === "markdown")) {
       result.format = value;
       index += 1;
+    } else if (key === "--profile") {
+      result.profile = value;
+      index += 1;
     }
   }
 
@@ -1193,6 +1209,7 @@ function printUsage(): string {
     "Usage:",
     "  tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts --composition product-design-os/specs/examples/local-bricklayer.composition.json --format markdown",
     "  tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts --html output/render/landing-page.html --format json",
+    "  Optional: --profile <seo_led|balanced|brand_led|experimental_showcase> (default: balanced; severities come from product-design-os/qa/profile-check-matrix.json)",
     ""
   ].join("\n");
 }

@@ -159,6 +159,16 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 56,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 7/8/9."
+        ],
+        "penalties": []
+      },
+      {
         "id": "marketing-premium",
         "score": 50,
         "selected": false,

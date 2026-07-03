@@ -153,6 +153,16 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 60,
+        "selected": false,
+        "reasons": [
+          "Project type admin_panel is not a primary fit.",
+          "Logic/design/motion fit: 7/9/10."
+        ],
+        "penalties": []
+      },
+      {
         "id": "ecommerce-conversion",
         "score": 56,
         "selected": false,

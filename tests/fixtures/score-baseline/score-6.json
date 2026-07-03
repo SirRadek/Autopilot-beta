@@ -151,6 +151,16 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 64,
+        "selected": false,
+        "reasons": [
+          "Project type client_portal is not a primary fit.",
+          "Logic/design/motion fit: 9/9/10."
+        ],
+        "penalties": []
+      },
+      {
         "id": "internal-ops-clean",
         "score": 62,
         "selected": false,

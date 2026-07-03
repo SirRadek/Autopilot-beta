@@ -2,6 +2,10 @@
 
 SEO is a project-specific tradeoff, not a universal maximum.
 
+The canonical machine-readable field for this choice is `page_profile`
+(`seo_led | balanced | brand_led | experimental_showcase`) in recipes and
+project briefs.
+
 Autopilot must protect a minimum SEO and accessibility floor, but it must not
 force every website into the same content-heavy, perfectly optimized structure.
 Some sites sell through search. Some sell through brand memory, referral,
@@ -122,7 +126,7 @@ Do not trade away these without an explicit owner decision:
 
 Every design direction must state:
 
-- `tradeoff_profile`,
+- `page_profile`,
 - what SEO/technical rules are kept,
 - what SEO/technical rules are intentionally relaxed,
 - why that tradeoff fits the target user and business goal,

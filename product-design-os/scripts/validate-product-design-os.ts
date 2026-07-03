@@ -23,6 +23,8 @@ const REQUIRED_FILES = [
   "README.md",
   "briefs/project-brief.schema.json",
   "briefs/brief-template.md",
+  "briefs/motion-brief.schema.json",
+  "briefs/motion-brief-template.md",
   "scope/PROJECT_SCOPE.md",
   "scope/CHANGE_REQUESTS.md",
   "scope/DECISIONS.md",
@@ -58,6 +60,8 @@ const REQUIRED_FILES = [
   "taste/project-preferences.json",
   "taste/feedback-log.json",
   "taste/pattern-scores.json",
+  "qa/profile-check-matrix.json",
+  "qa/profile-check-matrix.schema.json",
   "reader/README.md",
   "reader/capture-sample.html",
   "reader/document-reader-adapter.ts",
@@ -199,6 +203,8 @@ export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidatio
   validateLibraryRelationships(pdosRoot, repoRoot, errors);
   validateTasteMemory(pdosRoot, repoRoot, errors);
   validateRecipes(join(pdosRoot, "recipes"), repoRoot, errors);
+  validateMotionBriefs(pdosRoot, repoRoot, errors);
+  validateProfileCheckMatrix(pdosRoot, repoRoot, errors);
   validateCompositionSpecs(pdosRoot, repoRoot, errors);
   validateEvidenceRecords(pdosRoot, repoRoot, errors);
   validateMarkdown(pdosRoot, repoRoot, errors, warnings);
@@ -665,6 +671,62 @@ function validateRecipes(recipesRoot: string, repoRoot: string, errors: PdosVali
     if (!recipeIds.has(recipeId)) {
       errors.push({ file: toRepoPath(repoRoot, recipesRoot), message: `Missing required recipe ${recipeId}.` });
     }
+  }
+}
+
+function validateMotionBriefs(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const schemaFile = join(pdosRoot, "briefs/motion-brief.schema.json");
+  if (!existsSync(schemaFile)) {
+    return; // Missing schema is already reported by the REQUIRED_FILES check.
+  }
+
+  const motionBriefSchema = readJsonFile(schemaFile, repoRoot, errors);
+  if (!isRecord(motionBriefSchema)) {
+    return;
+  }
+
+  const motionBriefsRoot = join(pdosRoot, "briefs/motion");
+  if (!existsSync(motionBriefsRoot)) {
+    return; // No motion briefs authored yet; the directory is optional.
+  }
+
+  const motionBriefFiles = listFiles(motionBriefsRoot)
+    .filter((file) => file.endsWith(".json"))
+    .sort();
+
+  for (const briefFile of motionBriefFiles) {
+    const value = readJsonFile(briefFile, repoRoot, errors);
+    if (value === undefined) {
+      continue;
+    }
+
+    for (const issue of validateJsonSchema(value, motionBriefSchema)) {
+      errors.push({
+        file: toRepoPath(repoRoot, briefFile),
+        message: `${issue.path}: ${issue.message}`
+      });
+    }
+  }
+}
+
+function validateProfileCheckMatrix(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const schemaFile = join(pdosRoot, "qa/profile-check-matrix.schema.json");
+  const matrixFile = join(pdosRoot, "qa/profile-check-matrix.json");
+  if (!existsSync(schemaFile) || !existsSync(matrixFile)) {
+    return; // Missing files are already reported by the REQUIRED_FILES check.
+  }
+
+  const matrixSchema = readJsonFile(schemaFile, repoRoot, errors);
+  const matrix = readJsonFile(matrixFile, repoRoot, errors);
+  if (!isRecord(matrixSchema) || matrix === undefined) {
+    return;
+  }
+
+  for (const issue of validateJsonSchema(matrix, matrixSchema)) {
+    errors.push({
+      file: toRepoPath(repoRoot, matrixFile),
+      message: `${issue.path}: ${issue.message}`
+    });
   }
 }
 

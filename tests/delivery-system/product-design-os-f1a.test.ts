@@ -61,7 +61,7 @@ describe("Product Design OS F1a contracts", () => {
       .filter((file) => file.endsWith(".json") && file !== "recipe.schema.json")
       .sort();
 
-    expect(recipeFiles).toHaveLength(7);
+    expect(recipeFiles).toHaveLength(8);
     for (const recipeFile of recipeFiles) {
       const issues = validateJsonSchema(readJson(join(recipesRoot, recipeFile)), schema);
       expect(issues, recipeFile).toEqual([]);

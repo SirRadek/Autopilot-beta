@@ -11,6 +11,7 @@
     "priorities",
     "logic_priority",
     "design_priority",
+    "page_profile",
     "motion_level",
     "allowed_pattern_ids",
     "blocked_assets",
@@ -118,9 +119,9 @@
         "minLength": 1
       }
     },
-    "design_seo_tradeoff": {
+    "page_profile": {
       "type": "string",
-      "minLength": 1
+      "enum": ["seo_led", "balanced", "brand_led", "experimental_showcase"]
     }
   }
 }

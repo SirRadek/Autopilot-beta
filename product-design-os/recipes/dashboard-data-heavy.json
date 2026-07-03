@@ -4,6 +4,7 @@
   "priorities": ["data-clarity", "filters", "decision-support", "export", "readable-charts"],
   "logic_priority": 9,
   "design_priority": 4,
+  "page_profile": "balanced",
   "motion_level": 1,
   "visual_energy": 3,
   "allowed_pattern_ids": ["kpi-overview", "filter-bar", "drilldown-table", "chart-with-source", "alert-feed"],
