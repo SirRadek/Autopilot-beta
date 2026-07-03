@@ -5,7 +5,7 @@ Next review: 2026-06-24
 Status: active process layer
 Release: `v0.2.0`
 Slug: `autopilot-control-plane`
-Canonical local root: `C:\Programování\Codex`
+Canonical local root: `C:\Programování\Codex` *(NOTE 2026-07-03: this predates the v0.2 consolidation and disagrees with the project registry, which records `C:\Programování\autopilot`. Per `docs/decisions/brainstorm-2-briefing.md` the live self-contained control-plane source of truth is now `C:\Programování\autopilot-beta` and canonical `autopilot` is frozen. Owner to normalize the exact canonical-root value across records.)*
 Canonical remote repository: `SirRadek/autopilot`
 Local workspace: `C:\Programování\Codex`
 Separation status: `separated`
