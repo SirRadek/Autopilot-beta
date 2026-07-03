@@ -36,6 +36,7 @@ const openAiTier: ProviderTierSpec = {
   cliAccessPath: "codex",
   verifiedLocally: true,
   rateLimitState: "available",
+  costWeight: 1.0,
   notes: undefined,
   lastAttemptedAt: undefined
 };
@@ -187,6 +188,51 @@ describe("routing invariants", () => {
     expect(() =>
       assertRoleConstraint({ assignedProvider: "deterministic_tools", authorityRole: "source_of_truth" })
     ).not.toThrow();
+  });
+
+  it("prefers the riskier lane when a task multi-matches (S0 lane priority)", () => {
+    // "security audit": "audit" hits deterministic_verification, but "security"/"audit"
+    // also hit architecture_security_review. The riskier review lane must win.
+    const securityAudit = buildSupervisorRoutingDecision({
+      taskId: "s0-security-audit",
+      taskDescription: "security audit of the auth boundary",
+      layer: "reviewer",
+      budgets: [openAiBudget],
+      evalRecords: []
+    });
+    expect(securityAudit.taskLane).toBe("architecture_security_review");
+
+    // The advisory route surfaces the same priority in taskLanes[0].
+    const route = selectReasoningModelRoute({ task: "security audit of the auth boundary" });
+    expect(route.route).toBe("external_advisory_review");
+    expect(route.taskLanes[0]).toBe("architecture_security_review");
+    // The deterministic lane still co-matches (it is not dropped, just deprioritized).
+    expect(route.taskLanes).toContain("deterministic_verification");
+  });
+
+  it("leaves a single-match lane unchanged (S0 does not alter single-match)", () => {
+    // "typecheck" is a signal ONLY on deterministic_verification.
+    const typecheckDecision = buildSupervisorRoutingDecision({
+      taskId: "s0-typecheck",
+      taskDescription: "typecheck the delivery-system module",
+      layer: "reviewer",
+      budgets: [openAiBudget],
+      evalRecords: []
+    });
+    expect(typecheckDecision.taskLane).toBe("deterministic_verification");
+  });
+
+  it("routes a multi-signal description to the riskier lane (S0)", () => {
+    // "architecture audit": "audit" hits deterministic_verification; "architecture"/"audit"
+    // hit architecture_security_review. Riskier lane leads.
+    const decision = buildSupervisorRoutingDecision({
+      taskId: "s0-multi-signal",
+      taskDescription: "architecture audit and build check",
+      layer: "reviewer",
+      budgets: [openAiBudget],
+      evalRecords: []
+    });
+    expect(decision.taskLane).toBe("architecture_security_review");
   });
 
   it("keeps the local Codex happy path decision unchanged", () => {

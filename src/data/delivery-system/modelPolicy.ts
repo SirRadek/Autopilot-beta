@@ -890,12 +890,49 @@ export function selectModelForLayer(
   return provider;
 }
 
+/**
+ * Risk-priority ordering for lane selection (S0 — vendor-routing v2).
+ *
+ * `reasoningTaskLanePolicies` is declared roughly cheapest/most-deterministic first, so a
+ * naive first-match (matches[0]) resolves an overlapping signal like "audit" — which is a
+ * signal on BOTH `deterministic_verification` and `architecture_security_review` — to the
+ * deterministic lane and silently drops the riskier review lane. On a MULTI-match we want
+ * the riskier lane to win (e.g. "security audit" -> architecture_security_review).
+ *
+ * Lower index = riskier = preferred on a tie. Single-match behavior is unchanged: a lane
+ * that matches alone is still returned alone, regardless of its rank.
+ * See docs/decisions/vendor-routing-policy-beta-v2.md (slice S0).
+ */
+const LANE_SELECTION_PRIORITY: readonly ReasoningTaskLaneId[] = [
+  "sensitive_private_context",
+  "architecture_security_review",
+  "agent_validation",
+  "multimodal_design_review",
+  "long_context_synthesis",
+  "structured_tool_reasoning",
+  "bounded_coding_worker",
+  "local_routine_worker",
+  "deterministic_verification"
+];
+
+function laneRiskPriority(lane: ReasoningTaskLaneId): number {
+  const index = LANE_SELECTION_PRIORITY.indexOf(lane);
+  // Unlisted lanes sort last (least risky) but keep a stable position.
+  return index === -1 ? LANE_SELECTION_PRIORITY.length : index;
+}
+
 function selectTaskLanes(normalizedTask: string): ReasoningTaskLaneId[] {
   const matches = reasoningTaskLanePolicies
     .filter((lane) => hasAny(normalizedTask, lane.taskSignals))
     .map((lane) => lane.id);
 
-  return matches.length > 0 ? unique(matches) : ["architecture_security_review"];
+  if (matches.length === 0) {
+    return ["architecture_security_review"];
+  }
+
+  // Stable risk-priority sort: on a multi-match the riskier lane leads (matches[0]),
+  // so downstream `matches[0]` callers get the riskier lane. A single match is unaffected.
+  return unique(matches).sort((a, b) => laneRiskPriority(a) - laneRiskPriority(b));
 }
 
 function selectProviderPolicies(taskLanes: readonly ReasoningTaskLaneId[]): ReasoningProviderId[] {

@@ -73,13 +73,15 @@ per provider, not per model). Cost-weights are **reconstructed placeholders**
 | | GPT-5.4 | cheaper | 0.6 |
 | | mini | cheaper | 0.3 |
 | | codex-spark | cheaper — spill catch | 0.2 |
-| **Google** | gemini-pro | advisory-only | 0.7 |
-| | gemini-flash | advisory-only — spill catch | 0.2 |
+| **Google** | gemini-pro | advisory-only — deepest (pool flagship) | **1.0** |
 | | gemini-auto | advisory-only | 0.5 |
-| **qwen local** | qwen | last-resort | **0** |
+| | gemini-flash | advisory-only — spill catch | 0.2 |
+| **qwen local** | qwen | last-resort | **0** (special-cased) |
 
 > The exact relative values above are reconstructed guesses that satisfy the *shape*
-> (flagship 1.0, cheaper < 1.0, qwen 0). **Re-verify before hardcoding.**
+> (each pool's deepest/flagship tier = 1.0, cheaper < 1.0). qwen's 0 is a special-cased
+> last-resort sentinel and is validated separately from the `(0,1]` catalog weights.
+> **Re-verify before hardcoding.**
 
 ---
 
@@ -217,7 +219,7 @@ owner re-ratification of this ADR and re-confirmation of the numeric tunables.
 
 ## Reconstructed / placeholder values the owner MUST re-verify
 1. **All cost-weights** (Anthropic Opus 1.0 / Sonnet 0.4; OpenAI GPT-5.5 1.0 / 5.4 0.6 /
-   mini 0.3 / codex-spark 0.2; Google pro 0.7 / auto 0.5 / flash 0.2; qwen 0) —
+   mini 0.3 / codex-spark 0.2; Google pro 1.0 / auto 0.5 / flash 0.2; qwen 0) —
    reconstructed placeholders, `verifiedLocally: false`.
 2. **Reserve floors** (Anthropic 30%, OpenAI 15%, Google 0%, qwen 0%) — spec defaults.
 3. **Bulk ceilings** (Anthropic 70%, OpenAI 85%, Google/qwen 100%) — spec defaults.
