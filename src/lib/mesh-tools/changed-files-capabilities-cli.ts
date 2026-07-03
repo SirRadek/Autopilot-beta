@@ -8,6 +8,8 @@
 //   git diff --name-only | tsx changed-files-capabilities-cli.ts --root .
 //   # gate mode (exit nonzero if a blocker-governed surface is touched):
 //   ... --fail-on-blocker
+//   # acknowledge a specific fired blocker (repeatable; pre-commit sources AUTOPILOT_ACK_BLOCKERS):
+//   ... --fail-on-blocker --ack WORKER-CLI-001
 //
 // Per-project mesh: pass --mesh-dir <repo>/.autopilot/decision-mesh. Read-only.
 
@@ -17,16 +19,25 @@ import { join } from "node:path";
 
 import { loadDecisionMesh } from "../decision-mesh";
 
-import { activateForChangedFiles } from "./changed-files-capabilities";
+import { activateForChangedFiles, unacknowledgedBlockers } from "./changed-files-capabilities";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
+function argAll(name: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < process.argv.length; i++) {
+    if (process.argv[i] === name && process.argv[i + 1] !== undefined) out.push(process.argv[i + 1] as string);
+  }
+  return out;
+}
+
 const root = arg("--root") ?? process.cwd();
 const meshDir = arg("--mesh-dir") ?? join(root, "mesh");
 const failOnBlocker = process.argv.includes("--fail-on-blocker");
+const acked = argAll("--ack").flatMap((value) => value.split(/[\s,]+/).filter(Boolean));
 // Opt-in: also fail when an ungoverned change touches a sensitive root. Separate from
 // --fail-on-blocker so the existing hooks keep their current (blocker-only) behaviour
 // until a seeded baseline is wired (else every change to the control plane's own
@@ -52,6 +63,7 @@ function resolveChangedFiles(): string[] {
 const changedFiles = resolveChangedFiles();
 const mesh = loadDecisionMesh(meshDir);
 const r = activateForChangedFiles(mesh, changedFiles);
+const unackedBlockers = unacknowledgedBlockers(r.blockers, acked);
 
 console.log(`[changed-files] ${changedFiles.length} changed → ${r.activatedNodes.length} governing node(s) activated`);
 for (const n of r.activatedNodes) {
@@ -59,6 +71,9 @@ for (const n of r.activatedNodes) {
 }
 for (const rule of r.rules) {
   console.log(`  ${rule.severity.toUpperCase().padEnd(7)} ${rule.id}: ${rule.instruction}`);
+}
+for (const blocker of r.blockers.filter((b) => acked.includes(b))) {
+  console.log(`  ACKED   ${blocker} (acknowledged via --ack / AUTOPILOT_ACK_BLOCKERS)`);
 }
 for (const e of r.escalations) {
   console.log(`  ESCALATE  ${e.from} --${e.relation}--> ${e.to}`);
@@ -69,6 +84,6 @@ for (const f of r.ungovernedSensitive) {
   console.log(`  UNGOVERNED ${f} (under a sensitive root, no node covers it)`);
 }
 
-const blockerFail = failOnBlocker && r.blockers.length > 0;
+const blockerFail = failOnBlocker && unackedBlockers.length > 0;
 const ungovernedFail = failOnUngoverned && r.ungovernedSensitive.length > 0;
 process.exit(blockerFail || ungovernedFail ? 1 : 0);

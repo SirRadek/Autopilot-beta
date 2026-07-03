@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { loadDecisionMesh } from "../../src/lib/decision-mesh";
-import { activateForChangedFiles } from "../../src/lib/mesh-tools/changed-files-capabilities";
+import {
+  activateForChangedFiles,
+  unacknowledgedBlockers
+} from "../../src/lib/mesh-tools/changed-files-capabilities";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MESH = join(here, "../fixtures/mesh-tools/changed-files/mesh");
@@ -51,5 +54,13 @@ describe("changed-files-capabilities (bind-point ②)", () => {
     // no node hint is a placeholder here, but a concrete path that looks templated must not crash/match
     const r = activateForChangedFiles(mesh, ["docs/projects/<slug>/architecture.md"]);
     expect(r.activatedNodes).toEqual([]);
+  });
+});
+
+describe("unacknowledgedBlockers", () => {
+  it("removes only explicitly acknowledged blocker ids", () => {
+    expect(unacknowledgedBlockers(["A", "B"], ["A"])).toEqual(["B"]);
+    expect(unacknowledgedBlockers(["A"], ["A"])).toEqual([]);
+    expect(unacknowledgedBlockers(["A", "B"], [])).toEqual(["A", "B"]);
   });
 });
