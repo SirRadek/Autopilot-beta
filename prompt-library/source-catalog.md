@@ -124,6 +124,18 @@ AGENTS.md:
 Use for durable repository rules, Decision Mesh order, project mesh separation,
 token economy, model routing, and prompt-library adoption rules.
 
+Prompt Library Rules (00-rules):
+
+- `prompt-library/00-rules/anti-hallucination.md`
+- `prompt-library/00-rules/autopilot-global-routing.md`
+- `prompt-library/00-rules/output-validation.md`
+- `prompt-library/00-rules/sources-and-citations.md`
+
+Use as the base provider-neutral rule set every prompt-library prompt inherits:
+anti-hallucination and verification-status marking, global role/scope/token/
+plugin/GitHub/asset routing, output validation and schema checks, and source
+authority and citation requirements.
+
 Autopilot V3 Prompt Pack:
 
 - `docs/autopilot/v3-prompt-pack.md`
@@ -183,12 +195,16 @@ progress states, blockers, waiting dependencies, and report-first supervision.
 
 RadeQ Project Architecture:
 
-- `docs/projects/radeq/architecture.md`
-- `docs/projects/radeq/work-log.md`
-- `docs/projects/radeq/decision-mesh/`
+- `docs/projects/radeq/architecture.md` (local governance record only)
+- `SirRadek/radeq:.autopilot/architecture.md` (external project source, canonical)
+- `SirRadek/radeq:.autopilot/decision-mesh/` (external project source, canonical)
+- `SirRadek/radeq:.autopilot/work-log.md` (external project source, canonical)
 
 Use for RadeQ-specific source-of-truth, route, SEO, lead-capture, deployment,
-performance, and mascot boundaries.
+performance, and mascot boundaries. The RadeQ project itself lives in the
+sibling `SirRadek/radeq` repository; `docs/projects/radeq/` in this repo holds
+only the redacted Autopilot governance record, not the project's live
+architecture, mesh, or work log.
 
 Cat Mascot Provenance:
 
