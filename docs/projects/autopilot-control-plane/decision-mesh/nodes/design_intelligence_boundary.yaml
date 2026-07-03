@@ -22,7 +22,6 @@ related_agents:
 related_files:
   - docs/autopilot/design-intelligence-operating-model.md
   - src/data/delivery-system/designIntelligence.ts
-  - src/data/delivery-system/roles.ts
   - mcp/server.ts
 required_checks:
   - independent_design_critique
