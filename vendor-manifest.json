@@ -98,32 +98,27 @@
     {
       "source_path": "product-design-os/agents/agent-task-template.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "08bb95d3938333c9f55eebc4d5cec49dcb4c837bffac18e9933e519c5813f49d",
-      "patched_by": "audit-P3-frontmatter"
+      "content_hash": "08bb95d3938333c9f55eebc4d5cec49dcb4c837bffac18e9933e519c5813f49d"
     },
     {
       "source_path": "product-design-os/agents/design-critic.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "ec9fadcfa54e80cf30d4cf8700fae05a6cb73f1d7de53a051de0dd9465f523da",
-      "patched_by": "audit-P3-frontmatter"
+      "content_hash": "ec9fadcfa54e80cf30d4cf8700fae05a6cb73f1d7de53a051de0dd9465f523da"
     },
     {
       "source_path": "product-design-os/agents/gemini-reviewer.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "e8a3adc8f863a304503b9f168989da315fc460bcdd65c0a25a2903f8d307398d",
-      "patched_by": "audit-P3-frontmatter"
+      "content_hash": "e8a3adc8f863a304503b9f168989da315fc460bcdd65c0a25a2903f8d307398d"
     },
     {
       "source_path": "product-design-os/agents/qwen-worker.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "ee74c2220a60e474cd2911338f84d79450d7044b536ed711dadab48e80ee76db",
-      "patched_by": "audit-P3-frontmatter"
+      "content_hash": "ee74c2220a60e474cd2911338f84d79450d7044b536ed711dadab48e80ee76db"
     },
     {
       "source_path": "product-design-os/agents/strict-opponent.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "1d5823136a7a991a4c6878a8bb258bf416472f87e93b5e6e32262949b0a23ef8",
-      "patched_by": "audit-P3-frontmatter"
+      "content_hash": "1d5823136a7a991a4c6878a8bb258bf416472f87e93b5e6e32262949b0a23ef8"
     },
     {
       "source_path": "product-design-os/assets/3d/.gitkeep",
