@@ -269,6 +269,246 @@
       "blocked_uses": ["copying template sections blindly", "adding template dependency without architecture decision"],
       "adoption_requirements": ["check repository license and activity", "use as structure inspiration unless license is captured", "preserve RadeQ/project-specific architecture"],
       "notes": "Good reference for Astro site organization, but not an approved runtime dependency here."
+    },
+    {
+      "id": "poppins",
+      "name": "Poppins",
+      "category": "font",
+      "status": "approved_source",
+      "source_url": "https://fonts.google.com/specimen/Poppins",
+      "evidence_urls": [],
+      "license": {
+        "name": "SIL Open Font License 1.1",
+        "type": "ofl",
+        "url": "https://openfontlicense.org/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["UI and body text", "friendly geometric sans for fintech, nonprofit, and lifestyle projects"],
+      "blocked_uses": ["selling the font files standalone", "modifying reserved font names without review"],
+      "adoption_requirements": ["bundle the OFL license file", "record exact downloaded files"],
+      "notes": "Google Fonts / Indian Type Foundry geometric sans under SIL OFL 1.1."
+    },
+    {
+      "id": "instrument-serif",
+      "name": "Instrument Serif",
+      "category": "font",
+      "status": "approved_source",
+      "source_url": "https://fonts.google.com/specimen/Instrument+Serif",
+      "evidence_urls": [],
+      "license": {
+        "name": "SIL Open Font License 1.1",
+        "type": "ofl",
+        "url": "https://openfontlicense.org/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["editorial and premium headline serif"],
+      "blocked_uses": ["selling the font files standalone", "modifying reserved font names without review"],
+      "adoption_requirements": ["bundle the OFL license file", "record exact downloaded files"],
+      "notes": "Instrument-designed display serif under SIL OFL 1.1; best for editorial/premium headline use."
+    },
+    {
+      "id": "satoshi-fontshare",
+      "name": "Satoshi (Fontshare)",
+      "category": "font",
+      "status": "candidate_source",
+      "source_url": "https://www.fontshare.com/fonts/satoshi",
+      "evidence_urls": [],
+      "license": {
+        "name": "Fontshare EULA (ITF Free Font License)",
+        "type": "custom",
+        "url": "https://www.fontshare.com/licenses/itf-ffl"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["modern grotesque sans for UI and headline text"],
+      "blocked_uses": ["redistributing font files outside the project"],
+      "adoption_requirements": ["re-read the ITF FFL terms per release", "no redistribution outside the project", "record downloaded version"],
+      "notes": "Fontshare (Indian Type Foundry) font; free for personal and commercial use under the Fontshare EULA, but NOT OFL."
+    },
+    {
+      "id": "aeonik-cotype",
+      "name": "Aeonik (CoType Foundry)",
+      "category": "font",
+      "status": "candidate_source",
+      "source_url": "https://cotypefoundry.com/products/aeonik",
+      "evidence_urls": [],
+      "license": {
+        "name": "CoType Foundry License (paid)",
+        "type": "custom",
+        "url": "https://cotypefoundry.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["typography direction shortlisting pending a purchased license"],
+      "blocked_uses": ["any project use before a purchased license is recorded"],
+      "adoption_requirements": ["owner purchase decision", "license evidence record"],
+      "notes": "Paid commercial license from CoType Foundry required before any project use."
+    },
+    {
+      "id": "migra-pangram",
+      "name": "Migra (Pangram Pangram)",
+      "category": "font",
+      "status": "candidate_source",
+      "source_url": "https://pangrampangram.com/products/migra",
+      "evidence_urls": [],
+      "license": {
+        "name": "Pangram Pangram EULA",
+        "type": "custom",
+        "url": "https://pangrampangram.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["expressive display serif studies", "typography direction shortlisting"],
+      "blocked_uses": ["commercial use before the current Pangram Pangram licensing tier is verified and recorded"],
+      "adoption_requirements": ["verify current Pangram Pangram licensing tier before any commercial use", "record license evidence"],
+      "notes": "Pangram Pangram offers free trial/personal tiers; commercial use is paid and needs verification per current EULA."
+    },
+    {
+      "id": "awwwards",
+      "name": "Awwwards",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://www.awwwards.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://www.awwwards.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Award-bait caveat: entries often over-animated, weak accessibility/conversion; suitable reference only for brand_led/experimental_showcase page profiles."
+    },
+    {
+      "id": "godly-websites",
+      "name": "Godly",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://godly.website",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://godly.website"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Curated production minimalism; good default reference for balanced/seo_led profiles."
+    },
+    {
+      "id": "lapa-ninja",
+      "name": "Lapa Ninja",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://www.lapa.ninja",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://www.lapa.ninja"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Landing-page case studies including historical evolution."
+    },
+    {
+      "id": "landingfolio",
+      "name": "Landingfolio",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://www.landingfolio.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://www.landingfolio.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "SaaS landing patterns."
+    },
+    {
+      "id": "land-book",
+      "name": "Land-book",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://land-book.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://land-book.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Broad landing/product gallery."
+    },
+    {
+      "id": "hover-states",
+      "name": "Hover States",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://hoverstat.es",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://hoverstat.es"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Micro-interactions and hover/motion details."
+    },
+    {
+      "id": "minimal-gallery",
+      "name": "Minimal Gallery",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://minimal.gallery",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://minimal.gallery"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Grid and negative-space purism."
     }
   ]
 }

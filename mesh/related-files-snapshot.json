@@ -8,7 +8,7 @@
   ".codex/hooks/autopilot-hook.mjs": "59eef8f87dbdc68c8b91fad7f20fd675bca7ed9b",
   "docs/autopilot/codex-hooks-operating-model.md": "bef0e099d4430ee4d26512ef2e926e130e1f3794",
   "src/data/delivery-system/contextEconomy.ts": "70dda4331e15e3ff4bddb1bb42ae2ab1f55dc975",
-  "GEMINI.md": "c3d36e38cc43b689fa1bc907b3bf25b3684b1d66",
+  "GEMINI.md": "c1852287f258de48aaf6f5efcc486a0e9756b27a",
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
   "src/data/delivery-system/modelOutputEvaluation.ts": "e32d29917dfb4fe588cc7cbe7b2579f590412f7a",
   "scripts/validate-model-output-evals.ts": "c5ae90b87c5a7cd8e531905a57d6585102a6ce95",
