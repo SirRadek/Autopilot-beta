@@ -21,6 +21,14 @@ Climb one rung at a time and record why the lower rung was insufficient.
    and Spline (visual 3D editor). See the hypothesis warning below.
 5. Custom shader work — explicit owner approval only.
 
+### Canonical QA Debug Hook
+
+Scroll-progress motion implementations must expose
+`window.__autopilotSetProgress(p)` for p=0..1 so visual QA can capture the
+brief's progress points. `window.__autopilotGetMotionState()` is optional;
+per-effect helpers such as `window.__set<X>Progress(p)` may exist, but they do
+not replace the canonical QA hook.
+
 ## Situation Table
 
 | Situation | Default stack | Constraint |

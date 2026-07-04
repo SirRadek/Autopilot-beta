@@ -163,6 +163,14 @@
       "notes": "Floor: reduced-motion support."
     },
     {
+      "code": "motion_debug_hook_missing",
+      "seo_led": "advisory",
+      "balanced": "advisory",
+      "brand_led": "advisory",
+      "experimental_showcase": "advisory",
+      "notes": "Advisory only. Emitted only when visual-qa-browser --progress is explicitly requested and the canonical window.__autopilotSetProgress QA hook is absent."
+    },
+    {
       "code": "touch_target_below_44px",
       "seo_led": "blocking",
       "balanced": "blocking",

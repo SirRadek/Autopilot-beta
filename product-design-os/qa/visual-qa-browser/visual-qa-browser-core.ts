@@ -27,7 +27,7 @@ export interface VisualQaBrowserContrastFailure {
   readonly background: string;
 }
 
-export interface VisualQaBrowserViewportSnapshot extends PdosVisualViewportInput {
+export interface VisualQaBrowserViewportMetricSnapshot extends PdosVisualViewportInput {
   readonly h1_visible: boolean;
   readonly cta_target_min_44: boolean;
   readonly min_cta_target_px: number;
@@ -37,6 +37,15 @@ export interface VisualQaBrowserViewportSnapshot extends PdosVisualViewportInput
   readonly active_motion_element_count: number;
   readonly reduce_motion_rule_count: number;
   readonly contrast_failures: readonly VisualQaBrowserContrastFailure[];
+}
+
+export interface VisualQaBrowserProgressSnapshot extends Omit<VisualQaBrowserViewportMetricSnapshot, "name"> {
+  readonly p: number;
+  readonly text_overlap_count: number;
+}
+
+export interface VisualQaBrowserViewportSnapshot extends VisualQaBrowserViewportMetricSnapshot {
+  readonly progress_snapshots?: readonly VisualQaBrowserProgressSnapshot[];
 }
 
 export interface VisualQaBrowserSnapshot extends Omit<PdosVisualQaInput, "viewports"> {
@@ -90,6 +99,7 @@ export interface VisualQaBrowserReportInput {
   readonly checked_viewports: readonly number[];
   readonly snapshot: VisualQaBrowserSnapshot;
   readonly axe_violations: readonly VisualQaBrowserAxeViolation[];
+  readonly additional_issues?: readonly PdosVisualIssue[];
   readonly errors?: readonly string[];
   readonly profile?: PageProfile;
   readonly profileMatrix?: ProfileCheckMatrix;
@@ -107,7 +117,10 @@ export interface VisualQaBrowserClassification {
 const axeImpacts = ["critical", "serious", "moderate", "minor", "unknown"] as const;
 
 export function buildVisualQaBrowserReport(input: VisualQaBrowserReportInput): VisualQaBrowserReport {
-  const analyzer = analyzeMeasuredVisualQaSnapshot(input.snapshot);
+  const analyzer = appendAdditionalAnalyzerIssues(
+    analyzeMeasuredVisualQaSnapshot(input.snapshot),
+    input.additional_issues ?? []
+  );
   const axeViolations = sortAxeViolations(input.axe_violations);
   const profile = input.profile ?? DEFAULT_PAGE_PROFILE;
   const classification = classifyVisualQaBrowserReport(
@@ -188,7 +201,7 @@ export function toAnalyzerInput(snapshot: VisualQaBrowserSnapshot): PdosVisualQa
     ctas?: readonly string[];
     template_signals?: readonly string[];
   } = {
-    viewports: snapshot.viewports.map(toAnalyzerViewport)
+    viewports: snapshot.viewports.flatMap(toAnalyzerViewports)
   };
 
   assignDefined(input, "url", snapshot.url);
@@ -318,6 +331,9 @@ export function formatVisualQaBrowserReport(
     "## Viewport Snapshot",
     ...formatViewportSnapshot(report.snapshot.viewports),
     "",
+    "## Progress Snapshots",
+    ...formatProgressSnapshots(report.snapshot.viewports),
+    "",
     "## Analyzer Issues",
     ...formatAnalyzerIssues(analyzerIssues),
     "",
@@ -348,7 +364,7 @@ export function applyVisualQaBrowserCliExitCode(report: VisualQaBrowserReport): 
   return exitCode;
 }
 
-function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisualViewportInput {
+function toAnalyzerViewport(viewport: VisualQaBrowserViewportMetricSnapshot): PdosVisualViewportInput {
   const horizontalOverflow = viewport.horizontal_overflow === true || viewport.overflow_px > 1;
   const output: {
     name: string;
@@ -395,6 +411,36 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
   return output;
 }
 
+function toAnalyzerViewports(viewport: VisualQaBrowserViewportSnapshot): readonly PdosVisualViewportInput[] {
+  return [
+    toAnalyzerViewport(viewport),
+    ...(viewport.progress_snapshots ?? []).map((progressSnapshot) => {
+      const { p, text_overlap_count: _textOverlapCount, ...progressMetrics } = progressSnapshot;
+      return toAnalyzerViewport({
+        ...progressMetrics,
+        name: `${viewport.name}@p=${formatProgressValue(p)}`
+      });
+    })
+  ];
+}
+
+function appendAdditionalAnalyzerIssues(
+  analyzer: PdosVisualQaReport,
+  additionalIssues: readonly PdosVisualIssue[]
+): PdosVisualQaReport {
+  if (additionalIssues.length === 0) {
+    return analyzer;
+  }
+
+  const issues = [...analyzer.issues, ...additionalIssues];
+  return {
+    ...analyzer,
+    ok: !issues.some((issue) => issue.severity === "error"),
+    issues,
+    report_markdown: `${analyzer.report_markdown.trimEnd()}\n\n## Browser Runner Issues\n${formatAnalyzerIssues(additionalIssues).join("\n")}\n`
+  };
+}
+
 function sortAxeViolations(violations: readonly VisualQaBrowserAxeViolation[]): readonly VisualQaBrowserAxeViolation[] {
   return [...violations].sort((first, second) => {
     const impactDelta = impactRank(first.impact) - impactRank(second.impact);
@@ -434,6 +480,25 @@ function formatViewportSnapshot(viewports: readonly VisualQaBrowserViewportSnaps
   });
 }
 
+function formatProgressSnapshots(viewports: readonly VisualQaBrowserViewportSnapshot[]): readonly string[] {
+  const lines = viewports.flatMap((viewport) =>
+    (viewport.progress_snapshots ?? []).map((progressSnapshot) => {
+      return [
+        `- ${viewport.name} p=${formatProgressValue(progressSnapshot.p)}:`,
+        `overflow=${String(progressSnapshot.horizontal_overflow)}(${progressSnapshot.overflow_px}px)`,
+        `overlap=${String(progressSnapshot.text_overlap)}(${progressSnapshot.text_overlap_count})`,
+        `low_contrast=${String(progressSnapshot.low_contrast)}(${progressSnapshot.contrast_failures.length})`,
+        `h1=${String(progressSnapshot.h1_visible)}`,
+        `cta44=${String(progressSnapshot.cta_target_min_44)}`,
+        `canvas_primary=${String(progressSnapshot.primary_content_in_canvas)}`,
+        `motion=${progressSnapshot.motion_level ?? 0}`,
+        `reduced_motion=${String(progressSnapshot.reduced_motion_supported)}`
+      ].join(" ");
+    })
+  );
+  return lines.length === 0 ? ["- None."] : lines;
+}
+
 function formatAnalyzerIssues(issues: readonly PdosVisualIssue[]): readonly string[] {
   if (issues.length === 0) {
     return ["- None."];
@@ -461,4 +526,8 @@ function assignDefined<T extends object, K extends keyof T>(target: T, key: K, v
   if (value !== undefined) {
     target[key] = value;
   }
+}
+
+function formatProgressValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value).replace(/0+$/, "").replace(/\.$/, "");
 }

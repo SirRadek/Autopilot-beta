@@ -77,8 +77,9 @@ const analyzerCodes = [
 ] as const;
 
 const browserGateCodes = ["runner_error", "axe_critical", "axe_serious"] as const;
+const progressDebugCodes = ["motion_debug_hook_missing"] as const;
 
-const expectedCodes = [...fitSafetyCodes, ...analyzerCodes, ...browserGateCodes];
+const expectedCodes = [...fitSafetyCodes, ...analyzerCodes, ...browserGateCodes, ...progressDebugCodes];
 
 // Floor codes: must stay blocking in ALL FOUR profiles (dual-track hard floor).
 const floorCodes = [
@@ -214,8 +215,13 @@ describe("Product Design OS profile check matrix", () => {
     const byCode = new Map(matrix.checks.map((entry) => [entry.code, entry]));
 
     for (const entry of matrix.checks) {
-      expect(`${entry.code}:balanced:${entry.balanced}`).toBe(`${entry.code}:balanced:blocking`);
-      expect(`${entry.code}:seo_led:${entry.seo_led}`).toBe(`${entry.code}:seo_led:blocking`);
+      if (entry.code === "motion_debug_hook_missing") {
+        expect(entry.balanced).toBe("advisory");
+        expect(entry.seo_led).toBe("advisory");
+      } else {
+        expect(`${entry.code}:balanced:${entry.balanced}`).toBe(`${entry.code}:balanced:blocking`);
+        expect(`${entry.code}:seo_led:${entry.seo_led}`).toBe(`${entry.code}:seo_led:blocking`);
+      }
     }
 
     for (const code of floorCodes) {
@@ -227,12 +233,17 @@ describe("Product Design OS profile check matrix", () => {
     }
 
     // Regression guard: the ONLY non-blocking cells in the shipped matrix are the
-    // two recorded experimental_showcase downgrades.
+    // two recorded experimental_showcase downgrades plus the explicit --progress
+    // debug-hook advisory.
     const nonBlockingCells = matrix.checks.flatMap((entry) =>
       PAGE_PROFILES.filter((profile) => entry[profile] !== "blocking").map((profile) => `${entry.code}:${profile}:${entry[profile]}`)
     );
     expect(nonBlockingCells.sort()).toEqual([
       "fixed_height_floor_risk:experimental_showcase:advisory",
+      "motion_debug_hook_missing:balanced:advisory",
+      "motion_debug_hook_missing:brand_led:advisory",
+      "motion_debug_hook_missing:experimental_showcase:advisory",
+      "motion_debug_hook_missing:seo_led:advisory",
       "thin_visible_content:experimental_showcase:advisory"
     ]);
   });

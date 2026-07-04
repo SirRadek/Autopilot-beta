@@ -64,7 +64,10 @@ numbered questions and stop. No implementation, no partial patch.
   objects keep `must_remain_dom`).
 - Respect the brief's constraints and its `page_profile`.
 - Every scroll-driven effect ships the dev debug API:
-  `window.__set<X>Progress(p)` and `window.__get<X>MotionState()`.
+  `window.__autopilotSetProgress(p)` for p=0..1 and, when useful,
+  `window.__autopilotGetMotionState()`. Per-effect helpers such as
+  `window.__set<X>Progress(p)` MAY exist, but the canonical
+  `window.__autopilotSetProgress(p)` hook is REQUIRED for QA.
 - GSAP/React: clean up on unmount (kill tweens and ScrollTriggers, remove
   listeners) where relevant.
 - No architecture redesign; smallest patch that meets the brief.
