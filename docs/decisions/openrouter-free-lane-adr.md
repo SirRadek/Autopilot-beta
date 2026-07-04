@@ -100,7 +100,19 @@ the bans below are enforced in code.
 ## Ratification checklist (owner)
 
 - [ ] Confirm the two-model allowlist and the worker-role mapping above.
-- [ ] Rotate the OpenRouter API key; store the new one only in local env.
-- [ ] Decide: top up $10 credit for the 1000 requests/day window (vs 50/day free)?
+- [x] Key policy (owner 2026-07-04): **rotate quarterly** (every 3 months); key lives only in
+      local env. First rotation due immediately (initial key was exposed in chat).
+- [x] Top-up decision (owner 2026-07-04): **no $10 top-up for now** — the lane budget is the
+      free window: 50 requests/day + 20 rpm, attempts counted. Revisit when the daily window
+      measurably blocks work.
 - [ ] Confirm per-provider data-policy/ZDR verification as a stage-1 precondition.
-- [ ] Confirm eval-per-output as a hard lane rule (no unscored worker output).
+- [x] Eval rule — **GPT-5.5 xhigh consult verdict (2026-07-04): severity/kind-tiered evals**,
+      not hard per-output and not pure sampling. Every free-worker output must pass codex review
+      before use (accepted/retry/blocked stamp + source pointers + verification evidence), but
+      only mandatory-trigger outputs (failures, retries, prompt/input deltas, format breaks,
+      hallucinations, privacy/provider anomalies, route changes, governance/security/release-
+      affecting work, anything used to tune prompts/routing) plus a stratified sample of trivial
+      accepted outputs (~10–20 %, ≥1 per active model/task-kind/day) create full
+      `model-output-evals/records/` records. Codex scores during its existing review pass; Claude
+      audits high-risk/planning cases + weekly aggregates; worker self-score forbidden. Decision 4
+      "eval mandatory per output" is amended accordingly.
