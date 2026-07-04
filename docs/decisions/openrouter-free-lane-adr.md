@@ -102,8 +102,9 @@ the bans below are enforced in code.
 - [ ] Confirm the two-model allowlist and the worker-role mapping above.
 - [x] Key policy (owner 2026-07-04): **rotate quarterly** (every 3 months); key lives only in
       local env. Rotation regime STARTED 2026-07-04 (owner confirmation "začíná teď"); the
-      chat-exposed initial key is to be revoked on openrouter.ai as rotation #1. **Next rotation
-      due: 2026-10-04.**
+      chat-exposed initial key is to be revoked on openrouter.ai as rotation #1. Rotation #1
+      DONE (owner 2026-07-04): a new key is set in local env as of today. **Next rotation due:
+      2026-10-04.**
 - [x] Top-up decision (owner 2026-07-04): **no $10 top-up for now** — the lane budget is the
       free window: 50 requests/day + 20 rpm, attempts counted. Revisit when the daily window
       measurably blocks work.
