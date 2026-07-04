@@ -5,7 +5,17 @@ import type { HandoffId } from "./checkCompletionMatrix";
 import {
   captureAgyResponse,
   captureCodexResponse,
+  captureOpenRouterResponse,
+  assertOpenRouterAccessTierOptions,
+  assertOpenRouterPromptIsSendable,
+  incrementOpenRouterAttemptBudget,
+  openRouterErrorReason,
+  redactOpenRouterApiKey,
+  resolveOpenRouterModel,
   type CodexDispatchMode,
+  type OpenRouterAttemptCounts,
+  type OpenRouterMode,
+  type OpenRouterModel,
   writePromptFile
 } from "./cliWorkerCapture";
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH } from "./sessionState";
@@ -21,9 +31,9 @@ import {
 
 // ─── Vendor types ─────────────────────────────────────────────────────────────
 
-export type CliVendor = "codex_cli" | "agy_cli";
+export type CliVendor = "codex_cli" | "agy_cli" | "openrouter_api";
 
-export type { CodexDispatchMode };
+export type { CodexDispatchMode, OpenRouterMode };
 
 export type CliWorkerFailureSignal =
   | "timeout"
@@ -68,7 +78,7 @@ export interface CliCallTelemetryRecord {
   readonly worker_run_id: string;
   readonly handoff_id: HandoffId;
   readonly vendor: CliVendor;
-  readonly provider: "openai_gpt" | "gemini_cli";
+  readonly provider: "openai_gpt" | "gemini_cli" | "openrouter";
   readonly model: string | null;
   readonly tier_id: string | null;
   readonly input_chars: number;
@@ -85,7 +95,9 @@ export interface CliCallTelemetryRecord {
   readonly error_reason: string | null;
   readonly parsed_json_present: boolean;
   readonly codex_mode?: CodexDispatchMode;
+  readonly openrouter_mode?: OpenRouterMode;
   readonly task_packet_ref?: string;
+  readonly attempt_counts?: OpenRouterAttemptCounts;
 }
 
 export interface BuildCliCallTelemetryRecordInput {
@@ -106,7 +118,9 @@ export interface BuildCliCallTelemetryRecordInput {
   readonly parsedJson: unknown;
   readonly providerUsage?: CliWorkerProviderUsage;
   readonly codexMode?: CodexDispatchMode;
+  readonly openrouterMode?: OpenRouterMode;
   readonly taskPacketRef?: string;
+  readonly attemptCounts?: OpenRouterAttemptCounts;
 }
 
 const AUTH_ERROR_PATTERNS: readonly RegExp[] = [
@@ -205,7 +219,9 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
     error_reason: input.errorReason,
     parsed_json_present: input.parsedJson != null,
     ...(input.codexMode !== undefined ? { codex_mode: input.codexMode } : {}),
-    ...(input.taskPacketRef !== undefined ? { task_packet_ref: input.taskPacketRef } : {})
+    ...(input.openrouterMode !== undefined ? { openrouter_mode: input.openrouterMode } : {}),
+    ...(input.taskPacketRef !== undefined ? { task_packet_ref: input.taskPacketRef } : {}),
+    ...(input.attemptCounts !== undefined ? { attempt_counts: input.attemptCounts } : {})
   };
 }
 
@@ -286,13 +302,24 @@ export function releaseWorkerLock(workerRunId: string, stateDir: string): void {
 // ─── Worker run ID ────────────────────────────────────────────────────────────
 
 export function buildWorkerRunId(vendor: CliVendor, handoffSlug: string): string {
-  const prefix = vendor === "codex_cli" ? "cli-codex" : "cli-agy";
+  const prefix = prefixForCliVendor(vendor);
   const ts = new Date()
     .toISOString()
     .replace(/[-:]/g, "")
     .replace("T", "T")
     .slice(0, 15); // YYYYMMDDTHHmmss
   return `${prefix}-${handoffSlug}-${ts}`;
+}
+
+function prefixForCliVendor(vendor: CliVendor): string {
+  switch (vendor) {
+    case "codex_cli":
+      return "cli-codex";
+    case "agy_cli":
+      return "cli-agy";
+    case "openrouter_api":
+      return "cli-openrouter";
+  }
 }
 
 // ─── runCliWorker ─────────────────────────────────────────────────────────────
@@ -306,6 +333,8 @@ export interface CliWorkerInput {
   readonly outputSchemaPath?: string;
   /** Named governed Codex dispatch mode. Absent preserves the legacy command config. */
   readonly codexMode?: CodexDispatchMode;
+  /** Required for openrouter_api; selects the compiled-in free-model worker role. */
+  readonly openrouterMode?: OpenRouterMode;
   /** Required for codex_implement; links the write-capable worker to its bounded packet. */
   readonly taskPacketRef?: string;
   readonly model?: string;
@@ -334,6 +363,11 @@ export interface CliWorkerResult {
   readonly lockStatus: "acquired_supervisor_spawn" | "already_locked" | "stale_replaced" | "failed";
   readonly workerOutputPath: string | null;
   readonly errorReason: string | null;
+  readonly missing?: {
+    readonly status: "MISSING";
+    readonly provider: "openrouter";
+    readonly reason: "openrouter_api_key_missing";
+  };
 }
 
 export async function runCliWorker(
@@ -341,7 +375,9 @@ export async function runCliWorker(
   stateDir: string
 ): Promise<CliWorkerResult> {
   assertCodexDispatchGuard(input);
+  const openRouterConfig = input.vendor === "openrouter_api" ? resolveOpenRouterWorkerConfig(input) : null;
   const taskPacketRef = normalizeTaskPacketRef(input.taskPacketRef);
+  const modelForRun = openRouterConfig?.model ?? input.model ?? null;
   const handoffSlug = (input.handoffId as string).replace(/^hp-/, "hp-");
   const workerRunId = buildWorkerRunId(input.vendor, handoffSlug);
   const startedAt = new Date().toISOString();
@@ -356,7 +392,7 @@ export async function runCliWorker(
     worker_run_id: workerRunId,
     handoff_id: input.handoffId,
     vendor: input.vendor,
-    model: input.model ?? null,
+    model: modelForRun,
     pid: null,
     started_at: startedAt,
     lock_source: "supervisor_spawn",
@@ -369,6 +405,7 @@ export async function runCliWorker(
     emitSupervisorAlert("already_locked", {
       input,
       workerRunId,
+      model: modelForRun,
       lockStatus: "already_locked",
       errorReason: busyErrorReason
     }, stateDir);
@@ -377,7 +414,7 @@ export async function runCliWorker(
       workerRunId,
       handoffId: input.handoffId,
       vendor: input.vendor,
-      model: input.model ?? null,
+      model: modelForRun,
       tierId: null,
       prompt: input.prompt,
       rawOutput: "",
@@ -389,6 +426,7 @@ export async function runCliWorker(
       errorReason: busyErrorReason,
       parsedJson: null,
       ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
+      ...(openRouterConfig !== null ? { openrouterMode: openRouterConfig.openrouterMode } : {}),
       ...(taskPacketRef !== undefined ? { taskPacketRef } : {})
     }), stateDir);
 
@@ -396,7 +434,7 @@ export async function runCliWorker(
       workerRunId,
       handoffId: input.handoffId,
       vendor: input.vendor,
-      model: input.model ?? null,
+      model: modelForRun,
       exitCode: -1,
       rawOutput: "",
       parsedJson: null,
@@ -411,6 +449,7 @@ export async function runCliWorker(
     emitSupervisorAlert("lock_stale_replaced", {
       input,
       workerRunId,
+      model: modelForRun,
       lockStatus,
       errorReason: "lock_stale_replaced: stale worker lock was replaced"
     }, stateDir);
@@ -437,6 +476,9 @@ export async function runCliWorker(
   let errorReason: string | null = null;
   let captureErrorText: string | null = null;
   let captureTimedOut = false;
+  let openRouterAttemptCounts: OpenRouterAttemptCounts | undefined;
+  let missing: CliWorkerResult["missing"] | undefined;
+  let providerUsage: CliWorkerProviderUsage | undefined;
 
   try {
     if (input.vendor === "agy_cli") {
@@ -455,6 +497,48 @@ export async function runCliWorker(
 
       // Persist the clean output to a file as the worker_output artifact
       workerOutputPath = writeResponseFile(result.cleanOutput, workerRunId, stateDir);
+    } else if (input.vendor === "openrouter_api") {
+      if (openRouterConfig === null) {
+        throw new Error("openrouter_api internal error: missing resolved config");
+      }
+
+      const result = await captureOpenRouterResponse(input.prompt, {
+        openrouterMode: openRouterConfig.openrouterMode,
+        model: openRouterConfig.model,
+        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...promptLimitOptions,
+        recordAttempt: () => {
+          try {
+            const counts = incrementOpenRouterAttemptBudget({
+              stateDir,
+              openrouterMode: openRouterConfig.openrouterMode,
+              model: openRouterConfig.model,
+              taskPacketRef: openRouterConfig.taskPacketRef
+            });
+            openRouterAttemptCounts = counts;
+            return counts;
+          } catch (err) {
+            const counts = attemptCountsFromError(err);
+            if (counts) {
+              openRouterAttemptCounts = counts;
+            }
+            throw err;
+          }
+        }
+      });
+      exitCode = result.exitCode;
+      rawOutput = result.rawOutput;
+      parsedJson = result.parsedJson;
+      durationSeconds = result.durationMs / 1000;
+      captureErrorText = result.errorOutput;
+      captureTimedOut = result.timedOut;
+      openRouterAttemptCounts = result.attemptCounts ?? openRouterAttemptCounts;
+      providerUsage = result.providerUsage;
+      missing = result.missing;
+
+      if (!result.missing) {
+        workerOutputPath = writeResponseFile(result.rawOutput, workerRunId, stateDir);
+      }
     } else {
       const result = await captureCodexResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
@@ -475,7 +559,7 @@ export async function runCliWorker(
       captureTimedOut = result.timedOut;
     }
   } catch (err) {
-    captureErrorText = err instanceof Error ? err.message : String(err);
+    captureErrorText = sanitizeCaptureErrorText(err, input.vendor);
   }
 
   const classification = classifyCliWorkerOutcome({
@@ -486,7 +570,9 @@ export async function runCliWorker(
     errorText: captureErrorText,
     timedOut: captureTimedOut
   });
-  errorReason = classification.errorReason;
+  errorReason = input.vendor === "openrouter_api" && captureErrorText
+    ? captureErrorText
+    : classification.errorReason;
 
   const stoppedAt = new Date().toISOString();
 
@@ -509,7 +595,7 @@ export async function runCliWorker(
     workerRunId,
     handoffId: input.handoffId,
     vendor: input.vendor,
-    model: input.model ?? null,
+    model: modelForRun,
     tierId: null,
     prompt: input.prompt,
     rawOutput,
@@ -520,14 +606,18 @@ export async function runCliWorker(
     failureSignals: classification.failure_signals,
     errorReason,
     parsedJson,
+    ...(providerUsage !== undefined ? { providerUsage } : {}),
     ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
-    ...(taskPacketRef !== undefined ? { taskPacketRef } : {})
+    ...(openRouterConfig !== null ? { openrouterMode: openRouterConfig.openrouterMode } : {}),
+    ...(taskPacketRef !== undefined ? { taskPacketRef } : {}),
+    ...(openRouterAttemptCounts !== undefined ? { attemptCounts: openRouterAttemptCounts } : {})
   }), stateDir);
 
   for (const trigger of alertTriggersForCliWorkerOutcome(classification)) {
     emitSupervisorAlert(trigger, {
       input,
       workerRunId,
+      model: modelForRun,
       lockStatus,
       errorReason
     }, stateDir);
@@ -561,8 +651,13 @@ export async function runCliWorker(
     lock_status: lockStatus,
     verified: false,
     recorded_at: stoppedAt,
+    ...(modelForRun !== null ? { model: modelForRun } : {}),
+    ...(errorReason !== null ? { error_reason: errorReason } : {}),
     ...(input.codexMode !== undefined ? { codex_mode: input.codexMode } : {}),
-    ...(taskPacketRef !== undefined ? { task_packet_ref: taskPacketRef } : {})
+    ...(openRouterConfig !== null ? { openrouter_mode: openRouterConfig.openrouterMode } : {}),
+    ...(taskPacketRef !== undefined ? { task_packet_ref: taskPacketRef } : {}),
+    ...(openRouterAttemptCounts !== undefined ? { attempt_counts: openRouterAttemptCounts } : {}),
+    ...(missing !== undefined ? { missing } : {})
   };
   writeSubagentEvidence(
     subagentEvidenceRecord,
@@ -573,14 +668,15 @@ export async function runCliWorker(
     workerRunId,
     handoffId: input.handoffId,
     vendor: input.vendor,
-    model: input.model ?? null,
+    model: modelForRun,
     exitCode,
     rawOutput,
     parsedJson,
     durationSeconds,
     lockStatus,
     workerOutputPath,
-    errorReason
+    errorReason,
+    ...(missing !== undefined ? { missing } : {})
   };
 }
 
@@ -600,9 +696,65 @@ function assertCodexDispatchGuard(input: CliWorkerInput): void {
   }
 }
 
+interface OpenRouterWorkerConfig {
+  readonly openrouterMode: OpenRouterMode;
+  readonly model: OpenRouterModel;
+  readonly taskPacketRef: string;
+}
+
+function resolveOpenRouterWorkerConfig(input: CliWorkerInput): OpenRouterWorkerConfig {
+  if (input.openrouterMode === undefined) {
+    throw new Error("openrouter_api requires openrouterMode - bounded worker doctrine");
+  }
+
+  const taskPacketRef = normalizeTaskPacketRef(input.taskPacketRef);
+  if (taskPacketRef === undefined) {
+    throw new Error("openrouter_api requires taskPacketRef - bounded worker doctrine");
+  }
+
+  assertOpenRouterAccessTierOptions(input as unknown as Record<string, unknown>);
+  const model = resolveOpenRouterModel(input.openrouterMode, input.model);
+  assertOpenRouterPromptIsSendable(input.prompt);
+
+  return {
+    openrouterMode: input.openrouterMode,
+    model,
+    taskPacketRef
+  };
+}
+
 function normalizeTaskPacketRef(taskPacketRef: string | undefined): string | undefined {
   const trimmed = taskPacketRef?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function attemptCountsFromError(err: unknown): OpenRouterAttemptCounts | undefined {
+  if (!err || typeof err !== "object" || !("attemptCounts" in err)) {
+    return undefined;
+  }
+
+  const attemptCounts = (err as { readonly attemptCounts?: unknown }).attemptCounts;
+  if (!attemptCounts || typeof attemptCounts !== "object") {
+    return undefined;
+  }
+
+  return attemptCounts as OpenRouterAttemptCounts;
+}
+
+function sanitizeCaptureErrorText(err: unknown, vendor: CliVendor): string {
+  const raw = vendor === "openrouter_api"
+    ? openRouterErrorReason(err) ?? errorText(err)
+    : errorText(err);
+
+  return vendor === "openrouter_api" ? redactOpenRouterApiKey(raw) : raw;
+}
+
+function errorText(err: unknown): string {
+  if (err instanceof Error) {
+    return `${err.name}: ${err.message}`;
+  }
+
+  return String(err);
 }
 
 function appendRegistryEntry(entry: Record<string, unknown>, stateDir: string): void {
@@ -650,8 +802,15 @@ function signalToAlertTrigger(signal: CliWorkerFailureSignal): AlertTrigger {
   }
 }
 
-function providerForCliVendor(vendor: CliVendor): "openai_gpt" | "gemini_cli" {
-  return vendor === "codex_cli" ? "openai_gpt" : "gemini_cli";
+function providerForCliVendor(vendor: CliVendor): "openai_gpt" | "gemini_cli" | "openrouter" {
+  switch (vendor) {
+    case "codex_cli":
+      return "openai_gpt";
+    case "agy_cli":
+      return "gemini_cli";
+    case "openrouter_api":
+      return "openrouter";
+  }
 }
 
 function safeTelemetryTokenCount(value: number): number {
@@ -668,6 +827,7 @@ function emitSupervisorAlert(
   context: {
     readonly input: CliWorkerInput;
     readonly workerRunId: string;
+    readonly model: string | null;
     readonly lockStatus: CliWorkerResult["lockStatus"];
     readonly errorReason: string | null;
   },
@@ -679,7 +839,7 @@ function emitSupervisorAlert(
       `handoff_id=${context.input.handoffId as string}`,
       `worker_run_id=${context.workerRunId}`,
       `vendor=${context.input.vendor}`,
-      `model=${context.input.model ?? "default"}`,
+      `model=${context.model ?? "default"}`,
       `lock_status=${context.lockStatus}`,
       `error_reason=${context.errorReason ?? "none"}`
     ].join(" "),

@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { platform } from "node:process";
@@ -83,6 +83,140 @@ export interface PromptLimitOptions {
 }
 
 export type CodexDispatchMode = "codex_implement" | "codex_review" | "codex_research";
+export type OpenRouterMode = "qwen3_code_draft" | "nemotron_planning";
+export type OpenRouterModel = "qwen/qwen3-coder:free" | "nvidia/nemotron-3-ultra-550b-a55b:free";
+
+export const OPENROUTER_CHAT_COMPLETIONS_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+export const OPENROUTER_MODE_MODEL_MAP: Readonly<Record<OpenRouterMode, OpenRouterModel>> = {
+  qwen3_code_draft: "qwen/qwen3-coder:free",
+  nemotron_planning: "nvidia/nemotron-3-ultra-550b-a55b:free"
+};
+export const OPENROUTER_ATTEMPT_COUNTER_FILE = "openrouter-api-attempts.jsonl";
+
+// ADR openrouter-free-lane Decision 4: free lane budget is 50/day + 20/minute.
+// UNVERIFIED at runtime: pricing and free limits must be rechecked before routing activation.
+export const OPENROUTER_FREE_DAILY_ATTEMPT_LIMIT = 50;
+export const OPENROUTER_FREE_MINUTE_ATTEMPT_LIMIT = 20;
+
+export interface OpenRouterAttemptCounts {
+  readonly day: number;
+  readonly minute: number;
+  readonly day_limit: number;
+  readonly minute_limit: number;
+}
+
+export interface OpenRouterRedactionPattern {
+  readonly id: string;
+  readonly pattern: RegExp;
+}
+
+export const OPENROUTER_PRE_SEND_REDACTION_PATTERNS: readonly OpenRouterRedactionPattern[] = [
+  {
+    id: "secret_key_value",
+    pattern: /(api[_-]?key|secret|token|password)\s*[:=]\s*\S+/i
+  },
+  {
+    id: "pem_private_material",
+    pattern: /-----BEGIN/i
+  },
+  {
+    id: "openrouter_key",
+    pattern: /sk-or-v1-/i
+  },
+  {
+    id: "aws_access_key",
+    pattern: /AKIA[0-9A-Z]{16}/
+  },
+  {
+    id: "windows_absolute_path",
+    pattern: /[A-Za-z]:\\/
+  }
+];
+
+export type OpenRouterMissingReason = "openrouter_api_key_missing";
+
+export class OpenRouterGuardError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = new.target.name;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export class OpenRouterModeGuardError extends OpenRouterGuardError {}
+export class OpenRouterModelGuardError extends OpenRouterGuardError {}
+export class OpenRouterAccessTierError extends OpenRouterGuardError {}
+export class OpenRouterRedactionError extends OpenRouterGuardError {
+  readonly patternId: string;
+
+  constructor(patternId: string) {
+    super(`openrouter_redaction_rejected: prompt packet matched ${patternId}`);
+    this.patternId = patternId;
+  }
+}
+export class OpenRouterBudgetError extends OpenRouterGuardError {
+  readonly attemptCounts: OpenRouterAttemptCounts;
+
+  constructor(attemptCounts: OpenRouterAttemptCounts) {
+    super("openrouter_budget_exceeded: free lane attempt budget exhausted");
+    this.attemptCounts = attemptCounts;
+  }
+}
+export class OpenRouterZeroCostAssertionError extends OpenRouterGuardError {}
+export class OpenRouterProviderError extends OpenRouterGuardError {}
+
+export interface OpenRouterFetchInit {
+  readonly method: "POST";
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: string;
+  readonly signal?: AbortSignal;
+}
+
+export interface OpenRouterFetchResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  text(): Promise<string>;
+}
+
+export type OpenRouterFetch = (
+  url: typeof OPENROUTER_CHAT_COMPLETIONS_ENDPOINT,
+  init: OpenRouterFetchInit
+) => Promise<OpenRouterFetchResponse>;
+
+export interface OpenRouterProviderUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens?: number;
+}
+
+export interface OpenRouterCaptureOptions extends PromptLimitOptions {
+  readonly openrouterMode: OpenRouterMode;
+  readonly model?: string;
+  readonly timeoutMs?: number;
+  readonly fetchImpl?: OpenRouterFetch;
+  readonly recordAttempt?: () => OpenRouterAttemptCounts;
+  readonly cwd?: unknown;
+  readonly addDirs?: unknown;
+  readonly images?: unknown;
+}
+
+export interface OpenRouterCaptureResult {
+  readonly exitCode: number;
+  readonly rawOutput: string;
+  readonly parsedJson: unknown;
+  readonly durationMs: number;
+  readonly errorOutput: string;
+  readonly timedOut: boolean;
+  readonly model: OpenRouterModel;
+  readonly openrouterMode: OpenRouterMode;
+  readonly providerUsage?: OpenRouterProviderUsage;
+  readonly attemptCounts?: OpenRouterAttemptCounts;
+  readonly missing?: {
+    readonly status: "MISSING";
+    readonly provider: "openrouter";
+    readonly reason: OpenRouterMissingReason;
+  };
+}
 
 export interface CodexDispatchConfig {
   readonly sandboxMode: "read-only" | "workspace-write";
@@ -159,8 +293,144 @@ export function buildVendorEnv(): NodeJS.ProcessEnv {
   return out;
 }
 
+// OpenRouter stage-1 guard helpers. These run before any network call.
+export function resolveOpenRouterModel(
+  openrouterMode: OpenRouterMode | string | undefined,
+  requestedModel?: string
+): OpenRouterModel {
+  if (!isOpenRouterMode(openrouterMode)) {
+    throw new OpenRouterModeGuardError("openrouter_mode_required: openrouter_api requires an allowlisted openrouterMode");
+  }
+
+  const expected = OPENROUTER_MODE_MODEL_MAP[openrouterMode];
+  if (requestedModel !== undefined && requestedModel !== expected) {
+    throw new OpenRouterModelGuardError("openrouter_model_rejected: requested model is not allowlisted for openrouterMode");
+  }
+
+  return expected;
+}
+
+export function assertOpenRouterAccessTierOptions(opts: Record<string, unknown>): void {
+  for (const key of ["cwd", "addDirs", "images"] as const) {
+    if (Object.hasOwn(opts, key)) {
+      throw new OpenRouterAccessTierError(`openrouter_access_tier_violation: ${key} is not accepted by openrouter_api`);
+    }
+  }
+}
+
+export function assertOpenRouterPromptIsSendable(prompt: string): void {
+  for (const redactionPattern of OPENROUTER_PRE_SEND_REDACTION_PATTERNS) {
+    redactionPattern.pattern.lastIndex = 0;
+    if (redactionPattern.pattern.test(prompt)) {
+      throw new OpenRouterRedactionError(redactionPattern.id);
+    }
+  }
+}
+
+export function openRouterAttemptCounterPathForStateDir(stateDir: string): string {
+  return join(dirname(stateDir), OPENROUTER_ATTEMPT_COUNTER_FILE);
+}
+
+export function incrementOpenRouterAttemptBudget(input: {
+  readonly stateDir: string;
+  readonly openrouterMode: OpenRouterMode;
+  readonly model: OpenRouterModel;
+  readonly taskPacketRef: string;
+  readonly now?: Date;
+}): OpenRouterAttemptCounts {
+  const now = input.now ?? new Date();
+  const recordedAt = now.toISOString();
+  const counterPath = openRouterAttemptCounterPathForStateDir(input.stateDir);
+  mkdirSync(dirname(counterPath), { recursive: true });
+  appendFileSync(counterPath, `${JSON.stringify({
+    schema_version: "v1",
+    recorded_at: recordedAt,
+    provider: "openrouter",
+    openrouter_mode: input.openrouterMode,
+    model: input.model,
+    task_packet_ref: input.taskPacketRef
+  })}\n`, "utf8");
+
+  const counts = countOpenRouterAttempts(counterPath, recordedAt);
+  if (
+    counts.day > OPENROUTER_FREE_DAILY_ATTEMPT_LIMIT ||
+    counts.minute > OPENROUTER_FREE_MINUTE_ATTEMPT_LIMIT
+  ) {
+    throw new OpenRouterBudgetError(counts);
+  }
+
+  return counts;
+}
+
+export function openRouterErrorReason(err: unknown): string | null {
+  if (!(err instanceof OpenRouterGuardError)) {
+    return null;
+  }
+
+  return `${err.name}: ${err.message}`;
+}
+
+export function redactOpenRouterApiKey(value: string): string {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    return value;
+  }
+
+  return value.split(apiKey).join("[REDACTED_OPENROUTER_API_KEY]");
+}
+
+function isOpenRouterMode(value: OpenRouterMode | string | undefined): value is OpenRouterMode {
+  return value === "qwen3_code_draft" || value === "nemotron_planning";
+}
+
+function countOpenRouterAttempts(counterPath: string, recordedAt: string): OpenRouterAttemptCounts {
+  const dayKey = recordedAt.slice(0, 10);
+  const minuteKey = recordedAt.slice(0, 16);
+  let day = 0;
+  let minute = 0;
+
+  for (const line of readJsonlLines(counterPath)) {
+    const timestamp = readRecordedAt(line);
+    if (!timestamp) {
+      continue;
+    }
+
+    if (timestamp.slice(0, 10) === dayKey) {
+      day += 1;
+    }
+
+    if (timestamp.slice(0, 16) === minuteKey) {
+      minute += 1;
+    }
+  }
+
+  return {
+    day,
+    minute,
+    day_limit: OPENROUTER_FREE_DAILY_ATTEMPT_LIMIT,
+    minute_limit: OPENROUTER_FREE_MINUTE_ATTEMPT_LIMIT
+  };
+}
+
+function readJsonlLines(path: string): readonly string[] {
+  try {
+    return readFileSync(path, "utf8").split(/\r?\n/).filter((line) => line.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function readRecordedAt(line: string): string | null {
+  try {
+    const parsed = JSON.parse(line) as { readonly recorded_at?: unknown };
+    return typeof parsed.recorded_at === "string" ? parsed.recorded_at : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * POSIX single-quote escape: wrap in '…' and rewrite each ' as '\'' so a caller-supplied
+ * POSIX single-quote escape: wrap in '...' and rewrite each ' as '\'' so a caller-supplied
  * value can never break out of the quotes into shell command position.
  */
 export function shq(value: string): string {
@@ -459,6 +729,233 @@ export async function captureCodexResponse(
     timedOut: isSpawnTimeout(result.error),
     attempts
   };
+}
+
+export async function captureOpenRouterResponse(
+  prompt: string,
+  opts: OpenRouterCaptureOptions
+): Promise<OpenRouterCaptureResult> {
+  const startedAt = Date.now();
+  assertPromptWithinLimit(prompt, opts);
+  assertOpenRouterAccessTierOptions(opts as unknown as Record<string, unknown>);
+  const model = resolveOpenRouterModel(opts.openrouterMode, opts.model);
+  assertOpenRouterPromptIsSendable(prompt);
+
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    return {
+      exitCode: -1,
+      rawOutput: "",
+      parsedJson: null,
+      durationMs: Date.now() - startedAt,
+      errorOutput: "MISSING: openrouter_api_key_missing",
+      timedOut: false,
+      model,
+      openrouterMode: opts.openrouterMode,
+      missing: {
+        status: "MISSING",
+        provider: "openrouter",
+        reason: "openrouter_api_key_missing"
+      }
+    };
+  }
+
+  const fetchImpl = opts.fetchImpl ?? defaultOpenRouterFetch;
+  const attemptCounts = opts.recordAttempt?.();
+  const controller = new AbortController();
+  const timeoutMs = opts.timeoutMs ?? 120000;
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  let response: OpenRouterFetchResponse;
+
+  try {
+    response = await fetchImpl(OPENROUTER_CHAT_COMPLETIONS_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      }),
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw new OpenRouterProviderError(`openrouter_timeout: request timed out after ${timeoutMs}ms`);
+    }
+    throw new OpenRouterProviderError("openrouter_fetch_failed: request failed");
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+
+  const responseText = await response.text();
+  const payload = parseOpenRouterPayload(responseText);
+
+  if (!response.ok) {
+    throw new OpenRouterProviderError(`openrouter_http_error: status ${response.status}`);
+  }
+
+  assertOpenRouterResponseModel(payload, model);
+  assertOpenRouterZeroCost(payload);
+
+  const rawOutput = extractOpenRouterOutput(payload);
+  const providerUsage = extractOpenRouterUsage(payload);
+  return {
+    exitCode: 0,
+    rawOutput,
+    parsedJson: extractJsonFromPtyOutput(rawOutput),
+    durationMs: Date.now() - startedAt,
+    errorOutput: "",
+    timedOut: false,
+    model,
+    openrouterMode: opts.openrouterMode,
+    ...(providerUsage ? { providerUsage } : {}),
+    ...(attemptCounts ? { attemptCounts } : {})
+  };
+}
+
+function defaultOpenRouterFetch(
+  url: typeof OPENROUTER_CHAT_COMPLETIONS_ENDPOINT,
+  init: OpenRouterFetchInit
+): Promise<OpenRouterFetchResponse> {
+  if (typeof globalThis.fetch !== "function") {
+    throw new OpenRouterProviderError("openrouter_fetch_unavailable: global fetch is unavailable");
+  }
+
+  return globalThis.fetch(url, init) as Promise<OpenRouterFetchResponse>;
+}
+
+function parseOpenRouterPayload(responseText: string): unknown {
+  try {
+    return JSON.parse(responseText) as unknown;
+  } catch {
+    throw new OpenRouterProviderError("openrouter_invalid_json: response body was not valid JSON");
+  }
+}
+
+function assertOpenRouterResponseModel(payload: unknown, expectedModel: OpenRouterModel): void {
+  const record = asUnknownRecord(payload);
+  const echoedModel = record ? record.model : undefined;
+
+  if (echoedModel !== expectedModel) {
+    throw new OpenRouterModelGuardError("openrouter_model_rejected: response model did not match allowlisted model");
+  }
+}
+
+function assertOpenRouterZeroCost(payload: unknown): void {
+  const usage = asUnknownRecord(payload)?.usage;
+  if (hasNonZeroCostField(usage)) {
+    throw new OpenRouterZeroCostAssertionError("openrouter_nonzero_cost_detected: response usage reported nonzero cost");
+  }
+}
+
+function extractOpenRouterOutput(payload: unknown): string {
+  const choices = asUnknownRecord(payload)?.choices;
+  if (!Array.isArray(choices)) {
+    return "";
+  }
+
+  const firstChoice = asUnknownRecord(choices[0]);
+  const message = asUnknownRecord(firstChoice?.message);
+  const content = message?.content;
+
+  if (typeof content === "string") {
+    return content.trim();
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        const partRecord = asUnknownRecord(part);
+        return typeof partRecord?.text === "string" ? partRecord.text : "";
+      })
+      .join("")
+      .trim();
+  }
+
+  if (content === undefined || content === null) {
+    return "";
+  }
+
+  return JSON.stringify(content);
+}
+
+function extractOpenRouterUsage(payload: unknown): OpenRouterProviderUsage | undefined {
+  const usage = asUnknownRecord(asUnknownRecord(payload)?.usage);
+  if (!usage) {
+    return undefined;
+  }
+
+  const inputTokens = safeOpenRouterUsageCount(usage.prompt_tokens ?? usage.input_tokens);
+  const outputTokens = safeOpenRouterUsageCount(usage.completion_tokens ?? usage.output_tokens);
+  const totalTokens = safeOpenRouterUsageCount(usage.total_tokens);
+
+  if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0) {
+    return undefined;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    ...(totalTokens > 0 ? { totalTokens } : {})
+  };
+}
+
+function hasNonZeroCostField(value: unknown): boolean {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return false;
+  }
+
+  for (const [key, item] of Object.entries(record)) {
+    if (/cost/i.test(key)) {
+      const cost = numericCostValue(item);
+      if (cost !== null && cost !== 0) {
+        return true;
+      }
+    }
+
+    if (hasNonZeroCostField(item)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function numericCostValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function safeOpenRouterUsageCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+
+  return Math.ceil(value);
+}
+
+function asUnknownRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
 }
 
 export function shouldRetryCodex(input: {
