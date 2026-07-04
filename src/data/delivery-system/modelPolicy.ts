@@ -40,6 +40,7 @@ export type ReasoningProviderId =
   | "anthropic_claude_subscription"
   | "gemini_cli"
   | "deepseek_api_or_self_hosted"
+  | "openrouter_free"
   | "deepseek_web_chat_manual";
 
 export type ReasoningTaskLaneId =
@@ -496,6 +497,54 @@ export const reasoningProviderPolicies = [
       "model_output_used_as_source_of_truth"
     ],
     sourceIds: ["deepseek-reasoning-model", "deepseek-json-output", "deepseek-function-calling"]
+  },
+  {
+    id: "openrouter_free",
+    provider: "openrouter",
+    accessMode: "api_or_self_hosted",
+    advisoryTrustTier: "bounded_draft",
+    advisoryWeight: 45,
+    contextScope:
+      "minimal redacted OpenRouter free-model draft context for qwen/qwen3-coder:free and nvidia/nemotron-3-ultra-550b-a55b:free; never sensitive/private context or broad repository dumps",
+    bestFor: [
+      "qwen/qwen3-coder:free code drafts",
+      "qwen/qwen3-coder:free test drafts",
+      "qwen/qwen3-coder:free refactor drafts",
+      "nvidia/nemotron-3-ultra-550b-a55b:free planning drafts",
+      "nvidia/nemotron-3-ultra-550b-a55b:free brainstorming drafts",
+      "nvidia/nemotron-3-ultra-550b-a55b:free long-context research drafts"
+    ],
+    avoidFor: [
+      "final delivery approval",
+      "security-critical review",
+      "sensitive/private context",
+      "architecture decisions",
+      "source-of-truth claims",
+      "OpenRouter auto-router",
+      "paid spill"
+    ],
+    requiredChecks: [
+      "provider_availability_verified",
+      "free_tier_or_no_cost_confirmed",
+      "redacted_context_only",
+      "redaction_before_send",
+      "explicit_model_id_allowlist",
+      "model_output_scored_before_acceptance",
+      "eval_recorded_for_output",
+      "local_verification_required"
+    ],
+    stopConditions: [
+      "provider_availability_unverified",
+      "private_data_not_redacted",
+      "broad_private_context_sent_to_lower_trust_model",
+      "sensitive_private_context_sent_to_free_route",
+      "paid_model_or_credit_required_without_owner_decision",
+      "openrouter_paid_spill_detected",
+      "openrouter_auto_router_requested",
+      "openrouter_missing_env_key_not_reported_as_missing",
+      "model_output_used_as_source_of_truth"
+    ],
+    sourceIds: ["openrouter-free-lane-adr"]
   },
   {
     id: "deepseek_web_chat_manual",
@@ -1068,6 +1117,8 @@ function providerFamilyForReasoningProvider(provider: ReasoningProviderId): Mode
     case "deepseek_api_or_self_hosted":
     case "deepseek_web_chat_manual":
       return "deepseek";
+    case "openrouter_free":
+      return "unknown";
     case "deterministic_tools":
       return "local";
   }
