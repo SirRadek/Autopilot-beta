@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-06-05",
+  "updated": "2026-07-04",
   "policy": {
     "default": "A source entry approves only research and source-pool eligibility. Concrete project adoption still requires exact asset URL, license, local path, performance, fallback, and QA evidence.",
     "preferred_licenses": ["CC0", "MIT", "ISC", "BSD", "Apache-2.0", "SIL OFL"],
@@ -509,6 +509,206 @@
       "blocked_uses": ["copying code, assets, or layouts into projects"],
       "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
       "notes": "Grid and negative-space purism."
+    },
+    {
+      "id": "gsap",
+      "name": "GSAP + ScrollTrigger",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://gsap.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "GSAP Standard License (custom, free for commercial use per gsap.com; exact current terms unverified)",
+        "type": "custom",
+        "url": "https://gsap.com"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["scroll pin/scrub choreography", "framework-agnostic JS timelines", "2.5D text depth with CSS perspective (text stays DOM)"],
+      "blocked_uses": ["adoption before the current standard license is re-read and recorded", "scroll hijacking on ordinary-site profiles", "motion_pattern effects on profiles that do not allow them"],
+      "adoption_requirements": ["dated evidence record before first project use", "re-verify the 2025 Webflow-era 'free including all plugins' claim with dated sources", "reduced-motion and mobile fallback per motion brief"],
+      "notes": "Rung 2 of rules/motion-stack-decision-tree.md. Tier placement is a HYPOTHESIS; the free-plugins claim is UNVERIFIED model memory until an evidence record exists."
+    },
+    {
+      "id": "motion",
+      "name": "Motion (motion.dev)",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://motion.dev",
+      "evidence_urls": ["https://github.com/motiondivision/motion"],
+      "license": {
+        "name": "MIT (core library)",
+        "type": "mit",
+        "url": "https://github.com/motiondivision/motion"
+      },
+      "commercial_use": "allowed",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["React UI, layout, and gesture animation", "hover/reveal micro-interactions owned by JS state", "2.5D text depth with CSS perspective (text stays DOM)"],
+      "blocked_uses": ["Motion+ or Motion AI Kit (paid) without explicit owner approval", "motion_pattern effects on profiles that do not allow them"],
+      "adoption_requirements": ["dated evidence record before first project use", "confirm the MIT boundary of the core package vs paid Motion+ features", "reduced-motion and mobile fallback per motion brief"],
+      "notes": "Rung 2 of rules/motion-stack-decision-tree.md. MIT core is the only default; Motion+ / AI Kit is paid and blocked without owner approval. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "three",
+      "name": "Three.js",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/mrdoob/three.js",
+      "evidence_urls": ["https://github.com/mrdoob/three.js"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/mrdoob/three.js/blob/dev/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["real 3D objects, camera, and lighting when depth explains the product", "glTF/GLB model rendering with byte budget"],
+      "blocked_uses": ["default hero treatment without justification", "primary content hidden in WebGL", "use on profiles that do not allow motion_pattern effects"],
+      "adoption_requirements": ["dated evidence record before first project use", "reduced-motion, mobile, and static fallback evidence", "performance budget evidence"],
+      "notes": "Rung 3 of rules/motion-stack-decision-tree.md; premium add-on per rules/performance.md. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "react-three-fiber",
+      "name": "React Three Fiber",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/pmndrs/react-three-fiber",
+      "evidence_urls": ["https://github.com/pmndrs/react-three-fiber"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/pmndrs/react-three-fiber/blob/master/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["React renderer for Three.js scenes when the project is React-based"],
+      "blocked_uses": ["default hero treatment without justification", "primary content hidden in WebGL", "use on profiles that do not allow motion_pattern effects"],
+      "adoption_requirements": ["dated evidence record before first project use", "reduced-motion, mobile, and static fallback evidence", "performance budget evidence"],
+      "notes": "Rung 3 of rules/motion-stack-decision-tree.md, paired with three and drei. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "drei",
+      "name": "Drei",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/pmndrs/drei",
+      "evidence_urls": ["https://github.com/pmndrs/drei"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/pmndrs/drei/blob/master/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["React Three Fiber helper components (controls, loaders, staging)"],
+      "blocked_uses": ["pulling in heavy helpers without byte budget", "use outside a justified React Three Fiber scene"],
+      "adoption_requirements": ["dated evidence record before first project use", "record which helpers are used and their bundle cost"],
+      "notes": "Rung 3 helper library of rules/motion-stack-decision-tree.md. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "lenis",
+      "name": "Lenis",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/darkroomengineering/lenis",
+      "evidence_urls": ["https://github.com/darkroomengineering/lenis"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/darkroomengineering/lenis/blob/main/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["DOM/WebGL scroll sync ONLY when native scroll is proven insufficient"],
+      "blocked_uses": ["ordinary sites and seo_led/balanced profiles", "smooth-scroll as a default aesthetic", "adoption without a recorded native-scroll insufficiency"],
+      "adoption_requirements": ["dated evidence record before first project use", "record why native scroll is insufficient", "verify keyboard, reduced-motion, and accessibility behavior"],
+      "notes": "Constrained rung-2 helper in rules/motion-stack-decision-tree.md: never on ordinary sites. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "rive-web-runtime",
+      "name": "Rive Web Runtime",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/rive-app/rive-wasm",
+      "evidence_urls": ["https://github.com/rive-app/rive-wasm"],
+      "license": {
+        "name": "MIT (web runtime)",
+        "type": "mit",
+        "url": "https://github.com/rive-app/rive-wasm/blob/master/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["vector state-machine UI (interactive characters, animated controls)"],
+      "blocked_uses": ["paid Rive editor tiers without owner approval", "shipping .riv assets without their own provenance record", "canvas-only content without static fallback"],
+      "adoption_requirements": ["dated evidence record before first project use", "separate provenance record for each authored .riv asset", "static and reduced-motion fallback evidence"],
+      "notes": "Runtime is MIT; the Rive editor is a hosted product with paid tiers and is out of scope for this entry. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "lottie-web",
+      "name": "Lottie Web",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/airbnb/lottie-web",
+      "evidence_urls": ["https://github.com/airbnb/lottie-web"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/airbnb/lottie-web/blob/master/LICENSE.md"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["simple icon and loader animations from owned/licensed After Effects exports"],
+      "blocked_uses": ["marketplace Lottie files without per-file license evidence", "using Lottie where CSS/SVG is equivalent", "primary content as animation-only"],
+      "adoption_requirements": ["dated evidence record before first project use", "per-file license record for every animation JSON", "reduced-motion fallback"],
+      "notes": "Rung shortcut for icon animations in rules/motion-stack-decision-tree.md; prefer CSS/SVG when equivalent. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "theatre-js",
+      "name": "Theatre.js",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/theatre-js/theatre",
+      "evidence_urls": ["https://github.com/theatre-js/theatre"],
+      "license": {
+        "name": "Apache-2.0 (core); @theatre/studio is AGPL-3.0",
+        "type": "apache-2.0",
+        "url": "https://github.com/theatre-js/theatre"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["specialist-tier motion timeline authoring with explicit owner approval"],
+      "blocked_uses": ["shipping @theatre/studio (AGPL-3.0) in any delivered project", "use without owner approval (specialist tier)", "adoption while maintenance status is unverified"],
+      "adoption_requirements": ["dated evidence record before first project use", "verify current maintenance/release activity with dated sources", "confirm the Apache-2.0/AGPL package boundary before install"],
+      "notes": "WARNING: specialist tier of rules/motion-stack-decision-tree.md. Maintenance is opaque and the studio package is AGPL-3.0 — both flags UNVERIFIED model memory until an evidence record exists."
+    },
+    {
+      "id": "spline",
+      "name": "Spline",
+      "category": "tool",
+      "status": "inspiration_only",
+      "source_url": "https://spline.design",
+      "evidence_urls": [],
+      "license": {
+        "name": "Spline terms of service — export rights tier-gated, current terms not captured",
+        "type": "unknown",
+        "url": "https://spline.design"
+      },
+      "commercial_use": "unknown",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["3D scene direction studies and specialist-tier evaluation only"],
+      "blocked_uses": ["any export or embed in project work before terms are captured and the owner approves", "treating editor output as a licensed asset"],
+      "adoption_requirements": ["dated evidence record before first project use", "capture current terms and export-tier pricing", "explicit owner approval (specialist tier, paid export)"],
+      "notes": "Specialist tier of rules/motion-stack-decision-tree.md. Export is paid-tier-gated and commercial terms are uncaptured, so this stays inspiration_only. All claims UNVERIFIED until an evidence record exists."
     }
   ]
 }
