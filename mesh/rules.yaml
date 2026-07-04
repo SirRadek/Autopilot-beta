@@ -244,3 +244,15 @@ rules:
     severity: blocker
     must_not_assume:
       - Do not weaken or bypass a gate to make a commit pass.
+  - id: ACCESS-TIER-001
+    title: Control-plane access is verified-vendor only
+    applies_to:
+      - supervisor_execution_loop
+      - subscription_worker_boundary
+      - reasoning_strategy
+    instruction: "Only verified vendors — the Claude supervisor, codex_cli, and agy_cli — may access the autopilot control plane (repository, mesh, governance surfaces). Lower-trust workers (openrouter_free, qwen_local, deepseek) receive only project-scoped, redacted packets with no sensitive or security-threat content; they never self-prompt, never persist or learn from our data, and every input and output is mediated and reviewed by a verified vendor."
+    severity: blocker
+    must_not_assume:
+      - Do not give a free or low-trust worker control-plane files, mesh content, or governance context.
+      - Do not chain a worker output into the next prompt without verified-vendor normalization.
+      - Do not let a worker accumulate memory or fine-tune on Autopilot or project data.

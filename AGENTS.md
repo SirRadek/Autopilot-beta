@@ -178,6 +178,21 @@ Before using any cloud model:
 
 If a task depends on a non-local worker and is not strategic reasoning or independent review, stop and ask for an owner decision. Do not route routine worker loops to cloud/frontier models by default. Stop if the model requires paid credits, has unknown cost, or would become a source of truth.
 
+## Access Tiers
+
+Only verified vendors — the Claude supervisor, codex_cli, and agy_cli — have
+access to the autopilot control plane (this repository, the mesh, governance
+surfaces). Lower-trust workers (openrouter_free, qwen_local, deepseek and any
+future free lane):
+
+- see only project-scoped, redacted packets — never control-plane files, mesh
+  content, or governance context;
+- never receive sensitive data or security-threat content;
+- never self-prompt: worker output is normalized by a verified vendor before it
+  can influence any next step;
+- never persist or learn from Autopilot or project data;
+- have every input and output mediated and reviewed by a verified vendor.
+
 ## Prompt Library Rules
 
 Reusable prompts live in `prompt-library/` as local Git/Markdown contracts.
