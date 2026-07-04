@@ -21,6 +21,7 @@ export type {
   DecisionMeshGraphLink,
   DecisionMeshGraphNode,
   DecisionMeshNode,
+  DecisionMeshNodeReference,
   DecisionMeshRule,
   NodeExplanation,
   ProjectMeshPacket,

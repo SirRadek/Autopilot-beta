@@ -93,6 +93,7 @@
     "src/lib/image-point-cloud/types.ts",
     "src/lib/mesh-tools/changed-files-capabilities-cli.ts",
     "src/lib/mesh-tools/changed-files-capabilities.ts",
+    "src/lib/mesh-tools/related-file-hints.ts",
     "src/lib/mesh-tools/related-files-status-cli.ts",
     "src/lib/mesh-tools/related-files-status.ts"
   ],

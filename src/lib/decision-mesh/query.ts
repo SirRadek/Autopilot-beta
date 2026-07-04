@@ -6,6 +6,7 @@ import type {
   DecisionMesh,
   DecisionMeshEdge,
   DecisionMeshNode,
+  DecisionMeshNodeReference,
   DecisionMeshRule,
   NodeExplanation,
   ProjectMeshPacketRule,
@@ -41,12 +42,34 @@ interface ScoredNode {
   readonly score: number;
 }
 
+interface FullRelevantSubgraph {
+  readonly task: string;
+  readonly agent?: string;
+  readonly relevant_nodes: readonly DecisionMeshNode[];
+  readonly relevant_edges: readonly DecisionMeshEdge[];
+  readonly required_agents: readonly string[];
+  readonly node_scores: ReadonlyMap<string, number>;
+}
+
 export function getRelevantSubgraph(mesh: DecisionMesh, input: RelevantSubgraphInput): RelevantSubgraph {
+  const subgraph = getRelevantSubgraphFull(mesh, input);
+  const result: RelevantSubgraph = {
+    task: subgraph.task,
+    relevant_nodes: subgraph.relevant_nodes.map((node) => toNodeReference(node, subgraph.node_scores)),
+    relevant_edges: subgraph.relevant_edges,
+    required_agents: subgraph.required_agents
+  };
+
+  return subgraph.agent ? { ...result, agent: subgraph.agent } : result;
+}
+
+function getRelevantSubgraphFull(mesh: DecisionMesh, input: RelevantSubgraphInput): FullRelevantSubgraph {
   const maxNodes = Math.max(1, Math.min(input.max_nodes ?? DEFAULT_MAX_NODES, mesh.nodes.length));
   const scored = mesh.nodes
     .map((node) => ({ node, score: scoreNode(node, input.task, input.agent) }))
     .filter((entry) => entry.score > 0)
     .sort(compareScoredNodes);
+  const nodeScores = new Map(scored.map((entry) => [entry.node.id, entry.score]));
 
   const selectedIds: string[] = [];
 
@@ -69,21 +92,20 @@ export function getRelevantSubgraph(mesh: DecisionMesh, input: RelevantSubgraphI
   const selectedIdSet = new Set(selectedIds);
   const relevantNodes = selectedIds.map((id) => requireNode(mesh, id));
   const relevantEdges = mesh.edges.filter((edge) => selectedIdSet.has(edge.from) && selectedIdSet.has(edge.to));
-  const excluded = mesh.nodes.filter((node) => !selectedIdSet.has(node.id)).map((node) => node.id);
 
-  const result: RelevantSubgraph = {
+  const result: FullRelevantSubgraph = {
     task: input.task,
     relevant_nodes: relevantNodes,
     relevant_edges: relevantEdges,
     required_agents: orderAgents(unique(relevantNodes.flatMap((node) => node.related_agents))),
-    excluded
+    node_scores: nodeScores
   };
 
   return input.agent ? { ...result, agent: input.agent } : result;
 }
 
 /**
- * Severity-aware packet construction. getRelevantSubgraph keeps only the top-N scored
+ * Severity-aware packet construction. getRelevantSubgraphFull keeps only the top-N scored
  * nodes for the token budget, and packet rules/stop_conditions are derived from selected
  * nodes only — so a BLOCKER relevant to the task could be silently truncated away before
  * the agent ever sees it. Re-attach any task-relevant (score > 0) node that carries a
@@ -107,7 +129,7 @@ function withRelevantBlockerNodes(
 
 export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): AgentPacket {
   const maxNodes = Math.max(4, Math.min(7, Math.floor((input.token_budget ?? 7000) / 1000)));
-  const subgraph = getRelevantSubgraph(mesh, {
+  const subgraph = getRelevantSubgraphFull(mesh, {
     task: input.task,
     agent: input.agent,
     max_nodes: maxNodes
@@ -140,7 +162,7 @@ export function buildProjectMeshPacket(mesh: DecisionMesh, input: ProjectMeshPac
     task: input.task,
     max_nodes: input.max_nodes ?? DEFAULT_MAX_NODES
   };
-  const subgraph = getRelevantSubgraph(mesh, input.agent ? { ...subgraphInput, agent: input.agent } : subgraphInput);
+  const subgraph = getRelevantSubgraphFull(mesh, input.agent ? { ...subgraphInput, agent: input.agent } : subgraphInput);
   const nodes = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
   const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
@@ -191,7 +213,7 @@ export function findRequiredAgents(
   mesh: DecisionMesh,
   input: Pick<RelevantSubgraphInput, "task">
 ): RequiredAgentsResult {
-  const subgraph = getRelevantSubgraph(mesh, {
+  const subgraph = getRelevantSubgraphFull(mesh, {
     task: input.task,
     max_nodes: DEFAULT_MAX_NODES
   });
@@ -204,7 +226,7 @@ export function findRequiredAgents(
 }
 
 export function findRisks(mesh: DecisionMesh, input: Pick<RelevantSubgraphInput, "task">): RiskResult {
-  const subgraph = getRelevantSubgraph(mesh, {
+  const subgraph = getRelevantSubgraphFull(mesh, {
     task: input.task,
     max_nodes: DEFAULT_MAX_NODES
   });
@@ -214,8 +236,19 @@ export function findRisks(mesh: DecisionMesh, input: Pick<RelevantSubgraphInput,
 
   return {
     task: input.task,
-    risks,
+    risks: risks.map((node) => toNodeReference(node, subgraph.node_scores)),
     stop_conditions: unique(risks.flatMap((node) => node.stop_conditions ?? []))
+  };
+}
+
+function toNodeReference(
+  node: DecisionMeshNode,
+  nodeScores: ReadonlyMap<string, number>
+): DecisionMeshNodeReference {
+  return {
+    id: node.id,
+    name: node.name,
+    score: nodeScores.get(node.id) ?? 0
   };
 }
 

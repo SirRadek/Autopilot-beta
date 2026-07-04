@@ -1,3 +1,20 @@
+---
+id: prompt-source-catalog
+title: Prompt Source Catalog
+model_family: provider-neutral
+task_type: rule
+version: v0.1.0
+status: candidate
+last_reviewed: 2026-06-11
+sources:
+  - local-agents-md
+  - prompt-library-policy
+risk_level: medium
+expected_output: Source catalog for prompt-library authority and citation boundaries.
+evals:
+  - 05-evaluation/checklist.md
+---
+
 # Prompt Source Catalog
 
 Status: reviewed source index
