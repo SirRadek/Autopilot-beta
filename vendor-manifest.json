@@ -19,6 +19,8 @@
     "product-design-os/contracts/component-contract.schema.json",
     "product-design-os/evidence/evidence.schema.json",
     "product-design-os/evidence/records/example-context7-evidence.json",
+    "product-design-os/evidence/records/gsap-skills-adoption-audit.json",
+    "product-design-os/evidence/records/openrouter-free-route-data-policy.json",
     "product-design-os/library/design-trend-hypotheses.md",
     "product-design-os/library/preset-manifest.json",
     "product-design-os/library/preset.schema.json",
@@ -263,7 +265,8 @@
     {
       "source_path": "product-design-os/library/source.schema.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "60ff71d246cb233ed77bb6cf7742cd16a1a87cb527e97645a82cd6c45fb6c27e"
+      "content_hash": "60ff71d246cb233ed77bb6cf7742cd16a1a87cb527e97645a82cd6c45fb6c27e",
+      "patched_by": "evidence-claims-d9"
     },
     {
       "source_path": "product-design-os/library/templates/project-library-entry-template.json",

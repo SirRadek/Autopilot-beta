@@ -6,6 +6,10 @@
     "preferred_licenses": ["CC0", "MIT", "ISC", "BSD", "Apache-2.0", "SIL OFL"],
     "blocked_licenses": ["NC", "ND", "personal-use-only", "editorial-only", "unknown", "paid-credit-required"]
   },
+  "control_plane_evidence_claims": {
+    "note": "Evidence bindings for control-plane governance artifacts (docs/decisions ADRs, docs/autopilot registries) that the PDOS evidence claimant whitelist cannot reach directly. Each id here is depended on by the artifact named in that record's covered_claim, not by this design-source catalog.",
+    "governance_evidence_ids": ["openrouter-free-route-data-policy"]
+  },
   "sources": [
     {
       "id": "open-doodles",
@@ -528,7 +532,8 @@
       "allowed_uses": ["scroll pin/scrub choreography", "framework-agnostic JS timelines", "2.5D text depth with CSS perspective (text stays DOM)"],
       "blocked_uses": ["adoption before the current standard license is re-read and recorded", "scroll hijacking on ordinary-site profiles", "motion_pattern effects on profiles that do not allow them"],
       "adoption_requirements": ["dated evidence record before first project use", "re-verify the 2025 Webflow-era 'free including all plugins' claim with dated sources", "reduced-motion and mobile fallback per motion brief"],
-      "notes": "Rung 2 of rules/motion-stack-decision-tree.md. Tier placement is a HYPOTHESIS; the free-plugins claim is UNVERIFIED model memory until an evidence record exists."
+      "governance_evidence_ids": ["gsap-skills-adoption-audit"],
+      "notes": "Rung 2 of rules/motion-stack-decision-tree.md. Tier placement is a HYPOTHESIS; the free-including-former-Club-plugins claim is now covered by dated evidence record gsap-skills-adoption-audit (2026-07-04, official repo/install docs). The exact GSAP Standard License text itself is still unread."
     },
     {
       "id": "motion",
