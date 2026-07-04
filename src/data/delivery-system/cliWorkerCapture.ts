@@ -82,6 +82,14 @@ export interface PromptLimitOptions {
   readonly maxPromptChars?: number;
 }
 
+export type CodexDispatchMode = "codex_implement" | "codex_review" | "codex_research";
+
+export interface CodexDispatchConfig {
+  readonly sandboxMode: "read-only" | "workspace-write";
+  readonly approvalPolicy: "never";
+  readonly webSearch?: boolean;
+}
+
 // Reuse the largest existing context-width budget as the vendor prompt ceiling:
 // 8,000 max context lines across 60 packet files = 480,000 chars. This keeps
 // normal handoff packets well above current tests while still refusing dumps.
@@ -161,30 +169,77 @@ export function shq(value: string): string {
 
 /**
  * Build the Git-Bash `-c` command line for `codex exec`. Two hardenings vs the old inline
- * string: (1) read-only sandbox + never-approve are forced as args, so the vendor is
- * proposal-only BY CONSTRUCTION rather than trusting an ambient ~/.codex/config.toml; and
+ * string: (1) sandbox + never-approve are forced as args, so the vendor is
+ * governed by the caller's dispatch mode rather than trusting an ambient ~/.codex/config.toml; and
  * (2) every caller-supplied value (model, images, schema, paths) is shq-escaped, closing the
  * Windows command-injection sink the audit flagged. The prompt is still passed via `< file`.
  */
 export function buildCodexBashCommand(
   codexPath: string,
-  opts: { readonly model?: string; readonly outputSchemaPath?: string; readonly images?: readonly string[] },
+  opts: {
+    readonly model?: string;
+    readonly outputSchemaPath?: string;
+    readonly images?: readonly string[];
+    readonly codexMode?: CodexDispatchMode;
+  },
   outFile: string,
   promptFile: string
 ): string {
+  const dispatchArgs = buildCodexConfigArgs(opts.codexMode);
   const parts = [
     shq(codexPath),
     "exec",
-    "-c",
-    "sandbox_mode=read-only",
-    "-c",
-    "approval_policy=never"
+    ...dispatchArgs
   ];
   if (opts.outputSchemaPath) parts.push("--output-schema", shq(opts.outputSchemaPath.replace(/\\/g, "/")));
   if (opts.model) parts.push("-m", shq(opts.model));
   for (const img of opts.images ?? []) parts.push("-i", shq(img.replace(/\\/g, "/")));
   parts.push("-o", shq(outFile.replace(/\\/g, "/")), "-", "<", shq(promptFile.replace(/\\/g, "/")));
   return parts.join(" ");
+}
+
+export function resolveCodexDispatchConfig(mode: CodexDispatchMode | undefined): CodexDispatchConfig {
+  switch (mode) {
+    case "codex_implement":
+      return {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "never",
+        webSearch: false
+      };
+    case "codex_review":
+      return {
+        sandboxMode: "read-only",
+        approvalPolicy: "never",
+        webSearch: false
+      };
+    case "codex_research":
+      return {
+        sandboxMode: "read-only",
+        approvalPolicy: "never",
+        webSearch: true
+      };
+    case undefined:
+      return {
+        sandboxMode: "read-only",
+        approvalPolicy: "never"
+      };
+  }
+}
+
+export function buildCodexConfigArgs(mode: CodexDispatchMode | undefined): string[] {
+  const config = resolveCodexDispatchConfig(mode);
+  const args = [
+    "-c",
+    `sandbox_mode=${config.sandboxMode}`,
+    "-c",
+    `approval_policy=${config.approvalPolicy}`
+  ];
+
+  if (config.webSearch !== undefined) {
+    args.push("-c", `tools.web_search=${config.webSearch ? "true" : "false"}`);
+  }
+
+  return args;
 }
 
 /**
@@ -289,6 +344,7 @@ export async function captureAgyResponse(
 export interface CodexCaptureOptions {
   readonly model?: string;
   readonly outputSchemaPath?: string;
+  readonly codexMode?: CodexDispatchMode;
   readonly cwd?: string;
   /** Extra directories (codex works in cwd; recorded for parity with agy). */
   readonly addDirs?: readonly string[];
@@ -349,7 +405,7 @@ export async function captureCodexResponse(
     outputFile = join(outputDir, `codex-${Date.now()}-${attempt}.json`);
 
     if (bashPath) {
-      // Windows: Git Bash for reliable stdin redirection. Read-only sandbox + never-approve
+      // Windows: Git Bash for reliable stdin redirection. Dispatch sandbox + never-approve
       // are forced and every caller value is shq-escaped (see buildCodexBashCommand).
       const bashCmd = buildCodexBashCommand(codexPath, opts, outputFile, promptFile);
       result = spawnSync(bashPath, ["-c", bashCmd], {
@@ -359,11 +415,10 @@ export async function captureCodexResponse(
         env: buildVendorEnv()
       });
     } else {
-      // POSIX: direct spawnSync with stdin input (read-only sandbox + never-approve forced)
+      // POSIX: direct spawnSync with stdin input (dispatch sandbox + never-approve forced)
       result = spawnSync("codex", [
         "exec",
-        "-c", "sandbox_mode=read-only",
-        "-c", "approval_policy=never",
+        ...buildCodexConfigArgs(opts.codexMode),
         ...schemaArgs, "-o", outputFile,
         ...(opts.model ? ["-m", opts.model] : []),
         ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"

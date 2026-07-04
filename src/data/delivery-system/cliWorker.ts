@@ -5,6 +5,7 @@ import type { HandoffId } from "./checkCompletionMatrix";
 import {
   captureAgyResponse,
   captureCodexResponse,
+  type CodexDispatchMode,
   writePromptFile
 } from "./cliWorkerCapture";
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH } from "./sessionState";
@@ -21,6 +22,8 @@ import {
 // ─── Vendor types ─────────────────────────────────────────────────────────────
 
 export type CliVendor = "codex_cli" | "agy_cli";
+
+export type { CodexDispatchMode };
 
 export type CliWorkerFailureSignal =
   | "timeout"
@@ -81,6 +84,8 @@ export interface CliCallTelemetryRecord {
   readonly failure_signals: readonly CliWorkerFailureSignal[];
   readonly error_reason: string | null;
   readonly parsed_json_present: boolean;
+  readonly codex_mode?: CodexDispatchMode;
+  readonly task_packet_ref?: string;
 }
 
 export interface BuildCliCallTelemetryRecordInput {
@@ -100,6 +105,8 @@ export interface BuildCliCallTelemetryRecordInput {
   readonly errorReason: string | null;
   readonly parsedJson: unknown;
   readonly providerUsage?: CliWorkerProviderUsage;
+  readonly codexMode?: CodexDispatchMode;
+  readonly taskPacketRef?: string;
 }
 
 const AUTH_ERROR_PATTERNS: readonly RegExp[] = [
@@ -196,7 +203,9 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
     outcome: input.outcome,
     failure_signals: [...input.failureSignals],
     error_reason: input.errorReason,
-    parsed_json_present: input.parsedJson != null
+    parsed_json_present: input.parsedJson != null,
+    ...(input.codexMode !== undefined ? { codex_mode: input.codexMode } : {}),
+    ...(input.taskPacketRef !== undefined ? { task_packet_ref: input.taskPacketRef } : {})
   };
 }
 
@@ -295,6 +304,10 @@ export interface CliWorkerInput {
   readonly prompt: string;
   /** Optional JSON schema path for Codex structured output enforcement. */
   readonly outputSchemaPath?: string;
+  /** Named governed Codex dispatch mode. Absent preserves the legacy command config. */
+  readonly codexMode?: CodexDispatchMode;
+  /** Required for codex_implement; links the write-capable worker to its bounded packet. */
+  readonly taskPacketRef?: string;
   readonly model?: string;
   readonly parentSessionHash: string;
   readonly parentTurnHash: string;
@@ -327,6 +340,8 @@ export async function runCliWorker(
   input: CliWorkerInput,
   stateDir: string
 ): Promise<CliWorkerResult> {
+  assertCodexDispatchGuard(input);
+  const taskPacketRef = normalizeTaskPacketRef(input.taskPacketRef);
   const handoffSlug = (input.handoffId as string).replace(/^hp-/, "hp-");
   const workerRunId = buildWorkerRunId(input.vendor, handoffSlug);
   const startedAt = new Date().toISOString();
@@ -372,7 +387,9 @@ export async function runCliWorker(
       outcome: "already_locked",
       failureSignals: [],
       errorReason: busyErrorReason,
-      parsedJson: null
+      parsedJson: null,
+      ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
+      ...(taskPacketRef !== undefined ? { taskPacketRef } : {})
     }), stateDir);
 
     return {
@@ -442,6 +459,7 @@ export async function runCliWorker(
       const result = await captureCodexResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.outputSchemaPath !== undefined ? { outputSchemaPath: input.outputSchemaPath } : {}),
+        ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
         ...(input.images !== undefined ? { images: input.images } : {}),
@@ -501,7 +519,9 @@ export async function runCliWorker(
     outcome: classification.outcome,
     failureSignals: classification.failure_signals,
     errorReason,
-    parsedJson
+    parsedJson,
+    ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
+    ...(taskPacketRef !== undefined ? { taskPacketRef } : {})
   }), stateDir);
 
   for (const trigger of alertTriggersForCliWorkerOutcome(classification)) {
@@ -525,24 +545,27 @@ export async function runCliWorker(
   );
 
   // Write subagent evidence
-  writeSubagentEvidence(
-    {
-      handoff_id: input.handoffId,
-      agent_id: workerRunId,
-      agent_type: `${input.vendor}-external`,
-      parent_session_hash: input.parentSessionHash,
-      started_at: startedAt,
-      stopped_at: stoppedAt,
-      duration_seconds: Math.round(durationSeconds),
-      artifacts: {
-        handoff_packet: handoffFilePath,
-        worker_output: workerOutputPath ?? "",
-        reviewer_output: null
-      },
-      lock_status: lockStatus,
-      verified: false,
-      recorded_at: stoppedAt
+  const subagentEvidenceRecord = {
+    handoff_id: input.handoffId,
+    agent_id: workerRunId,
+    agent_type: `${input.vendor}-external`,
+    parent_session_hash: input.parentSessionHash,
+    started_at: startedAt,
+    stopped_at: stoppedAt,
+    duration_seconds: Math.round(durationSeconds),
+    artifacts: {
+      handoff_packet: handoffFilePath,
+      worker_output: workerOutputPath ?? "",
+      reviewer_output: null
     },
+    lock_status: lockStatus,
+    verified: false,
+    recorded_at: stoppedAt,
+    ...(input.codexMode !== undefined ? { codex_mode: input.codexMode } : {}),
+    ...(taskPacketRef !== undefined ? { task_packet_ref: taskPacketRef } : {})
+  };
+  writeSubagentEvidence(
+    subagentEvidenceRecord,
     stateDir
   );
 
@@ -565,6 +588,21 @@ export async function runCliWorker(
 
 function promptLimitOptionsFor(input: Pick<CliWorkerInput, "maxPromptChars">): { readonly maxPromptChars?: number } {
   return input.maxPromptChars === undefined ? {} : { maxPromptChars: input.maxPromptChars };
+}
+
+function assertCodexDispatchGuard(input: CliWorkerInput): void {
+  if (
+    input.vendor === "codex_cli" &&
+    input.codexMode === "codex_implement" &&
+    normalizeTaskPacketRef(input.taskPacketRef) === undefined
+  ) {
+    throw new Error("codex_implement requires taskPacketRef — bounded worker doctrine");
+  }
+}
+
+function normalizeTaskPacketRef(taskPacketRef: string | undefined): string | undefined {
+  const trimmed = taskPacketRef?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function appendRegistryEntry(entry: Record<string, unknown>, stateDir: string): void {
