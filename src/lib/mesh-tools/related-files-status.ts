@@ -15,6 +15,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { normalizeRelatedFileHint, PLACEHOLDER_RE } from "./related-file-hints";
+
 export type RelatedFileStatus = "VERIFIED" | "STALE" | "MISSING" | "PLACEHOLDER";
 
 export interface RelatedFileEntry {
@@ -50,9 +52,8 @@ export interface ComputeOptions {
   prior?: Record<string, string>;
 }
 
-// Templated/glob hints (e.g. docs/projects/<slug>/architecture.md) are intentional
-// patterns, not real paths — never treat them as MISSING.
-const PLACEHOLDER_RE = /[<>*]/;
+// Templated/glob hints and trailing-slash normalization are shared with bind-point ②
+// (related-file-hints.ts) so ratchet and blocker-gate semantics stay identical (BLIND2).
 
 /** git blob object hash of a buffer: sha1("blob " + len + NUL + content). Matches `git hash-object`. */
 export function gitBlobHash(content: Buffer): string {
@@ -102,7 +103,7 @@ export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {
         entries.push({ node, relatedFile, status: "PLACEHOLDER" });
         continue;
       }
-      const abs = join(root, relatedFile);
+      const abs = join(root, normalizeRelatedFileHint(relatedFile));
       if (!existsSync(abs)) {
         entries.push({ node, relatedFile, status: "MISSING" });
         continue;

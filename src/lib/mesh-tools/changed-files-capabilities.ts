@@ -15,8 +15,7 @@
 
 import type { DecisionMesh, DecisionMeshRule } from "../decision-mesh";
 
-// Templated hints (docs/projects/<slug>/…) never match a concrete changed file.
-const PLACEHOLDER_RE = /[<>*]/;
+import { normalizeRelatedFileHint, PLACEHOLDER_RE } from "./related-file-hints";
 
 // Surfaces where an ungoverned change is a real risk. A changed file under one of
 // these that NO node covers is reported as `ungovernedSensitive` (deny-able), instead
@@ -39,8 +38,10 @@ function underSensitiveRoot(file: string): boolean {
 }
 
 /** A related_files hint covers a changed file if it equals it, is a dir prefix of it, or vice-versa. */
-function hintCovers(changedFile: string, hint: string): boolean {
-  if (PLACEHOLDER_RE.test(hint)) return false;
+function hintCovers(changedFile: string, rawHint: string): boolean {
+  if (PLACEHOLDER_RE.test(rawHint)) return false;
+  const hint = normalizeRelatedFileHint(rawHint);
+  if (hint.length === 0) return false;
   return changedFile === hint || changedFile.startsWith(`${hint}/`) || hint.startsWith(`${changedFile}/`);
 }
 

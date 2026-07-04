@@ -1,0 +1,17 @@
+id: docs_bundle
+type: governance_policy
+name: Docs bundle
+question: "Does this change touch the governed docs bundle?"
+why: "Regression fixture for trailing-slash directory hints (BLIND1): the hint below must cover files under docs-bundle/."
+signals:
+  - docs
+related_agents:
+  - qa
+related_files:
+  - docs-bundle/
+required_checks:
+  - docs_reviewed
+stop_conditions:
+  - docs_unreviewed
+must_not_assume:
+  - Do not assume the bundle is empty.

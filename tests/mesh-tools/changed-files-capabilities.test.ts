@@ -47,6 +47,14 @@ describe("changed-files-capabilities (bind-point ②)", () => {
     expect(r.ungovernedSensitive).not.toContain("docs/notes.md");
   });
 
+  it("matches a trailing-slash directory hint (BLIND1 regression)", () => {
+    // docs_bundle declares `docs-bundle/` WITH a trailing slash; before the
+    // normalization fix this matched nothing and its governance was silently skipped.
+    const r = activateForChangedFiles(mesh, ["docs-bundle/guide.md"]);
+    expect(r.activatedNodes.map((n) => n.id)).toContain("docs_bundle");
+    expect(r.stopConditions).toContain("docs_unreviewed");
+  });
+
   it("ignores placeholder/templated hints (never matches a concrete file)", () => {
     // no node hint is a placeholder here, but a concrete path that looks templated must not crash/match
     const r = activateForChangedFiles(mesh, ["docs/projects/<slug>/architecture.md"]);
