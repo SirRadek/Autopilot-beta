@@ -236,3 +236,11 @@ rules:
     must_not_assume:
       - Do not assume Claude can act as codex_cli or agy_cli.
       - Do not skip runCliWorker() for a vendor task because it is small or fast.
+  - id: GATE-ACK-001
+    title: Enforcement gate changes need an explicit Mesh-Ack
+    applies_to:
+      - enforcement_gates
+    instruction: "Changes to git hooks, bind-point tooling, or the vendor airlock require a reviewed Mesh-Ack commit trailer, focused tests, and preserved fail-closed behavior."
+    severity: blocker
+    must_not_assume:
+      - Do not weaken or bypass a gate to make a commit pass.

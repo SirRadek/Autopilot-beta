@@ -17,7 +17,7 @@ import { join } from "node:path";
 
 import { loadDecisionMesh } from "../decision-mesh";
 
-import { activateForChangedFiles } from "./changed-files-capabilities";
+import { activateForChangedFiles, resolveAckedBlockers } from "./changed-files-capabilities";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -32,6 +32,12 @@ const failOnBlocker = process.argv.includes("--fail-on-blocker");
 // until a seeded baseline is wired (else every change to the control plane's own
 // sensitive dirs — which no node covers — would self-block).
 const failOnUngoverned = process.argv.includes("--fail-on-ungoverned");
+// Mesh-Ack: comma/space-separated NODE ids whose blocker rules the committer has
+// reviewed (sourced from `Mesh-Ack: <node-id> — <reason>` commit-message trailers by
+// the commit-msg hook). Acks are auditable in history; they suppress the failure,
+// never the reporting, and only for rules whose activated nodes are ALL acked.
+const ackArg = arg("--ack") ?? "";
+const ackedNodeIds = ackArg.split(/[\s,]+/).filter(Boolean);
 
 function resolveChangedFiles(): string[] {
   const filesArg = arg("--files");
@@ -69,6 +75,20 @@ for (const f of r.ungovernedSensitive) {
   console.log(`  UNGOVERNED ${f} (under a sensitive root, no node covers it)`);
 }
 
-const blockerFail = failOnBlocker && r.blockers.length > 0;
+const ack = resolveAckedBlockers(r, ackedNodeIds);
+for (const id of ack.ackedBlockers) {
+  console.log(`  ACKED     ${id} (blocker suppressed by Mesh-Ack; review is recorded in the commit message)`);
+}
+for (const id of ack.unknownAcks) {
+  console.log(`  ACK-NOOP  ${id} (Mesh-Ack names a node this change does not activate; it excuses nothing)`);
+}
+
+const blockerFail = failOnBlocker && ack.unackedBlockers.length > 0;
+if (blockerFail) {
+  console.error(
+    `  -> blocked by ${ack.unackedBlockers.join(", ")}. Review the rules above; if the change is sound, ` +
+      `add a commit-message trailer per activated node: "Mesh-Ack: <node-id> — <short reason>".`
+  );
+}
 const ungovernedFail = failOnUngoverned && r.ungovernedSensitive.length > 0;
 process.exit(blockerFail || ungovernedFail ? 1 : 0);

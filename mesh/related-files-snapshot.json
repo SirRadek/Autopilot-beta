@@ -10,6 +10,7 @@
   "src/data/delivery-system/contextEconomy.ts": "70dda4331e15e3ff4bddb1bb42ae2ab1f55dc975",
   "GEMINI.md": "c1852287f258de48aaf6f5efcc486a0e9756b27a",
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
+  "scripts/vendor-check.mjs": "2c6907cb3ad4124b1adb0416a81fdf15bfbe30e6",
   "src/data/delivery-system/modelOutputEvaluation.ts": "e32d29917dfb4fe588cc7cbe7b2579f590412f7a",
   "scripts/validate-model-output-evals.ts": "c5ae90b87c5a7cd8e531905a57d6585102a6ce95",
   "model-output-evals/model-output-eval-record.schema.json": "d84b1b0c694be53d121c760c273d1766bd911a84",

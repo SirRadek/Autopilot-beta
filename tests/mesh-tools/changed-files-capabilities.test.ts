@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { loadDecisionMesh } from "../../src/lib/decision-mesh";
-import { activateForChangedFiles } from "../../src/lib/mesh-tools/changed-files-capabilities";
+import { activateForChangedFiles, resolveAckedBlockers } from "../../src/lib/mesh-tools/changed-files-capabilities";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MESH = join(here, "../fixtures/mesh-tools/changed-files/mesh");
@@ -51,5 +51,36 @@ describe("changed-files-capabilities (bind-point ②)", () => {
     // no node hint is a placeholder here, but a concrete path that looks templated must not crash/match
     const r = activateForChangedFiles(mesh, ["docs/projects/<slug>/architecture.md"]);
     expect(r.activatedNodes).toEqual([]);
+  });
+});
+
+describe("resolveAckedBlockers (Mesh-Ack)", () => {
+  const activation = activateForChangedFiles(mesh, ["src/api/upload/handler.ts"]);
+
+  it("without acks every blocker stays unacked (behavior identical to before)", () => {
+    const a = resolveAckedBlockers(activation, []);
+    expect(a.ackedBlockers).toEqual([]);
+    expect(a.unackedBlockers).toContain("SEC-UPLOAD-001");
+    expect(a.unknownAcks).toEqual([]);
+  });
+
+  it("acking the activated node excuses its blocker rules but keeps them reported upstream", () => {
+    const a = resolveAckedBlockers(activation, ["upload"]);
+    expect(a.ackedBlockers).toContain("SEC-UPLOAD-001");
+    expect(a.unackedBlockers).toEqual([]);
+  });
+
+  it("an ack for a non-activated node excuses nothing and is surfaced (fail-closed)", () => {
+    const a = resolveAckedBlockers(activation, ["security"]);
+    expect(a.unackedBlockers).toContain("SEC-UPLOAD-001");
+    expect(a.unknownAcks).toEqual(["security"]);
+  });
+
+  it("no activation means no blockers to ack and unknown acks are reported", () => {
+    const empty = activateForChangedFiles(mesh, ["README.md"]);
+    const a = resolveAckedBlockers(empty, ["upload"]);
+    expect(a.ackedBlockers).toEqual([]);
+    expect(a.unackedBlockers).toEqual([]);
+    expect(a.unknownAcks).toEqual(["upload"]);
   });
 });

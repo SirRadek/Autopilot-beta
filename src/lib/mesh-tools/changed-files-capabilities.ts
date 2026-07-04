@@ -77,6 +77,43 @@ function uniq(xs: readonly string[]): string[] {
   return [...new Set(xs)];
 }
 
+export interface AckResolution {
+  /** blocker rule ids excused because EVERY activated node they apply to is acked */
+  readonly ackedBlockers: readonly string[];
+  /** blocker rule ids still blocking (at least one activated applies_to node unacked) */
+  readonly unackedBlockers: readonly string[];
+  /** ack ids that matched no activated node — they excuse nothing (fail-closed) */
+  readonly unknownAcks: readonly string[];
+}
+
+/**
+ * Resolve Mesh-Ack'd node ids against an activation. Acks name NODES (not rules):
+ * a blocker rule is excused only when every activated node it applies to is acked.
+ * An ack for a non-activated node is surfaced as unknown and excuses nothing.
+ * An ack never removes reporting — callers must still print the rules.
+ */
+export function resolveAckedBlockers(
+  activation: ChangedFilesActivation,
+  ackedNodeIds: readonly string[]
+): AckResolution {
+  const activated = new Set(activation.activatedNodes.map((n) => n.id));
+  const acked = new Set(ackedNodeIds.filter((id) => activated.has(id)));
+  const unknownAcks = uniq(ackedNodeIds.filter((id) => !activated.has(id)));
+
+  const ackedBlockers: string[] = [];
+  const unackedBlockers: string[] = [];
+  for (const rule of activation.rules) {
+    if (rule.severity !== "blocker") continue;
+    const via = rule.applies_to.filter((id) => activated.has(id));
+    if (via.length > 0 && via.every((id) => acked.has(id))) {
+      ackedBlockers.push(rule.id);
+    } else {
+      unackedBlockers.push(rule.id);
+    }
+  }
+  return { ackedBlockers, unackedBlockers, unknownAcks };
+}
+
 function severityRank(s: DecisionMeshRule["severity"]): number {
   return s === "blocker" ? 0 : s === "major" ? 1 : s === "minor" ? 2 : 3;
 }
