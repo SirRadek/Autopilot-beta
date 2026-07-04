@@ -305,6 +305,8 @@ export interface CliWorkerInput {
   readonly addDirs?: readonly string[];
   /** Image files to attach to the prompt (codex exec -i; agy via the image's dir). */
   readonly images?: readonly string[];
+  /** Fail fast before forwarding oversized handoff prompts to a vendor CLI. */
+  readonly maxPromptChars?: number;
 }
 
 export interface CliWorkerResult {
@@ -328,9 +330,10 @@ export async function runCliWorker(
   const handoffSlug = (input.handoffId as string).replace(/^hp-/, "hp-");
   const workerRunId = buildWorkerRunId(input.vendor, handoffSlug);
   const startedAt = new Date().toISOString();
+  const promptLimitOptions = promptLimitOptionsFor(input);
 
   // Write handoff prompt to temp file (artifact pointer for evidence)
-  const handoffFilePath = writePromptFile(input.prompt, handoffSlug);
+  const handoffFilePath = writePromptFile(input.prompt, handoffSlug, promptLimitOptions);
 
   // Acquire lock
   const lockRecord: WorkerLockRecord = {
@@ -425,7 +428,8 @@ export async function runCliWorker(
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
         ...(input.images !== undefined ? { images: input.images } : {}),
-        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {})
+        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...promptLimitOptions
       });
       exitCode = result.exitCode;
       rawOutput = result.cleanOutput;
@@ -441,7 +445,8 @@ export async function runCliWorker(
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
         ...(input.images !== undefined ? { images: input.images } : {}),
-        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {})
+        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...promptLimitOptions
       });
       exitCode = result.exitCode;
       rawOutput = result.rawFileContent;
@@ -557,6 +562,10 @@ export async function runCliWorker(
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+function promptLimitOptionsFor(input: Pick<CliWorkerInput, "maxPromptChars">): { readonly maxPromptChars?: number } {
+  return input.maxPromptChars === undefined ? {} : { maxPromptChars: input.maxPromptChars };
+}
 
 function appendRegistryEntry(entry: Record<string, unknown>, stateDir: string): void {
   const path = join(stateDir, "agent-registry.jsonl");

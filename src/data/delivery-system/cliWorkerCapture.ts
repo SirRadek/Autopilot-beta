@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { platform } from "node:process";
 
+import { contextWidthSpecs } from "./tokenEfficiency";
+
 // ─── ANSI stripping ───────────────────────────────────────────────────────────
 
 /**
@@ -58,6 +60,7 @@ export interface AgyCaptureOptions {
   /** Image files to attach; their containing dirs are granted via --add-dir. */
   readonly images?: readonly string[];
   readonly timeoutMs?: number;
+  readonly maxPromptChars?: number;
   /**
    * Opt in to agy's `--dangerously-skip-permissions` (full host-permission bypass). Default OFF:
    * agy runs without it, the secure default the audit asked for. `--add-dir` is kept independent
@@ -74,6 +77,16 @@ export interface AgyCaptureResult {
   readonly parsedJson: unknown;
   readonly durationMs: number;
 }
+
+export interface PromptLimitOptions {
+  readonly maxPromptChars?: number;
+}
+
+// Reuse the largest existing context-width budget as the vendor prompt ceiling:
+// 8,000 max context lines across 60 packet files = 480,000 chars. This keeps
+// normal handoff packets well above current tests while still refusing dumps.
+export const DEFAULT_CLI_WORKER_MAX_PROMPT_CHARS =
+  contextWidthSpecs.large.maxContextLines * contextWidthSpecs.large.maxFilesInPacket;
 
 function resolveAgyPath(): string {
   try {
@@ -194,6 +207,8 @@ function killProcessTree(pid: number | undefined): void {
  * independent of the bypass, so any bypass is explicit at the call site.
  */
 export function buildAgyArgs(prompt: string, opts: AgyCaptureOptions = {}): string[] {
+  assertPromptWithinLimit(prompt, opts);
+
   // Grant real repo/data access: each extra dir + each image's containing dir.
   const accessDirs = [
     ...(opts.addDirs ?? []),
@@ -212,6 +227,8 @@ export async function captureAgyResponse(
   prompt: string,
   opts: AgyCaptureOptions = {}
 ): Promise<AgyCaptureResult> {
+  assertPromptWithinLimit(prompt, opts);
+
   // Dynamic import so TS compile doesn't fail in environments without node-pty
   const ptyModule = await import("node-pty");
   const pty = ptyModule.default ?? ptyModule;
@@ -278,6 +295,7 @@ export interface CodexCaptureOptions {
   /** Image files to attach to the prompt (codex exec -i). */
   readonly images?: readonly string[];
   readonly timeoutMs?: number;
+  readonly maxPromptChars?: number;
   /** Retries on a transient empty-output exit (default 1; timeouts are never retried). */
   readonly retries?: number;
 }
@@ -298,6 +316,8 @@ export async function captureCodexResponse(
   prompt: string,
   opts: CodexCaptureOptions = {}
 ): Promise<CodexCaptureResult> {
+  assertPromptWithinLimit(prompt, opts);
+
   const { spawnSync } = await import("node:child_process");
   const { readFileSync } = await import("node:fs");
 
@@ -367,8 +387,9 @@ export async function captureCodexResponse(
       // file absent or not valid JSON — caller checks exitCode
     }
 
+    const timedOut = isSpawnTimeout(result.error);
     const emptyOutput = rawFileContent.length === 0;
-    if (!emptyOutput || isSpawnTimeout(result.error) || attempt === maxAttempts) break;
+    if (!shouldRetryCodex({ emptyOutput, timedOut, attempt, maxAttempts })) break;
   }
 
   const durationMs = Date.now() - startedAt;
@@ -383,6 +404,15 @@ export async function captureCodexResponse(
     timedOut: isSpawnTimeout(result.error),
     attempts
   };
+}
+
+export function shouldRetryCodex(input: {
+  readonly emptyOutput: boolean;
+  readonly timedOut: boolean;
+  readonly attempt: number;
+  readonly maxAttempts: number;
+}): boolean {
+  return input.emptyOutput && !input.timedOut && input.attempt < input.maxAttempts;
 }
 
 function collectSpawnErrorOutput(result: ReturnType<typeof import("node:child_process").spawnSync>): string {
@@ -416,7 +446,36 @@ function isSpawnTimeout(error: Error | undefined): boolean {
 
 // ─── Prompt file writer (shared) ──────────────────────────────────────────────
 
-export function writePromptFile(prompt: string, handoffSlug: string): string {
+export function assertPromptWithinLimit(prompt: string, opts: PromptLimitOptions = {}): void {
+  const maxPromptChars = resolveMaxPromptChars(opts.maxPromptChars);
+  const actualChars = prompt.length;
+
+  if (actualChars > maxPromptChars) {
+    throw new Error(
+      `prompt_size_exceeded: prompt actual size ${actualChars} chars exceeds maxPromptChars limit ${maxPromptChars} chars`
+    );
+  }
+}
+
+function resolveMaxPromptChars(maxPromptChars: number | undefined): number {
+  if (maxPromptChars === undefined) {
+    return DEFAULT_CLI_WORKER_MAX_PROMPT_CHARS;
+  }
+
+  if (!Number.isInteger(maxPromptChars) || maxPromptChars <= 0) {
+    throw new Error(`invalid_maxPromptChars: maxPromptChars must be a positive integer, got ${maxPromptChars}`);
+  }
+
+  return maxPromptChars;
+}
+
+export function writePromptFile(
+  prompt: string,
+  handoffSlug: string,
+  opts: PromptLimitOptions = {}
+): string {
+  assertPromptWithinLimit(prompt, opts);
+
   const dir = join(tmpdir(), "autopilot-handoffs");
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `${handoffSlug}-${Date.now()}.md`);
