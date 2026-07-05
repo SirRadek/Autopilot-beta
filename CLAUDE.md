@@ -26,9 +26,9 @@ Hard boundaries:
 
 Useful local checks (all verified to exist in `package.json`):
 
-- `npm.cmd run verify` (aggregate gate: vendor-check + typecheck + tests + pdos:validate + renderability + buildability + fit-safety + mesh:gate:ci)
+- `npm.cmd run verify` (aggregate gate: vendor-check + typecheck + tests + pdos:validate + renderability + buildability-floor + fit-safety + model-output:validate + mesh:gate:ci)
 - `npm.cmd run mesh:gate:ci` (bind-point ① related_files ratchet)
-- `npm.cmd run mesh:changed -- --since origin/main --fail-on-blocker` (bind-point ② changed-file governance)
+- `npm.cmd run mesh:changed -- --since origin/main --fail-on-blocker --fail-on-ungoverned` (bind-point ② changed-file governance; `--fail-on-blocker` alone is fail-open on files no node maps — `--fail-on-ungoverned` adds the AF3 newly-added-sensitive deny that the pre-commit hook also enforces)
 - `npm.cmd run pdos:validate`
 - `npm.cmd run typecheck`
 - `npm.cmd test -- <target>`

@@ -117,6 +117,8 @@ Before implementation starts on any project, the supervisor must check:
 
 The local and remote split is established for Autopilot and Radeq: `C:\Programování\Codex` is the current Autopilot control-plane root for this workspace, `C:\Users\sirok\Documents\Projects\radeq` is the Radeq product root, `SirRadek/autopilot` is the Autopilot repository, and `SirRadek/radeq` is the Radeq repository. Historical notes may still mention the previous `C:\Users\sirok\Documents\Autopilot` checkout as migration evidence.
 
+> **Correction (2026-07-03):** the `C:\Programování\Codex` control-plane root above predates the v0.2 consolidation and disagrees with the project registry (which records `C:\Programování\autopilot`). Per `docs/decisions/brainstorm-2-briefing.md`, the live self-contained control-plane source of truth is now `C:\Programování\autopilot-beta` (canonical `autopilot` is frozen — do not edit it). The owner should normalize the exact canonical-root value across this policy, the architecture record, and the project registry.
+
 Completed migration evidence:
 
 - Autopilot governance was pushed to the dedicated `SirRadek/autopilot` repository.

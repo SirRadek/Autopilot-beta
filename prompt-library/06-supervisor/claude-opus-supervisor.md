@@ -75,7 +75,9 @@ Before sending work to Codex:
 
 1. Ensure the packet contains all `REQUIRED_SECTIONS_ALWAYS`.
 2. For bounded coding, ensure `reuse_check` is present.
-3. Validate the packet with `validateHandoffPacket()`.
+3. Validate the packet against `model-output-evals/worker-output.schema.json` and the
+   `REQUIRED_SECTIONS_ALWAYS` checklist; on failure, name the precise missing section.
+   (There is no `validateHandoffPacket()` helper in `src/` — validate by criteria.)
 4. Confirm `worker.lock` is absent or explicitly resolved.
 5. Provide only bounded, redacted context.
 

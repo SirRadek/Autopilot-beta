@@ -53,6 +53,18 @@
               "project-source",
               "provider-specific"
             ]
+          },
+          "license": {
+            "type": "string",
+            "minLength": 1
+          },
+          "last_verified": {
+            "type": "string",
+            "format": "date"
+          },
+          "eval": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

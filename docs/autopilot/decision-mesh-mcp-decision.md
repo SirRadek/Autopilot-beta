@@ -22,7 +22,7 @@ Autopilot may add:
 - `mesh/schemas/*.schema.json`
 - `mesh/generated/decision-mesh.json`
 - `src/lib/decision-mesh/*.ts`
-- `scripts/generate-decision-mesh.ts`
+- `scripts/generate-decision-mesh.ts` (planned, not yet built)
 - `mcp/server.ts`
 - `AGENTS.md`
 - `GEMINI.md`
@@ -100,7 +100,7 @@ YAML under `docs/projects/<project-slug>/decision-mesh/` is the source of truth 
 
 Typed TypeScript capability routing is an executable mirror for routing and UI display. It must stay aligned with mesh node IDs; if it drifts from YAML, YAML wins and the mirror must be updated.
 
-`mesh/generated/decision-mesh.json` is derived from YAML and must pass `npm run mesh:check`.
+`mesh/generated/decision-mesh.json` is derived from the `mesh/` YAML source and is kept in sync by `tests/decision-mesh/generated.test.ts` (deep-equal). There is no `mesh:check` script in autopilot-beta.
 
 When YAML and generated JSON disagree, work must regenerate the artifact or stop before delivery.
 

@@ -66,7 +66,7 @@ In this project:
 - project-specific Decision Mesh seed or mirror graphs under `docs/projects/*/decision-mesh/`
   and repo-local supervised project meshes under `.autopilot/decision-mesh/`
 - deterministic mesh artifact generator under `scripts/generate-decision-mesh.ts`
-- static read-only command center with 2D Decision Mesh graph and project delivery workflow at `src/pages/autopilot.astro`
+- (planned, not yet built) static read-only command center with 2D Decision Mesh graph and project delivery workflow at `src/pages/autopilot.astro`
 - tests under `tests/delivery-system/`
 - Decision Mesh tests under `tests/decision-mesh/`
 - local Playwright smoke test at `tests/autopilot-delivery-system.spec.ts`
@@ -159,12 +159,12 @@ Current data is Markdown-first with a minimal typed governance mirror:
 - pure Decision Mesh query helpers under `src/lib/decision-mesh/`
 - local stdio MCP tool server under `mcp/server.ts`
 - capability routing, context economy, and model spend policy data under `src/data/delivery-system/`
-- deterministic contract validation under `scripts/validate-contracts.ts`
+- (planned, not yet built) deterministic contract validation under `scripts/validate-contracts.ts`
 - seeded project-specific Decision Mesh records under `docs/projects/<project-slug>/decision-mesh/`
   and repo-local supervised project meshes under `.autopilot/decision-mesh/`
 - Vitest contract tests under `tests/delivery-system/`
 - Vitest Decision Mesh tests under `tests/decision-mesh/`
-- static `/autopilot` command-center page with deterministic 2D Decision Mesh visualization and ordered project-delivery workflow under `src/pages/`
+- (planned, not yet built) static `/autopilot` command-center page with deterministic 2D Decision Mesh visualization and ordered project-delivery workflow under `src/pages/`
 - Playwright browser smoke test under `tests/`
 
 Planned typed data:
@@ -368,8 +368,14 @@ Documentation verification:
 
 ```powershell
 rg -n "Project Architecture" docs
-npm run verify
+npm run verify        # aggregates: beta:vendor-check, typecheck, test, pdos:validate,
+                      # pdos:renderability, pdos:buildability-floor, pdos:fit-safety-lint,
+                      # model-output:validate, mesh:gate:ci
+npm run mesh:changed -- --since origin/main --fail-on-blocker --fail-on-ungoverned
 git diff --check
+# NOTE: mesh:check / prompt:validate / contracts:validate / audit:deps were canonical-autopilot
+# scripts and do NOT exist in autopilot-beta. The mesh derived-artifact check is
+# tests/decision-mesh/generated.test.ts; prompt/contract checks are covered by the test suite.
 ```
 
 Application verification is delegated to the affected project architecture record.

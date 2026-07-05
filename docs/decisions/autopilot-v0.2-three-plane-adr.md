@@ -52,7 +52,13 @@ the A↔B airlock. The full v0.2 cutover (collapsing beta siblings, moving mesh 
 is a **late, gated** step, not the first.
 
 ### 5. Execution mode — Y (fix-in-place-first)
-Verified fact: `autopilot-beta` has **no** `mesh/`, `mcp/`, or `src/lib/decision-mesh/`
+> **Correction (2026-07-03):** the "verified fact" below is now STALE. `autopilot-beta`
+> DOES have `mesh/`, `mcp/`, and `src/lib/decision-mesh/` (all git-tracked on main): the
+> v0.2 consolidation landed governance into beta, which is now the self-contained source
+> of truth (see `docs/decisions/brainstorm-2-briefing.md`). The "Y wins" decision was sound
+> at the time, but do NOT cite this section for "where governance lives."
+
+Verified fact (SUPERSEDED — see correction above): `autopilot-beta` has **no** `mesh/`, `mcp/`, or `src/lib/decision-mesh/`
 — governance lives only in canonical `autopilot`. Therefore cutover-first (X) would
 require migrating the whole governance into beta before the smallest fix — backwards.
 **Y wins (2/3 vendors + the fact):** fix `load.ts` where it lives; the vendor-manifest

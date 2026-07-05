@@ -101,7 +101,6 @@ describe("hintCovers — trailing-slash normalization (regression)", () => {
     expect(hintCovers("anything", "/")).toBe(false);
   });
 });
-
 describe("unacknowledgedBlockers", () => {
   it("removes only explicitly acknowledged blocker ids", () => {
     expect(unacknowledgedBlockers(["A", "B"], ["A"])).toEqual(["B"]);

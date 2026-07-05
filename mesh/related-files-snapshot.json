@@ -1,6 +1,6 @@
 {
   "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
-  "src/data/delivery-system/modelPolicy.ts": "a6c0b66b722f458c3ecf84914a50c8c1f496e270",
+  "src/data/delivery-system/modelPolicy.ts": "37b46948f633e0fe128eed1e6683c77ed4791cac",
   "src/lib/decision-mesh/query.ts": "af175e8840db4ed28ad6fcf42c3d50c7915c75d4",
   "mcp/server.ts": "994c3ba9f1cf69552d2b9fb488da1599ea88c8f7",
   "AGENTS.md": "b0e3c20d892ea42f450e74e789fb9b70eb51d9a9",
@@ -22,8 +22,8 @@
   "src/data/delivery-system/toolInventory.ts": "81ead678394de2191c3ded57b5977ea47ef07058",
   "docs/autopilot/model-output-evaluation-operating-model.md": "d6a569e14776a040cdf5568deea9935c04d828b4",
   "docs/autopilot/delivery-system-model-policy.md": "9729452e54781ab9022cc42915ea0f3946d22367",
-  "prompt-library/source-catalog.md": "aae1aef9c9e645e87b0694f0b6c1daeff4fbc6d2",
-  "prompt-library/source-catalog.json": "8cc4469aef16282bd2c78e62121c117f86be7c2f",
+  "prompt-library/source-catalog.md": "1469fbef70a62c1c77833abbbc7344a0a7edd05e",
+  "prompt-library/source-catalog.json": "0b1ba156e91bc0130d371d721138843e16b5dad2",
   "docs/autopilot/delivery-system-connector-snapshots.md": "c0aec91d6cceb6d01743ed41b8cc4250fcc69a9b",
   "docs/autopilot/project-architecture-standard.md": "23cac4e7c4995e6cb73fe68a66aaa4f35cbad080",
   "prompt-library/README.md": "10bb5c33523f9fa080ebd9cede21e7cd5e7dfe08",
@@ -36,7 +36,7 @@
   "src/data/delivery-system/dependencyFreshness.ts": "4f5edbdf1db9789aad615b1b94ef477b33cbfc25",
   "src/data/delivery-system/checkCompletionMatrix.ts": "d76155f8136933432446b2f49448ecf640e2cc52",
   "docs/autopilot/skill-registry.json": "3373ac38d88bb401ce1653367443cd7b7f6f17dc",
-  "src/data/delivery-system/subscriptionBudget.ts": "2906c7e222d46ad35f6ba90081e39384fe83d7b6",
+  "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
   "src/data/delivery-system/cliWorker.ts": "9a83212b713d0796f501a527ba2373a5f982f1c5",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
