@@ -284,7 +284,8 @@ const agentPacketOutputSchema = z
     must_read: stringArraySchema,
     must_not_assume: stringArraySchema,
     required_checks: stringArraySchema,
-    stop_conditions: stringArraySchema
+    stop_conditions: stringArraySchema,
+    no_governance_matched: z.boolean().optional()
   })
   .passthrough();
 const projectMeshPacketOutputSchema = z
@@ -299,7 +300,8 @@ const projectMeshPacketOutputSchema = z
     must_not_assume: stringArraySchema,
     required_checks: stringArraySchema,
     stop_conditions: stringArraySchema,
-    why: stringArraySchema
+    why: stringArraySchema,
+    no_governance_matched: z.boolean().optional()
   })
   .passthrough();
 const nodeExplanationOutputSchema = z

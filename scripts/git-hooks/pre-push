@@ -48,6 +48,11 @@ do
 
   autopilot_run_npm "checking pushed range $range against blocker-governed mesh nodes" \
     run mesh:changed -- --root . --since "$range" --fail-on-blocker
+
+  # Report-first (warn-only) self-approval gate: surfaces baseline-excuse growth added without a
+  # `Baseline-Waiver:` commit trailer over the pushed range. Exits 0 by design, so it never blocks a
+  # push; promotion to blocking is a deliberate owner-approved switch to `--strict` (P0.3).
+  autopilot_run_npm "checking baseline-excuse waivers (report-first)" run baseline:waiver-check -- --range "$range"
 done
 
 if [ "$saw_update" -eq 0 ]; then

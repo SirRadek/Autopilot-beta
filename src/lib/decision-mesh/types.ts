@@ -69,6 +69,12 @@ export interface AgentPacket {
   readonly must_not_assume: readonly string[];
   readonly required_checks: readonly string[];
   readonly stop_conditions: readonly string[];
+  /**
+   * Set to true when the task matched no mesh signal, so the packet carries only the governance
+   * floor (or nothing, for a project mesh without one). Absent means governance matched normally.
+   * A caller MUST stop and reclassify rather than proceed on an ungoverned packet.
+   */
+  readonly no_governance_matched?: boolean;
 }
 
 export interface ProjectMeshPacketInput {
@@ -90,6 +96,8 @@ export interface ProjectMeshPacket {
   readonly required_checks: readonly string[];
   readonly stop_conditions: readonly string[];
   readonly why: readonly string[];
+  /** See {@link AgentPacket.no_governance_matched}. */
+  readonly no_governance_matched?: boolean;
 }
 
 export interface ProjectMeshPacketRule {

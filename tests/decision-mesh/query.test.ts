@@ -212,20 +212,32 @@ describe("Decision Mesh queries", () => {
     );
   });
 
-  it("builds an empty agent packet when no task signal matches", () => {
+  it("flags no_governance_matched and forces the governance floor when no task signal matches", () => {
     const packet = buildAgentPacket(mesh, {
       task: NO_MATCH_TASK,
       agent: "architect",
       token_budget: 4000
     });
 
-    expect(packet.relevant_nodes).toEqual([]);
-    expect(packet.rules).toEqual([]);
-    expect(packet.must_read).toEqual([]);
-    expect(packet.stop_conditions).toEqual([]);
+    // The miss is no longer silent: the packet carries the always-applicable floor + the flag,
+    // so the agent must stop and reclassify instead of proceeding on an advice-free packet.
+    expect(packet.no_governance_matched).toBe(true);
+    expect(packet.relevant_nodes).toEqual(["capability_routing", "context_economy_policy"]);
+    expect(packet.rules.length).toBeGreaterThan(0);
   });
 
-  it("builds an empty control-plane project packet when no task signal matches", () => {
+  it("does not flag no_governance_matched when the task matches (governance is present)", () => {
+    const packet = buildAgentPacket(mesh, {
+      task: "Add authenticated avatar upload",
+      agent: "backend",
+      token_budget: 8000
+    });
+
+    expect(packet.no_governance_matched).toBeUndefined();
+    expect(packet.relevant_nodes).toContain("file_upload");
+  });
+
+  it("flags no_governance_matched on a project packet miss (no root floor in a project mesh)", () => {
     const projectMesh = loadProjectDecisionMeshFromRoot(process.cwd(), "autopilot-control-plane");
     const packet = buildProjectMeshPacket(projectMesh, {
       project_slug: "autopilot-control-plane",
@@ -234,9 +246,11 @@ describe("Decision Mesh queries", () => {
       max_nodes: 4
     });
 
+    // A project mesh has no root-mesh floor nodes, so the node set stays empty — but the flag is
+    // the load-bearing signal, and it must still fire.
+    expect(packet.no_governance_matched).toBe(true);
     expect(packet.relevant_nodes).toEqual([]);
     expect(packet.rules).toEqual([]);
-    expect(packet.must_read).toEqual([]);
     expect(packet.stop_conditions).toEqual([]);
   });
 

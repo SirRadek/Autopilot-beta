@@ -19,6 +19,10 @@ import type {
 import { selectCapabilityModules } from "../../data/delivery-system/capabilities";
 
 const DEFAULT_MAX_NODES = 12;
+// Always-applicable root-mesh nodes forced into a packet when a task matched no signal, so an
+// unclassified task never yields a silently advice-free packet. Project meshes without these ids
+// still get the no_governance_matched flag (their own floor is a separate concern).
+const GOVERNANCE_FLOOR_NODE_IDS = ["capability_routing", "context_economy_policy"] as const;
 const AGENT_ORDER = [
   "architect",
   "web_architect",
@@ -105,6 +109,26 @@ function withRelevantBlockerNodes(
   return forced.length > 0 ? [...baseNodes, ...forced] : baseNodes;
 }
 
+/**
+ * A task that matches no mesh signal would otherwise yield a packet with zero rules and zero
+ * stop_conditions and no indication that governance silently evaporated (the exact failure the
+ * A-Z audit hit on a real task). Flag the miss so the caller must stop and reclassify instead of
+ * proceeding ungoverned, and — where the mesh has them — force in the always-applicable governance
+ * floor so the packet is never advice-free.
+ */
+function applyGovernanceFloor(
+  mesh: DecisionMesh,
+  nodes: readonly DecisionMeshNode[]
+): { readonly nodes: readonly DecisionMeshNode[]; readonly noGovernanceMatched: boolean } {
+  if (nodes.length > 0) {
+    return { nodes, noGovernanceMatched: false };
+  }
+  const floor = GOVERNANCE_FLOOR_NODE_IDS.map((id) => mesh.nodes.find((node) => node.id === id)).filter(
+    (node): node is DecisionMeshNode => node !== undefined
+  );
+  return { nodes: floor, noGovernanceMatched: true };
+}
+
 export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): AgentPacket {
   const maxNodes = Math.max(4, Math.min(7, Math.floor((input.token_budget ?? 7000) / 1000)));
   const subgraph = getRelevantSubgraph(mesh, {
@@ -112,7 +136,8 @@ export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): A
     agent: input.agent,
     max_nodes: maxNodes
   });
-  const nodes = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const scored = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const { nodes, noGovernanceMatched } = applyGovernanceFloor(mesh, scored);
   const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
 
@@ -131,7 +156,8 @@ export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): A
       ...rules.flatMap((rule) => rule.must_not_assume ?? [])
     ]),
     required_checks: unique(nodes.flatMap((node) => node.required_checks)),
-    stop_conditions: unique(nodes.flatMap((node) => node.stop_conditions ?? []))
+    stop_conditions: unique(nodes.flatMap((node) => node.stop_conditions ?? [])),
+    ...(noGovernanceMatched ? { no_governance_matched: true } : {})
   };
 }
 
@@ -141,7 +167,8 @@ export function buildProjectMeshPacket(mesh: DecisionMesh, input: ProjectMeshPac
     max_nodes: input.max_nodes ?? DEFAULT_MAX_NODES
   };
   const subgraph = getRelevantSubgraph(mesh, input.agent ? { ...subgraphInput, agent: input.agent } : subgraphInput);
-  const nodes = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const scored = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const { nodes, noGovernanceMatched } = applyGovernanceFloor(mesh, scored);
   const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
 
@@ -158,7 +185,8 @@ export function buildProjectMeshPacket(mesh: DecisionMesh, input: ProjectMeshPac
     ]),
     required_checks: unique(nodes.flatMap((node) => node.required_checks)),
     stop_conditions: unique(nodes.flatMap((node) => node.stop_conditions ?? [])),
-    why: unique(nodes.map((node) => node.why))
+    why: unique(nodes.map((node) => node.why)),
+    ...(noGovernanceMatched ? { no_governance_matched: true } : {})
   };
 
   return input.agent ? { ...packet, agent: input.agent } : packet;
