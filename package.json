@@ -24,6 +24,7 @@
     "pdos:build-cloud": "tsx product-design-os/scripts/build-point-cloud-asset.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
+    "baseline:waiver-check": "node scripts/check-baseline-waivers.mjs",
     "test": "vitest run",
     "verify": "npm run beta:vendor-check && npm run typecheck && npm run test && npm run pdos:validate && npm run pdos:renderability && npm run pdos:buildability-floor && npm run pdos:fit-safety-lint && npm run mesh:gate:ci",
     "pdos:fit-probe": "tsx product-design-os/qa/fit-probe/check-fit-probe-product-design-os.ts",

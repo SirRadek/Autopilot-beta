@@ -17,7 +17,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, realpathSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,10 +37,10 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function collectVendoredFiles() {
+function collectVendoredFiles(root = ROOT, vendorRoots = VENDOR_ROOTS) {
   const files = [];
-  for (const root of VENDOR_ROOTS) {
-    const abs = join(ROOT, root);
+  for (const vendorRoot of vendorRoots) {
+    const abs = join(root, vendorRoot);
     if (!existsSync(abs)) continue;
     // git ls-files honors .gitignore: tracked (--cached) + untracked-but-not-ignored
     // (--others --exclude-standard). Gitignored crash litter (e.g. *.stackdump) is excluded
@@ -48,34 +48,34 @@ function collectVendoredFiles() {
     // the UNTRACKED provenance check below. -z keeps paths with odd chars intact.
     const out = execFileSync(
       "git",
-      ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", root],
-      { cwd: ROOT, encoding: "utf8" }
+      ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", vendorRoot],
+      { cwd: root, encoding: "utf8" }
     );
     for (const rel of out.split("\0")) {
       if (!rel) continue;
-      const full = join(ROOT, rel);
+      const full = join(root, rel);
       if (existsSync(full) && statSync(full).isFile()) files.push(full);
     }
   }
   // POSIX-style relative paths so the manifest is OS-stable.
   return files
-    .map((f) => relative(ROOT, f).split(sep).join("/"))
+    .map((f) => relative(root, f).split(sep).join("/"))
     .sort();
 }
 
-function generate() {
+function generate({ root = ROOT, manifestPath = MANIFEST_PATH, vendorRoots = VENDOR_ROOTS } = {}) {
   // Preserve baseline hash + patched_by for files a phase already patched:
   // re-generating must NOT re-baseline a patched file to its modified content
   // (that would destroy the merge-back anchor). Pristine/new files are hashed live.
-  const priorManifest = existsSync(MANIFEST_PATH)
-    ? JSON.parse(readFileSync(MANIFEST_PATH, "utf8"))
+  const priorManifest = existsSync(manifestPath)
+    ? JSON.parse(readFileSync(manifestPath, "utf8"))
     : { files: [], beta_authored: [] };
   const priorFiles = Array.isArray(priorManifest.files) ? priorManifest.files : [];
   const priorBetaAuthored = Array.isArray(priorManifest.beta_authored) ? priorManifest.beta_authored : [];
   const prior = new Map(priorFiles.map((e) => [e.source_path, e]));
   const betaAuthored = [...new Set([...priorBetaAuthored, ...BETA_AUTHORED_SEED])].sort();
   const betaAuthoredSet = new Set(betaAuthored);
-  const files = collectVendoredFiles()
+  const files = collectVendoredFiles(root, vendorRoots)
     .filter((source_path) => !betaAuthoredSet.has(source_path))
     .map((source_path) => {
       const was = prior.get(source_path);
@@ -85,7 +85,7 @@ function generate() {
       return {
         source_path,
         canonical_sha: CANONICAL_SHA,
-        content_hash: sha256(readFileSync(join(ROOT, source_path))),
+        content_hash: sha256(readFileSync(join(root, source_path))),
       };
     });
   const manifest = {
@@ -99,23 +99,27 @@ function generate() {
     beta_authored: betaAuthored,
     files,
   };
-  writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + "\n");
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   console.log(`[vendor-manifest] wrote ${files.length} entries (base ${CANONICAL_SHA.slice(0, 12)}).`);
 }
 
-function verify() {
-  if (!existsSync(MANIFEST_PATH)) {
+// Throws on any provenance problem (missing manifest, drift, missing, or untracked vendored
+// file) after printing the human-readable detail; returns silently on a clean tree. The CLI
+// runner turns a throw into exit 1, so the gate behavior is unchanged — the throw is what makes
+// the airlock unit-testable (a regression that neuters a check now fails a test, not just prod).
+function verify({ root = ROOT, manifestPath = MANIFEST_PATH, vendorRoots = VENDOR_ROOTS } = {}) {
+  if (!existsSync(manifestPath)) {
     console.error("[vendor-check] FAIL: vendor-manifest.json missing. Run: npm run beta:vendor-manifest");
-    process.exit(1);
+    throw new Error("vendor-manifest.json missing");
   }
-  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   // content_hash is the PINNED canonical baseline and never changes — it is the
   // merge-back anchor. `patched_by` marks a vendored file that a beta phase has
   // intentionally modified: its content is *expected* to differ from baseline,
   // and `current vs baseline` is precisely the patch that can merge back.
   const expected = new Map(manifest.files.map((e) => [e.source_path, e]));
   const betaAuthored = new Set([...(Array.isArray(manifest.beta_authored) ? manifest.beta_authored : []), ...BETA_AUTHORED_SEED]);
-  const actual = collectVendoredFiles();
+  const actual = collectVendoredFiles(root, vendorRoots);
 
   const drift = []; // pristine file changed (accidental drift — a real problem)
   const missing = []; // in manifest, not on disk
@@ -124,7 +128,7 @@ function verify() {
   const patchReverted = []; // marked patched but matches baseline — patch absent
 
   for (const [source_path, entry] of expected) {
-    const abs = join(ROOT, source_path);
+    const abs = join(root, source_path);
     if (!existsSync(abs)) {
       missing.push(source_path);
       continue;
@@ -162,8 +166,20 @@ function verify() {
   for (const f of drift) console.error(`  DRIFT     ${f}  (pristine vendored file changed vs baseline — not marked patched_by)`);
   for (const f of missing) console.error(`  MISSING   ${f}  (in manifest, absent on disk)`);
   for (const f of untracked) console.error(`  UNTRACKED ${f}  (under vendor root, not in manifest — re-run --generate if intentional)`);
-  process.exit(1);
+  throw new Error(`${problems} provenance problem(s)`);
 }
 
-if (process.argv.includes("--generate")) generate();
-else verify();
+export { collectVendoredFiles, generate, verify, CANONICAL_SHA, VENDOR_ROOTS };
+
+// CLI entry: run only when invoked directly (not when imported by a test). A throw from
+// verify()/generate() becomes exit 1, preserving the gate's original fail behavior.
+const invokedDirectly =
+  process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+if (invokedDirectly) {
+  try {
+    if (process.argv.includes("--generate")) generate();
+    else verify();
+  } catch {
+    process.exit(1);
+  }
+}

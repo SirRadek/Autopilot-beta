@@ -1,8 +1,8 @@
 {
   "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
   "src/data/delivery-system/modelPolicy.ts": "a6c0b66b722f458c3ecf84914a50c8c1f496e270",
-  "src/lib/decision-mesh/query.ts": "7e39cce5a63eb49b3082bb90825dd38651526a17",
-  "mcp/server.ts": "3e59dd5de4a51c8c7f3f70c479fe77e808bffa9f",
+  "src/lib/decision-mesh/query.ts": "57848528a2576b74198d0c89fee5d6eef29083f4",
+  "mcp/server.ts": "0a53e22a3d911b761dcf1458332d3e0c6745a50f",
   "AGENTS.md": "b0e3c20d892ea42f450e74e789fb9b70eb51d9a9",
   ".codex/hooks.json": "dd37d1633446888857a3693eecbbd640e45cba8c",
   ".codex/hooks/autopilot-hook.mjs": "59eef8f87dbdc68c8b91fad7f20fd675bca7ed9b",

@@ -19,6 +19,7 @@ npm.cmd run hooks:install
 `pre-push` checks committed push ranges and heavier local gates:
 
 - `npm run mesh:changed -- --root . --since <range> --fail-on-blocker`
+- `npm run baseline:waiver-check -- --range <range>` (report-first, per pushed range)
 - `npm run typecheck`
 - `npm run pdos:fit-safety-lint -- --no-pages`
 
