@@ -20,11 +20,7 @@ const PLACEHOLDER_RE = /[<>*]/;
 
 // Surfaces where an ungoverned change is a real risk. A changed file under one of
 // these that NO node covers is reported as `ungovernedSensitive` (deny-able), instead
-// of silently passing. Kept narrow + security-critical on purpose.
-// Executable / security surfaces where a NEW ungoverned file is a real risk. Deliberately
-// the runtime code paths — NOT mesh/ itself: the mesh is hand-authored governance source +
-// generated ratchet artifacts (baseline, snapshot) that are MEANT to grow, so a new node or a
-// regenerated snapshot must not be flagged as an ungoverned surface.
+// of silently passing. Kept narrow + security-critical on purpose: the runtime code paths.
 const SENSITIVE_ROOTS = [
   "src/data/delivery-system",
   "mcp",
@@ -34,14 +30,36 @@ const SENSITIVE_ROOTS = [
   "scripts/git-hooks"
 ] as const;
 
-function underSensitiveRoot(file: string): boolean {
-  return SENSITIVE_ROOTS.some((root) => file === root || file.startsWith(`${root}/`));
+// The mesh governance SOURCE (hand-authored nodes + rules + edges) is sensitive too: a new
+// ungoverned node could introduce governance or launder coverage of real code (the gap the
+// earlier "drop mesh from the sensitive set" change opened). But the GENERATED ratchet artifacts
+// under mesh/ (related-files-baseline.json, related-files-snapshot.json, generated/*) are MEANT to
+// grow, so we match the source files EXPLICITLY rather than treating all of mesh/ as a root.
+// In practice these source files are covered by a governance node (see capability_routing's
+// related_files), so a mesh change activates governance instead of being blocked; this stays as the
+// fail-closed backstop for any mesh source a node does not cover.
+export function isMeshGovernanceSource(file: string): boolean {
+  return file === "mesh/rules.yaml" || file === "mesh/edges.yaml" || /^mesh\/nodes\/[^/]+\.ya?ml$/.test(file);
 }
 
-/** A related_files hint covers a changed file if it equals it, is a dir prefix of it, or vice-versa. */
-function hintCovers(changedFile: string, hint: string): boolean {
+function underSensitiveRoot(file: string): boolean {
+  if (SENSITIVE_ROOTS.some((root) => file === root || file.startsWith(`${root}/`))) return true;
+  return isMeshGovernanceSource(file);
+}
+
+/**
+ * A related_files hint covers a changed file if it equals it, is a dir prefix of it, or vice-versa.
+ * Trailing slashes are normalized first: an authored directory hint like `model-output-evals/` must
+ * still prefix-match files inside it. Without normalization `${hint}/` becomes `model-output-evals//`
+ * and matches nothing, silently un-governing every file under that directory (and disarming its
+ * blocker rules in the changed-files gate). Exported so the regression test pins this exact case.
+ */
+export function hintCovers(changedFile: string, hint: string): boolean {
   if (PLACEHOLDER_RE.test(hint)) return false;
-  return changedFile === hint || changedFile.startsWith(`${hint}/`) || hint.startsWith(`${changedFile}/`);
+  const h = hint.replace(/\/+$/, "");
+  const f = changedFile.replace(/\/+$/, "");
+  if (h === "" || f === "") return false;
+  return f === h || f.startsWith(`${h}/`) || h.startsWith(`${f}/`);
 }
 
 export interface ActivatedNode {
@@ -75,6 +93,12 @@ export interface ChangedFilesActivation {
 
 function uniq(xs: readonly string[]): string[] {
   return [...new Set(xs)];
+}
+
+/** Blocker ids left after removing the acknowledged ones — the set a --fail-on-blocker gate must fail on. */
+export function unacknowledgedBlockers(blockers: readonly string[], acked: readonly string[]): string[] {
+  const ackSet = new Set(acked);
+  return blockers.filter((b) => !ackSet.has(b));
 }
 
 function severityRank(s: DecisionMeshRule["severity"]): number {

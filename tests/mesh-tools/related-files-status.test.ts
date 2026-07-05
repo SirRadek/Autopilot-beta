@@ -50,6 +50,22 @@ describe("related-files-status (bind-point ①)", () => {
     expect(r.entries.find((e) => e.relatedFile === "src/real.ts")?.status).toBe("VERIFIED");
   });
 
+  it("flags a file hint absent from a SUPPLIED prior as UNSNAPSHOTTED (fail-closed coverage gap)", () => {
+    // A non-empty prior that does NOT cover src/real.ts must not silently pass it as VERIFIED —
+    // that is how the snapshot used to fall out of coverage and the gate go drift-blind.
+    const r = computeRelatedFilesStatus(SAMPLE, { prior: { "some/unrelated.ts": "0".repeat(40) } });
+    expect(r.entries.find((e) => e.relatedFile === "src/real.ts")?.status).toBe("UNSNAPSHOTTED");
+    expect(r.summary.unsnapshotted).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a full matching prior yields zero UNSNAPSHOTTED; no prior at all also yields zero (strict mode unchanged)", () => {
+    const base = computeRelatedFilesStatus(SAMPLE);
+    expect(computeRelatedFilesStatus(SAMPLE, { prior: base.snapshot }).summary.unsnapshotted).toBe(0);
+    const noPrior = computeRelatedFilesStatus(SAMPLE);
+    expect(noPrior.summary.unsnapshotted).toBe(0);
+    expect(noPrior.entries.find((e) => e.relatedFile === "src/real.ts")?.status).toBe("VERIFIED");
+  });
+
   it("computes the same blob hash as real `git hash-object` (provenance honesty)", () => {
     const target = join(SAMPLE, "src/real.ts");
     const real = execFileSync("git", ["hash-object", target], { encoding: "utf8" }).trim();

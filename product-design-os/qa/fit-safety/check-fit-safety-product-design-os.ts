@@ -14,6 +14,7 @@ export type PdosFitSafetyGate = "blocking" | "warn_only_baseline" | "advisory_pa
 
 export type PdosFitSafetyPreconditionCode =
   | "font_clamp_min_below_floor"
+  | "missing_mobile_breakpoint"
   | "grid_track_overflow_risk"
   | "fixed_text_container_inline_cap"
   | "text_wrap_safety_missing"
@@ -303,6 +304,17 @@ function lintComponentCss(component: PdosFitSafetyComponentSource): readonly Raw
   const rules = parseCssRules(component.css);
   const customProperties = extractCustomProperties(component.css);
   const findings: RawFitSafetyFinding[] = [];
+
+  if (!hasMobileMaxWidthBreakpoint(component.css)) {
+    findings.push({
+      code: "missing_mobile_breakpoint",
+      source: "component_css",
+      precondition: "Component responsive CSS must include a phone breakpoint at max-width 480px or narrower.",
+      message: `${component.id} has no @media max-width <= 480px breakpoint.`,
+      snippet: "@media (max-width: 480px)",
+      path: component.sourcePath
+    });
+  }
 
   for (const rule of rules) {
     if (isRuleIgnored(rule.selector, component.html)) {
@@ -707,7 +719,73 @@ function summarizeFitSafety(
 }
 
 function parseCssRules(css: string): readonly CssRule[] {
-  return parseCssBlock(css.replace(/\/\*[\s\S]*?\*\//g, ""));
+  return parseCssBlock(stripCssComments(css));
+}
+
+function hasMobileMaxWidthBreakpoint(css: string): boolean {
+  return extractMediaConditions(stripCssComments(css)).some(mediaConditionHasMobileMaxWidth);
+}
+
+function extractMediaConditions(css: string): readonly string[] {
+  const conditions: string[] = [];
+  const lowerCss = css.toLowerCase();
+  let cursor = 0;
+
+  while (cursor < css.length) {
+    const mediaIndex = lowerCss.indexOf("@media", cursor);
+    if (mediaIndex === -1) {
+      break;
+    }
+
+    const conditionStart = mediaIndex + "@media".length;
+    const openBrace = css.indexOf("{", conditionStart);
+    if (openBrace === -1) {
+      break;
+    }
+
+    const closeBrace = findMatchingBrace(css, openBrace);
+    if (closeBrace === -1) {
+      break;
+    }
+
+    conditions.push(normalizeWhitespace(css.slice(conditionStart, openBrace)));
+    conditions.push(...extractMediaConditions(css.slice(openBrace + 1, closeBrace)));
+    cursor = closeBrace + 1;
+  }
+
+  return conditions;
+}
+
+function mediaConditionHasMobileMaxWidth(condition: string): boolean {
+  return (
+    anyCssLengthAtOrBelow480(/\(\s*max-width\s*:\s*(\d+(?:\.\d+)?)(px|rem|em)\s*\)/gi, condition) ||
+    anyCssLengthAtOrBelow480(/\(\s*width\s*<=\s*(\d+(?:\.\d+)?)(px|rem|em)\s*\)/gi, condition) ||
+    anyCssLengthAtOrBelow480(/\(\s*(\d+(?:\.\d+)?)(px|rem|em)\s*>=\s*width\s*\)/gi, condition)
+  );
+}
+
+function anyCssLengthAtOrBelow480(pattern: RegExp, condition: string): boolean {
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(condition)) !== null) {
+    const value = match[1];
+    const unit = match[2];
+    if (value !== undefined && unit !== undefined && cssLengthToPx(value, unit) <= 480) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function cssLengthToPx(value: string, unit: string): number {
+  const numeric = Number.parseFloat(value);
+  if (!Number.isFinite(numeric)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return unit.toLowerCase() === "px" ? numeric : numeric * REM_IN_PX;
+}
+
+function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
 function parseCssBlock(css: string): readonly CssRule[] {

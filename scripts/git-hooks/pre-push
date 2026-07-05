@@ -61,4 +61,5 @@ if [ "$saw_update" -eq 0 ]; then
 fi
 
 autopilot_run_npm "running TypeScript typecheck" run typecheck
+autopilot_run_npm "running test suite" run test
 autopilot_run_npm "running PDOS fit safety lint" run pdos:fit-safety-lint -- --no-pages

@@ -15,7 +15,14 @@ if [ -z "$staged_files" ]; then
 fi
 
 printf '\n[autopilot:pre-commit] checking staged files against blocker-governed mesh nodes\n'
-printf '%s\n' "$staged_files" | autopilot_npm run mesh:changed -- --root . --fail-on-blocker
+ack_args=""
+# Empty AUTOPILOT_ACK_BLOCKERS acks nothing; by default any fired blocker still blocks, and each ack must name an id.
+if [ -n "${AUTOPILOT_ACK_BLOCKERS:-}" ]; then
+  for bid in $(printf '%s' "$AUTOPILOT_ACK_BLOCKERS" | tr ',' ' '); do
+    ack_args="$ack_args --ack $bid"
+  done
+fi
+printf '%s\n' "$staged_files" | autopilot_npm run mesh:changed -- --root . --fail-on-blocker $ack_args
 status="$?"
 if [ "$status" -ne 0 ]; then
   autopilot_fail "$status" "staged changed-files blocker gate failed; commit blocked."

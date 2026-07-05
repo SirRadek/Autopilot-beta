@@ -26,6 +26,9 @@ related_files:
   - src/lib/decision-mesh/query.ts
   - mcp/server.ts
   - AGENTS.md
+  - mesh/nodes
+  - mesh/rules.yaml
+  - mesh/edges.yaml
 required_checks:
   - classify_task
   - select_capabilities

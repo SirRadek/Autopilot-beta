@@ -40,6 +40,7 @@ import {
   getRelevantSubgraph,
   loadDecisionMeshFromRoot,
   loadProjectDecisionMeshFromRoot,
+  resolveProjectMeshRoot,
   selectCapabilities
 } from "../src/lib/decision-mesh";
 
@@ -626,7 +627,10 @@ server.registerTool(
     }
   },
   async (input) => {
-    const projectMesh = loadProjectDecisionMeshFromRoot(projectRoot, input.project_slug);
+    const projectMesh = loadProjectDecisionMeshFromRoot(
+      resolveProjectMeshRoot(projectRoot, input.project_slug),
+      input.project_slug
+    );
     return toJsonText(buildProjectMeshPacket(projectMesh, toProjectMeshPacketInput(input)));
   }
 );

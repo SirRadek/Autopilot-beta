@@ -1,5 +1,36 @@
 # Autopilot Control Plane Work Log
 
+## 2026-06-29 Sibling Project Mesh Resolver
+
+Date: 2026-06-29
+Request or trigger: owner asked to fix `build_project_mesh_packet` so a supervised project's mesh resolves from that project's sibling repository instead of only the control-plane docs mirror.
+Mode: WRITE_ALLOWED for the local Decision Mesh resolver, read-only MCP handler wiring, fixture coverage, architecture record, and work log only. No remote mutation, no commit, and no absolute machine paths were added.
+Scope:
+
+- Add a portable `resolveProjectMeshRoot` binding that validates the project slug, checks `<ProjectsDir>/<slug>/.autopilot/decision-mesh/nodes`, and falls back to the control-plane root.
+- Route the read-only MCP `build_project_mesh_packet` handler through the resolver while keeping the tool schema slug-only.
+- Add fixture coverage for the sibling project mesh branch, fallback branch, and traversal-slug rejection.
+
+Files changed:
+
+- `src/lib/decision-mesh/load.ts`
+- `src/lib/decision-mesh/index.ts`
+- `mcp/server.ts`
+- `tests/decision-mesh/project-root.test.ts`
+- `tests/fixtures/decision-mesh/projects-dir/demo-proj/.autopilot/decision-mesh/`
+- `docs/projects/autopilot-control-plane/architecture.md`
+- `docs/projects/autopilot-control-plane/work-log.md`
+
+Architecture impact: supervised project mesh packets can now bind to repo-local sibling project meshes via `AUTOPILOT_PROJECTS_DIR` or the portable `../Projects` default, preserving the existing control-plane docs mirror fallback and slug-only traversal guard.
+
+Project mesh impact: no root mesh node/rule changes were needed; this fixes resolver behavior and documents the project-mesh source boundary.
+
+Verification:
+
+- `npm.cmd run typecheck` passed.
+- `npm.cmd test -- project-root` passed: 1 file, 3 tests.
+- `npm.cmd test -- query` passed: 1 file, 30 tests.
+
 ## 2026-06-21 VEM Live Capture + AST-Stamp Decision
 
 Date: 2026-06-21

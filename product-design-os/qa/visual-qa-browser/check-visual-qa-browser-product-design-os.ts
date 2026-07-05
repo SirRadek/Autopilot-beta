@@ -397,6 +397,8 @@ async function measureVisualQaViewport(
       readonly tagName: string;
       readonly textPreview: string;
       readonly textLength: number;
+      readonly contractProp: string;
+      readonly contractSlot: string;
       readonly visible: boolean;
       readonly isHeading: boolean;
       readonly isH1: boolean;
@@ -470,6 +472,9 @@ async function measureVisualQaViewport(
     const minCtaTargetPx = ctaMeasurements.length === 0
       ? 0
       : minNumber(ctaMeasurements.map((measurement) => Math.min(measurement.rect.width, measurement.rect.height))) ?? 0;
+    const primaryCtaMeasurement = selectPrimaryCtaMeasurement(ctaMeasurements);
+    const viewportHeightPx = round2(window.innerHeight);
+    const ctaTopPx = primaryCtaMeasurement === undefined ? 0 : round2(primaryCtaMeasurement.rect.y);
     const canvasCount = Array.from(document.querySelectorAll("canvas")).filter((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -506,6 +511,9 @@ async function measureVisualQaViewport(
       h1_visible: hasVisibleH1,
       cta_target_min_44: ctaMeasurements.length > 0 && minCtaTargetPx >= 44,
       min_cta_target_px: round2(minCtaTargetPx),
+      cta_top_px: ctaTopPx,
+      viewport_height_px: viewportHeightPx,
+      above_fold_mobile: primaryCtaMeasurement !== undefined && ctaTopPx < viewportHeightPx,
       overlap_count: overlapCount,
       overflow_px: overflowPx,
       canvas_count: canvasCount,
@@ -537,6 +545,7 @@ async function measureVisualQaViewport(
       const foregroundOnBackground = foreground.alpha >= 1 ? foreground : compositeColor(foreground, background);
       const contrast = contrastRatio(foregroundOnBackground, background);
       const contractProp = element.getAttribute("data-contract-prop") ?? "";
+      const contractSlot = element.getAttribute("data-contract-slot") ?? "";
 
       return {
         element,
@@ -544,10 +553,12 @@ async function measureVisualQaViewport(
         tagName,
         textPreview: previewText(text),
         textLength: text.length,
+        contractProp,
+        contractSlot,
         visible: isElementVisible(element, style, rect) && text.length > 0,
         isHeading: /^h[1-6]$/.test(tagName),
         isH1: tagName === "h1",
-        isCta: isCtaElement(element, tagName, contractProp),
+        isCta: isCtaElement(element, tagName, contractProp, contractSlot),
         rect,
         clientWidth,
         scrollWidth,
@@ -806,13 +817,23 @@ async function measureVisualQaViewport(
       );
     }
 
-    function isCtaElement(element: BrowserElement, tagName: string, contractProp: string): boolean {
+    function selectPrimaryCtaMeasurement(ctaMeasurementsToRank: readonly TextMeasurement[]): TextMeasurement | undefined {
+      return (
+        ctaMeasurementsToRank.find((measurement) => measurement.contractSlot === "above_fold_mobile") ??
+        ctaMeasurementsToRank.find((measurement) => measurement.contractProp === "primary_cta") ??
+        ctaMeasurementsToRank.find((measurement) => measurement.contractProp === "cta_label") ??
+        ctaMeasurementsToRank[0]
+      );
+    }
+
+    function isCtaElement(element: BrowserElement, tagName: string, contractProp: string, contractSlot: string): boolean {
       const classes = classNameOf(element).split(/\s+/);
       return (
         tagName === "button" ||
         tagName === "a" ||
         element.getAttribute("role") === "button" ||
         classes.includes("cta") ||
+        contractSlot === "above_fold_mobile" ||
         contractProp === "primary_cta" ||
         contractProp === "cta_label"
       );

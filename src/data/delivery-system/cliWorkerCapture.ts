@@ -60,9 +60,9 @@ export interface AgyCaptureOptions {
   readonly timeoutMs?: number;
   /**
    * Opt in to agy's `--dangerously-skip-permissions` (full host-permission bypass). Default OFF:
-   * agy runs without it, the secure default the audit asked for. `--add-dir` is kept independent
-   * (it's an explicit access grant, not a bypass), so only set this when a caller has proven agy
-   * needs the bypass — keeping any bypass visible at the call site.
+   * agy runs with `--sandbox`, the secure default the audit asked for. `--add-dir` is kept
+   * independent of the bypass (it's an explicit access grant, not a bypass), so only set this when
+   * a caller has proven agy needs the bypass — keeping any bypass visible at the call site.
    */
   readonly dangerouslySkipPermissions?: boolean;
 }
@@ -189,9 +189,9 @@ function killProcessTree(pid: number | undefined): void {
 }
 
 /**
- * Build the agy `--print` argv. `--dangerously-skip-permissions` (full host-permission bypass) is
- * OFF by default — opt in via opts.dangerouslySkipPermissions. `--add-dir` access grants stay
- * independent of the bypass, so any bypass is explicit at the call site.
+ * Build the agy `--print` argv. `--sandbox` is forced by default; `--dangerously-skip-permissions`
+ * (full host-permission bypass) is opt-in and mutually exclusive with the sandbox. `--add-dir`
+ * access grants stay independent of the bypass, so any bypass is explicit at the call site.
  */
 export function buildAgyArgs(prompt: string, opts: AgyCaptureOptions = {}): string[] {
   // Grant real repo/data access: each extra dir + each image's containing dir.
@@ -199,10 +199,13 @@ export function buildAgyArgs(prompt: string, opts: AgyCaptureOptions = {}): stri
     ...(opts.addDirs ?? []),
     ...(opts.images ?? []).map((img) => dirname(img))
   ];
+  // Keep `--print <prompt>` adjacent (the prompt directly follows --print, as the working lane
+  // always had it); place the sandbox/bypass flag AFTER the prompt where --dangerously-skip-permissions
+  // already lived, so we never risk --print swallowing a flag as its value.
   return [
     "--print",
     prompt,
-    ...(opts.dangerouslySkipPermissions === true ? ["--dangerously-skip-permissions"] : []),
+    ...(opts.dangerouslySkipPermissions === true ? ["--dangerously-skip-permissions"] : ["--sandbox"]),
     ...(opts.model ? ["--model", opts.model] : []),
     ...accessDirs.flatMap((dir) => ["--add-dir", dir])
   ];

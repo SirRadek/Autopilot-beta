@@ -1,13 +1,15 @@
 {
   "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
   "src/data/delivery-system/modelPolicy.ts": "a6c0b66b722f458c3ecf84914a50c8c1f496e270",
-  "src/lib/decision-mesh/query.ts": "57848528a2576b74198d0c89fee5d6eef29083f4",
-  "mcp/server.ts": "0a53e22a3d911b761dcf1458332d3e0c6745a50f",
+  "src/lib/decision-mesh/query.ts": "af175e8840db4ed28ad6fcf42c3d50c7915c75d4",
+  "mcp/server.ts": "994c3ba9f1cf69552d2b9fb488da1599ea88c8f7",
   "AGENTS.md": "b0e3c20d892ea42f450e74e789fb9b70eb51d9a9",
+  "mesh/rules.yaml": "39ff1db1f19ada3d392c4a281fd4f9713c940761",
+  "mesh/edges.yaml": "0761193d1699ee0fc92ed271252f401f66273b24",
   ".codex/hooks.json": "dd37d1633446888857a3693eecbbd640e45cba8c",
   ".codex/hooks/autopilot-hook.mjs": "59eef8f87dbdc68c8b91fad7f20fd675bca7ed9b",
   "docs/autopilot/codex-hooks-operating-model.md": "bef0e099d4430ee4d26512ef2e926e130e1f3794",
-  "docs/projects/autopilot-control-plane/work-log.md": "f51da998ec28c15a15e1c7dcb914bd8559c93b59",
+  "docs/projects/autopilot-control-plane/work-log.md": "b2290bb850dc2731e1203eb8906e689523fde3ad",
   "src/data/delivery-system/contextEconomy.ts": "70dda4331e15e3ff4bddb1bb42ae2ab1f55dc975",
   "GEMINI.md": "c3d36e38cc43b689fa1bc907b3bf25b3684b1d66",
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
@@ -36,6 +38,6 @@
   "docs/autopilot/skill-registry.json": "3373ac38d88bb401ce1653367443cd7b7f6f17dc",
   "src/data/delivery-system/subscriptionBudget.ts": "2906c7e222d46ad35f6ba90081e39384fe83d7b6",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
-  "src/data/delivery-system/cliWorker.ts": "b0ff5465a8c3bf84b50e070fb86e49b5b6dae656",
+  "src/data/delivery-system/cliWorker.ts": "9a83212b713d0796f501a527ba2373a5f982f1c5",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
 }
