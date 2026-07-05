@@ -30,6 +30,49 @@ Verification:
 - `npm.cmd run typecheck` passed.
 - `npm.cmd test -- project-root` passed: 1 file, 3 tests.
 - `npm.cmd test -- query` passed: 1 file, 30 tests.
+## 2026-07-03 page_profile Dual-Track + Motion Brief Contract (P0–P2)
+
+Date: 2026-07-03
+Request or trigger: owner supplied a "motion effect production system" design;
+pairing audit + independent GPT-5.5 xhigh opposition review (codex read-only +
+web search, verdict GO-WITH-CHANGES); owner ratified start of P0–P2. See
+`docs/decisions/page-profile-dual-track-adr.md` for decisions and deferrals.
+Mode: governed implementation in worktree branch (3 parallel Fable 5 subagents
+with disjoint file ownership + supervisor integration/review). No push.
+
+Landed:
+
+- P0: canonical `page_profile` enum (`seo_led|balanced|brand_led|
+  experimental_showcase`) required in recipe + project-brief schemas; all 8
+  recipes declare it; `rules/design-seo-tradeoff.md` names the canonical field;
+  new `recipes/standard-web-fast.json` (normal fast-pages track, seo_led,
+  motion_level 1).
+- P1: `qa/profile-check-matrix.json` (+schema +loader) — 44 codes × 4 profiles,
+  fail-closed (unknown code/profile → blocking); `--profile` wired into
+  fit-safety and visual-qa-browser (default `balanced` = decision-identical to
+  prior behavior); only 2 downgrades, both experimental_showcase-only, reasons
+  recorded; downgraded findings stay reported (`advisory_profile` /
+  `profile_downgraded_reasons`).
+- P2: `briefs/motion-brief.schema.json` + `motion-brief-template.md` (driver/
+  objects/states/constraints/acceptance, NEED_SPEC_CLARIFICATION protocol);
+  `pdos:validate` now requires the new files and validates `briefs/motion/*.json`
+  and the matrix.
+- Integration: score-baseline fixtures regenerated (all 7 `selected_recipe`
+  winners unchanged; standard-web-fast is runner-up on public-sector input);
+  f1a recipe count 7→8; vendor-manifest: 3 files marked
+  `patched_by: page-profile-p0`, 6 new files registered `beta_authored`.
+
+Verification: `npm run verify` full pass (vendor-check OK 77 pristine + 44
+patched; ratchet 0 new dead / 0 stale); `mesh:changed --since origin/main
+--fail-on-blocker` → 25 changed, 0 blockers; targeted suites f1a 6/6, f5 5/5,
+f7 5/5, profile-matrix 14/14, f8 visual-qa 6/6, f2 fit-safety 8/8.
+
+Deferred (measured-pain order, see ADR): P3 motion-stack decision tree +
+candidate_source entries + dated evidence records; P4 preset layer; P5
+visual-qa scroll-progress + debug-API convention; P6 skills adoption
+(`greensock/gsap-skills` first candidate). visual-qa-browser stays a per-task
+gate, not part of `verify` (owner decision). Motion-lab/demos belong to a
+supervised project repo as part of the beta bootstrap, not this control plane.
 
 ## 2026-06-21 VEM Live Capture + AST-Stamp Decision
 

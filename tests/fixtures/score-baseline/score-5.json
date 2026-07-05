@@ -44,22 +44,22 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 96,
+        "selected": false,
+        "reasons": [
+          "Project type public_sector is supported.",
+          "Logic/design/motion fit: 9/10/9."
+        ],
+        "penalties": []
+      },
+      {
         "id": "client-portal-trust",
         "score": 64,
         "selected": false,
         "reasons": [
           "Project type public_sector is not a primary fit.",
           "Logic/design/motion fit: 10/9/9."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "dashboard-data-heavy",
-        "score": 64,
-        "selected": false,
-        "reasons": [
-          "Project type public_sector is not a primary fit.",
-          "Logic/design/motion fit: 9/10/9."
         ],
         "penalties": []
       }
@@ -140,6 +140,16 @@
   },
   "rejected": {
     "recipes": [
+      {
+        "id": "dashboard-data-heavy",
+        "score": 64,
+        "selected": false,
+        "reasons": [
+          "Project type public_sector is not a primary fit.",
+          "Logic/design/motion fit: 9/10/9."
+        ],
+        "penalties": []
+      },
       {
         "id": "internal-ops-clean",
         "score": 62,

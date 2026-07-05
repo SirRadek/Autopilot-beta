@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const hooksPath = "scripts/git-hooks";
 const absoluteHooksPath = resolve(root, hooksPath).replaceAll("\\", "/");
-const hooks = ["pre-commit", "pre-push"];
+const hooks = ["pre-commit", "commit-msg", "pre-push"];
 
 function git(args) {
   return spawnSync("git", args, {

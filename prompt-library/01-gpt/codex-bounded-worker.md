@@ -3,9 +3,9 @@ id: codex-bounded-worker
 title: Codex Bounded Worker POC Prompt
 model_family: gpt
 task_type: development
-version: v0.1.0
+version: v0.2.0
 status: draft
-last_reviewed: 2026-06-17
+last_reviewed: 2026-07-04
 sources:
   - local-agents-md
   - output-validation
@@ -54,6 +54,12 @@ The handoff packet must include:
 If required input is missing, stop and return `verify_result: skipped` with a
 specific `verify_skip_reason`.
 
+`NEED_SPEC_CLARIFICATION` is a first-class output state alongside
+`verify_result`: when critical packet fields are missing or empty, emit the
+marker followed by numbered questions and produce nothing else — no patch, no
+partial output. Set `verify_result: skipped` with
+`verify_skip_reason: need_spec_clarification`.
+
 ## Work Rules
 
 - Use `rg` before adding new code when a reuse check is relevant.
@@ -61,6 +67,13 @@ specific `verify_skip_reason`.
 - Do not store raw prompts, raw command output, secrets, or private customer data.
 - Prefer local deterministic checks.
 - Stop at declared stop conditions.
+
+## Motion Tasks
+
+For web motion effects, use `01-gpt/motion-implementer.md` on top of this
+contract. Its max-batch limits apply: max 1 effect, 1 section, 1 main visual
+change, 3-5 files, at most 1 new dependency with a recorded Tech Decision
+note; anything larger is split before implementation.
 
 ## Verify Failure Handling
 

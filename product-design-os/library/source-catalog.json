@@ -1,10 +1,14 @@
 {
   "version": 1,
-  "updated": "2026-06-05",
+  "updated": "2026-07-04",
   "policy": {
     "default": "A source entry approves only research and source-pool eligibility. Concrete project adoption still requires exact asset URL, license, local path, performance, fallback, and QA evidence.",
     "preferred_licenses": ["CC0", "MIT", "ISC", "BSD", "Apache-2.0", "SIL OFL"],
     "blocked_licenses": ["NC", "ND", "personal-use-only", "editorial-only", "unknown", "paid-credit-required"]
+  },
+  "control_plane_evidence_claims": {
+    "note": "Evidence bindings for control-plane governance artifacts (docs/decisions ADRs, docs/autopilot registries) that the PDOS evidence claimant whitelist cannot reach directly. Each id here is depended on by the artifact named in that record's covered_claim, not by this design-source catalog.",
+    "governance_evidence_ids": ["openrouter-free-route-data-policy"]
   },
   "sources": [
     {
@@ -269,6 +273,447 @@
       "blocked_uses": ["copying template sections blindly", "adding template dependency without architecture decision"],
       "adoption_requirements": ["check repository license and activity", "use as structure inspiration unless license is captured", "preserve RadeQ/project-specific architecture"],
       "notes": "Good reference for Astro site organization, but not an approved runtime dependency here."
+    },
+    {
+      "id": "poppins",
+      "name": "Poppins",
+      "category": "font",
+      "status": "approved_source",
+      "source_url": "https://fonts.google.com/specimen/Poppins",
+      "evidence_urls": [],
+      "license": {
+        "name": "SIL Open Font License 1.1",
+        "type": "ofl",
+        "url": "https://openfontlicense.org/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["UI and body text", "friendly geometric sans for fintech, nonprofit, and lifestyle projects"],
+      "blocked_uses": ["selling the font files standalone", "modifying reserved font names without review"],
+      "adoption_requirements": ["bundle the OFL license file", "record exact downloaded files"],
+      "notes": "Google Fonts / Indian Type Foundry geometric sans under SIL OFL 1.1."
+    },
+    {
+      "id": "instrument-serif",
+      "name": "Instrument Serif",
+      "category": "font",
+      "status": "approved_source",
+      "source_url": "https://fonts.google.com/specimen/Instrument+Serif",
+      "evidence_urls": [],
+      "license": {
+        "name": "SIL Open Font License 1.1",
+        "type": "ofl",
+        "url": "https://openfontlicense.org/"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["editorial and premium headline serif"],
+      "blocked_uses": ["selling the font files standalone", "modifying reserved font names without review"],
+      "adoption_requirements": ["bundle the OFL license file", "record exact downloaded files"],
+      "notes": "Instrument-designed display serif under SIL OFL 1.1; best for editorial/premium headline use."
+    },
+    {
+      "id": "satoshi-fontshare",
+      "name": "Satoshi (Fontshare)",
+      "category": "font",
+      "status": "candidate_source",
+      "source_url": "https://www.fontshare.com/fonts/satoshi",
+      "evidence_urls": [],
+      "license": {
+        "name": "Fontshare EULA (ITF Free Font License)",
+        "type": "custom",
+        "url": "https://www.fontshare.com/licenses/itf-ffl"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["modern grotesque sans for UI and headline text"],
+      "blocked_uses": ["redistributing font files outside the project"],
+      "adoption_requirements": ["re-read the ITF FFL terms per release", "no redistribution outside the project", "record downloaded version"],
+      "notes": "Fontshare (Indian Type Foundry) font; free for personal and commercial use under the Fontshare EULA, but NOT OFL."
+    },
+    {
+      "id": "aeonik-cotype",
+      "name": "Aeonik (CoType Foundry)",
+      "category": "font",
+      "status": "candidate_source",
+      "source_url": "https://cotypefoundry.com/products/aeonik",
+      "evidence_urls": [],
+      "license": {
+        "name": "CoType Foundry License (paid)",
+        "type": "custom",
+        "url": "https://cotypefoundry.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["typography direction shortlisting pending a purchased license"],
+      "blocked_uses": ["any project use before a purchased license is recorded"],
+      "adoption_requirements": ["owner purchase decision", "license evidence record"],
+      "notes": "Paid commercial license from CoType Foundry required before any project use."
+    },
+    {
+      "id": "migra-pangram",
+      "name": "Migra (Pangram Pangram)",
+      "category": "font",
+      "status": "candidate_source",
+      "source_url": "https://pangrampangram.com/products/migra",
+      "evidence_urls": [],
+      "license": {
+        "name": "Pangram Pangram EULA",
+        "type": "custom",
+        "url": "https://pangrampangram.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["expressive display serif studies", "typography direction shortlisting"],
+      "blocked_uses": ["commercial use before the current Pangram Pangram licensing tier is verified and recorded"],
+      "adoption_requirements": ["verify current Pangram Pangram licensing tier before any commercial use", "record license evidence"],
+      "notes": "Pangram Pangram offers free trial/personal tiers; commercial use is paid and needs verification per current EULA."
+    },
+    {
+      "id": "awwwards",
+      "name": "Awwwards",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://www.awwwards.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://www.awwwards.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Award-bait caveat: entries often over-animated, weak accessibility/conversion; suitable reference only for brand_led/experimental_showcase page profiles."
+    },
+    {
+      "id": "godly-websites",
+      "name": "Godly",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://godly.website",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://godly.website"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Curated production minimalism; good default reference for balanced/seo_led profiles."
+    },
+    {
+      "id": "lapa-ninja",
+      "name": "Lapa Ninja",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://www.lapa.ninja",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://www.lapa.ninja"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Landing-page case studies including historical evolution."
+    },
+    {
+      "id": "landingfolio",
+      "name": "Landingfolio",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://www.landingfolio.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://www.landingfolio.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "SaaS landing patterns."
+    },
+    {
+      "id": "land-book",
+      "name": "Land-book",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://land-book.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://land-book.com"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Broad landing/product gallery."
+    },
+    {
+      "id": "hover-states",
+      "name": "Hover States",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://hoverstat.es",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://hoverstat.es"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Micro-interactions and hover/motion details."
+    },
+    {
+      "id": "minimal-gallery",
+      "name": "Minimal Gallery",
+      "category": "inspiration_reference",
+      "status": "inspiration_only",
+      "source_url": "https://minimal.gallery",
+      "evidence_urls": [],
+      "license": {
+        "name": "Site terms — inspiration only",
+        "type": "unknown",
+        "url": "https://minimal.gallery"
+      },
+      "commercial_use": "inspiration_only",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["pattern, mood, and layout-rhythm study via the clean-room workflow"],
+      "blocked_uses": ["copying code, assets, or layouts into projects"],
+      "adoption_requirements": ["study via the clean-room workflow only", "record which reference informed which design decision"],
+      "notes": "Grid and negative-space purism."
+    },
+    {
+      "id": "gsap",
+      "name": "GSAP + ScrollTrigger",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://gsap.com",
+      "evidence_urls": [],
+      "license": {
+        "name": "GSAP Standard License (custom, free for commercial use per gsap.com; exact current terms unverified)",
+        "type": "custom",
+        "url": "https://gsap.com"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["scroll pin/scrub choreography", "framework-agnostic JS timelines", "2.5D text depth with CSS perspective (text stays DOM)"],
+      "blocked_uses": ["adoption before the current standard license is re-read and recorded", "scroll hijacking on ordinary-site profiles", "motion_pattern effects on profiles that do not allow them"],
+      "adoption_requirements": ["dated evidence record before first project use", "re-verify the 2025 Webflow-era 'free including all plugins' claim with dated sources", "reduced-motion and mobile fallback per motion brief"],
+      "governance_evidence_ids": ["gsap-skills-adoption-audit"],
+      "notes": "Rung 2 of rules/motion-stack-decision-tree.md. Tier placement is a HYPOTHESIS; the free-including-former-Club-plugins claim is now covered by dated evidence record gsap-skills-adoption-audit (2026-07-04, official repo/install docs). The exact GSAP Standard License text itself is still unread."
+    },
+    {
+      "id": "motion",
+      "name": "Motion (motion.dev)",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://motion.dev",
+      "evidence_urls": ["https://github.com/motiondivision/motion"],
+      "license": {
+        "name": "MIT (core library)",
+        "type": "mit",
+        "url": "https://github.com/motiondivision/motion"
+      },
+      "commercial_use": "allowed",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["React UI, layout, and gesture animation", "hover/reveal micro-interactions owned by JS state", "2.5D text depth with CSS perspective (text stays DOM)"],
+      "blocked_uses": ["Motion+ or Motion AI Kit (paid) without explicit owner approval", "motion_pattern effects on profiles that do not allow them"],
+      "adoption_requirements": ["dated evidence record before first project use", "confirm the MIT boundary of the core package vs paid Motion+ features", "reduced-motion and mobile fallback per motion brief"],
+      "notes": "Rung 2 of rules/motion-stack-decision-tree.md. MIT core is the only default; Motion+ / AI Kit is paid and blocked without owner approval. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "three",
+      "name": "Three.js",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/mrdoob/three.js",
+      "evidence_urls": ["https://github.com/mrdoob/three.js"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/mrdoob/three.js/blob/dev/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["real 3D objects, camera, and lighting when depth explains the product", "glTF/GLB model rendering with byte budget"],
+      "blocked_uses": ["default hero treatment without justification", "primary content hidden in WebGL", "use on profiles that do not allow motion_pattern effects"],
+      "adoption_requirements": ["dated evidence record before first project use", "reduced-motion, mobile, and static fallback evidence", "performance budget evidence"],
+      "notes": "Rung 3 of rules/motion-stack-decision-tree.md; premium add-on per rules/performance.md. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "react-three-fiber",
+      "name": "React Three Fiber",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/pmndrs/react-three-fiber",
+      "evidence_urls": ["https://github.com/pmndrs/react-three-fiber"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/pmndrs/react-three-fiber/blob/master/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["React renderer for Three.js scenes when the project is React-based"],
+      "blocked_uses": ["default hero treatment without justification", "primary content hidden in WebGL", "use on profiles that do not allow motion_pattern effects"],
+      "adoption_requirements": ["dated evidence record before first project use", "reduced-motion, mobile, and static fallback evidence", "performance budget evidence"],
+      "notes": "Rung 3 of rules/motion-stack-decision-tree.md, paired with three and drei. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "drei",
+      "name": "Drei",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/pmndrs/drei",
+      "evidence_urls": ["https://github.com/pmndrs/drei"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/pmndrs/drei/blob/master/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["React Three Fiber helper components (controls, loaders, staging)"],
+      "blocked_uses": ["pulling in heavy helpers without byte budget", "use outside a justified React Three Fiber scene"],
+      "adoption_requirements": ["dated evidence record before first project use", "record which helpers are used and their bundle cost"],
+      "notes": "Rung 3 helper library of rules/motion-stack-decision-tree.md. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "lenis",
+      "name": "Lenis",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/darkroomengineering/lenis",
+      "evidence_urls": ["https://github.com/darkroomengineering/lenis"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/darkroomengineering/lenis/blob/main/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["DOM/WebGL scroll sync ONLY when native scroll is proven insufficient"],
+      "blocked_uses": ["ordinary sites and seo_led/balanced profiles", "smooth-scroll as a default aesthetic", "adoption without a recorded native-scroll insufficiency"],
+      "adoption_requirements": ["dated evidence record before first project use", "record why native scroll is insufficient", "verify keyboard, reduced-motion, and accessibility behavior"],
+      "notes": "Constrained rung-2 helper in rules/motion-stack-decision-tree.md: never on ordinary sites. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "rive-web-runtime",
+      "name": "Rive Web Runtime",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/rive-app/rive-wasm",
+      "evidence_urls": ["https://github.com/rive-app/rive-wasm"],
+      "license": {
+        "name": "MIT (web runtime)",
+        "type": "mit",
+        "url": "https://github.com/rive-app/rive-wasm/blob/master/LICENSE"
+      },
+      "commercial_use": "allowed",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["vector state-machine UI (interactive characters, animated controls)"],
+      "blocked_uses": ["paid Rive editor tiers without owner approval", "shipping .riv assets without their own provenance record", "canvas-only content without static fallback"],
+      "adoption_requirements": ["dated evidence record before first project use", "separate provenance record for each authored .riv asset", "static and reduced-motion fallback evidence"],
+      "notes": "Runtime is MIT; the Rive editor is a hosted product with paid tiers and is out of scope for this entry. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "lottie-web",
+      "name": "Lottie Web",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/airbnb/lottie-web",
+      "evidence_urls": ["https://github.com/airbnb/lottie-web"],
+      "license": {
+        "name": "MIT",
+        "type": "mit",
+        "url": "https://github.com/airbnb/lottie-web/blob/master/LICENSE.md"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["simple icon and loader animations from owned/licensed After Effects exports"],
+      "blocked_uses": ["marketplace Lottie files without per-file license evidence", "using Lottie where CSS/SVG is equivalent", "primary content as animation-only"],
+      "adoption_requirements": ["dated evidence record before first project use", "per-file license record for every animation JSON", "reduced-motion fallback"],
+      "notes": "Rung shortcut for icon animations in rules/motion-stack-decision-tree.md; prefer CSS/SVG when equivalent. Tier placement UNVERIFIED until an evidence record exists."
+    },
+    {
+      "id": "theatre-js",
+      "name": "Theatre.js",
+      "category": "tool",
+      "status": "candidate_source",
+      "source_url": "https://github.com/theatre-js/theatre",
+      "evidence_urls": ["https://github.com/theatre-js/theatre"],
+      "license": {
+        "name": "Apache-2.0 (core); @theatre/studio is AGPL-3.0",
+        "type": "apache-2.0",
+        "url": "https://github.com/theatre-js/theatre"
+      },
+      "commercial_use": "allowed",
+      "cost": "free",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["specialist-tier motion timeline authoring with explicit owner approval"],
+      "blocked_uses": ["shipping @theatre/studio (AGPL-3.0) in any delivered project", "use without owner approval (specialist tier)", "adoption while maintenance status is unverified"],
+      "adoption_requirements": ["dated evidence record before first project use", "verify current maintenance/release activity with dated sources", "confirm the Apache-2.0/AGPL package boundary before install"],
+      "notes": "WARNING: specialist tier of rules/motion-stack-decision-tree.md. Maintenance is opaque and the studio package is AGPL-3.0 — both flags UNVERIFIED model memory until an evidence record exists."
+    },
+    {
+      "id": "spline",
+      "name": "Spline",
+      "category": "tool",
+      "status": "inspiration_only",
+      "source_url": "https://spline.design",
+      "evidence_urls": [],
+      "license": {
+        "name": "Spline terms of service — export rights tier-gated, current terms not captured",
+        "type": "unknown",
+        "url": "https://spline.design"
+      },
+      "commercial_use": "unknown",
+      "cost": "free_with_optional_paid",
+      "last_reviewed": "2026-07-04",
+      "allowed_uses": ["3D scene direction studies and specialist-tier evaluation only"],
+      "blocked_uses": ["any export or embed in project work before terms are captured and the owner approves", "treating editor output as a licensed asset"],
+      "adoption_requirements": ["dated evidence record before first project use", "capture current terms and export-tier pricing", "explicit owner approval (specialist tier, paid export)"],
+      "notes": "Specialist tier of rules/motion-stack-decision-tree.md. Export is paid-tier-gated and commercial terms are uncaptured, so this stays inspiration_only. All claims UNVERIFIED until an evidence record exists."
     }
   ]
 }

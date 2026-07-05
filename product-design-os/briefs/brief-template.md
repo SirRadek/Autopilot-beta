@@ -4,6 +4,10 @@
 
 `marketing_web | portfolio | landing_page | ecommerce | internal_system | dashboard | crm | client_portal | admin_panel | data_tool | ai_agent_ui | document_system | automation_ui | public_sector | experimental`
 
+## Page Profile
+
+`seo_led | balanced | brand_led | experimental_showcase`
+
 ## Primary Goal
 
 ## Secondary Goals

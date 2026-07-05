@@ -8,25 +8,8 @@ autopilot_cd_root
 
 autopilot_run_npm "running fast mesh related_files ratchet" run mesh:gate:ci
 
-staged_files="$(git diff --cached --name-only)"
-if [ -z "$staged_files" ]; then
-  printf '[autopilot:pre-commit] no staged files; skipping changed-files blocker gate\n'
-  exit 0
-fi
-
-printf '\n[autopilot:pre-commit] checking staged files against blocker-governed mesh nodes\n'
-ack_args=""
-# Empty AUTOPILOT_ACK_BLOCKERS acks nothing; by default any fired blocker still blocks, and each ack must name an id.
-if [ -n "${AUTOPILOT_ACK_BLOCKERS:-}" ]; then
-  for bid in $(printf '%s' "$AUTOPILOT_ACK_BLOCKERS" | tr ',' ' '); do
-    ack_args="$ack_args --ack $bid"
-  done
-fi
-printf '%s\n' "$staged_files" | autopilot_npm run mesh:changed -- --root . --fail-on-blocker $ack_args
-status="$?"
-if [ "$status" -ne 0 ]; then
-  autopilot_fail "$status" "staged changed-files blocker gate failed; commit blocked."
-fi
+# The staged-files blocker gate moved to the commit-msg hook: pre-commit cannot see the
+# commit message, and the gate honors auditable `Mesh-Ack: <node-id> — <reason>` trailers.
 
 # AF3: a NEWLY ADDED file under a sensitive governance root with no covering mesh node is
 # blocked (modifying an existing file never trips this — only additions, so it can't self-block).

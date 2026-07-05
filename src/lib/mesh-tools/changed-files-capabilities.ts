@@ -15,8 +15,7 @@
 
 import type { DecisionMesh, DecisionMeshRule } from "../decision-mesh";
 
-// Templated hints (docs/projects/<slug>/…) never match a concrete changed file.
-const PLACEHOLDER_RE = /[<>*]/;
+import { normalizeRelatedFileHint, PLACEHOLDER_RE } from "./related-file-hints";
 
 // Surfaces where an ungoverned change is a real risk. A changed file under one of
 // these that NO node covers is reported as `ungovernedSensitive` (deny-able), instead
@@ -49,17 +48,15 @@ function underSensitiveRoot(file: string): boolean {
 
 /**
  * A related_files hint covers a changed file if it equals it, is a dir prefix of it, or vice-versa.
- * Trailing slashes are normalized first: an authored directory hint like `model-output-evals/` must
- * still prefix-match files inside it. Without normalization `${hint}/` becomes `model-output-evals//`
- * and matches nothing, silently un-governing every file under that directory (and disarming its
- * blocker rules in the changed-files gate). Exported so the regression test pins this exact case.
+ * The hint is normalized first (shared normalizeRelatedFileHint): an authored directory hint like
+ * `model-output-evals/` must still prefix-match files inside it — without normalization `${hint}/`
+ * becomes `model-output-evals//` and matches nothing, silently un-governing every file under it.
  */
-export function hintCovers(changedFile: string, hint: string): boolean {
-  if (PLACEHOLDER_RE.test(hint)) return false;
-  const h = hint.replace(/\/+$/, "");
-  const f = changedFile.replace(/\/+$/, "");
-  if (h === "" || f === "") return false;
-  return f === h || f.startsWith(`${h}/`) || h.startsWith(`${f}/`);
+function hintCovers(changedFile: string, rawHint: string): boolean {
+  if (PLACEHOLDER_RE.test(rawHint)) return false;
+  const hint = normalizeRelatedFileHint(rawHint);
+  if (hint.length === 0) return false;
+  return changedFile === hint || changedFile.startsWith(`${hint}/`) || hint.startsWith(`${changedFile}/`);
 }
 
 export interface ActivatedNode {
@@ -95,10 +92,41 @@ function uniq(xs: readonly string[]): string[] {
   return [...new Set(xs)];
 }
 
-/** Blocker ids left after removing the acknowledged ones — the set a --fail-on-blocker gate must fail on. */
-export function unacknowledgedBlockers(blockers: readonly string[], acked: readonly string[]): string[] {
-  const ackSet = new Set(acked);
-  return blockers.filter((b) => !ackSet.has(b));
+export interface AckResolution {
+  /** blocker rule ids excused because EVERY activated node they apply to is acked */
+  readonly ackedBlockers: readonly string[];
+  /** blocker rule ids still blocking (at least one activated applies_to node unacked) */
+  readonly unackedBlockers: readonly string[];
+  /** ack ids that matched no activated node — they excuse nothing (fail-closed) */
+  readonly unknownAcks: readonly string[];
+}
+
+/**
+ * Resolve Mesh-Ack'd node ids against an activation. Acks name NODES (not rules):
+ * a blocker rule is excused only when every activated node it applies to is acked.
+ * An ack for a non-activated node is surfaced as unknown and excuses nothing.
+ * An ack never removes reporting — callers must still print the rules.
+ */
+export function resolveAckedBlockers(
+  activation: ChangedFilesActivation,
+  ackedNodeIds: readonly string[]
+): AckResolution {
+  const activated = new Set(activation.activatedNodes.map((n) => n.id));
+  const acked = new Set(ackedNodeIds.filter((id) => activated.has(id)));
+  const unknownAcks = uniq(ackedNodeIds.filter((id) => !activated.has(id)));
+
+  const ackedBlockers: string[] = [];
+  const unackedBlockers: string[] = [];
+  for (const rule of activation.rules) {
+    if (rule.severity !== "blocker") continue;
+    const via = rule.applies_to.filter((id) => activated.has(id));
+    if (via.length > 0 && via.every((id) => acked.has(id))) {
+      ackedBlockers.push(rule.id);
+    } else {
+      unackedBlockers.push(rule.id);
+    }
+  }
+  return { ackedBlockers, unackedBlockers, unknownAcks };
 }
 
 function severityRank(s: DecisionMeshRule["severity"]): number {

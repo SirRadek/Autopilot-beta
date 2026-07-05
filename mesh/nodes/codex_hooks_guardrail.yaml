@@ -28,7 +28,6 @@ related_files:
   - .codex/hooks.json
   - .codex/hooks/autopilot-hook.mjs
   - docs/autopilot/codex-hooks-operating-model.md
-  - docs/projects/autopilot-control-plane/work-log.md
 required_checks:
   - official_codex_hooks_contract_verified
   - project_hook_trust_reviewed

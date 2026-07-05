@@ -5,7 +5,7 @@
   "logic_priority": 4,
   "design_priority": 9,
   "seo_priority": 4,
-  "design_seo_tradeoff": "brand_led",
+  "page_profile": "brand_led",
   "motion_level": 7,
   "visual_energy": 8,
   "allowed_pattern_ids": [

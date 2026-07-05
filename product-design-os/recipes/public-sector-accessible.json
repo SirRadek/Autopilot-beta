@@ -4,6 +4,7 @@
   "priorities": ["accessibility", "findability", "plain-language", "forms", "service-navigation", "trust"],
   "logic_priority": 8,
   "design_priority": 4,
+  "page_profile": "seo_led",
   "motion_level": 0,
   "visual_energy": 2,
   "allowed_pattern_ids": ["service-finder", "plain-language-content", "accessible-form-flow", "notice-banner", "contact-office-block"],

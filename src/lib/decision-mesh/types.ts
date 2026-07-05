@@ -37,6 +37,12 @@ export interface DecisionMesh {
   readonly rules: readonly DecisionMeshRule[];
 }
 
+export interface DecisionMeshNodeReference {
+  readonly id: string;
+  readonly name: string;
+  readonly score: number;
+}
+
 export interface RelevantSubgraphInput {
   readonly task: string;
   readonly agent?: string;
@@ -46,10 +52,9 @@ export interface RelevantSubgraphInput {
 export interface RelevantSubgraph {
   readonly task: string;
   readonly agent?: string;
-  readonly relevant_nodes: readonly DecisionMeshNode[];
+  readonly relevant_nodes: readonly DecisionMeshNodeReference[];
   readonly relevant_edges: readonly DecisionMeshEdge[];
   readonly required_agents: readonly string[];
-  readonly excluded: readonly string[];
 }
 
 export interface AgentPacketInput {
@@ -130,7 +135,7 @@ export interface RequiredAgentsResult {
 
 export interface RiskResult {
   readonly task: string;
-  readonly risks: readonly DecisionMeshNode[];
+  readonly risks: readonly DecisionMeshNodeReference[];
   readonly stop_conditions: readonly string[];
 }
 

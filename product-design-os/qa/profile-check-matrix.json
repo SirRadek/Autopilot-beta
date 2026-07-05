@@ -1,0 +1,366 @@
+{
+  "schema": "autopilot-beta/pdos-profile-check-matrix@1",
+  "version": 1,
+  "checks": [
+    {
+      "code": "font_clamp_min_below_floor",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: text legibility (R4 clamp minimum). Never traded away."
+    },
+    {
+      "code": "grid_track_overflow_risk",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: horizontal overflow risk from fixed/intrinsic grid tracks (R1/R2)."
+    },
+    {
+      "code": "fixed_text_container_inline_cap",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: fixed text-width caps clip responsive copy (text legibility)."
+    },
+    {
+      "code": "text_wrap_safety_missing",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: heading/body overflow-wrap + hyphens safety (text legibility)."
+    },
+    {
+      "code": "viewport_width_overflow_risk",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: 100vw content width causes horizontal overflow (R3)."
+    },
+    {
+      "code": "fixed_min_width_over_viewport",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: fixed min-width above the 320px viewport forces horizontal scroll (R2)."
+    },
+    {
+      "code": "fixed_height_floor_risk",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "advisory",
+      "notes": "experimental_showcase only: full-viewport/fixed-height stages are an accepted showcase layout convention (design-seo-tradeoff: conservative layout conventions may be relaxed). Actual clipping still blocks via the browser fluid-floor checks."
+    },
+    {
+      "code": "sticky_background_opacity_missing",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: sticky/fixed bars without an opaque background make text unreadable (R7)."
+    },
+    {
+      "code": "transform_scale_on_interactive",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: scale() as a fit fix shrinks touch targets and text (R5)."
+    },
+    {
+      "code": "page_lang_missing",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: accessibility (html lang)."
+    },
+    {
+      "code": "page_lang_invalid",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: accessibility (valid BCP 47 lang)."
+    },
+    {
+      "code": "missing_viewports",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Gate integrity: a QA run without viewports proves nothing."
+    },
+    {
+      "code": "desktop_viewport_missing",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Gate integrity: desktop evidence must exist."
+    },
+    {
+      "code": "mobile_viewport_missing",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: mobile usability evidence must exist."
+    },
+    {
+      "code": "horizontal_overflow",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: horizontal overflow."
+    },
+    {
+      "code": "fluid_floor_overflow",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: horizontal overflow at the 320-360px fluid floor."
+    },
+    {
+      "code": "text_overlap",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: overlapping text/controls (text legibility)."
+    },
+    {
+      "code": "low_contrast",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: contrast."
+    },
+    {
+      "code": "primary_content_hidden_in_canvas",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: essential offer/proof text must live in readable DOM, outside canvas/WebGL."
+    },
+    {
+      "code": "missing_reduced_motion_fallback",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: reduced-motion support."
+    },
+    {
+      "code": "motion_debug_hook_missing",
+      "seo_led": "advisory",
+      "balanced": "advisory",
+      "brand_led": "advisory",
+      "experimental_showcase": "advisory",
+      "notes": "Advisory only. Emitted only when visual-qa-browser --progress is explicitly requested and the canonical window.__autopilotSetProgress QA hook is absent."
+    },
+    {
+      "code": "touch_target_below_44px",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: touch targets (R5)."
+    },
+    {
+      "code": "text_fit_probe_failed",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Text legibility floor territory; advisory-severity in the analyzer today."
+    },
+    {
+      "code": "clipped_text_detected",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Text legibility floor territory; advisory-severity in the analyzer today."
+    },
+    {
+      "code": "fluid_floor_clipped_text",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: clipped text at the 320-360px fluid floor (text legibility)."
+    },
+    {
+      "code": "min_font_below_legible_floor",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: text legibility minimum font size."
+    },
+    {
+      "code": "line_length_above_readability_band",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Readability band kept blocking in all profiles (in doubt -> blocking)."
+    },
+    {
+      "code": "fit_scale_below_advisory_floor",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Aggressive text down-scaling is a legibility risk; kept blocking."
+    },
+    {
+      "code": "weak_heading_hierarchy",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor territory: visible H1/heading structure."
+    },
+    {
+      "code": "missing_primary_action",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: DOM CTA presence per viewport."
+    },
+    {
+      "code": "repeated_card_grid",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk signal; originality matters more, not less, on showcase work."
+    },
+    {
+      "code": "thin_visible_content",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "advisory",
+      "notes": "experimental_showcase only: demos/art pieces may be intentionally text-light (design-seo-tradeoff: long-form SEO sections / keyword depth may be traded away). H1, CTA, and canvas-content floors still block."
+    },
+    {
+      "code": "headings_missing",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: visible H1/heading evidence."
+    },
+    {
+      "code": "ctas_missing",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: DOM CTA presence."
+    },
+    {
+      "code": "public_sector_motion_too_high",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Public-sector context overrides any showcase motion relaxation."
+    },
+    {
+      "code": "template_generic-saas-hero",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk originality signal; kept in all profiles."
+    },
+    {
+      "code": "template_repeated-equal-card-grid",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk originality signal; kept in all profiles."
+    },
+    {
+      "code": "template_fake-dashboard",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk originality signal; kept in all profiles."
+    },
+    {
+      "code": "template_gradient-background",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk originality signal; kept in all profiles."
+    },
+    {
+      "code": "template_bento-grid",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk originality signal; kept in all profiles."
+    },
+    {
+      "code": "template_dark-neon-default",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk originality signal; kept in all profiles."
+    },
+    {
+      "code": "template_stock-like-media",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Template-risk originality signal; kept in all profiles."
+    },
+    {
+      "code": "runner_error",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Gate integrity: the classifier hard-codes runner errors as blocking regardless of this matrix."
+    },
+    {
+      "code": "axe_critical",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: axe critical accessibility violations."
+    },
+    {
+      "code": "axe_serious",
+      "seo_led": "blocking",
+      "balanced": "blocking",
+      "brand_led": "blocking",
+      "experimental_showcase": "blocking",
+      "notes": "Floor: axe serious accessibility violations."
+    }
+  ]
+}

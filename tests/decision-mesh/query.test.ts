@@ -44,7 +44,34 @@ describe("Decision Mesh queries", () => {
       "storage_provider"
     ]);
     expect(result.required_agents).toEqual(["backend", "frontend", "security", "qa"]);
-    expect(result.excluded).toContain("payments_checkout");
+    expect(result.relevant_nodes[0]).toMatchObject({
+      id: "file_upload",
+      name: "File upload",
+      score: expect.any(Number)
+    });
+  });
+
+  it("returns compact node references without node bodies or excluded ids", () => {
+    const subgraph = getRelevantSubgraph(mesh, {
+      task: "Add authenticated avatar upload",
+      agent: "backend",
+      max_nodes: 7
+    });
+    const risks = findRisks(mesh, {
+      task: "Add public file upload endpoint"
+    });
+
+    expect(subgraph).not.toHaveProperty("excluded");
+    for (const node of subgraph.relevant_nodes) {
+      expect(Object.keys(node).sort()).toEqual(["id", "name", "score"]);
+      expect(node).not.toHaveProperty("related_files");
+      expect(node).not.toHaveProperty("required_checks");
+    }
+    for (const risk of risks.risks) {
+      expect(Object.keys(risk).sort()).toEqual(["id", "name", "score"]);
+      expect(risk).not.toHaveProperty("related_files");
+      expect(risk).not.toHaveProperty("required_checks");
+    }
   });
 
   it("builds a compact backend packet without returning the full graph", () => {
@@ -152,7 +179,7 @@ describe("Decision Mesh queries", () => {
 
     expect(result.relevant_nodes.map((node) => node.id)).toContain("prompt_library_policy");
     expect(result.required_agents).toEqual(expect.arrayContaining(["architect", "qa"]));
-    const promptNode = result.relevant_nodes.find((node) => node.id === "prompt_library_policy");
+    const promptNode = explainNode(mesh, "prompt_library_policy");
     expect(promptNode?.required_checks).toEqual(
       expect.arrayContaining(["prompt_metadata_complete", "prompt_eval_defined", "official_provider_docs_verified"])
     );
@@ -169,7 +196,7 @@ describe("Decision Mesh queries", () => {
     });
 
     expect(result.relevant_nodes.map((node) => node.id)).toContain("model_output_evaluation_policy");
-    const evalNode = result.relevant_nodes.find((node) => node.id === "model_output_evaluation_policy");
+    const evalNode = explainNode(mesh, "model_output_evaluation_policy");
     expect(evalNode?.required_checks).toEqual(
       expect.arrayContaining([
         "model_output_scored_before_acceptance",
@@ -191,7 +218,7 @@ describe("Decision Mesh queries", () => {
 
     expect(result.relevant_nodes.map((node) => node.id)).toContain("protective_supervision_policy");
     expect(result.required_agents).toEqual(expect.arrayContaining(["architect", "qa"]));
-    const protectiveNode = result.relevant_nodes.find((node) => node.id === "protective_supervision_policy");
+    const protectiveNode = explainNode(mesh, "protective_supervision_policy");
     expect(protectiveNode?.required_checks).toEqual(
       expect.arrayContaining(["agent_output_normalized", "progress_state_updated", "blocker_owner_declared"])
     );
@@ -210,7 +237,7 @@ describe("Decision Mesh queries", () => {
     expect(result.relevant_nodes).toEqual([]);
     expect(result.relevant_edges).toEqual([]);
     expect(result.required_agents).toEqual([]);
-    expect(result.excluded.length).toBe(mesh.nodes.length);
+    expect(result).not.toHaveProperty("excluded");
   });
 
   it("returns no risks or stop conditions when no task signal matches", () => {
@@ -519,7 +546,9 @@ describe("Decision Mesh queries", () => {
     const hookNode = subgraph.relevant_nodes.find((node) => node.id === "codex_hooks_guardrail");
 
     expect(hookNode).toBeDefined();
-    expect(hookNode?.stop_conditions).toContain("hook_stores_raw_sensitive_content");
+    expect(explainNode(rootMesh, "codex_hooks_guardrail").stop_conditions).toContain(
+      "hook_stores_raw_sensitive_content"
+    );
 
     const projectMesh = loadProjectDecisionMeshFromRoot(process.cwd(), "autopilot-control-plane");
     const packet = buildProjectMeshPacket(projectMesh, {

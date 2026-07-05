@@ -2,7 +2,6 @@
 id: claude-sonnet-5-supervisor
 title: Claude Sonnet 5 Worker-Supervisor Prompt
 model_family: claude
-tier: sonnet-5
 task_type: agentic-task
 version: v0.1.0
 status: draft

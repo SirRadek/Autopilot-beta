@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "project_type",
+    "page_profile",
     "primary_goal",
     "target_users",
     "critical_user_action",
@@ -34,6 +35,10 @@
         "public_sector",
         "experimental"
       ]
+    },
+    "page_profile": {
+      "type": "string",
+      "enum": ["seo_led", "balanced", "brand_led", "experimental_showcase"]
     },
     "primary_goal": {
       "type": "string",

@@ -14,7 +14,7 @@
   "logic_priority": 5,
   "design_priority": 8,
   "seo_priority": 6,
-  "design_seo_tradeoff": "balanced",
+  "page_profile": "balanced",
   "motion_level": 4,
   "visual_energy": 6,
   "allowed_pattern_ids": [

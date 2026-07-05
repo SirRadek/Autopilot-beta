@@ -33,7 +33,7 @@ analysis_packet:
   risks: string[]
   required_fallbacks: string[]
   acceptance_criteria: string[]
-  design_seo_tradeoff: string
+  page_profile: string
 ```
 
 ### Design Critic
@@ -95,6 +95,19 @@ source_packet:
   blocked_reuse: string[]
 ```
 
+### Design Director (agy/Gemini, advisory)
+
+The agy/Gemini vendor lane executes the Visual Analyst direction work and the
+Design Critic render critique for design-bearing decisions, under the
+advisory boundary in `GEMINI.md` ("Design Director (advisory role)"). It is
+called only for heuristic, aesthetic, or visually critical questions — never
+for deterministic checks or routine compilation. Its only output channels are
+proposed design-contract diffs
+(`product-design-os/briefs/design-contract-template.md`) and visual critique
+packets (`prompt-library/02-gemini/visual-critique.md`). It cannot approve
+delivery, and its trend/typography claims must come from the dated hypothesis
+records and the license-gated library catalogs.
+
 ## Rubric
 
 | Criterion | Question | Blocker examples |
@@ -125,6 +138,15 @@ Context7 also belongs in the reasoning and Gemini brainstorming path. When a Vis
 Gemini brainstorming output is allowed to expand options, critique direction, and identify risks, but it must separate ideas from verified facts. A Gemini-suggested library, framework pattern, motion technique, SEO rule, accessibility rule, or cloud capability is blocked from adoption until Context7 or official documentation verifies it.
 
 Cloud research sources and cloud-hosted free tools are allowed when the no-cost path is confirmed. Paid services, unknown pricing, paid credits, or cost-bearing gateways remain blocked unless the owner later creates an explicit exception.
+
+For visual inspiration specifically: analyze the project's established
+competitors first — they encode the visual language the market already
+trusts — then curated galleries registered as `inspiration_only` in
+`product-design-os/library/source-catalog.json`. Award-show galleries
+(Awwwards-class) carry an award-bait caveat: over-animated, weak on
+accessibility/conversion — use them as reference only for `brand_led` /
+`experimental_showcase` page profiles, never as templates for `seo_led`
+work. All gallery use goes through the clean-room reference workflow.
 
 ## Architecture Library
 

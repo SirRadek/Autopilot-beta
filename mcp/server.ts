@@ -49,20 +49,11 @@ const packageVersion = readPackageVersion(projectRoot);
 const mesh = loadDecisionMeshFromRoot(projectRoot);
 
 const stringArraySchema = z.array(z.string());
-const decisionMeshNodeSchema = z
+const decisionMeshNodeReferenceSchema = z
   .object({
     id: z.string(),
-    type: z.string(),
     name: z.string(),
-    question: z.string(),
-    why: z.string(),
-    signals: stringArraySchema,
-    related_agents: stringArraySchema,
-    related_files: stringArraySchema,
-    required_checks: stringArraySchema,
-    stop_conditions: stringArraySchema.optional(),
-    must_not_assume: stringArraySchema.optional(),
-    objective: stringArraySchema.optional()
+    score: z.number()
   })
   .passthrough();
 const decisionMeshEdgeSchema = z
@@ -268,10 +259,9 @@ const relevantSubgraphOutputSchema = z
   .object({
     task: z.string(),
     agent: z.string().optional(),
-    relevant_nodes: z.array(decisionMeshNodeSchema),
+    relevant_nodes: z.array(decisionMeshNodeReferenceSchema),
     relevant_edges: z.array(decisionMeshEdgeSchema),
-    required_agents: stringArraySchema,
-    excluded: stringArraySchema
+    required_agents: stringArraySchema
   })
   .passthrough();
 const agentPacketOutputSchema = z
@@ -329,7 +319,7 @@ const requiredAgentsOutputSchema = z
 const risksOutputSchema = z
   .object({
     task: z.string(),
-    risks: z.array(decisionMeshNodeSchema),
+    risks: z.array(decisionMeshNodeReferenceSchema),
     stop_conditions: stringArraySchema
   })
   .passthrough();
