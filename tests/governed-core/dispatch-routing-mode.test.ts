@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeHandoffId } from "../../src/data/delivery-system/checkCompletionMatrix";
 import type { CliWorkerResult } from "../../src/data/delivery-system/cliWorker";
 import {
+  AGY_VERIFIED_MODELS,
   resolveRoutingLane,
   type RoutingModeId
 } from "../../src/data/delivery-system/routingModes";
@@ -106,6 +107,44 @@ describe("dispatchHandoff routing_mode lane guard", () => {
       expect(result.refused).toBe(false);
     }
     expect(mocks.runCliWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it("pins the governed agy default while preserving explicit agy models", async () => {
+    const defaultStateDir = mkdtempSync(join(tmpdir(), "governed-dispatch-routing-mode-"));
+    mocks.runCliWorker.mockResolvedValue(fakeCliWorkerResult("agy_cli"));
+
+    const defaultResult = await dispatchHandoff(baseHandoff({ vendor: "agy_cli", routing_mode: "idea" }), defaultStateDir);
+
+    expect(defaultResult.refused).toBe(false);
+    expect(mocks.runCliWorker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendor: "agy_cli",
+        model: AGY_VERIFIED_MODELS.agy_fast_default
+      }),
+      defaultStateDir
+    );
+
+    mocks.runCliWorker.mockClear();
+    const explicitStateDir = mkdtempSync(join(tmpdir(), "governed-dispatch-routing-mode-"));
+    mocks.runCliWorker.mockResolvedValue(fakeCliWorkerResult("agy_cli"));
+
+    const explicitResult = await dispatchHandoff(
+      baseHandoff({
+        vendor: "agy_cli",
+        model: AGY_VERIFIED_MODELS.agy_claude_sonnet_4_6,
+        routing_mode: "idea"
+      }),
+      explicitStateDir
+    );
+
+    expect(explicitResult.refused).toBe(false);
+    expect(mocks.runCliWorker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendor: "agy_cli",
+        model: AGY_VERIFIED_MODELS.agy_claude_sonnet_4_6
+      }),
+      explicitStateDir
+    );
   });
 
   it("allows Nemotron planning in idea mode past the lane guard", async () => {

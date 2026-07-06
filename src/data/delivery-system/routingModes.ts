@@ -16,6 +16,8 @@ export type RoutingModeId = "idea" | "spec" | "build" | "review";
 export type RoutingLaneId =
   | "agy_fast"
   | "agy_deep"
+  | "agy_gpt_oss_120b"
+  | "agy_claude_sonnet_4_6"
   | "openrouter_nemotron_planning"
   | "openrouter_qwen3_code_draft"
   | "qwen_local"
@@ -40,9 +42,22 @@ export const LANE_COST_TIERS: Record<RoutingLaneId, LaneCostTier> = {
   openrouter_nemotron_planning: "free",
   agy_fast: "mid",
   agy_deep: "mid",
+  // Separate Antigravity "Claude and GPT models" quota pool - measured 2026-07-06:
+  // consumes neither the Gemini group quota nor OpenRouter free budget.
+  agy_gpt_oss_120b: "mid",
+  agy_claude_sonnet_4_6: "mid",
   claude_supervisor: "expensive",
   codex_cli: "expensive"
 };
+
+// Live-verified 2026-07-06 (owner smokes returned "OK"): see docs/decisions/lane-cost-tiers-2026-07-06.md.
+export const AGY_VERIFIED_MODELS = {
+  agy_fast_default: "gemini-3.5-flash-medium", // ratified routine default (quota saver)
+  agy_fast_quality: "gemini-3.5-flash-high", // explicit quality escalation
+  agy_deep: "gemini-3.1-pro-high", // explicit justification only
+  agy_gpt_oss_120b: "gpt-oss-120b",
+  agy_claude_sonnet_4_6: "claude-4.6-sonnet"
+} as const;
 
 export type BuildPrepProvenance =
   | { readonly kind: "cheap_attempts"; readonly cheap_attempt_refs: readonly string[] }
@@ -81,8 +96,14 @@ export const routingModes = [
   {
     id: "idea",
     summary:
-      "Brainstorming and variants run only on cheap advisory lanes; Claude/Codex decision and implementation lanes are hard-forbidden.",
-    allowedLanes: ["agy_fast", "agy_deep", "openrouter_nemotron_planning"],
+      "Brainstorming and variants run only on non-expensive advisory lanes; Claude/Codex decision and implementation lanes are hard-forbidden.",
+    allowedLanes: [
+      "agy_fast",
+      "agy_deep",
+      "agy_gpt_oss_120b",
+      "agy_claude_sonnet_4_6",
+      "openrouter_nemotron_planning"
+    ],
     expensiveLanesAllowed: false,
     refuseWhen: ["any expensive lane requested (claude_supervisor/codex_cli)"],
     requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "no_expensive_lane"],
@@ -115,7 +136,7 @@ export const routingModes = [
     id: "review",
     summary:
       "Review starts with agy critique lanes; Claude/Codex review paths remain deferred to declared severity and bounded artifacts.",
-    allowedLanes: ["agy_fast", "agy_deep", "claude_supervisor", "codex_cli"],
+    allowedLanes: ["agy_fast", "agy_deep", "agy_gpt_oss_120b", "agy_claude_sonnet_4_6", "claude_supervisor", "codex_cli"],
     expensiveLanesAllowed: true,
     refuseWhen: ["severity not declared", "cheap review artifact absent", "low-severity polish routed to Claude"],
     requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "review_severity_declared"],
@@ -144,7 +165,10 @@ export function resolveRoutingLane(input: {
 }): RoutingLaneId {
   if (input.vendor === "codex_cli") return "codex_cli";
   if (input.vendor === "agy_cli") {
-    return /pro/i.test(input.model ?? "") ? "agy_deep" : "agy_fast";
+    const model = input.model ?? "";
+    if (model === AGY_VERIFIED_MODELS.agy_gpt_oss_120b) return "agy_gpt_oss_120b";
+    if (model === AGY_VERIFIED_MODELS.agy_claude_sonnet_4_6) return "agy_claude_sonnet_4_6";
+    return /pro/i.test(model) ? "agy_deep" : "agy_fast";
   }
   if (input.openrouterMode === "nemotron_planning") return "openrouter_nemotron_planning";
   if (input.openrouterMode === "qwen3_code_draft") return "openrouter_qwen3_code_draft";

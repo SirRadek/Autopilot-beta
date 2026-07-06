@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AGY_VERIFIED_MODELS,
   EXPENSIVE_LANES,
   LANE_COST_TIERS,
   LaneNotAllowedInModeError,
   assertLaneAllowedInMode,
   getRoutingMode,
   isLaneAllowedInMode,
+  resolveRoutingLane,
   routingModes,
   type RoutingLaneId,
   type RoutingModeId
@@ -33,6 +35,8 @@ describe("routing mode catalog", () => {
     const allowedIdeaLanes = [
       "agy_fast",
       "agy_deep",
+      "agy_gpt_oss_120b",
+      "agy_claude_sonnet_4_6",
       "openrouter_nemotron_planning"
     ] as const satisfies readonly RoutingLaneId[];
 
@@ -44,6 +48,7 @@ describe("routing mode catalog", () => {
 
   it("hard-refuses expensive lanes in Idea Mode", () => {
     expect(isLaneAllowedInMode("idea", "claude_supervisor")).toBe(false);
+    expect(isLaneAllowedInMode("idea", "codex_cli")).toBe(false);
 
     expect(() => assertLaneAllowedInMode("idea", "codex_cli")).toThrow(LaneNotAllowedInModeError);
 
@@ -76,6 +81,8 @@ describe("routing mode catalog", () => {
     const expectedLaneIds = [
       "agy_fast",
       "agy_deep",
+      "agy_gpt_oss_120b",
+      "agy_claude_sonnet_4_6",
       "openrouter_nemotron_planning",
       "openrouter_qwen3_code_draft",
       "qwen_local",
@@ -96,5 +103,29 @@ describe("routing mode catalog", () => {
         true
       );
     }
+  });
+
+  it("maps verified agy model slugs to routing lanes", () => {
+    expect(resolveRoutingLane({ vendor: "agy_cli", model: "gpt-oss-120b" })).toBe("agy_gpt_oss_120b");
+    expect(resolveRoutingLane({ vendor: "agy_cli", model: "claude-4.6-sonnet" })).toBe(
+      "agy_claude_sonnet_4_6"
+    );
+    expect(resolveRoutingLane({ vendor: "agy_cli", model: "gemini-3.5-flash-medium" })).toBe("agy_fast");
+    expect(resolveRoutingLane({ vendor: "agy_cli", model: "gemini-3.1-pro-high" })).toBe("agy_deep");
+  });
+
+  it("allows the verified MID agy lanes in review mode", () => {
+    expect(isLaneAllowedInMode("review", "agy_gpt_oss_120b")).toBe(true);
+    expect(isLaneAllowedInMode("review", "agy_claude_sonnet_4_6")).toBe(true);
+  });
+
+  it("characterizes verified agy model pins", () => {
+    expect(AGY_VERIFIED_MODELS).toEqual({
+      agy_fast_default: "gemini-3.5-flash-medium",
+      agy_fast_quality: "gemini-3.5-flash-high",
+      agy_deep: "gemini-3.1-pro-high",
+      agy_gpt_oss_120b: "gpt-oss-120b",
+      agy_claude_sonnet_4_6: "claude-4.6-sonnet"
+    });
   });
 });

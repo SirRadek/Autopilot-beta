@@ -1,7 +1,7 @@
 {
   "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
   "src/data/delivery-system/modelPolicy.ts": "c795d51c3a08690cd76fe1c5f9232c7695d84c87",
-  "src/data/delivery-system/routingModes.ts": "fe0ad5f5493efcc7f5d1de0a46f06d5c1d9a19b8",
+  "src/data/delivery-system/routingModes.ts": "1f231ba5fceb43708cad8928d9ab226b362452f9",
   "src/lib/decision-mesh/query.ts": "105ff4e9cd1a6f3bf3fb528e230c2e3ca72127e7",
   "src/lib/decision-mesh/types.ts": "4b42bd54588452805bd0212a1e16eb241362aabf",
   "mcp/server.ts": "690d6bb346858dc2c98242bfca7c1e0bca2cbf35",
@@ -17,7 +17,7 @@
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
   "scripts/git-hooks": "tree:7fc1b8265fc4eef9ad821a049e0cbff072cf2857da285ec1c37abe8a3cf26dd5",
   "src/lib/mesh-tools": "tree:710af41007fa14b43f4ef741193a8cedd7baeb3eb3df592e00b24c7bfe07f19e",
-  "src/governed-core": "tree:666cc58e1b8795fe58012b4344034d9a416b7c3c97b7e553564a66bd9672f6b7",
+  "src/governed-core": "tree:07d9bf8a8a1cad57e2a481e654bcb64c06251ad2d20f9142d0a7ca31322a5d94",
   "scripts/vendor-check.mjs": "53e61bb8918eeead814892250d413dc6230e99a2",
   "src/data/delivery-system/modelOutputEvaluation.ts": "e32d29917dfb4fe588cc7cbe7b2579f590412f7a",
   "scripts/validate-model-output-evals.ts": "c216cb461de3e5640ac0fdcfc5249a466e231dd6",

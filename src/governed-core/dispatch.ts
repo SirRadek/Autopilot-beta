@@ -17,6 +17,7 @@ import {
 } from "../data/delivery-system/modelPolicy";
 import type { TierCircuitBreakerThresholds, TierFailureSignalRecord } from "../data/delivery-system/routingGuards";
 import {
+  AGY_VERIFIED_MODELS,
   EXPENSIVE_LANES,
   isBuildPrepProvenanceSatisfied,
   isLaneAllowedInMode,
@@ -275,6 +276,10 @@ function hasNonEmptyString(value: string | undefined): boolean {
 }
 
 function toCliWorkerInput(handoff: GovernedHandoff): CliWorkerInput {
+  // Close the ADR determinism gap: governed agy dispatch must not inherit the Antigravity app selection.
+  const governedAgyDefaultModel =
+    handoff.vendor === "agy_cli" && handoff.model === undefined ? AGY_VERIFIED_MODELS.agy_fast_default : undefined;
+
   return {
     handoffId: handoff.handoffId,
     vendor: handoff.vendor,
@@ -284,6 +289,7 @@ function toCliWorkerInput(handoff: GovernedHandoff): CliWorkerInput {
     ...(handoff.codexMode !== undefined ? { codexMode: handoff.codexMode } : {}),
     ...(handoff.openrouterMode !== undefined ? { openrouterMode: handoff.openrouterMode } : {}),
     ...(handoff.model !== undefined ? { model: handoff.model } : {}),
+    ...(governedAgyDefaultModel !== undefined ? { model: governedAgyDefaultModel } : {}),
     ...(handoff.routing_mode !== undefined ? { routingMode: handoff.routing_mode } : {}),
     ...(handoff.taskPacketRef !== undefined ? { taskPacketRef: handoff.taskPacketRef } : {}),
     ...(handoff.cwd !== undefined ? { cwd: handoff.cwd } : {}),
