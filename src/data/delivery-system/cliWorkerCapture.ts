@@ -137,11 +137,14 @@ export const OPENROUTER_MODE_MODEL_MAP: Readonly<Record<OpenRouterMode, OpenRout
   nemotron_planning: "nvidia/nemotron-3-ultra-550b-a55b:free"
 };
 export const OPENROUTER_ATTEMPT_COUNTER_FILE = "openrouter-api-attempts.jsonl";
+export const OPENROUTER_SPEND_LEDGER_FILE = "openrouter-api-spend.jsonl";
 
-// ADR openrouter-free-lane Decision 4: free lane budget is 50/day + 20/minute.
-// UNVERIFIED at runtime: pricing and free limits must be rechecked before routing activation.
-export const OPENROUTER_FREE_DAILY_ATTEMPT_LIMIT = 50;
+// Balance-backed OpenRouter :free lane budget: owner topped up $20 on 2026-07-06;
+// OpenRouter grants 1000 :free requests/day with >= $10 balance. Re-verify on
+// key rotation or balance drain. Minute rpm limit remains separate below.
+export const OPENROUTER_FREE_DAILY_ATTEMPT_LIMIT = 1000;
 export const OPENROUTER_FREE_MINUTE_ATTEMPT_LIMIT = 20;
+export const OPENROUTER_DAILY_SPEND_CAP_USD = 1;
 export const DEFAULT_VENDOR_ARTIFACT_TTL_DAYS = 7;
 export const VENDOR_ARTIFACT_TEMP_DIR_NAMES = ["autopilot-handoffs", "autopilot-codex-captures"] as const;
 export const DEFAULT_VENDOR_PROCESS_MAX_AGE_MS = 30 * 60_000;
@@ -217,6 +220,11 @@ export class OpenRouterBudgetError extends OpenRouterGuardError {
     this.attemptCounts = attemptCounts;
   }
 }
+export class OpenRouterSpendBudgetError extends OpenRouterGuardError {
+  constructor() {
+    super("openrouter_spend_budget_exhausted: daily spend cap reached");
+  }
+}
 export class OpenRouterZeroCostAssertionError extends OpenRouterGuardError {}
 export class OpenRouterProviderError extends OpenRouterGuardError {}
 
@@ -250,6 +258,7 @@ export interface OpenRouterCaptureOptions extends PromptLimitOptions {
   readonly timeoutMs?: number;
   readonly fetchImpl?: OpenRouterFetch;
   readonly recordAttempt?: () => OpenRouterAttemptCounts;
+  readonly spendLedgerPath?: string;
   readonly cwd?: unknown;
   readonly addDirs?: unknown;
   readonly images?: unknown;
@@ -514,6 +523,51 @@ export function openRouterAttemptCounterPathForStateDir(stateDir: string): strin
   return join(dirname(stateDir), OPENROUTER_ATTEMPT_COUNTER_FILE);
 }
 
+export function openRouterSpendLedgerPathForStateDir(stateDir: string): string {
+  return join(dirname(stateDir), OPENROUTER_SPEND_LEDGER_FILE);
+}
+
+export function sumOpenRouterSpendForDay(ledgerText: string, dayPrefix: string): number {
+  let total = 0;
+
+  for (const line of ledgerText.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(line) as {
+        readonly recorded_at?: unknown;
+        readonly cost_usd?: unknown;
+      };
+      if (typeof parsed.recorded_at !== "string" || !parsed.recorded_at.startsWith(dayPrefix)) {
+        continue;
+      }
+
+      const costUsd = numericCostValue(parsed.cost_usd);
+      if (costUsd !== null && costUsd > 0) {
+        total += costUsd;
+      }
+    } catch {
+      // Corrupt local ledger lines are skipped so spend-cap accounting never
+      // masks the zero-cost guard or blocks unrelated worker cleanup.
+    }
+  }
+
+  return total;
+}
+
+export function assertOpenRouterDailySpendBudgetAvailable(input: {
+  readonly spendLedgerPath: string;
+  readonly now?: Date;
+}): void {
+  const now = input.now ?? new Date();
+  const spendForDay = sumOpenRouterSpendForDay(readOpenRouterLedgerText(input.spendLedgerPath), now.toISOString().slice(0, 10));
+  if (spendForDay >= OPENROUTER_DAILY_SPEND_CAP_USD) {
+    throw new OpenRouterSpendBudgetError();
+  }
+}
+
 export function incrementOpenRouterAttemptBudget(input: {
   readonly stateDir: string;
   readonly openrouterMode: OpenRouterMode;
@@ -600,6 +654,14 @@ function readJsonlLines(path: string): readonly string[] {
     return readFileSync(path, "utf8").split(/\r?\n/).filter((line) => line.trim().length > 0);
   } catch {
     return [];
+  }
+}
+
+function readOpenRouterLedgerText(path: string): string {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
   }
 }
 
@@ -1023,6 +1085,18 @@ export async function captureOpenRouterResponse(
   }
 
   assertOpenRouterResponseModel(payload, model);
+  const responseCostUsd = extractOpenRouterUsageCostUsd(payload);
+  if (responseCostUsd !== null && opts.spendLedgerPath !== undefined) {
+    // The charge has already happened even though the output is refused below;
+    // persist a redacted local spend line so future sends honor the daily cap.
+    appendOpenRouterSpendLedgerBestEffort({
+      spendLedgerPath: opts.spendLedgerPath,
+      recordedAt: new Date().toISOString(),
+      model,
+      openrouterMode: opts.openrouterMode,
+      costUsd: responseCostUsd
+    });
+  }
   assertOpenRouterZeroCost(payload);
 
   const rawOutput = extractOpenRouterOutput(payload);
@@ -1132,6 +1206,54 @@ function extractOpenRouterUsage(payload: unknown): OpenRouterProviderUsage | und
     outputTokens,
     ...(totalTokens > 0 ? { totalTokens } : {})
   };
+}
+
+function extractOpenRouterUsageCostUsd(payload: unknown): number | null {
+  return firstPositiveOpenRouterCost(asUnknownRecord(payload)?.usage);
+}
+
+function firstPositiveOpenRouterCost(value: unknown): number | null {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  for (const [key, item] of Object.entries(record)) {
+    if (/cost/i.test(key)) {
+      const cost = numericCostValue(item);
+      if (cost !== null && cost > 0) {
+        return cost;
+      }
+    }
+
+    const nestedCost = firstPositiveOpenRouterCost(item);
+    if (nestedCost !== null) {
+      return nestedCost;
+    }
+  }
+
+  return null;
+}
+
+function appendOpenRouterSpendLedgerBestEffort(input: {
+  readonly spendLedgerPath: string;
+  readonly recordedAt: string;
+  readonly model: OpenRouterModel;
+  readonly openrouterMode: OpenRouterMode;
+  readonly costUsd: number;
+}): void {
+  try {
+    mkdirSync(dirname(input.spendLedgerPath), { recursive: true });
+    appendFileSync(input.spendLedgerPath, `${JSON.stringify({
+      schema_version: "v1",
+      recorded_at: input.recordedAt,
+      model: input.model,
+      openrouter_mode: input.openrouterMode,
+      cost_usd: input.costUsd
+    })}\n`, "utf8");
+  } catch {
+    // Ledgering is best-effort; the zero-cost assertion remains the hard guard.
+  }
 }
 
 function hasNonZeroCostField(value: unknown): boolean {

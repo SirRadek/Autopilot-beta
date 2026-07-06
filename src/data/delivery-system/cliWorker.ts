@@ -7,12 +7,14 @@ import {
   captureCodexResponse,
   captureOpenRouterResponse,
   assertOpenRouterAccessTierOptions,
+  assertOpenRouterDailySpendBudgetAvailable,
   assertOpenRouterPromptIsSendable,
   buildVendorProcessRecord,
   DEFAULT_VENDOR_PROCESS_MAX_AGE_MS,
   incrementOpenRouterAttemptBudget,
   killVendorProcess,
   openRouterErrorReason,
+  openRouterSpendLedgerPathForStateDir,
   parseVendorProcessRegistryLines,
   redactOpenRouterApiKey,
   resolveOpenRouterModel,
@@ -535,13 +537,16 @@ export async function runCliWorker(
         throw new Error("openrouter_api internal error: missing resolved config");
       }
 
+      const spendLedgerPath = openRouterSpendLedgerPathForStateDir(stateDir);
       const result = await captureOpenRouterResponse(input.prompt, {
         openrouterMode: openRouterConfig.openrouterMode,
         model: openRouterConfig.model,
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         ...promptLimitOptions,
+        spendLedgerPath,
         recordAttempt: () => {
           try {
+            assertOpenRouterDailySpendBudgetAvailable({ spendLedgerPath });
             const counts = incrementOpenRouterAttemptBudget({
               stateDir,
               openrouterMode: openRouterConfig.openrouterMode,

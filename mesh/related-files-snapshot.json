@@ -46,8 +46,8 @@
   "prompt-library/": "tree:e1ed1d4c9846967506d0ecc6696474a662ae72cb6e6348701a086711a67bd4ea",
   "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
-  "src/data/delivery-system/cliWorker.ts": "d4974c81ea242588eb3e5fd24b08015ffa444ef2",
-  "src/data/delivery-system/cliWorkerCapture.ts": "2ca565d1b181a52794f81dda3db04837c696748c",
+  "src/data/delivery-system/cliWorker.ts": "cd6ccf833c36f82f28c9d7e89e756481441ed9e8",
+  "src/data/delivery-system/cliWorkerCapture.ts": "25ffb99fe8f3c8ccb59f520517a2d5067c11506a",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
   "model-output-evals/": "tree:f16e34569ce48d444527de04f827a3031657716ada5a8d23bf4b1be65ee6d263",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"

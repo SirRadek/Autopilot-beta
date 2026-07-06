@@ -153,7 +153,7 @@ describe("OpenRouter Stage 1 worker lane", () => {
     expect(telemetry.attempt_counts).toMatchObject({
       day: 1,
       minute: 1,
-      day_limit: 50,
+      day_limit: 1000,
       minute_limit: 20
     });
 

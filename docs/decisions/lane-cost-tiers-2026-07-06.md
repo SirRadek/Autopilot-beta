@@ -92,6 +92,16 @@ These are verified dispatch targets and wired as MID lanes for advisory `idea` a
 
 Anti-footgun rule: never route through unverified models.
 
+## Spend policy (owner-ratified 2026-07-06)
+
+The owner topped up the OpenRouter account with $20 USD. With an account balance >= $10, the
+OpenRouter `:free` daily request limit moves from 50/day to 1000/day; re-verify this balance-backed
+limit on key rotation or balance drain.
+
+The OpenRouter lane has a hard maximum spend cap of $1 USD/day, enforced before sends from a
+persistent local spend ledger. The `:free` allowlist and zero-cost assertion remain unchanged: this
+cap is a safety ceiling, not paid-tier opt-in. Paid models require their own ADR and allowlist change.
+
 ## Candidate MID Lanes
 
 These are still pending verification and/or evals.
