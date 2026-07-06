@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 
+import { codepointCompare } from "./codepoint-compare";
+
 interface ProjectIndexEntry {
   readonly slug: string;
   readonly name: string;
@@ -112,7 +114,7 @@ function buildIndex(): ProjectIndex {
             notes: "Generated from docs/projects. Enrich library links during project design work."
           };
         })
-        .sort((a, b) => a.slug.localeCompare(b.slug))
+        .sort((a, b) => codepointCompare(a.slug, b.slug))
     : [];
 
   return {

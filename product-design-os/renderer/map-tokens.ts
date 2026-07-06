@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { codepointCompare } from "../scripts/codepoint-compare";
 import type { TokenOverrideMap, TokenPrimitive } from "./types";
 
 export interface TokenOverrideValidationIssue {
@@ -99,7 +100,7 @@ export function mapTokensToCss(pdosRoot: string, overrides: TokenOverrideMap = {
       flattened[canonicalTokenKey] = safeValue;
     }
 
-    for (const [tokenKey, value] of Object.entries(flattened).sort(([left], [right]) => left.localeCompare(right))) {
+    for (const [tokenKey, value] of Object.entries(flattened).sort(([left], [right]) => codepointCompare(left, right))) {
       declarations.push(`  ${cssCustomPropertyName(prefix, tokenKey)}: ${value};`);
     }
 
@@ -131,7 +132,7 @@ function compareTokenFiles(left: string, right: string): number {
     return leftIndex - rightIndex;
   }
 
-  return leftName.localeCompare(rightName);
+  return codepointCompare(leftName, rightName);
 }
 
 function readTokenFile(filePath: string): TokenFile {

@@ -4,6 +4,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getDefaultPdosCompositionSpecPaths } from "../../scripts/check-renderability-product-design-os";
+import { codepointCompare } from "../../scripts/codepoint-compare";
 import { patternComponentRegistry } from "../../renderer/pattern-component-registry";
 import { renderCompositionPage } from "../../renderer/render-composition";
 import {
@@ -181,10 +182,10 @@ export function analyzeFitSafetyLint(input: PdosFitSafetyLintInput = {}, repoRoo
 
   const componentReports = components
     .map((component) => analyzeComponent(component, baselineById, profileGate))
-    .sort((first, second) => first.id.localeCompare(second.id));
+    .sort((first, second) => codepointCompare(first.id, second.id));
   const pageReports = pages
     .map((page) => analyzeRenderedPage(page, profileGate))
-    .sort((first, second) => first.path.localeCompare(second.path));
+    .sort((first, second) => codepointCompare(first.path, second.path));
   const summary = summarizeFitSafety(componentReports, pageReports);
 
   return {
@@ -387,7 +388,7 @@ function summarizeProfileGate(collector: ProfileGateCollector): PdosFitSafetyPro
 function toProfileCodeCounts(counts: ReadonlyMap<string, number>): readonly PdosFitSafetyProfileCodeCount[] {
   return [...counts.entries()]
     .map(([code, count]) => ({ code, count }))
-    .sort((first, second) => first.code.localeCompare(second.code));
+    .sort((first, second) => codepointCompare(first.code, second.code));
 }
 
 function formatProfileCodeCounts(counts: readonly PdosFitSafetyProfileCodeCount[]): string {

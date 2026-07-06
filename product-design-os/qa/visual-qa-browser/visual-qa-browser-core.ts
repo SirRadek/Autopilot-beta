@@ -1,3 +1,4 @@
+import { codepointCompare } from "../../scripts/codepoint-compare";
 import {
   analyzeProductDesignVisualQa,
   type PdosVisualIssue,
@@ -456,11 +457,11 @@ function sortAxeViolations(violations: readonly VisualQaBrowserAxeViolation[]): 
     if (impactDelta !== 0) {
       return impactDelta;
     }
-    const idDelta = first.id.localeCompare(second.id);
+    const idDelta = codepointCompare(first.id, second.id);
     if (idDelta !== 0) {
       return idDelta;
     }
-    return first.help.localeCompare(second.help);
+    return codepointCompare(first.help, second.help);
   });
 }
 
