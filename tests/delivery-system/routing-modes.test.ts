@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EXPENSIVE_LANES,
+  LANE_COST_TIERS,
   LaneNotAllowedInModeError,
   assertLaneAllowedInMode,
   getRoutingMode,
@@ -69,5 +70,31 @@ describe("routing mode catalog", () => {
 
   it("throws when a routing mode id is unknown at runtime", () => {
     expect(() => getRoutingMode("unknown" as unknown as RoutingModeId)).toThrow(/routing_mode_not_found/);
+  });
+
+  it("keeps lane cost tiers complete and aligned with expensive lane policy", () => {
+    const expectedLaneIds = [
+      "agy_fast",
+      "agy_deep",
+      "openrouter_nemotron_planning",
+      "openrouter_qwen3_code_draft",
+      "qwen_local",
+      "deterministic_tools",
+      "claude_supervisor",
+      "codex_cli"
+    ] as const satisfies readonly RoutingLaneId[];
+    const tieredLaneIds = Object.keys(LANE_COST_TIERS) as RoutingLaneId[];
+
+    expect(tieredLaneIds).toHaveLength(expectedLaneIds.length);
+    expect([...new Set(tieredLaneIds)].sort()).toEqual([...expectedLaneIds].sort());
+
+    const expensiveTierLanes = tieredLaneIds.filter((lane) => LANE_COST_TIERS[lane] === "expensive");
+    expect(expensiveTierLanes.sort()).toEqual([...EXPENSIVE_LANES].sort());
+
+    for (const mode of routingModes.filter((candidate) => candidate.expensiveLanesAllowed === false)) {
+      expect(mode.allowedLanes.every((lane) => LANE_COST_TIERS[lane] === "free" || LANE_COST_TIERS[lane] === "mid")).toBe(
+        true
+      );
+    }
   });
 });

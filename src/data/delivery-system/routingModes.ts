@@ -26,6 +26,24 @@ export type RoutingLaneId =
 // Expensive means owner-subscription decision/implementation lanes, not a cost number; guard is cost-blind.
 export const EXPENSIVE_LANES: readonly RoutingLaneId[] = ["claude_supervisor", "codex_cli"];
 
+export type LaneCostTier = "free" | "mid" | "expensive";
+
+// Owner-ratified 2026-07-06 (docs/decisions/lane-cost-tiers-2026-07-06.md): free lanes are always
+// tried first, then mid, then expensive. Ordering is supervisor doctrine + future routing input —
+// enforcement stays at the existing cost-blind gates (idea-mode wall, build-mode draft trail).
+// agy_deep is mid, NOT free: Antigravity quota burns proportionally to token cost and Gemini 3.1
+// Pro consumes the shared weekly quota far faster than 3.5 Flash.
+export const LANE_COST_TIERS: Record<RoutingLaneId, LaneCostTier> = {
+  deterministic_tools: "free",
+  qwen_local: "free",
+  openrouter_qwen3_code_draft: "free",
+  openrouter_nemotron_planning: "free",
+  agy_fast: "mid",
+  agy_deep: "mid",
+  claude_supervisor: "expensive",
+  codex_cli: "expensive"
+};
+
 export type BuildPrepProvenance =
   | { readonly kind: "cheap_attempts"; readonly cheap_attempt_refs: readonly string[] }
   | { readonly kind: "cheap_not_applicable"; readonly reason: string; readonly owner_override: true };
