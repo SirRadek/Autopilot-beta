@@ -25,6 +25,7 @@
     "pdos:library:projects": "tsx product-design-os/scripts/update-project-library.ts",
     "pdos:build-cloud": "tsx product-design-os/scripts/build-point-cloud-asset.ts",
     "model-output:validate": "tsx scripts/validate-model-output-evals.ts",
+    "telemetry:summary": "tsx scripts/telemetry-summary.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "baseline:waiver-check": "node scripts/check-baseline-waivers.mjs",
