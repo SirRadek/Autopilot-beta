@@ -46,8 +46,15 @@ do
     range="$remote_commit..$local_commit"
   fi
 
+  # Auditable acknowledgment: collect `Mesh-Ack: <node-id> -- <reason>` trailers
+  # from every commit in the pushed range, mirroring commit-msg's comma form.
+  acks="$(git log --format=%B "$range" | grep -iE '^mesh-ack:' | sed -E 's/^[Mm][Ee][Ss][Hh]-[Aa][Cc][Kk]:[[:space:]]*([A-Za-z0-9_-]+).*/\1/' | tr '\n' ',' | sed 's/,$//')"
+  if [ -n "$acks" ]; then
+    printf '[autopilot:pre-push] Mesh-Ack trailers found for: %s\n' "$acks"
+  fi
+
   autopilot_run_npm "checking pushed range $range against blocker-governed mesh nodes" \
-    run mesh:changed -- --root . --since "$range" --fail-on-blocker
+    run mesh:changed -- --root . --since "$range" --fail-on-blocker --ack "$acks"
 
   # Report-first (warn-only) self-approval gate: surfaces baseline-excuse growth added without a
   # `Baseline-Waiver:` commit trailer over the pushed range. Exits 0 by design, so it never blocks a

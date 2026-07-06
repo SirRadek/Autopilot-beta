@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +34,36 @@ describe("related-files-status (bind-point ①)", () => {
     expect(dir?.status).toBe("VERIFIED");
     expect(dir?.blobHash).toBeUndefined();
     expect(r.snapshot["src/area"]).toBeUndefined(); // dirs are not snapshotted
+  });
+
+  it("uses canonical hint normalization before filesystem status checks", () => {
+    const root = mkdtempSync(join(tmpdir(), "related-files-status-"));
+    try {
+      mkdirSync(join(root, "mesh/nodes"), { recursive: true });
+      mkdirSync(join(root, "src/area"), { recursive: true });
+      writeFileSync(join(root, "src/area/keep.ts"), "export const keep = true;\n");
+      writeFileSync(
+        join(root, "mesh/nodes/sample.yaml"),
+        [
+          "id: sample",
+          "type: test",
+          "name: Sample",
+          "question: q",
+          "why: w",
+          "signals: []",
+          "related_agents: []",
+          "related_files:",
+          "  - .\\src//area///keep.ts...",
+          "required_checks: []"
+        ].join("\n")
+      );
+
+      const r = computeRelatedFilesStatus(root);
+      expect(r.summary.missing).toBe(0);
+      expect(r.entries.find((e) => e.relatedFile === ".\\src//area///keep.ts...")?.status).toBe("VERIFIED");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("flips a file VERIFIED → STALE when its prior blob hash no longer matches (no manual edit, no DB)", () => {

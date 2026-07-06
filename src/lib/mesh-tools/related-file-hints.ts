@@ -7,11 +7,15 @@
 export const PLACEHOLDER_RE = /[<>*]/;
 
 /**
- * Hand-authored directory hints may carry a trailing slash (e.g. `prompt-library/`).
- * Path-prefix matching must treat them identically to `prompt-library` — without
- * this, `startsWith(hint + "/")` becomes `prompt-library//` and matches nothing,
- * silently skipping every blocker on that surface (BLIND1).
+ * Hand-authored path hints may carry shell/path noise (e.g. `./`, `\`, repeated
+ * slashes, trailing slash/dot). Canonicalize that noise once for every bind-point
+ * so the ratchet and blocker gate cannot disagree. Case is deliberately preserved:
+ * git path matching is case-sensitive, and lowercasing would change semantics.
  */
 export function normalizeRelatedFileHint(hint: string): string {
-  return hint.replace(/\/+$/, "");
+  return hint
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/^(?:\.\/)+/, "")
+    .replace(/[/.]+$/, "");
 }

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { loadDecisionMesh } from "../../src/lib/decision-mesh";
+import { loadDecisionMesh, type DecisionMesh } from "../../src/lib/decision-mesh";
 import { activateForChangedFiles, resolveAckedBlockers } from "../../src/lib/mesh-tools/changed-files-capabilities";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +71,28 @@ describe("changed-files-capabilities (bind-point ②)", () => {
     const r = activateForChangedFiles(mesh, ["docs-bundle/guide.md"]);
     expect(r.activatedNodes.map((n) => n.id)).toContain("docs_bundle");
     expect(r.stopConditions).toContain("docs_unreviewed");
+  });
+
+  it("uses canonical hint normalization before changed-file matching", () => {
+    const canonicalMesh: DecisionMesh = {
+      nodes: [
+        {
+          id: "canonical",
+          type: "test",
+          name: "Canonical",
+          question: "q",
+          why: "w",
+          signals: [],
+          related_agents: [],
+          related_files: [".\\src//Canonical///"],
+          required_checks: []
+        }
+      ],
+      edges: [],
+      rules: []
+    };
+    const r = activateForChangedFiles(canonicalMesh, ["src/Canonical/file.ts"]);
+    expect(r.activatedNodes.map((n) => n.id)).toEqual(["canonical"]);
   });
 
   it("ignores placeholder/templated hints (never matches a concrete file)", () => {
