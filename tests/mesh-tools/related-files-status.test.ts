@@ -28,12 +28,12 @@ describe("related-files-status (bind-point ①)", () => {
     expect(file?.blobHash).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  it("treats an existing directory hint as VERIFIED with no blob hash (coarse, no crash)", () => {
+  it("tree-hashes an existing directory hint for drift tracking (VERIFIED, no crash)", () => {
     const r = computeRelatedFilesStatus(SAMPLE);
     const dir = r.entries.find((e) => e.relatedFile === "src/area");
-    expect(dir?.status).toBe("VERIFIED");
-    expect(dir?.blobHash).toBeUndefined();
-    expect(r.snapshot["src/area"]).toBeUndefined(); // dirs are not snapshotted
+    expect(dir?.status).toBe("VERIFIED"); // no prior supplied => VERIFIED, but now drift-aware
+    expect(dir?.blobHash).toMatch(/^tree:[0-9a-f]{64}$/); // Phase 3.2: dirs carry a recursive tree hash
+    expect(r.snapshot["src/area"]).toBe(dir?.blobHash); // and ARE snapshotted so in-dir drift is caught
   });
 
   it("uses canonical hint normalization before filesystem status checks", () => {

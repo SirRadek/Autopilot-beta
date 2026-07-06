@@ -13,7 +13,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 
 import { normalizeRelatedFileHint, PLACEHOLDER_RE } from "./related-file-hints";
 
@@ -25,7 +25,7 @@ export interface RelatedFileEntry {
   /** the declared related_files path */
   relatedFile: string;
   status: RelatedFileStatus;
-  /** current git blob hash, present only when the file exists on disk */
+  /** current git blob hash or directory tree hash, present only when the hint exists on disk */
   blobHash?: string;
 }
 
@@ -62,6 +62,55 @@ export function gitBlobHash(content: Buffer): string {
   const header = Buffer.from(`blob ${content.length}`);
   const nul = Buffer.from([0]);
   return createHash("sha1").update(Buffer.concat([header, nul, content])).digest("hex");
+}
+
+const treeSkipDirectoryNames = new Set([
+  "node_modules",
+  ".git",
+  ".claude",
+  "dist",
+  "build",
+  "coverage",
+  ".vitest",
+  "tmp",
+]);
+const maxTreeHashFiles = 5000;
+
+export function hashDirectoryTree(absDir: string): string {
+  const files: string[] = [];
+
+  function walk(dir: string): boolean {
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const abs = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!treeSkipDirectoryNames.has(entry.name) && !walk(abs)) {
+          return false;
+        }
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      files.push(abs);
+      // Mesh directory hints are expected to be small; refuse pathological trees deterministically.
+      if (files.length > maxTreeHashFiles) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (!walk(absDir)) {
+    return "tree:UNBOUNDED";
+  }
+
+  const treeHash = createHash("sha256");
+  for (const file of files.sort()) {
+    const relPosixPath = relative(absDir, file).split(sep).join("/");
+    treeHash.update(`${relPosixPath}\0${gitBlobHash(readFileSync(file))}\n`);
+  }
+  return `tree:${treeHash.digest("hex")}`;
 }
 
 /** Extract the `related_files:` list out of one mesh node YAML (no YAML dep — bounded list block). */
@@ -115,8 +164,18 @@ export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {
         continue;
       }
       if (statSync(abs).isDirectory()) {
-        // a directory hint (e.g. src/api) exists but has no blob — coarse VERIFIED, no drift tracking
-        entries.push({ node, relatedFile, status: "VERIFIED" });
+        const treeHash = hashDirectoryTree(abs);
+        snapshot[relatedFile] = treeHash;
+        const priorHash = prior[relatedFile];
+        let status: RelatedFileStatus;
+        if (priorHash === undefined) {
+          // No baseline hash for this directory tree. With no prior supplied at all we cannot judge
+          // drift; with a supplied prior, absence means the snapshot is missing coverage.
+          status = hasPrior ? "UNSNAPSHOTTED" : "VERIFIED";
+        } else {
+          status = priorHash !== treeHash ? "STALE" : "VERIFIED";
+        }
+        entries.push({ node, relatedFile, status, blobHash: treeHash });
         continue;
       }
       const blobHash = gitBlobHash(readFileSync(abs));
