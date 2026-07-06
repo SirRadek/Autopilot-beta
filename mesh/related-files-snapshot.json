@@ -48,7 +48,7 @@
   "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
   "src/data/delivery-system/cliWorker.ts": "cd6ccf833c36f82f28c9d7e89e756481441ed9e8",
-  "src/data/delivery-system/cliWorkerCapture.ts": "7e0e386b9aaebc9b54ff602022c4b6e775462a02",
+  "src/data/delivery-system/cliWorkerCapture.ts": "dd170c60c3707dc3a2036ca1539adda49a41f4f0",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
   "model-output-evals/": "tree:bc7ef9aa344891c79ad16a8497221a8829c21e4d4b9e8535867f62fc7981295b",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"

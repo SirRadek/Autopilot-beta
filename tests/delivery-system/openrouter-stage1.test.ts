@@ -243,6 +243,57 @@ describe("OpenRouter Stage 1 worker lane", () => {
     expect(result.errorReason).not.toContain("model did not match");
   });
 
+  it("includes Retry-After on a 429 provider response", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: {
+        get: (name: string) => name === "Retry-After" ? "30" : null
+      },
+      text: async () =>
+        JSON.stringify({
+          error: {
+            message: "rate limited",
+            code: 429
+          }
+        })
+    });
+
+    const result = await runCliWorker(openRouterInput({
+      taskPacketRef: "packet-rate-limited"
+    }), stateDir);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.errorReason).toContain("openrouter_http_error: status 429 (retry_after=30s)");
+
+    const telemetry = readJsonlRecord(join(stateDir, "cli-call-telemetry.jsonl"));
+    expect(telemetry.error_reason).toContain("openrouter_http_error: status 429 (retry_after=30s)");
+  });
+
+  it("surfaces a 429 provider response without headers", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      text: async () =>
+        JSON.stringify({
+          error: {
+            message: "rate limited",
+            code: 429
+          }
+        })
+    });
+
+    const result = await runCliWorker(openRouterInput({
+      taskPacketRef: "packet-rate-limited-no-headers"
+    }), stateDir);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.errorReason).toContain("openrouter_http_error: status 429");
+
+    const telemetry = readJsonlRecord(join(stateDir, "cli-call-telemetry.jsonl"));
+    expect(telemetry.error_reason).toContain("openrouter_http_error: status 429");
+  });
+
   it("rejects a response that echoes a genuinely different model", async () => {
     fetchMock.mockResolvedValueOnce(openRouterResponse({
       model: "some-other/model",

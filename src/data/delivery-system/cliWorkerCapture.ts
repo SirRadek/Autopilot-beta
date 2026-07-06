@@ -238,6 +238,9 @@ export interface OpenRouterFetchInit {
 export interface OpenRouterFetchResponse {
   readonly ok: boolean;
   readonly status: number;
+  readonly headers?: {
+    get(name: string): string | null;
+  };
   text(): Promise<string>;
 }
 
@@ -1074,12 +1077,12 @@ export async function captureOpenRouterResponse(
     clearTimeout(timeoutHandle);
   }
 
+  if (!response.ok) {
+    throw new OpenRouterProviderError(openRouterHttpErrorMessage(response));
+  }
+
   const responseText = await response.text();
   const payload = parseOpenRouterPayload(responseText);
-
-  if (!response.ok) {
-    throw new OpenRouterProviderError(`openrouter_http_error: status ${response.status}`);
-  }
 
   // OpenRouter can return HTTP 200 whose body is ONLY an error envelope (measured live 2026-07-06:
   // {"error":{"message":"Upstream error from Nvidia: ResourceExhausted: ...","code":502}} on the
@@ -1133,6 +1136,40 @@ function defaultOpenRouterFetch(
   }
 
   return globalThis.fetch(url, init) as Promise<OpenRouterFetchResponse>;
+}
+
+function openRouterHttpErrorMessage(response: OpenRouterFetchResponse): string {
+  const details: string[] = [];
+  const retryAfter = safeOpenRouterResponseHeader(response, "Retry-After");
+  const rateLimitReset = safeOpenRouterResponseHeader(response, "X-RateLimit-Reset");
+
+  if (retryAfter !== null) {
+    details.push(`retry_after=${formatRetryAfterHeader(retryAfter)}`);
+  }
+
+  if (rateLimitReset !== null) {
+    details.push(`rate_limit_reset=${rateLimitReset}`);
+  }
+
+  return `openrouter_http_error: status ${response.status}${details.length > 0 ? ` (${details.join(" ")})` : ""}`;
+}
+
+function safeOpenRouterResponseHeader(response: OpenRouterFetchResponse, name: string): string | null {
+  try {
+    const value = response.headers?.get(name);
+    return typeof value === "string" ? sanitizeHeaderValue(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatRetryAfterHeader(value: string): string {
+  return /^\d+(?:\.\d+)?$/.test(value) ? `${value}s` : value;
+}
+
+function sanitizeHeaderValue(value: string): string | null {
+  const sanitized = value.replace(/[\r\n\t]+/g, " ").trim().slice(0, 120);
+  return sanitized.length > 0 ? sanitized : null;
 }
 
 function parseOpenRouterPayload(responseText: string): unknown {

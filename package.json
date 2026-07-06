@@ -27,6 +27,7 @@
     "model-output:validate": "tsx scripts/validate-model-output-evals.ts",
     "telemetry:summary": "tsx scripts/telemetry-summary.ts",
     "openrouter:health": "tsx scripts/openrouter-health.ts",
+    "quota:agy": "tsx scripts/agy-quota.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "baseline:waiver-check": "node scripts/check-baseline-waivers.mjs",
