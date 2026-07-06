@@ -1,3 +1,7 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { makeHandoffId } from "../../src/data/delivery-system/checkCompletionMatrix";
@@ -9,6 +13,8 @@ import {
 
 const task = "bounded implementation security audit vendor chokepoint dispatch";
 const agent = "security";
+// Refusal paths now RECORD a dispatch-decision line (Phase 5.1) — use a real writable stateDir.
+const refusalStateDir = mkdtempSync(join(tmpdir(), "governed-ipc-refusal-"));
 
 describe("governed-core IPC handleRequest", () => {
   it("returns a mesh packet and stable packet hash", async () => {
@@ -34,7 +40,7 @@ describe("governed-core IPC handleRequest", () => {
         ...handoff,
         packet_hash: "0".repeat(64)
       },
-      stateDir: "unused-state-dir"
+      stateDir: refusalStateDir
     });
 
     expect(response.ok).toBe(true);

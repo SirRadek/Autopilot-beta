@@ -179,6 +179,51 @@ describe("CLI worker token telemetry", () => {
     });
   });
 
+  it("records routing_mode in telemetry when provided", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-codex-hp-test-20260625T120000",
+      handoffId: "hp-test" as WorkerLockRecord["handoff_id"],
+      vendor: "codex_cli",
+      model: "gpt-5-codex",
+      tierId: null,
+      prompt: "hello world",
+      rawOutput: "alpha beta gamma",
+      durationSeconds: 1.25,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: null,
+      routingMode: "idea"
+    });
+
+    expect(record.routing_mode).toBe("idea");
+  });
+
+  it("omits routing_mode from telemetry when absent", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-codex-hp-test-20260625T120000",
+      handoffId: "hp-test" as WorkerLockRecord["handoff_id"],
+      vendor: "codex_cli",
+      model: "gpt-5-codex",
+      tierId: null,
+      prompt: "hello world",
+      rawOutput: "alpha beta gamma",
+      durationSeconds: 1.25,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: null
+    });
+
+    expect("routing_mode" in record).toBe(false);
+  });
+
   it("aggregates telemetry into the subscription session budget", () => {
     const budget: SubscriptionSessionBudget = {
       provider: "openai_gpt",

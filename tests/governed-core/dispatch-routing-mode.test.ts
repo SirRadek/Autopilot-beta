@@ -21,6 +21,10 @@ const mocks = vi.hoisted(() => ({
   runCliWorker: vi.fn()
 }));
 
+// Refusal paths now RECORD a dispatch-decision line (Phase 5.1), so even refusal tests need a real
+// writable stateDir — a repo-relative literal would pollute the working tree on every run.
+const refusalStateDir = mkdtempSync(join(tmpdir(), "governed-dispatch-refusal-"));
+
 vi.mock("../../src/data/delivery-system/cliWorker", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/data/delivery-system/cliWorker")>();
   return {
@@ -59,7 +63,7 @@ describe("dispatchHandoff routing_mode lane guard", () => {
   it("refuses codex_cli in idea mode without spawning", async () => {
     const result = await dispatchHandoff(
       baseHandoff({ vendor: "codex_cli", routing_mode: "idea" }),
-      "unused-state-dir"
+      refusalStateDir
     );
 
     expect(result).toEqual({
@@ -78,7 +82,7 @@ describe("dispatchHandoff routing_mode lane guard", () => {
         openrouterMode: "qwen3_code_draft",
         routing_mode: "idea"
       }),
-      "unused-state-dir"
+      refusalStateDir
     );
 
     expect(result).toEqual({

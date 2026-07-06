@@ -19,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   buildSupervisorRoutingDecision: vi.fn()
 }));
 
+// Refusal paths now RECORD a dispatch-decision line (Phase 5.1), so even refusal tests need a real
+// writable stateDir — a repo-relative literal would pollute the working tree on every run.
+const refusalStateDir = mkdtempSync(join(tmpdir(), "governed-dispatch-refusal-"));
+
 vi.mock("../../src/data/delivery-system/cliWorker", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/data/delivery-system/cliWorker")>();
   return {
@@ -65,7 +69,7 @@ describe("dispatchHandoff", () => {
   });
 
   it("refuses a forged packet hash without spawning", async () => {
-    const result = await dispatchHandoff(baseHandoff({ packet_hash: "wrong-hash" }), "unused-state-dir");
+    const result = await dispatchHandoff(baseHandoff({ packet_hash: "wrong-hash" }), refusalStateDir);
 
     expect(result).toEqual({
       refused: true,
@@ -77,7 +81,7 @@ describe("dispatchHandoff", () => {
   });
 
   it("refuses missing required checks without spawning", async () => {
-    const result = await dispatchHandoff(baseHandoff({ required_checks: [] }), "unused-state-dir");
+    const result = await dispatchHandoff(baseHandoff({ required_checks: [] }), refusalStateDir);
 
     expect(result).toEqual({
       refused: true,
@@ -103,7 +107,7 @@ describe("dispatchHandoff", () => {
           now: "2026-06-30T12:00:00.000Z"
         }
       }),
-      "unused-state-dir"
+      refusalStateDir
     );
 
     expect(result).toEqual({

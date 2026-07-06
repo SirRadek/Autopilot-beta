@@ -20,6 +20,7 @@ import {
   writePromptFile
 } from "./cliWorkerCapture";
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH } from "./sessionState";
+import type { RoutingModeId } from "./routingModes";
 import {
   writeCorrelationEntry,
   writeSubagentEvidence
@@ -99,6 +100,7 @@ export interface CliCallTelemetryRecord {
   readonly parsed_json_present: boolean;
   readonly codex_mode?: CodexDispatchMode;
   readonly openrouter_mode?: OpenRouterMode;
+  readonly routing_mode?: RoutingModeId;
   readonly task_packet_ref?: string;
   readonly attempt_counts?: OpenRouterAttemptCounts;
 }
@@ -124,6 +126,7 @@ export interface BuildCliCallTelemetryRecordInput {
   readonly providerUsage?: CliWorkerProviderUsage;
   readonly codexMode?: CodexDispatchMode;
   readonly openrouterMode?: OpenRouterMode;
+  readonly routingMode?: RoutingModeId;
   readonly taskPacketRef?: string;
   readonly attemptCounts?: OpenRouterAttemptCounts;
 }
@@ -227,6 +230,7 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
     parsed_json_present: input.parsedJson != null,
     ...(input.codexMode !== undefined ? { codex_mode: input.codexMode } : {}),
     ...(input.openrouterMode !== undefined ? { openrouter_mode: input.openrouterMode } : {}),
+    ...(input.routingMode !== undefined ? { routing_mode: input.routingMode } : {}),
     ...(input.taskPacketRef !== undefined ? { task_packet_ref: input.taskPacketRef } : {}),
     ...(input.attemptCounts !== undefined ? { attempt_counts: input.attemptCounts } : {})
   };
@@ -342,6 +346,8 @@ export interface CliWorkerInput {
   readonly codexMode?: CodexDispatchMode;
   /** Required for openrouter_api; selects the compiled-in free-model worker role. */
   readonly openrouterMode?: OpenRouterMode;
+  /** Optional governed routing mode for redacted vendor-call telemetry. */
+  readonly routingMode?: RoutingModeId;
   /** Required for codex_implement; links the write-capable worker to its bounded packet. */
   readonly taskPacketRef?: string;
   readonly model?: string;
@@ -439,6 +445,7 @@ export async function runCliWorker(
       lockSource,
       ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
       ...(openRouterConfig !== null ? { openrouterMode: openRouterConfig.openrouterMode } : {}),
+      ...(input.routingMode !== undefined ? { routingMode: input.routingMode } : {}),
       ...(taskPacketRef !== undefined ? { taskPacketRef } : {})
     }), stateDir);
 
@@ -626,6 +633,7 @@ export async function runCliWorker(
     ...(providerUsage !== undefined ? { providerUsage } : {}),
     ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
     ...(openRouterConfig !== null ? { openrouterMode: openRouterConfig.openrouterMode } : {}),
+    ...(input.routingMode !== undefined ? { routingMode: input.routingMode } : {}),
     ...(taskPacketRef !== undefined ? { taskPacketRef } : {}),
     ...(openRouterAttemptCounts !== undefined ? { attemptCounts: openRouterAttemptCounts } : {})
   }), stateDir);
