@@ -12,3 +12,5 @@ docs/autopilot/session-state/
 
 # OpenRouter attempts budget counter — runtime state, never committed
 docs/autopilot/openrouter-api-attempts.jsonl
+# OpenRouter spend ledger — runtime state, never committed
+docs/autopilot/openrouter-api-spend.jsonl
