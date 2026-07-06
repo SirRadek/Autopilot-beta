@@ -419,6 +419,17 @@
         "penalties": []
       },
       {
+        "id": "chart-with-source",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route admin_panel and recipe internal-ops-clean.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
         "id": "client-task-timeline",
         "score": 68,
         "selected": false,
@@ -437,17 +448,6 @@
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "chart-with-source",
-        "score": 68,
-        "selected": false,
-        "reasons": [
-          "Compared against route admin_panel and recipe internal-ops-clean.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 9/7."
         ],
         "penalties": []
       },
@@ -772,6 +772,17 @@
         "penalties": []
       },
       {
+        "id": "checkout-progress-steps",
+        "score": 116,
+        "selected": false,
+        "reasons": [
+          "Compared against route admin_panel and recipe internal-ops-clean.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
         "id": "client-account-overview",
         "score": 116,
         "selected": false,
@@ -790,17 +801,6 @@
           "Compared against route admin_panel and recipe internal-ops-clean.",
           "Asset use_case is not an exact match.",
           "Creativity/trust/motion: 3/9/1."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "checkout-progress-steps",
-        "score": 116,
-        "selected": false,
-        "reasons": [
-          "Compared against route admin_panel and recipe internal-ops-clean.",
-          "Asset use_case is not an exact match.",
-          "Creativity/trust/motion: 2/9/1."
         ],
         "penalties": []
       },

@@ -376,7 +376,14 @@ function scoreAsset(
 function rankItems(items: readonly PdosScoredItem[]): readonly PdosScoredItem[] {
   return items
     .slice()
-    .sort((first, second) => second.score - first.score || first.id.localeCompare(second.id))
+    // Tie-break by CODEPOINT, not localeCompare: locale-sensitive collation made the committed
+    // score fixtures machine-dependent (cs-CZ sorts the "ch" digraph AFTER "h", so
+    // "chart-with-source" vs "client-task-timeline" swapped order between a Czech dev machine and
+    // the en-US CI runner — broke CI on equal-score ties).
+    .sort(
+      (first, second) =>
+        second.score - first.score || (first.id < second.id ? -1 : first.id > second.id ? 1 : 0)
+    )
     .map((item, index) => ({ ...item, selected: index === 0 }));
 }
 

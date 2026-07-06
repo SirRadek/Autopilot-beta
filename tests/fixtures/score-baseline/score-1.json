@@ -527,17 +527,6 @@
         "penalties": []
       },
       {
-        "id": "client-task-timeline",
-        "score": 62,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe marketing-premium.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
         "id": "chart-with-source",
         "score": 62,
         "selected": false,
@@ -545,6 +534,17 @@
           "Compared against route marketing_web and recipe marketing-premium.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-task-timeline",
+        "score": 62,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe marketing-premium.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
         ],
         "penalties": []
       },
