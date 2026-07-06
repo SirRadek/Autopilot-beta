@@ -15,7 +15,7 @@
   "src/data/delivery-system/contextEconomy.ts": "70dda4331e15e3ff4bddb1bb42ae2ab1f55dc975",
   "GEMINI.md": "c1852287f258de48aaf6f5efcc486a0e9756b27a",
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
-  "scripts/git-hooks": "tree:46d819d6709a6df2375099eab30d742d176ac1b91fe586f9048a64194cc71b33",
+  "scripts/git-hooks": "tree:7fc1b8265fc4eef9ad821a049e0cbff072cf2857da285ec1c37abe8a3cf26dd5",
   "src/lib/mesh-tools": "tree:710af41007fa14b43f4ef741193a8cedd7baeb3eb3df592e00b24c7bfe07f19e",
   "src/governed-core": "tree:b4ea1439ad251a964ef73a9529417176046ad996773068a77e2e291ab8af8601",
   "scripts/vendor-check.mjs": "55e860ef0cc23b0c7638e1f546dab06389bec1bf",

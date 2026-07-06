@@ -15,6 +15,12 @@ autopilot_cd_root() {
   root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
     autopilot_fail 1 "not inside a Git worktree"
   cd "$root" || autopilot_fail 1 "cannot cd to repository root: $root"
+  # Hooks inherit GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE from git. Leaking them into the npm/test
+  # subprocesses makes every child `git` call resolve THIS repo instead of its own cwd (e.g. the
+  # vendor-check tests build temp git repos and run `git ls-files` inside them — with a leaked
+  # GIT_DIR all 7 fail under pre-push while passing standalone). After cd-ing to the resolved
+  # toplevel, plain discovery-from-cwd is correct for everything this hook runs, so unset them.
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 }
 
 autopilot_npm() {
