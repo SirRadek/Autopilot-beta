@@ -37,6 +37,19 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+// A caller-inherited GIT_DIR/GIT_WORK_TREE would make every child `git` here resolve the CALLER's
+// repository instead of `root` — the pre-push hook leaked exactly that and a temp-repo `git init`
+// in the tests corrupted the host .git/config (core.bare). The hook now unsets these (lib.sh), but
+// this gate must be safe under ANY caller: scrub them before shelling out to git.
+function gitScrubbedEnv() {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_COMMON_DIR;
+  return env;
+}
+
 function collectVendoredFiles(root = ROOT, vendorRoots = VENDOR_ROOTS) {
   const files = [];
   for (const vendorRoot of vendorRoots) {
@@ -49,7 +62,7 @@ function collectVendoredFiles(root = ROOT, vendorRoots = VENDOR_ROOTS) {
     const out = execFileSync(
       "git",
       ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", vendorRoot],
-      { cwd: root, encoding: "utf8" }
+      { cwd: root, encoding: "utf8", env: gitScrubbedEnv() }
     );
     for (const rel of out.split("\0")) {
       if (!rel) continue;
@@ -169,7 +182,7 @@ function verify({ root = ROOT, manifestPath = MANIFEST_PATH, vendorRoots = VENDO
   throw new Error(`${problems} provenance problem(s)`);
 }
 
-export { collectVendoredFiles, generate, verify, CANONICAL_SHA, VENDOR_ROOTS };
+export { collectVendoredFiles, generate, verify, gitScrubbedEnv, CANONICAL_SHA, VENDOR_ROOTS };
 
 // CLI entry: run only when invoked directly (not when imported by a test). A throw from
 // verify()/generate() becomes exit 1, preserving the gate's original fail behavior.

@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { VENDOR_ROOTS, generate, verify } from "../../scripts/vendor-check.mjs";
+import { VENDOR_ROOTS, collectVendoredFiles, generate, gitScrubbedEnv, verify } from "../../scripts/vendor-check.mjs";
 
 // The vendor-check airlock had ZERO tests (audit 2026-07-05 §4-B / F2 probe c): a regression that
 // neutered drift/untracked detection — or dropped a VENDOR_ROOT — passed `verify` green because the
@@ -18,7 +18,9 @@ let root: string;
 let manifestPath: string;
 
 function git(args: string[]): void {
-  execFileSync("git", args, { cwd: root, stdio: "pipe" });
+  // Scrubbed env: with a caller-leaked GIT_DIR this helper's `git init`/`git add` would hit the
+  // HOST repo instead of the temp fixture (that exact leak corrupted the host .git/config once).
+  execFileSync("git", args, { cwd: root, stdio: "pipe", env: gitScrubbedEnv() });
 }
 
 function opts(vendorRoots: readonly string[] = ALL_ROOTS) {
@@ -77,5 +79,20 @@ describe("vendor-check airlock", () => {
 
   it("pins the airlocked roots so removing one is a test failure", () => {
     expect([...VENDOR_ROOTS].sort()).toEqual(["product-design-os", "src"]);
+  });
+
+  // Belt-and-braces for the pre-push GIT_DIR leak: even when a caller leaks a (bogus) GIT_DIR into
+  // process.env, the gate's child `git` calls must resolve the fixture repo from cwd — not the
+  // caller's repo — so results stay correct and the HOST repo can never be touched.
+  it("ignores a leaked GIT_DIR: collectVendoredFiles still resolves the temp repo", () => {
+    const prior = process.env.GIT_DIR;
+    process.env.GIT_DIR = join(root, "nonexistent-bogus-gitdir");
+    try {
+      expect(collectVendoredFiles(root, ALL_ROOTS)).toEqual(["product-design-os/b.ts", "src/a.ts"]);
+      expect(() => verify(opts())).not.toThrow();
+    } finally {
+      if (prior === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = prior;
+    }
   });
 });
