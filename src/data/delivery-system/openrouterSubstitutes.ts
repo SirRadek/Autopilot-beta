@@ -31,9 +31,12 @@ export const SUBSTITUTE_LADDERS: Readonly<Record<SubstituteRole, readonly Substi
     {
       model_id: "poolside/laguna-m.1:free",
       provider_slug: "Poolside",
+      // Admission gates 1+2 PASSED 2026-07-06 (supervised smoke + accepted tiered eval record
+      // 2026-07-06-openrouter-laguna-admission-smoke); gate 3 (owner-gated allowlist entry) pending,
+      // so quality stays pending_eval until the lane allowlist slice lands.
       quality: "pending_eval",
-      evidence: "72.5% SWE-bench Verified - vendor-run, Poolside blog",
-      notes: "Poolside free tier may train on inputs - packet-only redaction required; max_out 32K"
+      evidence: "72.5% SWE-bench Verified - vendor-run, Poolside blog; LOCAL eval accepted 2026-07-06 (slugifier draft, 8/8 test cases consistent)",
+      notes: "REASONING-FIRST model: ~95% of output tokens are reasoning (measured 10207/10699) - the lane MUST send max_tokens >= 16k or content comes back empty; echoed canonical poolside/laguna-m.1-20260312:free; Poolside free tier may train on inputs - packet-only redaction required; max_out 32K"
     },
     {
       model_id: "poolside/laguna-xs-2.1:free",

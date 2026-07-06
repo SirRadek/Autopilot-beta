@@ -1,0 +1,106 @@
+{
+  "record_version": "v0.1",
+  "eval_id": "2026-07-06-openrouter-laguna-admission-smoke",
+  "created": "2026-07-06",
+  "project": {
+    "slug": "autopilot-control-plane",
+    "name": "Autopilot Control Plane",
+    "control_plane": true
+  },
+  "task": {
+    "task_type": "development",
+    "summary": "Admission smoke for substitute candidate laguna-m.1:free (code_draft role): bounded code draft — pure TypeScript filename slugifier + 6-8 unit test cases, strict JSON.",
+    "risk_level": "low"
+  },
+  "phase": "learning_immediate_loop",
+  "state": "accepted",
+  "model_or_worker": {
+    "provider": "unknown",
+    "name": "poolside/laguna-m.1:free (via OpenRouter; echoed canonical poolside/laguna-m.1-20260312:free)",
+    "role": "code_draft_substitute_candidate"
+  },
+  "reasoning_profile": {
+    "route": "free_cloud_advisory",
+    "reasoning_effort": "model_default",
+    "change_policy": "Candidate stays OUT of the dispatch allowlist until the owner-gated allowlist entry lands (gate 3 of the free-substitute-ladder ADR admission sequence)."
+  },
+  "token_efficiency_profile": {
+    "mode": "agent_packet",
+    "context_scope": "Redacted self-contained code-draft packet (190 input tokens); no repository or governance context sent; direct admission probe replicating the lane's provider pinning (allow_fallbacks=false, max_price=0).",
+    "caveman_applied": false
+  },
+  "provider_best_practice_sources": [
+    "prompt-source-catalog",
+    "local-agents-md",
+    "token-efficiency-operating-model",
+    "vendor-routing-policy-beta-v2"
+  ],
+  "input_packet_summary": {
+    "summary": "Supervised admission smoke per the free-substitute-ladder ADR (gate 1). Three attempts: (1) max_tokens 4096 -> the model burned the ENTIRE budget on reasoning tokens and returned empty content — laguna is a reasoning-first model; (2) HTTP 429 with a HEALTHY endpoint (per-account/burst limit — third 429 signature, invisible to the public health probe); (3) max_tokens 16384 -> success.",
+    "allowed_context": [
+      "task requirements embedded in the packet text"
+    ],
+    "forbidden_context": [
+      "repository or mesh content",
+      "secrets",
+      "customer data"
+    ],
+    "source_pointers": [
+      "docs/decisions/free-substitute-ladder-2026-07-06.md"
+    ]
+  },
+  "output_pointer": {
+    "kind": "local_file",
+    "pointer": "docs/decisions/free-substitute-ladder-2026-07-06.md",
+    "summary": "Successful run: HTTP 200, echoed model poolside/laguna-m.1-20260312:free (dated canonical + :free — third independent confirmation of the family-validation pattern), usage.cost 0, tokens 190 in / 10699 out of which 10207 REASONING (~95% reasoning ratio; content ~1715 chars). Output: strict JSON with a slugifyFileName implementation + 8 test cases + notes. Raw output intentionally NOT stored."
+  },
+  "score_by_dimension": {
+    "task_fit": 90,
+    "instruction_following": 93,
+    "source_grounding": 82,
+    "format_contract": 95,
+    "verification_readiness": 92,
+    "privacy_safety": 100,
+    "handoff_clarity": 90,
+    "token_efficiency": 70,
+    "workflow_compatibility": 85
+  },
+  "failure_labels": [],
+  "prompt_or_input_delta": {
+    "changed": true,
+    "summary": "max_tokens raised 4096 -> 16384 after attempt 1 proved the reasoning-first budget requirement; the packet text itself was unchanged.",
+    "changed_fields": [
+      "max_tokens"
+    ],
+    "rollback_path": "None needed; the lesson is recorded as a candidate constraint (max_tokens >= 16k for laguna)."
+  },
+  "rerun_count": 2,
+  "accepted_state": "accepted",
+  "verification_evidence": [
+    {
+      "type": "manual_review",
+      "status": "passed",
+      "evidence": "Supervisor traced all 8 test cases against the implementation mentally — consistent, incl. empty string, multi-dot extension (documented interpretation), diacritics via NFD, separator collapse; no hallucinated APIs; strict JSON parsed.",
+      "source_pointer": "docs/decisions/free-substitute-ladder-2026-07-06.md"
+    },
+    {
+      "type": "source_check",
+      "status": "passed",
+      "evidence": "Echoed model within the allowlisted family pattern (prefix poolside/laguna-m.1 + :free retained); usage.cost 0; provider prefs pinned in the request.",
+      "source_pointer": "src/data/delivery-system/openrouterSubstitutes.ts"
+    }
+  ],
+  "source_pointers": [
+    "docs/autopilot/model-output-evaluation-operating-model.md",
+    "docs/decisions/free-substitute-ladder-2026-07-06.md",
+    "src/data/delivery-system/openrouterSubstitutes.ts"
+  ],
+  "privacy_review": {
+    "redacted_context_only": true,
+    "raw_output_stored": false,
+    "raw_prompt_stored": false,
+    "raw_logs_stored": false,
+    "secrets_or_customer_data_stored": false,
+    "reviewer": "claude-supervisor"
+  }
+}
