@@ -1,6 +1,6 @@
 {
   "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
-  "src/data/delivery-system/modelPolicy.ts": "e379e13d1f0d98363465a2f86173fa9727203eaf",
+  "src/data/delivery-system/modelPolicy.ts": "c795d51c3a08690cd76fe1c5f9232c7695d84c87",
   "src/data/delivery-system/routingModes.ts": "e9b2a20bbf4eb0861b1841c1313da1b9169060f8",
   "src/lib/decision-mesh/query.ts": "da50eca3950ee16e0149b9c6245378c1828d51ae",
   "mcp/server.ts": "94d4fd5a7d14cc22f843d0c0cc9192941663da11",

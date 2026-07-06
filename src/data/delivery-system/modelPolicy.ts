@@ -231,8 +231,12 @@ export const layerProviderMapping = {
 
 export type CliVendorSelection = "codex_cli" | "agy_cli" | null;
 
-// Maps each orchestration layer to the CLI vendor dispatched via runCliWorker().
-// null = Claude handles this layer directly (orchestrator, memory_summarizer).
+// Maps each orchestration layer to the spawned CLI vendor used for ADVISORY worker output.
+// This is a SEPARATE AXIS from layerProviderMapping: layerProviderMapping is the reasoning
+// provider (e.g. architect/reviewer reason via Claude, the supervisor session), while this map
+// is which CLI worker is spawned to PRODUCE advisory output that Claude then consumes. They are
+// orthogonal and intentionally differ (architect/reviewer -> anthropic reasoning + agy_cli advisory).
+// null = no spawned CLI; Claude handles this layer directly (orchestrator, memory_summarizer).
 // codex_cli = bounded implementation/code/tests (OpenAI Codex CLI).
 // agy_cli   = analysis/brainstorming/critique (agy CLI).
 export const supervisorCliVendorMap = {
@@ -608,7 +612,7 @@ export const reasoningTaskLanePolicies = [
   {
     id: "bounded_coding_worker",
     taskSignals: ["bounded implementation", "focused bugfix", "refactor", "test generation"],
-    preferredProviders: ["openai_gpt", "qwen_local", "deterministic_tools"],
+    preferredProviders: ["qwen_local", "deterministic_tools", "openai_gpt"],
     requiredChecks: ["bounded_file_scope", "test_evidence", "supervisor_reviews_diff_or_claims"],
     stopConditions: ["broad_ambiguous_scope", "model_output_used_as_source_of_truth"]
   },

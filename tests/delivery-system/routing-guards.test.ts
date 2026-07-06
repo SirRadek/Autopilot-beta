@@ -5,6 +5,7 @@ import {
   type FallbackChainStep
 } from "../../src/data/delivery-system/fallbackChains";
 import {
+  reasoningTaskLanePolicies,
   assertRoleConstraint,
   buildSupervisorRoutingDecision,
   resolveCliVendorForLayer,
@@ -266,6 +267,11 @@ describe("routing invariants", () => {
       decisionReasoning:
         "Layer bounded_coding maps to openai_gpt; context width small; task lane bounded_coding_worker."
     });
+  });
+
+  it("keeps bounded_coding_worker lane cheap-first (qwen/deterministic before openai)", () => {
+    const lane = reasoningTaskLanePolicies.find((l) => l.id === "bounded_coding_worker");
+    expect(lane?.preferredProviders).toEqual(["qwen_local", "deterministic_tools", "openai_gpt"]);
   });
 });
 
