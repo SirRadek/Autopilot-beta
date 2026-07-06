@@ -22,7 +22,7 @@
   "src/data/delivery-system/modelOutputEvaluation.ts": "e32d29917dfb4fe588cc7cbe7b2579f590412f7a",
   "scripts/validate-model-output-evals.ts": "c216cb461de3e5640ac0fdcfc5249a466e231dd6",
   "model-output-evals/model-output-eval-record.schema.json": "d84b1b0c694be53d121c760c273d1766bd911a84",
-  "model-output-evals/records/": "tree:327ddbafff8c6c15ac5d2b85fdcef28c6e22b7a7904a29f91d45092be0dfbac8",
+  "model-output-evals/records/": "tree:6b5247e9408e24e4e0130bda9a991be2999f1f4fcdb0bd56ea4ca2e9fd68ca19",
   "src/data/delivery-system/modelSpend.ts": "8bb3c10d6beaadd91f43f9bf43115da07bc3bc9e",
   "src/data/delivery-system/promptLibrary.ts": "d6abab15ddc4af378eb69f2ab9286d669684115f",
   "src/data/delivery-system/tokenEfficiency.ts": "7d1df211687145886b1319a97fd6506e80e27c2b",
@@ -49,6 +49,6 @@
   "src/data/delivery-system/cliWorker.ts": "cd6ccf833c36f82f28c9d7e89e756481441ed9e8",
   "src/data/delivery-system/cliWorkerCapture.ts": "7e0e386b9aaebc9b54ff602022c4b6e775462a02",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
-  "model-output-evals/": "tree:f16e34569ce48d444527de04f827a3031657716ada5a8d23bf4b1be65ee6d263",
+  "model-output-evals/": "tree:bc7ef9aa344891c79ad16a8497221a8829c21e4d4b9e8535867f62fc7981295b",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
 }
