@@ -1,4 +1,9 @@
-export { loadDecisionMesh, loadDecisionMeshFromRoot, loadProjectDecisionMeshFromRoot } from "./load";
+export {
+  loadDecisionMesh,
+  loadDecisionMeshFromRoot,
+  loadProjectDecisionMeshFromRoot,
+  resolveProjectMeshRoot
+} from "./load";
 export { buildDecisionMeshGraph } from "./graph";
 export { validateCapabilityRoutingMirror } from "./capabilityMirror";
 export {
@@ -21,6 +26,7 @@ export type {
   DecisionMeshGraphLink,
   DecisionMeshGraphNode,
   DecisionMeshNode,
+  DecisionMeshNodeReference,
   DecisionMeshRule,
   NodeExplanation,
   ProjectMeshPacket,

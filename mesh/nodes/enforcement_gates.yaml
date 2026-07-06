@@ -1,0 +1,37 @@
+id: enforcement_gates
+type: governance_policy
+name: Enforcement gates
+question: "Does this change touch the deterministic enforcement layer (git hooks, bind-point tooling, vendor airlock)?"
+why: "Gate scripts and bind-point tooling enforce every other rule; an unreviewed change here can silently disable governance, so edits require explicit, auditable acknowledgment."
+signals:
+  - git hook
+  - pre-commit
+  - pre-push
+  - commit-msg
+  - ratchet
+  - bind-point
+  - blocker gate
+  - vendor check
+  - mesh ack
+related_agents:
+  - architect
+  - security
+  - qa
+related_files:
+  - scripts/git-hooks
+  - src/lib/mesh-tools
+  - src/governed-core
+  - scripts/vendor-check.mjs
+required_checks:
+  - gate_change_tested
+  - fail_closed_preserved
+  - mesh_ack_recorded
+stop_conditions:
+  - gate_disabled_without_owner_decision
+  - fail_open_introduced_silently
+  - ack_mechanism_bypassed
+must_not_assume:
+  - Do not weaken a gate to make a commit pass.
+  - Do not treat a Mesh-Ack as approval of the underlying work.
+objective:
+  - Keep enforcement deterministic, fail-closed, and auditable.

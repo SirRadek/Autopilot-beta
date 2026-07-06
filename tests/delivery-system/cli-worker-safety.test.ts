@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   alertTriggersForCliWorkerOutcome,
@@ -16,6 +16,7 @@ import {
   buildVendorEnv,
   buildCodexBashCommand,
   buildAgyArgs,
+  captureCodexResponse,
   shq
 } from "../../src/data/delivery-system/cliWorkerCapture";
 
@@ -142,6 +143,7 @@ describe("CLI worker token telemetry", () => {
       prompt: "hello world",
       rawOutput: "alpha beta gamma",
       durationSeconds: 1.25,
+      attempt_count: 2,
       exitCode: 0,
       lockStatus: "acquired_supervisor_spawn",
       outcome: "success",
@@ -165,7 +167,9 @@ describe("CLI worker token telemetry", () => {
       output_tokens: 4,
       total_tokens: 7,
       token_source: "estimated_chars",
+      lock_source: "supervisor_spawn",
       duration_seconds: 1.25,
+      attempt_count: 2,
       exit_code: 0,
       lock_status: "acquired_supervisor_spawn",
       outcome: "success",
@@ -173,6 +177,51 @@ describe("CLI worker token telemetry", () => {
       error_reason: null,
       parsed_json_present: true
     });
+  });
+
+  it("records routing_mode in telemetry when provided", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-codex-hp-test-20260625T120000",
+      handoffId: "hp-test" as WorkerLockRecord["handoff_id"],
+      vendor: "codex_cli",
+      model: "gpt-5-codex",
+      tierId: null,
+      prompt: "hello world",
+      rawOutput: "alpha beta gamma",
+      durationSeconds: 1.25,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: null,
+      routingMode: "idea"
+    });
+
+    expect(record.routing_mode).toBe("idea");
+  });
+
+  it("omits routing_mode from telemetry when absent", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-codex-hp-test-20260625T120000",
+      handoffId: "hp-test" as WorkerLockRecord["handoff_id"],
+      vendor: "codex_cli",
+      model: "gpt-5-codex",
+      tierId: null,
+      prompt: "hello world",
+      rawOutput: "alpha beta gamma",
+      durationSeconds: 1.25,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: null
+    });
+
+    expect("routing_mode" in record).toBe(false);
   });
 
   it("aggregates telemetry into the subscription session budget", () => {
@@ -254,8 +303,9 @@ describe("CLI worker exec containment", () => {
     expect(shq(evil)).toBe(`'m'\\''; rm -rf ~ #'`);
   });
 
-  it("agy runs WITHOUT --dangerously-skip-permissions by default (bypass is opt-in)", () => {
+  it("agy runs sandboxed by default without the permission bypass", () => {
     const args = buildAgyArgs("ping", { addDirs: ["/repo"] });
+    expect(args).toContain("--sandbox");
     expect(args).not.toContain("--dangerously-skip-permissions");
     // --add-dir access grant stays independent of the bypass
     expect(args).toContain("--add-dir");
@@ -263,7 +313,42 @@ describe("CLI worker exec containment", () => {
   });
 
   it("agy includes the permission bypass only when explicitly opted in", () => {
-    const args = buildAgyArgs("ping", { dangerouslySkipPermissions: true });
+    const args = buildAgyArgs("ping", { addDirs: ["/repo"], dangerouslySkipPermissions: true });
     expect(args).toContain("--dangerously-skip-permissions");
+    expect(args).not.toContain("--sandbox");
+    // --add-dir access grant stays independent of the bypass
+    expect(args).toContain("--add-dir");
+    expect(args).toContain("/repo");
+  });
+
+  it("retries codex once when the first output file is empty and the second has JSON", async () => {
+    const spawnSyncMock = vi.fn()
+      .mockReturnValueOnce({ status: 1, stderr: "", stdout: "", error: undefined })
+      .mockReturnValueOnce({ status: 0, stderr: "", stdout: "", error: undefined });
+    const readFileSyncMock = vi.fn()
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce(JSON.stringify({ ok: true }));
+
+    vi.doMock("node:child_process", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:child_process")>();
+      return { ...actual, spawnSync: spawnSyncMock };
+    });
+    vi.doMock("node:fs", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:fs")>();
+      return { ...actual, readFileSync: readFileSyncMock };
+    });
+
+    try {
+      const result = await captureCodexResponse("ping", { retries: 1, timeoutMs: 1000 });
+
+      expect(spawnSyncMock).toHaveBeenCalledTimes(2);
+      expect(readFileSyncMock).toHaveBeenCalledTimes(2);
+      expect(result.attempts).toBe(2);
+      expect(result.parsedJson).toEqual({ ok: true });
+    } finally {
+      vi.doUnmock("node:child_process");
+      vi.doUnmock("node:fs");
+      vi.restoreAllMocks();
+    }
   });
 });

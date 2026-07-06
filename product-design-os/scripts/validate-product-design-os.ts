@@ -23,6 +23,8 @@ const REQUIRED_FILES = [
   "README.md",
   "briefs/project-brief.schema.json",
   "briefs/brief-template.md",
+  "briefs/motion-brief.schema.json",
+  "briefs/motion-brief-template.md",
   "scope/PROJECT_SCOPE.md",
   "scope/CHANGE_REQUESTS.md",
   "scope/DECISIONS.md",
@@ -44,6 +46,8 @@ const REQUIRED_FILES = [
   "library/source-catalog.json",
   "library/reference-catalog.json",
   "library/project-index.json",
+  "library/preset.schema.json",
+  "library/preset-manifest.json",
   "assets/asset.schema.json",
   "assets/asset-manifest.json",
   "patterns/pattern.schema.json",
@@ -58,6 +62,8 @@ const REQUIRED_FILES = [
   "taste/project-preferences.json",
   "taste/feedback-log.json",
   "taste/pattern-scores.json",
+  "qa/profile-check-matrix.json",
+  "qa/profile-check-matrix.schema.json",
   "reader/README.md",
   "reader/capture-sample.html",
   "reader/document-reader-adapter.ts",
@@ -199,6 +205,9 @@ export function validateProductDesignOs(repoRoot = process.cwd()): PdosValidatio
   validateLibraryRelationships(pdosRoot, repoRoot, errors);
   validateTasteMemory(pdosRoot, repoRoot, errors);
   validateRecipes(join(pdosRoot, "recipes"), repoRoot, errors);
+  validateMotionBriefs(pdosRoot, repoRoot, errors);
+  validateProfileCheckMatrix(pdosRoot, repoRoot, errors);
+  validatePresetLibrary(pdosRoot, repoRoot, errors);
   validateCompositionSpecs(pdosRoot, repoRoot, errors);
   validateEvidenceRecords(pdosRoot, repoRoot, errors);
   validateMarkdown(pdosRoot, repoRoot, errors, warnings);
@@ -666,6 +675,118 @@ function validateRecipes(recipesRoot: string, repoRoot: string, errors: PdosVali
       errors.push({ file: toRepoPath(repoRoot, recipesRoot), message: `Missing required recipe ${recipeId}.` });
     }
   }
+}
+
+function validateMotionBriefs(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const schemaFile = join(pdosRoot, "briefs/motion-brief.schema.json");
+  if (!existsSync(schemaFile)) {
+    return; // Missing schema is already reported by the REQUIRED_FILES check.
+  }
+
+  const motionBriefSchema = readJsonFile(schemaFile, repoRoot, errors);
+  if (!isRecord(motionBriefSchema)) {
+    return;
+  }
+
+  const motionBriefsRoot = join(pdosRoot, "briefs/motion");
+  if (!existsSync(motionBriefsRoot)) {
+    return; // No motion briefs authored yet; the directory is optional.
+  }
+
+  const motionBriefFiles = listFiles(motionBriefsRoot)
+    .filter((file) => file.endsWith(".json"))
+    .sort();
+
+  for (const briefFile of motionBriefFiles) {
+    const value = readJsonFile(briefFile, repoRoot, errors);
+    if (value === undefined) {
+      continue;
+    }
+
+    for (const issue of validateJsonSchema(value, motionBriefSchema)) {
+      errors.push({
+        file: toRepoPath(repoRoot, briefFile),
+        message: `${issue.path}: ${issue.message}`
+      });
+    }
+  }
+}
+
+function validateProfileCheckMatrix(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const schemaFile = join(pdosRoot, "qa/profile-check-matrix.schema.json");
+  const matrixFile = join(pdosRoot, "qa/profile-check-matrix.json");
+  if (!existsSync(schemaFile) || !existsSync(matrixFile)) {
+    return; // Missing files are already reported by the REQUIRED_FILES check.
+  }
+
+  const matrixSchema = readJsonFile(schemaFile, repoRoot, errors);
+  const matrix = readJsonFile(matrixFile, repoRoot, errors);
+  if (!isRecord(matrixSchema) || matrix === undefined) {
+    return;
+  }
+
+  for (const issue of validateJsonSchema(matrix, matrixSchema)) {
+    errors.push({
+      file: toRepoPath(repoRoot, matrixFile),
+      message: `${issue.path}: ${issue.message}`
+    });
+  }
+}
+
+function validatePresetLibrary(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {
+  const schemaFile = join(pdosRoot, "library/preset.schema.json");
+  const manifestFile = join(pdosRoot, "library/preset-manifest.json");
+  if (!existsSync(schemaFile) || !existsSync(manifestFile)) {
+    return; // Missing files are already reported by the REQUIRED_FILES check.
+  }
+
+  const presetSchema = readJsonFile(schemaFile, repoRoot, errors);
+  const manifest = readJsonFile(manifestFile, repoRoot, errors);
+  if (!isRecord(presetSchema) || !isRecord(manifest)) {
+    return;
+  }
+
+  if (manifest.version !== 1) {
+    errors.push({ file: toRepoPath(repoRoot, manifestFile), message: "Preset manifest version must be 1." });
+  }
+
+  if (!Array.isArray(manifest.presets)) {
+    errors.push({
+      file: toRepoPath(repoRoot, manifestFile),
+      message: "Preset manifest must contain an array field named presets."
+    });
+    return;
+  }
+
+  manifest.presets.forEach((preset, index) => {
+    for (const issue of validateJsonSchema(preset, presetSchema)) {
+      errors.push({
+        file: toRepoPath(repoRoot, manifestFile),
+        message: `presets[${index}] ${issue.path}: ${issue.message}`
+      });
+    }
+  });
+
+  const presets = getRecordArray(manifest, "presets");
+  validateUniqueCatalogKeys(manifestFile, repoRoot, "presets", "id", presets, errors);
+
+  const patternManifestParseErrors: PdosValidationIssue[] = [];
+  const patternManifest = readJsonFile(join(pdosRoot, "patterns/pattern-manifest.json"), repoRoot, patternManifestParseErrors);
+  const patternIds = new Set(
+    getRecordArray(patternManifest, "patterns")
+      .filter((pattern) => typeof pattern.id === "string")
+      .map((pattern) => String(pattern.id))
+  );
+
+  presets.forEach((preset, index) => {
+    const patternId = preset.pattern_id;
+    if (typeof patternId === "string" && patternId.length > 0 && !patternIds.has(patternId)) {
+      errors.push({
+        file: toRepoPath(repoRoot, manifestFile),
+        message: `PDOS_GHOST_PATTERN: presets[${index}] references missing pattern ${patternId}; pattern_id must exist in patterns/pattern-manifest.json.`
+      });
+    }
+  });
 }
 
 export function validateCompositionSpecs(pdosRoot: string, repoRoot: string, errors: PdosValidationIssue[]): void {

@@ -40,6 +40,7 @@ export type ReasoningProviderId =
   | "anthropic_claude_subscription"
   | "gemini_cli"
   | "deepseek_api_or_self_hosted"
+  | "openrouter_free"
   | "deepseek_web_chat_manual";
 
 export type ReasoningTaskLaneId =
@@ -230,8 +231,12 @@ export const layerProviderMapping = {
 
 export type CliVendorSelection = "codex_cli" | "agy_cli" | null;
 
-// Maps each orchestration layer to the CLI vendor dispatched via runCliWorker().
-// null = Claude handles this layer directly (orchestrator, memory_summarizer).
+// Maps each orchestration layer to the spawned CLI vendor used for ADVISORY worker output.
+// This is a SEPARATE AXIS from layerProviderMapping: layerProviderMapping is the reasoning
+// provider (e.g. architect/reviewer reason via Claude, the supervisor session), while this map
+// is which CLI worker is spawned to PRODUCE advisory output that Claude then consumes. They are
+// orthogonal and intentionally differ (architect/reviewer -> anthropic reasoning + agy_cli advisory).
+// null = no spawned CLI; Claude handles this layer directly (orchestrator, memory_summarizer).
 // codex_cli = bounded implementation/code/tests (OpenAI Codex CLI).
 // agy_cli   = analysis/brainstorming/critique (agy CLI).
 export const supervisorCliVendorMap = {
@@ -498,6 +503,54 @@ export const reasoningProviderPolicies = [
     sourceIds: ["deepseek-reasoning-model", "deepseek-json-output", "deepseek-function-calling"]
   },
   {
+    id: "openrouter_free",
+    provider: "openrouter",
+    accessMode: "api_or_self_hosted",
+    advisoryTrustTier: "bounded_draft",
+    advisoryWeight: 45,
+    contextScope:
+      "minimal redacted OpenRouter free-model draft context for qwen/qwen3-coder:free and nvidia/nemotron-3-ultra-550b-a55b:free; never sensitive/private context or broad repository dumps",
+    bestFor: [
+      "qwen/qwen3-coder:free code drafts",
+      "qwen/qwen3-coder:free test drafts",
+      "qwen/qwen3-coder:free refactor drafts",
+      "nvidia/nemotron-3-ultra-550b-a55b:free planning drafts",
+      "nvidia/nemotron-3-ultra-550b-a55b:free brainstorming drafts",
+      "nvidia/nemotron-3-ultra-550b-a55b:free long-context research drafts"
+    ],
+    avoidFor: [
+      "final delivery approval",
+      "security-critical review",
+      "sensitive/private context",
+      "architecture decisions",
+      "source-of-truth claims",
+      "OpenRouter auto-router",
+      "paid spill"
+    ],
+    requiredChecks: [
+      "provider_availability_verified",
+      "free_tier_or_no_cost_confirmed",
+      "redacted_context_only",
+      "redaction_before_send",
+      "explicit_model_id_allowlist",
+      "model_output_scored_before_acceptance",
+      "eval_recorded_for_output",
+      "local_verification_required"
+    ],
+    stopConditions: [
+      "provider_availability_unverified",
+      "private_data_not_redacted",
+      "broad_private_context_sent_to_lower_trust_model",
+      "sensitive_private_context_sent_to_free_route",
+      "paid_model_or_credit_required_without_owner_decision",
+      "openrouter_paid_spill_detected",
+      "openrouter_auto_router_requested",
+      "openrouter_missing_env_key_not_reported_as_missing",
+      "model_output_used_as_source_of_truth"
+    ],
+    sourceIds: ["openrouter-free-lane-adr"]
+  },
+  {
     id: "deepseek_web_chat_manual",
     provider: "deepseek",
     accessMode: "manual_web_login",
@@ -559,7 +612,7 @@ export const reasoningTaskLanePolicies = [
   {
     id: "bounded_coding_worker",
     taskSignals: ["bounded implementation", "focused bugfix", "refactor", "test generation"],
-    preferredProviders: ["openai_gpt", "qwen_local", "deterministic_tools"],
+    preferredProviders: ["qwen_local", "deterministic_tools", "openai_gpt"],
     requiredChecks: ["bounded_file_scope", "test_evidence", "supervisor_reviews_diff_or_claims"],
     stopConditions: ["broad_ambiguous_scope", "model_output_used_as_source_of_truth"]
   },
@@ -890,12 +943,49 @@ export function selectModelForLayer(
   return provider;
 }
 
+/**
+ * Risk-priority ordering for lane selection (S0 — vendor-routing v2).
+ *
+ * `reasoningTaskLanePolicies` is declared roughly cheapest/most-deterministic first, so a
+ * naive first-match (matches[0]) resolves an overlapping signal like "audit" — which is a
+ * signal on BOTH `deterministic_verification` and `architecture_security_review` — to the
+ * deterministic lane and silently drops the riskier review lane. On a MULTI-match we want
+ * the riskier lane to win (e.g. "security audit" -> architecture_security_review).
+ *
+ * Lower index = riskier = preferred on a tie. Single-match behavior is unchanged: a lane
+ * that matches alone is still returned alone, regardless of its rank.
+ * See docs/decisions/vendor-routing-policy-beta-v2.md (slice S0).
+ */
+const LANE_SELECTION_PRIORITY: readonly ReasoningTaskLaneId[] = [
+  "sensitive_private_context",
+  "architecture_security_review",
+  "agent_validation",
+  "multimodal_design_review",
+  "long_context_synthesis",
+  "structured_tool_reasoning",
+  "bounded_coding_worker",
+  "local_routine_worker",
+  "deterministic_verification"
+];
+
+function laneRiskPriority(lane: ReasoningTaskLaneId): number {
+  const index = LANE_SELECTION_PRIORITY.indexOf(lane);
+  // Unlisted lanes sort last (least risky) but keep a stable position.
+  return index === -1 ? LANE_SELECTION_PRIORITY.length : index;
+}
+
 function selectTaskLanes(normalizedTask: string): ReasoningTaskLaneId[] {
   const matches = reasoningTaskLanePolicies
     .filter((lane) => hasAny(normalizedTask, lane.taskSignals))
     .map((lane) => lane.id);
 
-  return matches.length > 0 ? unique(matches) : ["architecture_security_review"];
+  if (matches.length === 0) {
+    return ["architecture_security_review"];
+  }
+
+  // Stable risk-priority sort: on a multi-match the riskier lane leads (matches[0]),
+  // so downstream `matches[0]` callers get the riskier lane. A single match is unaffected.
+  return unique(matches).sort((a, b) => laneRiskPriority(a) - laneRiskPriority(b));
 }
 
 function selectProviderPolicies(taskLanes: readonly ReasoningTaskLaneId[]): ReasoningProviderId[] {
@@ -1068,6 +1158,8 @@ function providerFamilyForReasoningProvider(provider: ReasoningProviderId): Mode
     case "deepseek_api_or_self_hosted":
     case "deepseek_web_chat_manual":
       return "deepseek";
+    case "openrouter_free":
+      return "unknown";
     case "deterministic_tools":
       return "local";
   }

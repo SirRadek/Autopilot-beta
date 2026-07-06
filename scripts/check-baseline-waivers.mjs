@@ -81,6 +81,18 @@ export function findUnwaivedBaselineGrowth(entries, commitMessages) {
   return findings;
 }
 
+// A caller-inherited GIT_DIR/GIT_WORK_TREE would make these `git` reads resolve the CALLER's repo
+// instead of ROOT (same leak class that corrupted the host config via the pre-push hook) — and a
+// wrong-repo read here silently yields wrong waiver-gate results. Scrub before shelling out.
+function gitScrubbedEnv() {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_COMMON_DIR;
+  return env;
+}
+
 function readJsonAt(ref, path) {
   try {
     const text =
@@ -88,7 +100,7 @@ function readJsonAt(ref, path) {
         ? existsSync(join(ROOT, path))
           ? readFileSync(join(ROOT, path), "utf8")
           : null
-        : execFileSync("git", ["show", `${ref}:${path}`], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+        : execFileSync("git", ["show", `${ref}:${path}`], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: gitScrubbedEnv() });
     return text ? JSON.parse(text) : {};
   } catch {
     return {}; // absent/unparseable at that ref → treated as no excuses
@@ -97,7 +109,7 @@ function readJsonAt(ref, path) {
 
 function gitLogMessages(range) {
   try {
-    const out = execFileSync("git", ["log", "--format=%B%x00", range], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const out = execFileSync("git", ["log", "--format=%B%x00", range], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: gitScrubbedEnv() });
     return out.split("\0").map((s) => s.trim()).filter(Boolean);
   } catch {
     return [];

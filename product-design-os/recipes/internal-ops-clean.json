@@ -4,6 +4,7 @@
   "priorities": ["clarity", "speed", "low-cognitive-load", "data-entry", "auditability"],
   "logic_priority": 9,
   "design_priority": 3,
+  "page_profile": "balanced",
   "motion_level": 1,
   "visual_energy": 2,
   "allowed_pattern_ids": ["table-first", "detail-drawer", "status-badges", "bulk-actions", "saved-filters"],

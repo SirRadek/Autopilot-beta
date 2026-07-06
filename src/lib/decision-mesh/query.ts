@@ -6,6 +6,7 @@ import type {
   DecisionMesh,
   DecisionMeshEdge,
   DecisionMeshNode,
+  DecisionMeshNodeReference,
   DecisionMeshRule,
   NodeExplanation,
   ProjectMeshPacketRule,
@@ -17,12 +18,16 @@ import type {
   RiskResult
 } from "./types";
 import { selectCapabilityModules } from "../../data/delivery-system/capabilities";
+import { getRoutingMode } from "../../data/delivery-system/routingModes";
 
 const DEFAULT_MAX_NODES = 12;
 // Always-applicable root-mesh nodes forced into a packet when a task matched no signal, so an
 // unclassified task never yields a silently advice-free packet. Project meshes without these ids
 // still get the no_governance_matched flag (their own floor is a separate concern).
 const GOVERNANCE_FLOOR_NODE_IDS = ["capability_routing", "context_economy_policy"] as const;
+// buildAgentPacket caps the packet at this many nodes for ANY token budget; it is also the ceiling
+// against which blocker protection is computed, so a tiny packet surfaces the same blockers a full one would.
+const AGENT_PACKET_MAX_NODES = 7;
 const AGENT_ORDER = [
   "architect",
   "web_architect",
@@ -45,12 +50,34 @@ interface ScoredNode {
   readonly score: number;
 }
 
+interface FullRelevantSubgraph {
+  readonly task: string;
+  readonly agent?: string;
+  readonly relevant_nodes: readonly DecisionMeshNode[];
+  readonly relevant_edges: readonly DecisionMeshEdge[];
+  readonly required_agents: readonly string[];
+  readonly node_scores: ReadonlyMap<string, number>;
+}
+
 export function getRelevantSubgraph(mesh: DecisionMesh, input: RelevantSubgraphInput): RelevantSubgraph {
+  const subgraph = getRelevantSubgraphFull(mesh, input);
+  const result: RelevantSubgraph = {
+    task: subgraph.task,
+    relevant_nodes: subgraph.relevant_nodes.map((node) => toNodeReference(node, subgraph.node_scores)),
+    relevant_edges: subgraph.relevant_edges,
+    required_agents: subgraph.required_agents
+  };
+
+  return subgraph.agent ? { ...result, agent: subgraph.agent } : result;
+}
+
+function getRelevantSubgraphFull(mesh: DecisionMesh, input: RelevantSubgraphInput): FullRelevantSubgraph {
   const maxNodes = Math.max(1, Math.min(input.max_nodes ?? DEFAULT_MAX_NODES, mesh.nodes.length));
   const scored = mesh.nodes
     .map((node) => ({ node, score: scoreNode(node, input.task, input.agent) }))
     .filter((entry) => entry.score > 0)
     .sort(compareScoredNodes);
+  const nodeScores = new Map(scored.map((entry) => [entry.node.id, entry.score]));
 
   const selectedIds: string[] = [];
 
@@ -73,38 +100,51 @@ export function getRelevantSubgraph(mesh: DecisionMesh, input: RelevantSubgraphI
   const selectedIdSet = new Set(selectedIds);
   const relevantNodes = selectedIds.map((id) => requireNode(mesh, id));
   const relevantEdges = mesh.edges.filter((edge) => selectedIdSet.has(edge.from) && selectedIdSet.has(edge.to));
-  const excluded = mesh.nodes.filter((node) => !selectedIdSet.has(node.id)).map((node) => node.id);
 
-  const result: RelevantSubgraph = {
+  const result: FullRelevantSubgraph = {
     task: input.task,
     relevant_nodes: relevantNodes,
     relevant_edges: relevantEdges,
     required_agents: orderAgents(unique(relevantNodes.flatMap((node) => node.related_agents))),
-    excluded
+    node_scores: nodeScores
   };
 
   return input.agent ? { ...result, agent: input.agent } : result;
 }
 
 /**
- * Severity-aware packet construction. getRelevantSubgraph keeps only the top-N scored
+ * Severity-aware packet construction. getRelevantSubgraphFull keeps only the top-N scored
  * nodes for the token budget, and packet rules/stop_conditions are derived from selected
  * nodes only — so a BLOCKER relevant to the task could be silently truncated away before
- * the agent ever sees it. Re-attach any task-relevant (score > 0) node that carries a
- * blocker rule but fell outside the score cut, so a relevant blocker is never dropped.
+ * the agent ever sees it.
+ *
+ * The fix must be BUDGET-INDEPENDENT within the builder's range: a blocker present in the
+ * WIDEST packet this builder can produce must also be present in a tight one. So blocker
+ * protection is computed against a fixed CEILING subgraph (getRelevantSubgraph at the builder's
+ * maximum node count), not against the already-truncated base. Any blocker carrier the ceiling
+ * subgraph contains — including one reached only via a mesh edge (the escalates_when_combined
+ * case a directly-scored-only test would miss) — is re-attached if the tighter base dropped it.
+ * This makes full-packet blockers ⊆ tiny-packet blockers hold, while never surfacing a blocker
+ * the widest packet itself would not (which an unbounded 1-hop frontier would wrongly do).
  */
 function withRelevantBlockerNodes(
   mesh: DecisionMesh,
   baseNodes: readonly DecisionMeshNode[],
   task: string,
-  agent: string | undefined
+  agent: string | undefined,
+  ceilingMaxNodes: number
 ): readonly DecisionMeshNode[] {
   const have = new Set(baseNodes.map((node) => node.id));
   const blockerNodeIds = new Set(
     mesh.rules.filter((rule) => rule.severity === "blocker").flatMap((rule) => rule.applies_to)
   );
+  const ceiling = getRelevantSubgraph(
+    mesh,
+    agent ? { task, agent, max_nodes: ceilingMaxNodes } : { task, max_nodes: ceilingMaxNodes }
+  );
+  const ceilingIds = new Set(ceiling.relevant_nodes.map((node) => node.id));
   const forced = mesh.nodes.filter(
-    (node) => !have.has(node.id) && blockerNodeIds.has(node.id) && scoreNode(node, task, agent) > 0
+    (node) => !have.has(node.id) && blockerNodeIds.has(node.id) && ceilingIds.has(node.id)
   );
   return forced.length > 0 ? [...baseNodes, ...forced] : baseNodes;
 }
@@ -130,13 +170,20 @@ function applyGovernanceFloor(
 }
 
 export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): AgentPacket {
-  const maxNodes = Math.max(4, Math.min(7, Math.floor((input.token_budget ?? 7000) / 1000)));
-  const subgraph = getRelevantSubgraph(mesh, {
+  const modeContract = input.mode !== undefined ? getRoutingMode(input.mode) : undefined;
+  const maxNodes = Math.max(4, Math.min(AGENT_PACKET_MAX_NODES, Math.floor((input.token_budget ?? 7000) / 1000)));
+  const subgraph = getRelevantSubgraphFull(mesh, {
     task: input.task,
     agent: input.agent,
     max_nodes: maxNodes
   });
-  const scored = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const scored = withRelevantBlockerNodes(
+    mesh,
+    subgraph.relevant_nodes,
+    input.task,
+    input.agent,
+    AGENT_PACKET_MAX_NODES
+  );
   const { nodes, noGovernanceMatched } = applyGovernanceFloor(mesh, scored);
   const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
@@ -144,6 +191,7 @@ export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): A
   return {
     agent: input.agent,
     task: input.task,
+    ...(input.mode !== undefined ? { routing_mode: input.mode } : {}),
     objective: unique(
       nodes.flatMap((node) => node.objective ?? [`Answer: ${node.question}`])
     ),
@@ -155,8 +203,14 @@ export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): A
       ...nodes.flatMap((node) => node.must_not_assume ?? []),
       ...rules.flatMap((rule) => rule.must_not_assume ?? [])
     ]),
-    required_checks: unique(nodes.flatMap((node) => node.required_checks)),
-    stop_conditions: unique(nodes.flatMap((node) => node.stop_conditions ?? [])),
+    required_checks: unique([
+      ...nodes.flatMap((node) => node.required_checks),
+      ...(modeContract?.requiredChecks ?? [])
+    ]),
+    stop_conditions: unique([
+      ...nodes.flatMap((node) => node.stop_conditions ?? []),
+      ...(modeContract?.stopConditions ?? [])
+    ]),
     ...(noGovernanceMatched ? { no_governance_matched: true } : {})
   };
 }
@@ -166,8 +220,14 @@ export function buildProjectMeshPacket(mesh: DecisionMesh, input: ProjectMeshPac
     task: input.task,
     max_nodes: input.max_nodes ?? DEFAULT_MAX_NODES
   };
-  const subgraph = getRelevantSubgraph(mesh, input.agent ? { ...subgraphInput, agent: input.agent } : subgraphInput);
-  const scored = withRelevantBlockerNodes(mesh, subgraph.relevant_nodes, input.task, input.agent);
+  const subgraph = getRelevantSubgraphFull(mesh, input.agent ? { ...subgraphInput, agent: input.agent } : subgraphInput);
+  const scored = withRelevantBlockerNodes(
+    mesh,
+    subgraph.relevant_nodes,
+    input.task,
+    input.agent,
+    Math.max(input.max_nodes ?? DEFAULT_MAX_NODES, DEFAULT_MAX_NODES)
+  );
   const { nodes, noGovernanceMatched } = applyGovernanceFloor(mesh, scored);
   const selectedIds = new Set(nodes.map((node) => node.id));
   const rules = mesh.rules.filter((rule) => rule.applies_to.some((nodeId) => selectedIds.has(nodeId)));
@@ -219,7 +279,7 @@ export function findRequiredAgents(
   mesh: DecisionMesh,
   input: Pick<RelevantSubgraphInput, "task">
 ): RequiredAgentsResult {
-  const subgraph = getRelevantSubgraph(mesh, {
+  const subgraph = getRelevantSubgraphFull(mesh, {
     task: input.task,
     max_nodes: DEFAULT_MAX_NODES
   });
@@ -232,7 +292,7 @@ export function findRequiredAgents(
 }
 
 export function findRisks(mesh: DecisionMesh, input: Pick<RelevantSubgraphInput, "task">): RiskResult {
-  const subgraph = getRelevantSubgraph(mesh, {
+  const subgraph = getRelevantSubgraphFull(mesh, {
     task: input.task,
     max_nodes: DEFAULT_MAX_NODES
   });
@@ -242,8 +302,19 @@ export function findRisks(mesh: DecisionMesh, input: Pick<RelevantSubgraphInput,
 
   return {
     task: input.task,
-    risks,
+    risks: risks.map((node) => toNodeReference(node, subgraph.node_scores)),
     stop_conditions: unique(risks.flatMap((node) => node.stop_conditions ?? []))
+  };
+}
+
+function toNodeReference(
+  node: DecisionMeshNode,
+  nodeScores: ReadonlyMap<string, number>
+): DecisionMeshNodeReference {
+  return {
+    id: node.id,
+    name: node.name,
+    score: nodeScores.get(node.id) ?? 0
   };
 }
 

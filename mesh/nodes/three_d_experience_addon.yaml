@@ -20,7 +20,6 @@ related_agents:
 related_files:
   - src/data/delivery-system/capabilities.ts
   - docs/autopilot/product-brief-template.md
-  - docs/superpowers/specs/2026-05-09-radeq-style-matrix-design.md
 required_checks:
   - performance_budget
   - mobile_fallback

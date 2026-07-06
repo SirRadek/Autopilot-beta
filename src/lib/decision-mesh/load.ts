@@ -23,6 +23,22 @@ export function loadProjectDecisionMeshFromRoot(root: string, projectSlug: strin
   return loadDecisionMesh(join(root, "docs", "projects", projectSlug, "decision-mesh"));
 }
 
+/**
+ * Resolve which repo root holds a supervised project's Decision Mesh. A project repo lives as a
+ * SIBLING of the control plane at <ProjectsDir>/<slug>, where ProjectsDir defaults to the control
+ * plane's parent `../Projects` and is overridable via AUTOPILOT_PROJECTS_DIR (keeps absolute paths
+ * out of the committed tree / portable). If the sibling has a real .autopilot/decision-mesh, use it;
+ * otherwise fall back to the control-plane root so loadProjectDecisionMeshFromRoot uses the in-repo
+ * docs/projects/<slug> mesh. assertSafeProjectSlug blocks path traversal via the slug.
+ */
+export function resolveProjectMeshRoot(controlPlaneRoot: string, projectSlug: string): string {
+  assertSafeProjectSlug(projectSlug);
+  const projectsDir = process.env.AUTOPILOT_PROJECTS_DIR ?? join(controlPlaneRoot, "..", "Projects");
+  const sibling = join(projectsDir, projectSlug);
+  if (existsSync(join(sibling, ".autopilot", "decision-mesh", "nodes"))) return sibling;
+  return controlPlaneRoot;
+}
+
 export function loadDecisionMesh(meshDirectory: string): DecisionMesh {
   const nodesDirectory = join(meshDirectory, "nodes");
 

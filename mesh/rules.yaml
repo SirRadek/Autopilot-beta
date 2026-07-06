@@ -74,6 +74,15 @@ rules:
     must_not_assume:
       - Do not create duplicate sources of truth.
       - Do not create an unscoped parallel runtime.
+  - id: MODE-ROUTE-001
+    title: Routing-mode lane membership is enforced at dispatch
+    applies_to:
+      - capability_routing
+    instruction: "A governed dispatch that declares a routing_mode must target only a lane the mode allows. The cost-blind guard in routingModes.ts refuses expensive lanes (claude_supervisor, codex_cli) in idea mode via lane_not_allowed_in_mode, and routing_mode is bound into computePacketHash so one mode's handoff cannot replay another mode's hash. routing_mode is an explicit supervisor input, never auto-classified as authority."
+    severity: major
+    must_not_assume:
+      - Do not auto-classify the routing mode as authoritative.
+      - Do not allow an expensive lane in idea mode.
   - id: OBS-SCOPE-001
     title: Observability keeps Autopilot and project problems separate
     applies_to:
@@ -236,3 +245,23 @@ rules:
     must_not_assume:
       - Do not assume Claude can act as codex_cli or agy_cli.
       - Do not skip runCliWorker() for a vendor task because it is small or fast.
+  - id: GATE-ACK-001
+    title: Enforcement gate changes need an explicit Mesh-Ack
+    applies_to:
+      - enforcement_gates
+    instruction: "Changes to git hooks, bind-point tooling, or the vendor airlock require a reviewed Mesh-Ack commit trailer, focused tests, and preserved fail-closed behavior."
+    severity: blocker
+    must_not_assume:
+      - Do not weaken or bypass a gate to make a commit pass.
+  - id: ACCESS-TIER-001
+    title: Control-plane access is verified-vendor only
+    applies_to:
+      - supervisor_execution_loop
+      - subscription_worker_boundary
+      - reasoning_strategy
+    instruction: "Only verified vendors — the Claude supervisor, codex_cli, and agy_cli — may access the autopilot control plane (repository, mesh, governance surfaces). Lower-trust workers (openrouter_free, qwen_local, deepseek) receive only project-scoped, redacted packets with no sensitive or security-threat content; they never self-prompt, never persist or learn from our data, and every input and output is mediated and reviewed by a verified vendor."
+    severity: blocker
+    must_not_assume:
+      - Do not give a free or low-trust worker control-plane files, mesh content, or governance context.
+      - Do not chain a worker output into the next prompt without verified-vendor normalization.
+      - Do not let a worker accumulate memory or fine-tune on Autopilot or project data.

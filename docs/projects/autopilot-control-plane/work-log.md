@@ -1,5 +1,106 @@
 # Autopilot Control Plane Work Log
 
+## 2026-07-06 Governed Dispatch Worker Metadata Pass-Through
+
+Date: 2026-07-06
+Request or trigger: owner ran the Nemotron smoke driver and `runCliWorker()` rejected the governed OpenRouter call because `dispatchHandoff()` dropped `openrouterMode` before narrowing the handoff into `CliWorkerInput`.
+Mode: WRITE_ALLOWED for local governed-core dispatch mapping, regression coverage, architecture record, and work log only. No remote mutation and no live OpenRouter call were performed by this fix.
+Scope:
+
+- Preserve guarded worker metadata when governed-core dispatch forwards a verified handoff to `runCliWorker()`.
+- Add regression coverage that Nemotron idea-mode dispatch forwards `openrouterMode`, `taskPacketRef`, `routingMode`, and verified lock source.
+- Record the architecture invariant that dispatch narrowing must not drop downstream bounded-worker guard fields.
+
+Files changed:
+
+- `src/governed-core/dispatch.ts`
+- `tests/governed-core/dispatch-routing-mode.test.ts`
+- `docs/projects/autopilot-control-plane/architecture.md`
+- `docs/projects/autopilot-control-plane/work-log.md`
+
+Architecture impact: governed-core remains the dispatch chokepoint; the change preserves already-declared worker guard metadata across the chokepoint instead of weakening the `openrouter_api` and `codex_implement` bounded-worker doctrine.
+
+Project mesh impact: no mesh node or rule changes were needed; the active governance was `protective_supervision_policy`, `supervisor_execution_loop`, and routing/worker guard policy.
+
+Verification:
+
+- `npm.cmd test -- governed-core/dispatch-routing-mode` passed: 1 file, 6 tests.
+- `npm.cmd run typecheck` passed.
+
+## 2026-06-29 Sibling Project Mesh Resolver
+
+Date: 2026-06-29
+Request or trigger: owner asked to fix `build_project_mesh_packet` so a supervised project's mesh resolves from that project's sibling repository instead of only the control-plane docs mirror.
+Mode: WRITE_ALLOWED for the local Decision Mesh resolver, read-only MCP handler wiring, fixture coverage, architecture record, and work log only. No remote mutation, no commit, and no absolute machine paths were added.
+Scope:
+
+- Add a portable `resolveProjectMeshRoot` binding that validates the project slug, checks `<ProjectsDir>/<slug>/.autopilot/decision-mesh/nodes`, and falls back to the control-plane root.
+- Route the read-only MCP `build_project_mesh_packet` handler through the resolver while keeping the tool schema slug-only.
+- Add fixture coverage for the sibling project mesh branch, fallback branch, and traversal-slug rejection.
+
+Files changed:
+
+- `src/lib/decision-mesh/load.ts`
+- `src/lib/decision-mesh/index.ts`
+- `mcp/server.ts`
+- `tests/decision-mesh/project-root.test.ts`
+- `tests/fixtures/decision-mesh/projects-dir/demo-proj/.autopilot/decision-mesh/`
+- `docs/projects/autopilot-control-plane/architecture.md`
+- `docs/projects/autopilot-control-plane/work-log.md`
+
+Architecture impact: supervised project mesh packets can now bind to repo-local sibling project meshes via `AUTOPILOT_PROJECTS_DIR` or the portable `../Projects` default, preserving the existing control-plane docs mirror fallback and slug-only traversal guard.
+
+Project mesh impact: no root mesh node/rule changes were needed; this fixes resolver behavior and documents the project-mesh source boundary.
+
+Verification:
+
+- `npm.cmd run typecheck` passed.
+- `npm.cmd test -- project-root` passed: 1 file, 3 tests.
+- `npm.cmd test -- query` passed: 1 file, 30 tests.
+## 2026-07-03 page_profile Dual-Track + Motion Brief Contract (P0–P2)
+
+Date: 2026-07-03
+Request or trigger: owner supplied a "motion effect production system" design;
+pairing audit + independent GPT-5.5 xhigh opposition review (codex read-only +
+web search, verdict GO-WITH-CHANGES); owner ratified start of P0–P2. See
+`docs/decisions/page-profile-dual-track-adr.md` for decisions and deferrals.
+Mode: governed implementation in worktree branch (3 parallel Fable 5 subagents
+with disjoint file ownership + supervisor integration/review). No push.
+
+Landed:
+
+- P0: canonical `page_profile` enum (`seo_led|balanced|brand_led|
+  experimental_showcase`) required in recipe + project-brief schemas; all 8
+  recipes declare it; `rules/design-seo-tradeoff.md` names the canonical field;
+  new `recipes/standard-web-fast.json` (normal fast-pages track, seo_led,
+  motion_level 1).
+- P1: `qa/profile-check-matrix.json` (+schema +loader) — 44 codes × 4 profiles,
+  fail-closed (unknown code/profile → blocking); `--profile` wired into
+  fit-safety and visual-qa-browser (default `balanced` = decision-identical to
+  prior behavior); only 2 downgrades, both experimental_showcase-only, reasons
+  recorded; downgraded findings stay reported (`advisory_profile` /
+  `profile_downgraded_reasons`).
+- P2: `briefs/motion-brief.schema.json` + `motion-brief-template.md` (driver/
+  objects/states/constraints/acceptance, NEED_SPEC_CLARIFICATION protocol);
+  `pdos:validate` now requires the new files and validates `briefs/motion/*.json`
+  and the matrix.
+- Integration: score-baseline fixtures regenerated (all 7 `selected_recipe`
+  winners unchanged; standard-web-fast is runner-up on public-sector input);
+  f1a recipe count 7→8; vendor-manifest: 3 files marked
+  `patched_by: page-profile-p0`, 6 new files registered `beta_authored`.
+
+Verification: `npm run verify` full pass (vendor-check OK 77 pristine + 44
+patched; ratchet 0 new dead / 0 stale); `mesh:changed --since origin/main
+--fail-on-blocker` → 25 changed, 0 blockers; targeted suites f1a 6/6, f5 5/5,
+f7 5/5, profile-matrix 14/14, f8 visual-qa 6/6, f2 fit-safety 8/8.
+
+Deferred (measured-pain order, see ADR): P3 motion-stack decision tree +
+candidate_source entries + dated evidence records; P4 preset layer; P5
+visual-qa scroll-progress + debug-API convention; P6 skills adoption
+(`greensock/gsap-skills` first candidate). visual-qa-browser stays a per-task
+gate, not part of `verify` (owner decision). Motion-lab/demos belong to a
+supervised project repo as part of the beta bootstrap, not this control plane.
+
 ## 2026-06-21 VEM Live Capture + AST-Stamp Decision
 
 Date: 2026-06-21

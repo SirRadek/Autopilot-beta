@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const hooksPath = "scripts/git-hooks";
-const hooks = ["pre-commit", "pre-push"];
+const absoluteHooksPath = resolve(root, hooksPath).replaceAll("\\", "/");
+const hooks = ["pre-commit", "commit-msg", "pre-push"];
 
 function git(args) {
   return spawnSync("git", args, {
@@ -42,10 +43,24 @@ if (currentPath === hooksPath) {
   process.exit(0);
 }
 
+if (currentPath === absoluteHooksPath) {
+  const configured = git(["config", "--local", "core.hooksPath", hooksPath]);
+  if (configured.status !== 0) {
+    console.error("[autopilot:hooks] failed to repair absolute core.hooksPath");
+    console.error(configured.stderr.trim());
+    process.exit(configured.status ?? 1);
+  }
+
+  console.log(
+    `[autopilot:hooks] repaired absolute core.hooksPath=${currentPath} to relative ${hooksPath} for worktree-correct hooks`
+  );
+  process.exit(0);
+}
+
 if (currentPath) {
   console.warn(
-    `[autopilot:hooks] existing core.hooksPath=${currentPath}; leaving it unchanged. ` +
-      `Run "git config core.hooksPath ${hooksPath}" after merging local hooks.`
+    `[autopilot:hooks] WARNING: existing foreign core.hooksPath=${currentPath}; leaving it unchanged. ` +
+      `Autopilot git gates are NOT active until you run "git config core.hooksPath ${hooksPath}" after merging local hooks.`
   );
   process.exit(0);
 }

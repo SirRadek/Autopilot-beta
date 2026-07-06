@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+set -u
+
+HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "$HOOK_DIR/lib.sh"
+
+autopilot_cd_root
+
+msg_file="$1"
+
+staged_files="$(git diff --cached --name-only)"
+if [ -z "$staged_files" ]; then
+  printf '[autopilot:commit-msg] no staged files; skipping changed-files blocker gate\n'
+  exit 0
+fi
+
+# Auditable acknowledgment: `Mesh-Ack: <node-id> — <reason>` trailers in the commit
+# message name mesh NODES whose blocker rules the committer has reviewed. The gate
+# still prints every rule; an ack only converts the failure into a recorded pass.
+acks="$(grep -iE '^mesh-ack:' "$msg_file" | sed -E 's/^[Mm][Ee][Ss][Hh]-[Aa][Cc][Kk]:[[:space:]]*([A-Za-z0-9_-]+).*/\1/' | tr '\n' ',' | sed 's/,$//')"
+
+printf '\n[autopilot:commit-msg] checking staged files against blocker-governed mesh nodes\n'
+if [ -n "$acks" ]; then
+  printf '[autopilot:commit-msg] Mesh-Ack trailers found for: %s\n' "$acks"
+fi
+printf '%s\n' "$staged_files" | autopilot_npm run mesh:changed -- --root . --fail-on-blocker --ack "$acks"
+status="$?"
+if [ "$status" -ne 0 ]; then
+  autopilot_fail "$status" "staged changed-files blocker gate failed; commit blocked. Review the rules; if the change is sound, add 'Mesh-Ack: <node-id> — <reason>' to the commit message."
+fi

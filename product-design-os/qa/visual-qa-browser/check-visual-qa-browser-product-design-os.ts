@@ -12,11 +12,14 @@ import {
   type VisualQaBrowserAxeImpact,
   type VisualQaBrowserAxeViolation,
   type VisualQaBrowserFormat,
+  type VisualQaBrowserProgressSnapshot,
   type VisualQaBrowserReport,
   type VisualQaBrowserSnapshot,
   type VisualQaBrowserSourceKind,
   type VisualQaBrowserViewportSnapshot
 } from "./visual-qa-browser-core";
+import { DEFAULT_PAGE_PROFILE, parsePageProfile, type PageProfile } from "../profile-check-matrix";
+import type { PdosVisualIssue } from "../../scripts/visual-qa-product-design-os";
 
 declare const document: BrowserDocument;
 declare const window: BrowserWindow;
@@ -28,6 +31,8 @@ export interface VisualQaBrowserRunInput {
   readonly sourceKind: VisualQaBrowserSourceKind;
   readonly outputDir?: string;
   readonly format?: VisualQaBrowserFormat;
+  readonly profile?: PageProfile;
+  readonly progressValues?: readonly number[];
 }
 
 export interface VisualQaBrowserCliRun {
@@ -84,6 +89,8 @@ interface BrowserWindow {
   readonly innerHeight: number;
   readonly axe?: AxeInjectedRuntime;
   readonly matchMedia?: (query: string) => { readonly matches: boolean };
+  readonly __autopilotSetProgress?: (p: number) => unknown;
+  readonly __autopilotGetMotionState?: () => unknown;
 }
 
 interface BrowserStyleSheet {
@@ -222,6 +229,7 @@ export async function createVisualQaBrowserCliRun(
   repoRoot = process.cwd()
 ): Promise<VisualQaBrowserCliRun> {
   const args = parseArgs(cliArgs);
+  const profile = args.profile === undefined ? DEFAULT_PAGE_PROFILE : parsePageProfile(args.profile);
   if (args.sourcePath === undefined || args.sourceKind === undefined) {
     const report = skippedVisualQaBrowserReport({
       source_kind: "composition",
@@ -229,7 +237,8 @@ export async function createVisualQaBrowserCliRun(
       html_path: "",
       report_path: toRepoPath(repoRoot, resolve(repoRoot, args.outputDir ?? "output/visual-qa-browser")),
       checked_viewports: browserViewports.map((viewport) => viewport.width),
-      message: "Missing input. Use --composition <file> or --html <file>."
+      message: "Missing input. Use --composition <file> or --html <file>.",
+      profile
     });
     return {
       report,
@@ -243,15 +252,21 @@ export async function createVisualQaBrowserCliRun(
     sourceKind: VisualQaBrowserSourceKind;
     outputDir?: string;
     format?: VisualQaBrowserFormat;
+    profile: PageProfile;
+    progressValues?: readonly number[];
   } = {
     sourcePath: args.sourcePath,
-    sourceKind: args.sourceKind
+    sourceKind: args.sourceKind,
+    profile
   };
   if (args.outputDir !== undefined) {
     runInput.outputDir = args.outputDir;
   }
   if (args.format !== undefined) {
     runInput.format = args.format;
+  }
+  if (args.progressValues !== undefined) {
+    runInput.progressValues = args.progressValues;
   }
 
   const report = await runVisualQaBrowser(runInput, repoRoot);
@@ -268,6 +283,7 @@ export async function runVisualQaBrowser(
 ): Promise<VisualQaBrowserReport> {
   const prepared = prepareVisualQaBrowserSource(input, repoRoot);
   const checkedViewports = browserViewports.map((viewport) => viewport.width);
+  const profile = input.profile ?? DEFAULT_PAGE_PROFILE;
   const playwright = await optionalImport<PlaywrightModule>("@playwright/test");
 
   if (playwright.status === "missing" || playwright.module.chromium === undefined) {
@@ -279,7 +295,8 @@ export async function runVisualQaBrowser(
         html_path: toRepoPath(repoRoot, prepared.htmlPath),
         report_path: toRepoPath(repoRoot, prepared.reportPath),
         checked_viewports: checkedViewports,
-        message: `Playwright is unavailable: ${playwright.message}`
+        message: `Playwright is unavailable: ${playwright.message}`,
+        profile
       }),
       input.format
     );
@@ -297,7 +314,8 @@ export async function runVisualQaBrowser(
         html_path: toRepoPath(repoRoot, prepared.htmlPath),
         report_path: toRepoPath(repoRoot, prepared.reportPath),
         checked_viewports: checkedViewports,
-        message: `axe-core is unavailable: ${errorMessage(error)}`
+        message: `axe-core is unavailable: ${errorMessage(error)}`,
+        profile
       }),
       input.format
     );
@@ -317,10 +335,20 @@ export async function runVisualQaBrowser(
 
     const measuredViewports: MeasuredVisualQaViewport[] = [];
     const axeViolations: VisualQaBrowserAxeViolation[] = [];
+    const additionalIssues: PdosVisualIssue[] = [];
 
     for (const viewport of browserViewports) {
       const measured = await measureVisualQaViewport(page, viewport);
-      measuredViewports.push(measured);
+      if (input.progressValues === undefined) {
+        measuredViewports.push(measured);
+      } else {
+        const progressCapture = await captureProgressSnapshots(page, viewport, input.progressValues);
+        additionalIssues.push(...progressCapture.issues);
+        measuredViewports.push({
+          ...measured,
+          progress_snapshots: progressCapture.snapshots
+        });
+      }
       const axeResults = await runAxe(page);
       axeViolations.push(...mapAxeViolations(axeResults, viewport.name));
     }
@@ -333,7 +361,9 @@ export async function runVisualQaBrowser(
       report_path: toRepoPath(repoRoot, prepared.reportPath),
       checked_viewports: checkedViewports,
       snapshot,
-      axe_violations: mergeAxeViolations(axeViolations)
+      axe_violations: mergeAxeViolations(axeViolations),
+      additional_issues: additionalIssues,
+      profile
     });
 
     return writeReport(prepared.reportPath, report, input.format);
@@ -346,7 +376,8 @@ export async function runVisualQaBrowser(
         html_path: toRepoPath(repoRoot, prepared.htmlPath),
         report_path: toRepoPath(repoRoot, prepared.reportPath),
         checked_viewports: checkedViewports,
-        message: `Playwright browser visual QA failed: ${errorMessage(error)}`
+        message: `Playwright browser visual QA failed: ${errorMessage(error)}`,
+        profile
       }),
       input.format
     );
@@ -397,6 +428,8 @@ async function measureVisualQaViewport(
       readonly tagName: string;
       readonly textPreview: string;
       readonly textLength: number;
+      readonly contractProp: string;
+      readonly contractSlot: string;
       readonly visible: boolean;
       readonly isHeading: boolean;
       readonly isH1: boolean;
@@ -470,6 +503,9 @@ async function measureVisualQaViewport(
     const minCtaTargetPx = ctaMeasurements.length === 0
       ? 0
       : minNumber(ctaMeasurements.map((measurement) => Math.min(measurement.rect.width, measurement.rect.height))) ?? 0;
+    const primaryCtaMeasurement = selectPrimaryCtaMeasurement(ctaMeasurements);
+    const viewportHeightPx = round2(window.innerHeight);
+    const ctaTopPx = primaryCtaMeasurement === undefined ? 0 : round2(primaryCtaMeasurement.rect.y);
     const canvasCount = Array.from(document.querySelectorAll("canvas")).filter((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -506,6 +542,9 @@ async function measureVisualQaViewport(
       h1_visible: hasVisibleH1,
       cta_target_min_44: ctaMeasurements.length > 0 && minCtaTargetPx >= 44,
       min_cta_target_px: round2(minCtaTargetPx),
+      cta_top_px: ctaTopPx,
+      viewport_height_px: viewportHeightPx,
+      above_fold_mobile: primaryCtaMeasurement !== undefined && ctaTopPx < viewportHeightPx,
       overlap_count: overlapCount,
       overflow_px: overflowPx,
       canvas_count: canvasCount,
@@ -537,6 +576,7 @@ async function measureVisualQaViewport(
       const foregroundOnBackground = foreground.alpha >= 1 ? foreground : compositeColor(foreground, background);
       const contrast = contrastRatio(foregroundOnBackground, background);
       const contractProp = element.getAttribute("data-contract-prop") ?? "";
+      const contractSlot = element.getAttribute("data-contract-slot") ?? "";
 
       return {
         element,
@@ -544,10 +584,12 @@ async function measureVisualQaViewport(
         tagName,
         textPreview: previewText(text),
         textLength: text.length,
+        contractProp,
+        contractSlot,
         visible: isElementVisible(element, style, rect) && text.length > 0,
         isHeading: /^h[1-6]$/.test(tagName),
         isH1: tagName === "h1",
-        isCta: isCtaElement(element, tagName, contractProp),
+        isCta: isCtaElement(element, tagName, contractProp, contractSlot),
         rect,
         clientWidth,
         scrollWidth,
@@ -806,13 +848,23 @@ async function measureVisualQaViewport(
       );
     }
 
-    function isCtaElement(element: BrowserElement, tagName: string, contractProp: string): boolean {
+    function selectPrimaryCtaMeasurement(ctaMeasurementsToRank: readonly TextMeasurement[]): TextMeasurement | undefined {
+      return (
+        ctaMeasurementsToRank.find((measurement) => measurement.contractSlot === "above_fold_mobile") ??
+        ctaMeasurementsToRank.find((measurement) => measurement.contractProp === "primary_cta") ??
+        ctaMeasurementsToRank.find((measurement) => measurement.contractProp === "cta_label") ??
+        ctaMeasurementsToRank[0]
+      );
+    }
+
+    function isCtaElement(element: BrowserElement, tagName: string, contractProp: string, contractSlot: string): boolean {
       const classes = classNameOf(element).split(/\s+/);
       return (
         tagName === "button" ||
         tagName === "a" ||
         element.getAttribute("role") === "button" ||
         classes.includes("cta") ||
+        contractSlot === "above_fold_mobile" ||
         contractProp === "primary_cta" ||
         contractProp === "cta_label"
       );
@@ -954,6 +1006,82 @@ async function measureVisualQaViewport(
       return Math.round(value * 100) / 100;
     }
   }, viewport);
+}
+
+async function captureProgressSnapshots(
+  page: PageLike,
+  viewport: BrowserViewportInput,
+  progressValues: readonly number[]
+): Promise<{ readonly snapshots: readonly VisualQaBrowserProgressSnapshot[]; readonly issues: readonly PdosVisualIssue[] }> {
+  if (!(await hasCanonicalProgressHook(page))) {
+    return {
+      snapshots: [],
+      issues: [motionDebugHookMissingIssue(viewport.name)]
+    };
+  }
+
+  const snapshots: VisualQaBrowserProgressSnapshot[] = [];
+  for (const progress of progressValues) {
+    const progressApplied = await setCanonicalProgress(page, progress);
+    if (!progressApplied) {
+      return {
+        snapshots,
+        issues: [motionDebugHookMissingIssue(viewport.name)]
+      };
+    }
+    snapshots.push(toProgressSnapshot(progress, await measureVisualQaViewport(page, viewport)));
+  }
+  await setCanonicalProgress(page, 0);
+
+  return {
+    snapshots,
+    issues: []
+  };
+}
+
+async function hasCanonicalProgressHook(page: PageLike): Promise<boolean> {
+  return page.evaluate<boolean, null>(() => typeof window.__autopilotSetProgress === "function", null);
+}
+
+async function setCanonicalProgress(page: PageLike, progress: number): Promise<boolean> {
+  return page.evaluate<boolean, number>(async (nextProgress) => {
+    const setProgress = window.__autopilotSetProgress;
+    if (typeof setProgress !== "function") {
+      return false;
+    }
+    await setProgress(nextProgress);
+    if (document.fonts !== undefined) {
+      await document.fonts.ready;
+    }
+    await new Promise<void>((resolvePromise) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolvePromise()));
+    });
+    return true;
+  }, progress);
+}
+
+function toProgressSnapshot(progress: number, measured: MeasuredVisualQaViewport): VisualQaBrowserProgressSnapshot {
+  const {
+    name: _name,
+    headings: _headings,
+    ctas: _ctas,
+    progress_snapshots: _progressSnapshots,
+    ...snapshot
+  } = measured;
+  return {
+    p: progress,
+    text_overlap_count: measured.overlap_count,
+    ...snapshot
+  };
+}
+
+function motionDebugHookMissingIssue(viewportName: string): PdosVisualIssue {
+  return {
+    code: "motion_debug_hook_missing",
+    severity: "error",
+    message: "Progress capture requested but window.__autopilotSetProgress was not available.",
+    viewport: viewportName
+  };
 }
 
 async function runAxe(page: PageLike): Promise<AxeRunResult> {
@@ -1154,17 +1282,29 @@ function parseArgs(args: readonly string[]): {
   readonly sourcePath?: string;
   readonly outputDir?: string;
   readonly format?: VisualQaBrowserFormat;
+  readonly profile?: string;
+  readonly progressValues?: readonly number[];
 } {
   const result: {
     sourceKind?: VisualQaBrowserSourceKind;
     sourcePath?: string;
     outputDir?: string;
     format?: VisualQaBrowserFormat;
+    profile?: string;
+    progressValues?: readonly number[];
   } = {};
 
   for (let index = 0; index < args.length; index += 1) {
     const key = args[index];
     const value = args[index + 1];
+    if (key === "--progress") {
+      if (value === undefined) {
+        throw new Error("--progress requires a comma-separated list of values between 0 and 1.");
+      }
+      result.progressValues = parseVisualQaProgressValues(value);
+      index += 1;
+      continue;
+    }
     if (value === undefined) {
       continue;
     }
@@ -1182,10 +1322,28 @@ function parseArgs(args: readonly string[]): {
     } else if (key === "--format" && (value === "json" || value === "markdown")) {
       result.format = value;
       index += 1;
+    } else if (key === "--profile") {
+      result.profile = value;
+      index += 1;
     }
   }
 
   return result;
+}
+
+export function parseVisualQaProgressValues(value: string): readonly number[] {
+  const rawValues = value.split(",").map((part) => part.trim());
+  if (rawValues.length === 0 || rawValues.some((part) => part.length === 0)) {
+    throw new Error("--progress requires a non-empty comma-separated list of values between 0 and 1.");
+  }
+
+  return rawValues.map((rawValue) => {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+      throw new Error(`Invalid --progress value ${JSON.stringify(rawValue)}. Expected a number between 0 and 1.`);
+    }
+    return parsed;
+  });
 }
 
 function printUsage(): string {
@@ -1193,6 +1351,8 @@ function printUsage(): string {
     "Usage:",
     "  tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts --composition product-design-os/specs/examples/local-bricklayer.composition.json --format markdown",
     "  tsx product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts --html output/render/landing-page.html --format json",
+    "  Optional: --profile <seo_led|balanced|brand_led|experimental_showcase> (default: balanced; severities come from product-design-os/qa/profile-check-matrix.json)",
+    "  Optional: --progress \"0,0.25,0.5,0.75,1\" (captures canonical motion progress via window.__autopilotSetProgress)",
     ""
   ].join("\n");
 }

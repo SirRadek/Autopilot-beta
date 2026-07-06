@@ -13,9 +13,11 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 
-export type RelatedFileStatus = "VERIFIED" | "STALE" | "MISSING" | "PLACEHOLDER";
+import { normalizeRelatedFileHint, PLACEHOLDER_RE } from "./related-file-hints";
+
+export type RelatedFileStatus = "VERIFIED" | "STALE" | "MISSING" | "PLACEHOLDER" | "UNSNAPSHOTTED";
 
 export interface RelatedFileEntry {
   /** node yaml file name the hint came from */
@@ -23,7 +25,7 @@ export interface RelatedFileEntry {
   /** the declared related_files path */
   relatedFile: string;
   status: RelatedFileStatus;
-  /** current git blob hash, present only when the file exists on disk */
+  /** current git blob hash or directory tree hash, present only when the hint exists on disk */
   blobHash?: string;
 }
 
@@ -33,6 +35,8 @@ export interface RelatedFilesSummary {
   stale: number;
   missing: number;
   placeholder: number;
+  /** existing file hints absent from a SUPPLIED prior snapshot — drift-blind coverage gaps (fail-closed) */
+  unsnapshotted: number;
 }
 
 export interface RelatedFilesReport {
@@ -50,15 +54,63 @@ export interface ComputeOptions {
   prior?: Record<string, string>;
 }
 
-// Templated/glob hints (e.g. docs/projects/<slug>/architecture.md) are intentional
-// patterns, not real paths — never treat them as MISSING.
-const PLACEHOLDER_RE = /[<>*]/;
+// Templated/glob hints and trailing-slash normalization are shared with bind-point ②
+// (related-file-hints.ts) so ratchet and blocker-gate semantics stay identical (BLIND2).
 
 /** git blob object hash of a buffer: sha1("blob " + len + NUL + content). Matches `git hash-object`. */
 export function gitBlobHash(content: Buffer): string {
   const header = Buffer.from(`blob ${content.length}`);
   const nul = Buffer.from([0]);
   return createHash("sha1").update(Buffer.concat([header, nul, content])).digest("hex");
+}
+
+const treeSkipDirectoryNames = new Set([
+  "node_modules",
+  ".git",
+  ".claude",
+  "dist",
+  "build",
+  "coverage",
+  ".vitest",
+  "tmp",
+]);
+const maxTreeHashFiles = 5000;
+
+export function hashDirectoryTree(absDir: string): string {
+  const files: string[] = [];
+
+  function walk(dir: string): boolean {
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const abs = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!treeSkipDirectoryNames.has(entry.name) && !walk(abs)) {
+          return false;
+        }
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      files.push(abs);
+      // Mesh directory hints are expected to be small; refuse pathological trees deterministically.
+      if (files.length > maxTreeHashFiles) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (!walk(absDir)) {
+    return "tree:UNBOUNDED";
+  }
+
+  const treeHash = createHash("sha256");
+  for (const file of files.sort()) {
+    const relPosixPath = relative(absDir, file).split(sep).join("/");
+    treeHash.update(`${relPosixPath}\0${gitBlobHash(readFileSync(file))}\n`);
+  }
+  return `tree:${treeHash.digest("hex")}`;
 }
 
 /** Extract the `related_files:` list out of one mesh node YAML (no YAML dep — bounded list block). */
@@ -92,6 +144,10 @@ function listNodeFiles(nodesDir: string): string[] {
 export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {}): RelatedFilesReport {
   const nodesDir = join(root, opts.nodesSubdir ?? "mesh/nodes");
   const prior = opts.prior ?? {};
+  // Whether a prior snapshot was SUPPLIED (vs the default empty object). When supplied, a current
+  // file hint with no entry in it is a coverage gap (UNSNAPSHOTTED), not a free pass — otherwise the
+  // drift gate would silently go blind on every newly-added hint until someone remembered to regen.
+  const hasPrior = opts.prior !== undefined;
   const entries: RelatedFileEntry[] = [];
   const snapshot: Record<string, string> = {};
 
@@ -102,20 +158,38 @@ export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {
         entries.push({ node, relatedFile, status: "PLACEHOLDER" });
         continue;
       }
-      const abs = join(root, relatedFile);
+      const abs = join(root, normalizeRelatedFileHint(relatedFile));
       if (!existsSync(abs)) {
         entries.push({ node, relatedFile, status: "MISSING" });
         continue;
       }
       if (statSync(abs).isDirectory()) {
-        // a directory hint (e.g. src/api) exists but has no blob — coarse VERIFIED, no drift tracking
-        entries.push({ node, relatedFile, status: "VERIFIED" });
+        const treeHash = hashDirectoryTree(abs);
+        snapshot[relatedFile] = treeHash;
+        const priorHash = prior[relatedFile];
+        let status: RelatedFileStatus;
+        if (priorHash === undefined) {
+          // No baseline hash for this directory tree. With no prior supplied at all we cannot judge
+          // drift; with a supplied prior, absence means the snapshot is missing coverage.
+          status = hasPrior ? "UNSNAPSHOTTED" : "VERIFIED";
+        } else {
+          status = priorHash !== treeHash ? "STALE" : "VERIFIED";
+        }
+        entries.push({ node, relatedFile, status, blobHash: treeHash });
         continue;
       }
       const blobHash = gitBlobHash(readFileSync(abs));
       snapshot[relatedFile] = blobHash;
       const priorHash = prior[relatedFile];
-      const status: RelatedFileStatus = priorHash !== undefined && priorHash !== blobHash ? "STALE" : "VERIFIED";
+      let status: RelatedFileStatus;
+      if (priorHash === undefined) {
+        // No baseline hash for this file. With no prior supplied at all we cannot judge drift, so it
+        // is VERIFIED; but when a prior WAS supplied, an existing file hint missing from it means the
+        // snapshot has fallen out of coverage — surface it as a fail-closed signal, never a silent pass.
+        status = hasPrior ? "UNSNAPSHOTTED" : "VERIFIED";
+      } else {
+        status = priorHash !== blobHash ? "STALE" : "VERIFIED";
+      }
       entries.push({ node, relatedFile, status, blobHash });
     }
   }
@@ -126,6 +200,7 @@ export function computeRelatedFilesStatus(root: string, opts: ComputeOptions = {
     stale: entries.filter((e) => e.status === "STALE").length,
     missing: entries.filter((e) => e.status === "MISSING").length,
     placeholder: entries.filter((e) => e.status === "PLACEHOLDER").length,
+    unsnapshotted: entries.filter((e) => e.status === "UNSNAPSHOTTED").length,
   };
   return { root, entries, summary, snapshot };
 }

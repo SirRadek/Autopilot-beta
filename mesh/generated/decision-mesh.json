@@ -49,6 +49,12 @@
       "label": "Document Mesh"
     },
     {
+      "id": "enforcement_gates",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Enforcement gates"
+    },
+    {
       "id": "file_upload",
       "group": "risk_detector",
       "risk": 0.9,

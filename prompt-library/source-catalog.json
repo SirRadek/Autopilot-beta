@@ -15,6 +15,18 @@
       "authority": "local-contract"
     },
     {
+      "id": "anti-hallucination",
+      "kind": "local_prompt",
+      "location": "prompt-library/00-rules/anti-hallucination.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "autopilot-global-routing",
+      "kind": "local_prompt",
+      "location": "prompt-library/00-rules/autopilot-global-routing.md",
+      "authority": "local-contract"
+    },
+    {
       "id": "research-intelligence-operating-model",
       "kind": "local_docs",
       "location": "docs/autopilot/research-intelligence-operating-model.md",
@@ -294,7 +306,9 @@
       "id": "qwen2-5-coder-14b-model-card",
       "kind": "official_model_card",
       "location": "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct",
-      "authority": "model-card"
+      "authority": "model-card",
+      "license": "unverified",
+      "last_verified": "2026-07-03"
     },
     {
       "id": "qwen-chat-template",
@@ -305,14 +319,16 @@
     {
       "id": "qwen-function-calling",
       "kind": "official_docs",
-      "location": "https://qwen.readthedocs.io/en/latest/framework/function_call.html",
+      "location": "https://qwen.readthedocs.io/en/stable/framework/function_call.html",
       "authority": "provider-specific"
     },
     {
       "id": "qwen2-5-7b-model-card",
       "kind": "official_model_card",
       "location": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
-      "authority": "model-card"
+      "authority": "model-card",
+      "license": "unverified",
+      "last_verified": "2026-07-03"
     },
     {
       "id": "radeq-novel-design-supervisor",
@@ -348,6 +364,12 @@
       "id": "token-efficiency-operating-model",
       "kind": "local_docs",
       "location": "docs/autopilot/token-efficiency-operating-model.md",
+      "authority": "local-contract"
+    },
+    {
+      "id": "vendor-routing-policy-beta-v2",
+      "kind": "local_docs",
+      "location": "docs/decisions/vendor-routing-policy-beta-v2.md",
       "authority": "local-contract"
     }
   ]

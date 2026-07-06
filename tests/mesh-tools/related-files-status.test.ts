@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,12 +28,42 @@ describe("related-files-status (bind-point ①)", () => {
     expect(file?.blobHash).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  it("treats an existing directory hint as VERIFIED with no blob hash (coarse, no crash)", () => {
+  it("tree-hashes an existing directory hint for drift tracking (VERIFIED, no crash)", () => {
     const r = computeRelatedFilesStatus(SAMPLE);
     const dir = r.entries.find((e) => e.relatedFile === "src/area");
-    expect(dir?.status).toBe("VERIFIED");
-    expect(dir?.blobHash).toBeUndefined();
-    expect(r.snapshot["src/area"]).toBeUndefined(); // dirs are not snapshotted
+    expect(dir?.status).toBe("VERIFIED"); // no prior supplied => VERIFIED, but now drift-aware
+    expect(dir?.blobHash).toMatch(/^tree:[0-9a-f]{64}$/); // Phase 3.2: dirs carry a recursive tree hash
+    expect(r.snapshot["src/area"]).toBe(dir?.blobHash); // and ARE snapshotted so in-dir drift is caught
+  });
+
+  it("uses canonical hint normalization before filesystem status checks", () => {
+    const root = mkdtempSync(join(tmpdir(), "related-files-status-"));
+    try {
+      mkdirSync(join(root, "mesh/nodes"), { recursive: true });
+      mkdirSync(join(root, "src/area"), { recursive: true });
+      writeFileSync(join(root, "src/area/keep.ts"), "export const keep = true;\n");
+      writeFileSync(
+        join(root, "mesh/nodes/sample.yaml"),
+        [
+          "id: sample",
+          "type: test",
+          "name: Sample",
+          "question: q",
+          "why: w",
+          "signals: []",
+          "related_agents: []",
+          "related_files:",
+          "  - .\\src//area///keep.ts...",
+          "required_checks: []"
+        ].join("\n")
+      );
+
+      const r = computeRelatedFilesStatus(root);
+      expect(r.summary.missing).toBe(0);
+      expect(r.entries.find((e) => e.relatedFile === ".\\src//area///keep.ts...")?.status).toBe("VERIFIED");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("flips a file VERIFIED → STALE when its prior blob hash no longer matches (no manual edit, no DB)", () => {
@@ -48,6 +80,22 @@ describe("related-files-status (bind-point ①)", () => {
     const r = computeRelatedFilesStatus(SAMPLE, { prior: base.snapshot });
     expect(r.summary.stale).toBe(0);
     expect(r.entries.find((e) => e.relatedFile === "src/real.ts")?.status).toBe("VERIFIED");
+  });
+
+  it("flags a file hint absent from a SUPPLIED prior as UNSNAPSHOTTED (fail-closed coverage gap)", () => {
+    // A non-empty prior that does NOT cover src/real.ts must not silently pass it as VERIFIED —
+    // that is how the snapshot used to fall out of coverage and the gate go drift-blind.
+    const r = computeRelatedFilesStatus(SAMPLE, { prior: { "some/unrelated.ts": "0".repeat(40) } });
+    expect(r.entries.find((e) => e.relatedFile === "src/real.ts")?.status).toBe("UNSNAPSHOTTED");
+    expect(r.summary.unsnapshotted).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a full matching prior yields zero UNSNAPSHOTTED; no prior at all also yields zero (strict mode unchanged)", () => {
+    const base = computeRelatedFilesStatus(SAMPLE);
+    expect(computeRelatedFilesStatus(SAMPLE, { prior: base.snapshot }).summary.unsnapshotted).toBe(0);
+    const noPrior = computeRelatedFilesStatus(SAMPLE);
+    expect(noPrior.summary.unsnapshotted).toBe(0);
+    expect(noPrior.entries.find((e) => e.relatedFile === "src/real.ts")?.status).toBe("VERIFIED");
   });
 
   it("computes the same blob hash as real `git hash-object` (provenance honesty)", () => {

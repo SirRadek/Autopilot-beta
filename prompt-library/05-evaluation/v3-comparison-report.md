@@ -1,3 +1,20 @@
+---
+id: v3-comparison-report
+title: V3 Prompt Pack Comparison Report
+model_family: provider-neutral
+task_type: evaluation
+version: v0.1.0
+status: candidate
+last_reviewed: 2026-06-03
+sources:
+  - autopilot-v3-prompt-pack
+  - prompt-library-policy
+risk_level: medium
+expected_output: Comparison report for V3 prompt pack migration into prompt-library contracts.
+evals:
+  - 05-evaluation/checklist.md
+---
+
 # V3 Prompt Pack Comparison Report
 
 Date: 2026-06-03

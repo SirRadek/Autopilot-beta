@@ -84,9 +84,10 @@ the official-docs fallback.
 For creative visual directions, use `rules/theme-crossing.md` to combine mood
 axes intentionally, then validate the SEO, accessibility, performance, mobile,
 and conversion compromise before implementation.
-Use `rules/design-seo-tradeoff.md` to declare whether a project is `seo_led`,
-`balanced`, `brand_led`, or `experimental_showcase`. The SEO floor is mandatory
-for public pages, but perfect SEO is not mandatory for every design-led site.
+Use `rules/design-seo-tradeoff.md` to declare the project's `page_profile`:
+`seo_led`, `balanced`, `brand_led`, or `experimental_showcase`. The SEO floor
+is mandatory for public pages, but perfect SEO is not mandatory for every
+design-led site.
 For external sources and references, use `rules/source-and-license-gates.md` and
 `rules/clean-room-reference-workflow.md`. Inspiration can be broad; adoption into
 a commercial project requires a complete source record, exact asset path or URL,

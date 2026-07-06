@@ -58,9 +58,9 @@ function baselineFor(id: string, css: string): PdosFitSafetyBaseline {
 }
 
 describe("Product Design OS F2 fit-safety lint", () => {
-  it("runs on committed components as clean matched baselines and exits zero", () => {
+  it("runs on committed components with matched baseline findings as warn-only and exits zero", () => {
     const cliRun = createFitSafetyLintCliRun(["--no-pages"], repoRoot);
-    const statuses = new Set(cliRun.report.components.map((component) => component.status));
+    const findings = cliRun.report.components.flatMap((component) => component.findings);
 
     expect(cliRun.exitCode).toBe(0);
     expect(cliRun.report.ok).toBe(true);
@@ -72,9 +72,13 @@ describe("Product Design OS F2 fit-safety lint", () => {
       "sharp-positioning-hero",
       "tactile-shadow-hero"
     ]);
-    expect(statuses).toEqual(new Set(["pass"]));
     expect(cliRun.report.components.every((component) => component.baseline === "matched")).toBe(true);
-    expect(cliRun.report.summary.warning_count).toBe(0);
+    expect(cliRun.report.components.every((component) => component.status !== "fail")).toBe(true);
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.every((finding) => finding.code === "missing_mobile_breakpoint")).toBe(true);
+    expect(findings.every((finding) => finding.gate === "warn_only_baseline")).toBe(true);
+    expect(findings.every((finding) => finding.severity === "warning")).toBe(true);
+    expect(cliRun.report.summary.error_count).toBe(0);
   });
 
   it("fails a synthetic new component with a clamp minimum below the legible floor", () => {
@@ -120,6 +124,57 @@ describe("Product Design OS F2 fit-safety lint", () => {
     expect(report.components[0]?.status).toBe("fail");
   });
 
+  it("flags R1 when a component has only a 768px breakpoint and accepts max-width 480px", () => {
+    const tabletOnlyCss = `
+.tablet-only .grid {
+  display: grid;
+}
+
+@media (max-width: 768px) {
+  .tablet-only .grid {
+    grid-template-columns: 1fr;
+  }
+}
+`.trim();
+    const phoneCss = `
+.phone-breakpoint .grid {
+  display: grid;
+}
+
+@media screen and (max-width: 480px) {
+  .phone-breakpoint .grid {
+    grid-template-columns: 1fr;
+  }
+}
+`.trim();
+    const report = analyzeFitSafetyLint(
+      {
+        components: [
+          { id: "tablet-only", css: tabletOnlyCss },
+          { id: "phone-breakpoint", css: phoneCss }
+        ],
+        pages: [],
+        baseline: { schema: "test", generated_on: "test", note: "empty", components: [] }
+      },
+      repoRoot
+    );
+
+    const reportsById = new Map(report.components.map((component) => [component.id, component]));
+    expect(reportsById.get("tablet-only")?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing_mobile_breakpoint",
+          severity: "error"
+        })
+      ])
+    );
+    expect(reportsById.get("tablet-only")?.status).toBe("fail");
+    expect(reportsById.get("phone-breakpoint")?.findings.map((finding) => finding.code)).not.toContain(
+      "missing_mobile_breakpoint"
+    );
+    expect(reportsById.get("phone-breakpoint")?.status).toBe("pass");
+  });
+
   it("flags transform scale on interactive textish selectors", () => {
     const css = `
 .synthetic-scale .cta {
@@ -162,6 +217,12 @@ describe("Product Design OS F2 fit-safety lint", () => {
   background-color: rgb(255 255 255);
   backdrop-filter: blur(18px);
 }
+
+@media (max-width: 480px) {
+  .synthetic-sticky-solid .bar {
+    inset-inline: 0;
+  }
+}
 `.trim();
     const report = analyzeFitSafetyLint(
       {
@@ -190,6 +251,12 @@ describe("Product Design OS F2 fit-safety lint", () => {
     const css = `
 .synthetic-title {
   font-size: clamp(0.72rem, 5vw, 3rem);
+}
+
+@media (max-width: 480px) {
+  .synthetic-title {
+    max-width: 100%;
+  }
 }
 `.trim();
     const report = analyzeFitSafetyLint(

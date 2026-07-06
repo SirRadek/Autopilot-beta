@@ -1,3 +1,4 @@
+import { codepointCompare } from "../../scripts/codepoint-compare";
 import {
   analyzeProductDesignVisualQa,
   type PdosVisualIssue,
@@ -5,6 +6,13 @@ import {
   type PdosVisualQaReport,
   type PdosVisualViewportInput
 } from "../../scripts/visual-qa-product-design-os";
+import {
+  DEFAULT_PAGE_PROFILE,
+  loadDefaultProfileCheckMatrix,
+  resolveCheckSeverity,
+  type PageProfile,
+  type ProfileCheckMatrix
+} from "../profile-check-matrix";
 
 export type VisualQaBrowserReportStatus = "passed" | "failed" | "skipped";
 export type VisualQaBrowserSourceKind = "composition" | "html";
@@ -20,16 +28,28 @@ export interface VisualQaBrowserContrastFailure {
   readonly background: string;
 }
 
-export interface VisualQaBrowserViewportSnapshot extends PdosVisualViewportInput {
+export interface VisualQaBrowserViewportMetricSnapshot extends PdosVisualViewportInput {
   readonly h1_visible: boolean;
   readonly cta_target_min_44: boolean;
   readonly min_cta_target_px: number;
+  readonly cta_top_px: number;
+  readonly viewport_height_px: number;
+  readonly above_fold_mobile: boolean;
   readonly overlap_count: number;
   readonly overflow_px: number;
   readonly canvas_count: number;
   readonly active_motion_element_count: number;
   readonly reduce_motion_rule_count: number;
   readonly contrast_failures: readonly VisualQaBrowserContrastFailure[];
+}
+
+export interface VisualQaBrowserProgressSnapshot extends Omit<VisualQaBrowserViewportMetricSnapshot, "name"> {
+  readonly p: number;
+  readonly text_overlap_count: number;
+}
+
+export interface VisualQaBrowserViewportSnapshot extends VisualQaBrowserViewportMetricSnapshot {
+  readonly progress_snapshots?: readonly VisualQaBrowserProgressSnapshot[];
 }
 
 export interface VisualQaBrowserSnapshot extends Omit<PdosVisualQaInput, "viewports"> {
@@ -60,6 +80,7 @@ export interface VisualQaBrowserAxeReport {
 export interface VisualQaBrowserReport {
   readonly schema: "autopilot-beta/pdos-visual-qa-browser-report@1";
   readonly status: VisualQaBrowserReportStatus;
+  readonly profile: PageProfile;
   readonly source_kind: VisualQaBrowserSourceKind;
   readonly source_path: string;
   readonly html_path: string;
@@ -69,6 +90,8 @@ export interface VisualQaBrowserReport {
   readonly analyzer?: PdosVisualQaReport;
   readonly axe: VisualQaBrowserAxeReport;
   readonly blocking_reasons: readonly string[];
+  readonly profile_downgraded_reasons: readonly string[];
+  readonly profile_skipped_reasons: readonly string[];
   readonly errors: readonly string[];
 }
 
@@ -80,29 +103,51 @@ export interface VisualQaBrowserReportInput {
   readonly checked_viewports: readonly number[];
   readonly snapshot: VisualQaBrowserSnapshot;
   readonly axe_violations: readonly VisualQaBrowserAxeViolation[];
+  readonly additional_issues?: readonly PdosVisualIssue[];
   readonly errors?: readonly string[];
+  readonly profile?: PageProfile;
+  readonly profileMatrix?: ProfileCheckMatrix;
 }
 
 export interface VisualQaBrowserClassification {
   readonly status: "passed" | "failed";
   readonly exitCode: 0 | 1;
+  readonly profile: PageProfile;
   readonly blocking_reasons: readonly string[];
+  readonly downgraded_reasons: readonly string[];
+  readonly skipped_reasons: readonly string[];
 }
 
 const axeImpacts = ["critical", "serious", "moderate", "minor", "unknown"] as const;
 
 export function buildVisualQaBrowserReport(input: VisualQaBrowserReportInput): VisualQaBrowserReport {
-  const analyzer = analyzeMeasuredVisualQaSnapshot(input.snapshot);
+  const analyzer = appendAdditionalAnalyzerIssues(
+    analyzeMeasuredVisualQaSnapshot(input.snapshot),
+    input.additional_issues ?? []
+  );
   const axeViolations = sortAxeViolations(input.axe_violations);
-  const classification = classifyVisualQaBrowserReport({
-    analyzerIssues: analyzer.issues,
-    axeViolations,
-    errors: input.errors ?? []
-  });
+  const profile = input.profile ?? DEFAULT_PAGE_PROFILE;
+  const classification = classifyVisualQaBrowserReport(
+    input.profileMatrix === undefined
+      ? {
+          analyzerIssues: analyzer.issues,
+          axeViolations,
+          errors: input.errors ?? [],
+          profile
+        }
+      : {
+          analyzerIssues: analyzer.issues,
+          axeViolations,
+          errors: input.errors ?? [],
+          profile,
+          profileMatrix: input.profileMatrix
+        }
+  );
 
   return {
     schema: "autopilot-beta/pdos-visual-qa-browser-report@1",
     status: classification.status,
+    profile: classification.profile,
     source_kind: input.source_kind,
     source_path: input.source_path,
     html_path: input.html_path,
@@ -112,6 +157,8 @@ export function buildVisualQaBrowserReport(input: VisualQaBrowserReportInput): V
     analyzer,
     axe: buildAxeReport(axeViolations),
     blocking_reasons: classification.blocking_reasons,
+    profile_downgraded_reasons: classification.downgraded_reasons,
+    profile_skipped_reasons: classification.skipped_reasons,
     errors: input.errors ?? []
   };
 }
@@ -123,10 +170,12 @@ export function skippedVisualQaBrowserReport(input: {
   readonly report_path: string;
   readonly checked_viewports: readonly number[];
   readonly message: string;
+  readonly profile?: PageProfile;
 }): VisualQaBrowserReport {
   return {
     schema: "autopilot-beta/pdos-visual-qa-browser-report@1",
     status: "skipped",
+    profile: input.profile ?? DEFAULT_PAGE_PROFILE,
     source_kind: input.source_kind,
     source_path: input.source_path,
     html_path: input.html_path,
@@ -135,6 +184,8 @@ export function skippedVisualQaBrowserReport(input: {
     snapshot: { viewports: [] },
     axe: buildAxeReport([]),
     blocking_reasons: [input.message],
+    profile_downgraded_reasons: [],
+    profile_skipped_reasons: [],
     errors: [input.message]
   };
 }
@@ -154,7 +205,7 @@ export function toAnalyzerInput(snapshot: VisualQaBrowserSnapshot): PdosVisualQa
     ctas?: readonly string[];
     template_signals?: readonly string[];
   } = {
-    viewports: snapshot.viewports.map(toAnalyzerViewport)
+    viewports: snapshot.viewports.flatMap(toAnalyzerViewports)
   };
 
   assignDefined(input, "url", snapshot.url);
@@ -171,22 +222,66 @@ export function classifyVisualQaBrowserReport(input: {
   readonly analyzerIssues: readonly PdosVisualIssue[];
   readonly axeViolations: readonly VisualQaBrowserAxeViolation[];
   readonly errors?: readonly string[];
+  readonly profile?: PageProfile;
+  readonly profileMatrix?: ProfileCheckMatrix;
 }): VisualQaBrowserClassification {
-  const blockingReasons = [
-    ...(input.errors ?? []).map((error) => `runner_error:${error}`),
-    ...input.analyzerIssues
-      .filter((issue) => issue.severity === "error")
-      .map((issue) => `analyzer_error:${issue.code}${issue.viewport === undefined ? "" : `:${issue.viewport}`}`),
-    ...sortAxeViolations(input.axeViolations)
-      .filter((violation) => violation.impact === "serious" || violation.impact === "critical")
-      .map((violation) => `axe_${violation.impact}:${violation.id}`)
-  ];
+  const profile = input.profile ?? DEFAULT_PAGE_PROFILE;
+  const matrix = input.profileMatrix ?? loadDefaultProfileCheckMatrix();
+  const blockingReasons: string[] = [];
+  const downgradedReasons: string[] = [];
+  const skippedReasons: string[] = [];
+
+  for (const error of input.errors ?? []) {
+    // Runner/gate-integrity failures are never profile-downgradable (fail closed).
+    blockingReasons.push(`runner_error:${error}`);
+  }
+
+  for (const issue of input.analyzerIssues) {
+    if (issue.severity !== "error") {
+      continue;
+    }
+    const reason = `analyzer_error:${issue.code}${issue.viewport === undefined ? "" : `:${issue.viewport}`}`;
+    routeByProfileSeverity(resolveCheckSeverity(issue.code, profile, matrix), reason, blockingReasons, downgradedReasons, skippedReasons);
+  }
+
+  for (const violation of sortAxeViolations(input.axeViolations)) {
+    if (violation.impact !== "serious" && violation.impact !== "critical") {
+      continue;
+    }
+    const reason = `axe_${violation.impact}:${violation.id}`;
+    routeByProfileSeverity(
+      resolveCheckSeverity(`axe_${violation.impact}`, profile, matrix),
+      reason,
+      blockingReasons,
+      downgradedReasons,
+      skippedReasons
+    );
+  }
 
   return {
     status: blockingReasons.length === 0 ? "passed" : "failed",
     exitCode: blockingReasons.length === 0 ? 0 : 1,
-    blocking_reasons: blockingReasons
+    profile,
+    blocking_reasons: blockingReasons,
+    downgraded_reasons: downgradedReasons,
+    skipped_reasons: skippedReasons
   };
+}
+
+function routeByProfileSeverity(
+  severity: "blocking" | "advisory" | "skipped",
+  reason: string,
+  blockingReasons: string[],
+  downgradedReasons: string[],
+  skippedReasons: string[]
+): void {
+  if (severity === "blocking") {
+    blockingReasons.push(reason);
+  } else if (severity === "advisory") {
+    downgradedReasons.push(reason);
+  } else {
+    skippedReasons.push(reason);
+  }
 }
 
 export function buildAxeReport(violations: readonly VisualQaBrowserAxeViolation[]): VisualQaBrowserAxeReport {
@@ -229,6 +324,7 @@ export function formatVisualQaBrowserReport(
     "# Product Design OS Browser Visual QA",
     "",
     `- Status: ${report.status}`,
+    `- Profile: ${report.profile}`,
     `- Source: ${report.source_kind} ${report.source_path || "<missing>"}`,
     `- HTML: ${report.html_path || "<missing>"}`,
     `- Report: ${report.report_path || "<missing>"}`,
@@ -239,6 +335,9 @@ export function formatVisualQaBrowserReport(
     "## Viewport Snapshot",
     ...formatViewportSnapshot(report.snapshot.viewports),
     "",
+    "## Progress Snapshots",
+    ...formatProgressSnapshots(report.snapshot.viewports),
+    "",
     "## Analyzer Issues",
     ...formatAnalyzerIssues(analyzerIssues),
     "",
@@ -247,6 +346,16 @@ export function formatVisualQaBrowserReport(
     "",
     "## Blocking Reasons",
     ...(report.blocking_reasons.length === 0 ? ["- None."] : report.blocking_reasons.map((reason) => `- ${reason}`)),
+    "",
+    `## Profile Downgrades (advisory under ${report.profile})`,
+    ...(report.profile_downgraded_reasons.length === 0
+      ? ["- None."]
+      : report.profile_downgraded_reasons.map((reason) => `- ${reason}`)),
+    "",
+    `## Profile Skipped (under ${report.profile})`,
+    ...(report.profile_skipped_reasons.length === 0
+      ? ["- None."]
+      : report.profile_skipped_reasons.map((reason) => `- ${reason}`)),
     "",
     "## Errors",
     ...(report.errors.length === 0 ? ["- None."] : report.errors.map((error) => `- ${error}`))
@@ -259,7 +368,7 @@ export function applyVisualQaBrowserCliExitCode(report: VisualQaBrowserReport): 
   return exitCode;
 }
 
-function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisualViewportInput {
+function toAnalyzerViewport(viewport: VisualQaBrowserViewportMetricSnapshot): PdosVisualViewportInput {
   const horizontalOverflow = viewport.horizontal_overflow === true || viewport.overflow_px > 1;
   const output: {
     name: string;
@@ -268,6 +377,9 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
     heading_count?: number;
     cta_count?: number;
     min_cta_target_px?: number;
+    cta_top_px?: number;
+    viewport_height_px?: number;
+    above_fold_mobile?: boolean;
     visible_text_characters?: number;
     repeated_card_count?: number;
     text_overlap?: boolean;
@@ -290,6 +402,9 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
   assignDefined(output, "heading_count", viewport.heading_count);
   assignDefined(output, "cta_count", viewport.cta_count);
   assignDefined(output, "min_cta_target_px", viewport.min_cta_target_px);
+  assignDefined(output, "cta_top_px", viewport.cta_top_px);
+  assignDefined(output, "viewport_height_px", viewport.viewport_height_px);
+  assignDefined(output, "above_fold_mobile", viewport.above_fold_mobile);
   assignDefined(output, "visible_text_characters", viewport.visible_text_characters);
   assignDefined(output, "repeated_card_count", viewport.repeated_card_count);
   assignDefined(output, "text_overlap", viewport.text_overlap);
@@ -306,17 +421,47 @@ function toAnalyzerViewport(viewport: VisualQaBrowserViewportSnapshot): PdosVisu
   return output;
 }
 
+function toAnalyzerViewports(viewport: VisualQaBrowserViewportSnapshot): readonly PdosVisualViewportInput[] {
+  return [
+    toAnalyzerViewport(viewport),
+    ...(viewport.progress_snapshots ?? []).map((progressSnapshot) => {
+      const { p, text_overlap_count: _textOverlapCount, ...progressMetrics } = progressSnapshot;
+      return toAnalyzerViewport({
+        ...progressMetrics,
+        name: `${viewport.name}@p=${formatProgressValue(p)}`
+      });
+    })
+  ];
+}
+
+function appendAdditionalAnalyzerIssues(
+  analyzer: PdosVisualQaReport,
+  additionalIssues: readonly PdosVisualIssue[]
+): PdosVisualQaReport {
+  if (additionalIssues.length === 0) {
+    return analyzer;
+  }
+
+  const issues = [...analyzer.issues, ...additionalIssues];
+  return {
+    ...analyzer,
+    ok: !issues.some((issue) => issue.severity === "error"),
+    issues,
+    report_markdown: `${analyzer.report_markdown.trimEnd()}\n\n## Browser Runner Issues\n${formatAnalyzerIssues(additionalIssues).join("\n")}\n`
+  };
+}
+
 function sortAxeViolations(violations: readonly VisualQaBrowserAxeViolation[]): readonly VisualQaBrowserAxeViolation[] {
   return [...violations].sort((first, second) => {
     const impactDelta = impactRank(first.impact) - impactRank(second.impact);
     if (impactDelta !== 0) {
       return impactDelta;
     }
-    const idDelta = first.id.localeCompare(second.id);
+    const idDelta = codepointCompare(first.id, second.id);
     if (idDelta !== 0) {
       return idDelta;
     }
-    return first.help.localeCompare(second.help);
+    return codepointCompare(first.help, second.help);
   });
 }
 
@@ -338,11 +483,31 @@ function formatViewportSnapshot(viewports: readonly VisualQaBrowserViewportSnaps
       `low_contrast=${String(viewport.low_contrast)}(${viewport.contrast_failures.length})`,
       `h1=${String(viewport.h1_visible)}`,
       `cta44=${String(viewport.cta_target_min_44)}`,
+      `cta_fold=${String(viewport.above_fold_mobile)}(${viewport.cta_top_px}/${viewport.viewport_height_px}px)`,
       `canvas_primary=${String(viewport.primary_content_in_canvas)}`,
       `motion=${viewport.motion_level ?? 0}`,
       `reduced_motion=${String(viewport.reduced_motion_supported)}`
     ].join(" ");
   });
+}
+
+function formatProgressSnapshots(viewports: readonly VisualQaBrowserViewportSnapshot[]): readonly string[] {
+  const lines = viewports.flatMap((viewport) =>
+    (viewport.progress_snapshots ?? []).map((progressSnapshot) => {
+      return [
+        `- ${viewport.name} p=${formatProgressValue(progressSnapshot.p)}:`,
+        `overflow=${String(progressSnapshot.horizontal_overflow)}(${progressSnapshot.overflow_px}px)`,
+        `overlap=${String(progressSnapshot.text_overlap)}(${progressSnapshot.text_overlap_count})`,
+        `low_contrast=${String(progressSnapshot.low_contrast)}(${progressSnapshot.contrast_failures.length})`,
+        `h1=${String(progressSnapshot.h1_visible)}`,
+        `cta44=${String(progressSnapshot.cta_target_min_44)}`,
+        `canvas_primary=${String(progressSnapshot.primary_content_in_canvas)}`,
+        `motion=${progressSnapshot.motion_level ?? 0}`,
+        `reduced_motion=${String(progressSnapshot.reduced_motion_supported)}`
+      ].join(" ");
+    })
+  );
+  return lines.length === 0 ? ["- None."] : lines;
 }
 
 function formatAnalyzerIssues(issues: readonly PdosVisualIssue[]): readonly string[] {
@@ -372,4 +537,8 @@ function assignDefined<T extends object, K extends keyof T>(target: T, key: K, v
   if (value !== undefined) {
     target[key] = value;
   }
+}
+
+function formatProgressValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value).replace(/0+$/, "").replace(/\.$/, "");
 }

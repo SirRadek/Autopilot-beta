@@ -20,6 +20,8 @@ related_files:
   - src/data/delivery-system/modelPolicy.ts
   - src/data/delivery-system/modelOutputEvaluation.ts
   - src/data/delivery-system/cliWorker.ts
+  - src/data/delivery-system/cliWorkerCapture.ts
+  - src/data/delivery-system/sessionState.ts
   - model-output-evals/
   - docs/autopilot/agent-handoff-packet-template.md
 required_checks:

@@ -221,6 +221,7 @@ function isReasoningProviderId(value: string | undefined): value is ReasoningPro
     value === "anthropic_claude_subscription" ||
     value === "gemini_cli" ||
     value === "deepseek_api_or_self_hosted" ||
+    value === "openrouter_free" ||
     value === "deepseek_web_chat_manual"
   );
 }

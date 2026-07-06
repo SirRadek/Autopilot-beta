@@ -4,6 +4,7 @@
   "priorities": ["trust", "account-clarity", "documents", "secure-actions", "support", "mobile-access"],
   "logic_priority": 8,
   "design_priority": 5,
+  "page_profile": "balanced",
   "motion_level": 1,
   "visual_energy": 3,
   "allowed_pattern_ids": ["account-overview", "secure-document-list", "support-thread", "client-task-timeline", "permission-aware-actions"],

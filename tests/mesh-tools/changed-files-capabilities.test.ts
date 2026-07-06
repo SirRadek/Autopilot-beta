@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { loadDecisionMesh } from "../../src/lib/decision-mesh";
-import { activateForChangedFiles } from "../../src/lib/mesh-tools/changed-files-capabilities";
+import { loadDecisionMesh, type DecisionMesh } from "../../src/lib/decision-mesh";
+import { activateForChangedFiles, resolveAckedBlockers } from "../../src/lib/mesh-tools/changed-files-capabilities";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MESH = join(here, "../fixtures/mesh-tools/changed-files/mesh");
@@ -47,9 +47,94 @@ describe("changed-files-capabilities (bind-point ②)", () => {
     expect(r.ungovernedSensitive).not.toContain("docs/notes.md");
   });
 
+  it("flags a newly-added governed-core file with no node coverage as a fail-closed signal", () => {
+    const r = activateForChangedFiles(mesh, ["src/governed-core/new-spawn-policy.ts"]);
+    expect(r.activatedNodes).toEqual([]); // fixture mesh covers no governed-core files
+    expect(r.ungovernedSensitive).toEqual(["src/governed-core/new-spawn-policy.ts"]);
+  });
+
+  it("treats newly-added mesh governance SOURCE as a sensitive surface (mesh launder defense)", () => {
+    // The fixture mesh covers no mesh source, so an uncovered new node/rule/edge file is a
+    // fail-closed signal. In the real mesh these are covered by capability_routing → governed.
+    const r = activateForChangedFiles(mesh, ["mesh/nodes/backdoor.yaml", "mesh/rules.yaml", "mesh/edges.yaml"]);
+    expect(r.ungovernedSensitive).toContain("mesh/nodes/backdoor.yaml");
+    expect(r.ungovernedSensitive).toContain("mesh/rules.yaml");
+    expect(r.ungovernedSensitive).toContain("mesh/edges.yaml");
+  });
+
+  it("does NOT treat generated mesh ratchet artifacts as sensitive (they are meant to grow)", () => {
+    const r = activateForChangedFiles(mesh, [
+      "mesh/related-files-baseline.json",
+      "mesh/related-files-snapshot.json",
+      "mesh/generated/decision-mesh.json"
+    ]);
+    expect(r.ungovernedSensitive).toEqual([]);
+  });
+
+  it("matches a trailing-slash directory hint (BLIND1 regression)", () => {
+    // docs_bundle declares `docs-bundle/` WITH a trailing slash; before the
+    // normalization fix this matched nothing and its governance was silently skipped.
+    const r = activateForChangedFiles(mesh, ["docs-bundle/guide.md"]);
+    expect(r.activatedNodes.map((n) => n.id)).toContain("docs_bundle");
+    expect(r.stopConditions).toContain("docs_unreviewed");
+  });
+
+  it("uses canonical hint normalization before changed-file matching", () => {
+    const canonicalMesh: DecisionMesh = {
+      nodes: [
+        {
+          id: "canonical",
+          type: "test",
+          name: "Canonical",
+          question: "q",
+          why: "w",
+          signals: [],
+          related_agents: [],
+          related_files: [".\\src//Canonical///"],
+          required_checks: []
+        }
+      ],
+      edges: [],
+      rules: []
+    };
+    const r = activateForChangedFiles(canonicalMesh, ["src/Canonical/file.ts"]);
+    expect(r.activatedNodes.map((n) => n.id)).toEqual(["canonical"]);
+  });
+
   it("ignores placeholder/templated hints (never matches a concrete file)", () => {
     // no node hint is a placeholder here, but a concrete path that looks templated must not crash/match
     const r = activateForChangedFiles(mesh, ["docs/projects/<slug>/architecture.md"]);
     expect(r.activatedNodes).toEqual([]);
+  });
+});
+
+describe("resolveAckedBlockers (Mesh-Ack)", () => {
+  const activation = activateForChangedFiles(mesh, ["src/api/upload/handler.ts"]);
+
+  it("without acks every blocker stays unacked (behavior identical to before)", () => {
+    const a = resolveAckedBlockers(activation, []);
+    expect(a.ackedBlockers).toEqual([]);
+    expect(a.unackedBlockers).toContain("SEC-UPLOAD-001");
+    expect(a.unknownAcks).toEqual([]);
+  });
+
+  it("acking the activated node excuses its blocker rules but keeps them reported upstream", () => {
+    const a = resolveAckedBlockers(activation, ["upload"]);
+    expect(a.ackedBlockers).toContain("SEC-UPLOAD-001");
+    expect(a.unackedBlockers).toEqual([]);
+  });
+
+  it("an ack for a non-activated node excuses nothing and is surfaced (fail-closed)", () => {
+    const a = resolveAckedBlockers(activation, ["security"]);
+    expect(a.unackedBlockers).toContain("SEC-UPLOAD-001");
+    expect(a.unknownAcks).toEqual(["security"]);
+  });
+
+  it("no activation means no blockers to ack and unknown acks are reported", () => {
+    const empty = activateForChangedFiles(mesh, ["README.md"]);
+    const a = resolveAckedBlockers(empty, ["upload"]);
+    expect(a.ackedBlockers).toEqual([]);
+    expect(a.unackedBlockers).toEqual([]);
+    expect(a.unknownAcks).toEqual(["upload"]);
   });
 });

@@ -55,12 +55,12 @@
         "penalties": []
       },
       {
-        "id": "ecommerce-conversion",
-        "score": 38,
+        "id": "standard-web-fast",
+        "score": 66,
         "selected": false,
         "reasons": [
-          "Project type marketing_web is not a primary fit.",
-          "Logic/design/motion fit: 6/6/3."
+          "Project type marketing_web is supported.",
+          "Logic/design/motion fit: 7/4/2."
         ],
         "penalties": []
       }
@@ -144,6 +144,16 @@
   },
   "rejected": {
     "recipes": [
+      {
+        "id": "ecommerce-conversion",
+        "score": 38,
+        "selected": false,
+        "reasons": [
+          "Project type marketing_web is not a primary fit.",
+          "Logic/design/motion fit: 6/6/3."
+        ],
+        "penalties": []
+      },
       {
         "id": "client-portal-trust",
         "score": 34,
@@ -517,17 +527,6 @@
         "penalties": []
       },
       {
-        "id": "client-task-timeline",
-        "score": 62,
-        "selected": false,
-        "reasons": [
-          "Compared against route marketing_web and recipe creative-motion.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
         "id": "chart-with-source",
         "score": 62,
         "selected": false,
@@ -535,6 +534,17 @@
           "Compared against route marketing_web and recipe creative-motion.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-task-timeline",
+        "score": 62,
+        "selected": false,
+        "reasons": [
+          "Compared against route marketing_web and recipe creative-motion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
         ],
         "penalties": []
       },

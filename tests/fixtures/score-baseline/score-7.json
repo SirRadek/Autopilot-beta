@@ -155,6 +155,16 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 34,
+        "selected": false,
+        "reasons": [
+          "Project type portfolio is not a primary fit.",
+          "Logic/design/motion fit: 7/4/2."
+        ],
+        "penalties": []
+      },
+      {
         "id": "dashboard-data-heavy",
         "score": 30,
         "selected": false,
@@ -517,17 +527,6 @@
         "penalties": []
       },
       {
-        "id": "client-task-timeline",
-        "score": 62,
-        "selected": false,
-        "reasons": [
-          "Compared against route portfolio and recipe creative-motion.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
         "id": "chart-with-source",
         "score": 62,
         "selected": false,
@@ -535,6 +534,17 @@
           "Compared against route portfolio and recipe creative-motion.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "client-task-timeline",
+        "score": 62,
+        "selected": false,
+        "reasons": [
+          "Compared against route portfolio and recipe creative-motion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
         ],
         "penalties": []
       },

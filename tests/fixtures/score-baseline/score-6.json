@@ -151,6 +151,16 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 64,
+        "selected": false,
+        "reasons": [
+          "Project type client_portal is not a primary fit.",
+          "Logic/design/motion fit: 9/9/10."
+        ],
+        "penalties": []
+      },
+      {
         "id": "internal-ops-clean",
         "score": 62,
         "selected": false,
@@ -383,17 +393,6 @@
         "penalties": []
       },
       {
-        "id": "guided-offer-map",
-        "score": 68,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
         "id": "chart-with-source",
         "score": 68,
         "selected": false,
@@ -401,6 +400,17 @@
           "Compared against route client_portal and recipe client-portal-trust.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "guided-offer-map",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 8/8."
         ],
         "penalties": []
       },
@@ -747,17 +757,6 @@
         "penalties": []
       },
       {
-        "id": "dashboard-kpi-strip",
-        "score": 116,
-        "selected": false,
-        "reasons": [
-          "Compared against route client_portal and recipe client-portal-trust.",
-          "Asset use_case is not an exact match.",
-          "Creativity/trust/motion: 3/9/1."
-        ],
-        "penalties": []
-      },
-      {
         "id": "checkout-progress-steps",
         "score": 116,
         "selected": false,
@@ -765,6 +764,17 @@
           "Compared against route client_portal and recipe client-portal-trust.",
           "Asset use_case is not an exact match.",
           "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
+        "id": "dashboard-kpi-strip",
+        "score": 116,
+        "selected": false,
+        "reasons": [
+          "Compared against route client_portal and recipe client-portal-trust.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 3/9/1."
         ],
         "penalties": []
       },

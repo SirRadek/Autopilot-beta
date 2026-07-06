@@ -29,6 +29,7 @@ import { selectLocalWorkerRoute } from "../src/data/delivery-system/localWorkers
 import { selectModelOutputEvaluationRoute } from "../src/data/delivery-system/modelOutputEvaluation";
 import { selectReasoningModelRoute } from "../src/data/delivery-system/modelPolicy";
 import { selectProtectiveSupervisionRoute } from "../src/data/delivery-system/protectiveSupervision";
+import { getRoutingMode, type RoutingModeId } from "../src/data/delivery-system/routingModes";
 import { selectTokenEfficiencyRoute } from "../src/data/delivery-system/tokenEfficiency";
 import { selectToolInventoryForTask } from "../src/data/delivery-system/toolInventory";
 import {
@@ -40,6 +41,7 @@ import {
   getRelevantSubgraph,
   loadDecisionMeshFromRoot,
   loadProjectDecisionMeshFromRoot,
+  resolveProjectMeshRoot,
   selectCapabilities
 } from "../src/lib/decision-mesh";
 
@@ -48,20 +50,11 @@ const packageVersion = readPackageVersion(projectRoot);
 const mesh = loadDecisionMeshFromRoot(projectRoot);
 
 const stringArraySchema = z.array(z.string());
-const decisionMeshNodeSchema = z
+const decisionMeshNodeReferenceSchema = z
   .object({
     id: z.string(),
-    type: z.string(),
     name: z.string(),
-    question: z.string(),
-    why: z.string(),
-    signals: stringArraySchema,
-    related_agents: stringArraySchema,
-    related_files: stringArraySchema,
-    required_checks: stringArraySchema,
-    stop_conditions: stringArraySchema.optional(),
-    must_not_assume: stringArraySchema.optional(),
-    objective: stringArraySchema.optional()
+    score: z.number()
   })
   .passthrough();
 const decisionMeshEdgeSchema = z
@@ -81,6 +74,19 @@ const decisionMeshRuleSchema = z
     instruction: z.string(),
     applies_to: stringArraySchema,
     must_not_assume: stringArraySchema
+  })
+  .passthrough();
+const routingModeIdSchema = z.enum(["idea", "spec", "build", "review"]);
+const routingModeContractOutputSchema = z
+  .object({
+    id: routingModeIdSchema,
+    summary: z.string(),
+    allowedLanes: stringArraySchema,
+    expensiveLanesAllowed: z.boolean(),
+    refuseWhen: stringArraySchema,
+    requiredChecks: stringArraySchema,
+    stopConditions: stringArraySchema,
+    slice: z.enum(["shipped", "deferred"])
   })
   .passthrough();
 const textOutputSchema = z.object({ text: z.string() });
@@ -267,10 +273,9 @@ const relevantSubgraphOutputSchema = z
   .object({
     task: z.string(),
     agent: z.string().optional(),
-    relevant_nodes: z.array(decisionMeshNodeSchema),
+    relevant_nodes: z.array(decisionMeshNodeReferenceSchema),
     relevant_edges: z.array(decisionMeshEdgeSchema),
-    required_agents: stringArraySchema,
-    excluded: stringArraySchema
+    required_agents: stringArraySchema
   })
   .passthrough();
 const agentPacketOutputSchema = z
@@ -285,6 +290,7 @@ const agentPacketOutputSchema = z
     must_not_assume: stringArraySchema,
     required_checks: stringArraySchema,
     stop_conditions: stringArraySchema,
+    routing_mode: routingModeIdSchema.optional(),
     no_governance_matched: z.boolean().optional()
   })
   .passthrough();
@@ -328,7 +334,7 @@ const requiredAgentsOutputSchema = z
 const risksOutputSchema = z
   .object({
     task: z.string(),
-    risks: z.array(decisionMeshNodeSchema),
+    risks: z.array(decisionMeshNodeReferenceSchema),
     stop_conditions: stringArraySchema
   })
   .passthrough();
@@ -606,10 +612,24 @@ server.registerTool(
     inputSchema: {
       task: z.string().min(1),
       agent: z.string().min(1),
-      token_budget: z.number().int().min(1000).max(32000).optional()
+      token_budget: z.number().int().min(1000).max(32000).optional(),
+      mode: routingModeIdSchema.optional()
     }
   },
   async (input) => toJsonText(buildAgentPacket(mesh, toAgentPacketInput(input)))
+);
+
+server.registerTool(
+  "get_routing_mode_contract",
+  {
+    title: "Get Routing Mode Contract",
+    description: "Return the read-only advisory contract for an explicit routing mode.",
+    ...readOnlyTool(routingModeContractOutputSchema),
+    inputSchema: {
+      mode: routingModeIdSchema
+    }
+  },
+  async (input) => toJsonText(getRoutingMode(input.mode))
 );
 
 server.registerTool(
@@ -626,7 +646,10 @@ server.registerTool(
     }
   },
   async (input) => {
-    const projectMesh = loadProjectDecisionMeshFromRoot(projectRoot, input.project_slug);
+    const projectMesh = loadProjectDecisionMeshFromRoot(
+      resolveProjectMeshRoot(projectRoot, input.project_slug),
+      input.project_slug
+    );
     return toJsonText(buildProjectMeshPacket(projectMesh, toProjectMeshPacketInput(input)));
   }
 );
@@ -888,14 +911,19 @@ function toAgentPacketInput(input: {
   task: string;
   agent: string;
   token_budget?: number | undefined;
-}): { task: string; agent: string; token_budget?: number } {
-  const output: { task: string; agent: string; token_budget?: number } = {
+  mode?: RoutingModeId | undefined;
+}): { task: string; agent: string; token_budget?: number; mode?: RoutingModeId } {
+  const output: { task: string; agent: string; token_budget?: number; mode?: RoutingModeId } = {
     task: input.task,
     agent: input.agent
   };
 
   if (input.token_budget !== undefined) {
     output.token_budget = input.token_budget;
+  }
+
+  if (input.mode !== undefined) {
+    output.mode = input.mode;
   }
 
   return output;

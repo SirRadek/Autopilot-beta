@@ -4,16 +4,26 @@ import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getDefaultPdosCompositionSpecPaths } from "../../scripts/check-renderability-product-design-os";
+import { codepointCompare } from "../../scripts/codepoint-compare";
 import { patternComponentRegistry } from "../../renderer/pattern-component-registry";
 import { renderCompositionPage } from "../../renderer/render-composition";
+import {
+  DEFAULT_PAGE_PROFILE,
+  loadDefaultProfileCheckMatrix,
+  parsePageProfile,
+  resolveCheckSeverity,
+  type PageProfile,
+  type ProfileCheckMatrix
+} from "../profile-check-matrix";
 
 export type PdosFitSafetyStatus = "pass" | "warn" | "fail";
 export type PdosFitSafetySeverity = "warning" | "error";
 export type PdosFitSafetyFindingSource = "component_css" | "rendered_page";
-export type PdosFitSafetyGate = "blocking" | "warn_only_baseline" | "advisory_page";
+export type PdosFitSafetyGate = "blocking" | "warn_only_baseline" | "advisory_page" | "advisory_profile";
 
 export type PdosFitSafetyPreconditionCode =
   | "font_clamp_min_below_floor"
+  | "missing_mobile_breakpoint"
   | "grid_track_overflow_risk"
   | "fixed_text_container_inline_cap"
   | "text_wrap_safety_missing"
@@ -91,9 +101,21 @@ export interface PdosFitSafetySummary {
   readonly reason_counts: Readonly<Record<PdosFitSafetyPreconditionCode, number>>;
 }
 
+export interface PdosFitSafetyProfileCodeCount {
+  readonly code: string;
+  readonly count: number;
+}
+
+export interface PdosFitSafetyProfileGate {
+  readonly profile: PageProfile;
+  readonly downgraded_to_advisory: readonly PdosFitSafetyProfileCodeCount[];
+  readonly skipped: readonly PdosFitSafetyProfileCodeCount[];
+}
+
 export interface PdosFitSafetyReport {
   readonly ok: boolean;
   readonly lint_kind: "source_precondition_lint_not_fit_proof";
+  readonly profile_gate: PdosFitSafetyProfileGate;
   readonly components: readonly PdosFitSafetyComponentReport[];
   readonly pages: readonly PdosFitSafetyPageReport[];
   readonly summary: PdosFitSafetySummary;
@@ -104,6 +126,8 @@ export interface PdosFitSafetyLintInput {
   readonly pages?: readonly PdosFitSafetyPageSource[];
   readonly baseline?: PdosFitSafetyBaseline;
   readonly includeRenderedExamples?: boolean;
+  readonly profile?: PageProfile;
+  readonly profileMatrix?: ProfileCheckMatrix;
 }
 
 export interface PdosFitSafetyCliRun {
@@ -151,11 +175,17 @@ export function analyzeFitSafetyLint(input: PdosFitSafetyLintInput = {}, repoRoo
     input.pages ?? (input.includeRenderedExamples === false ? [] : renderDefaultExamplePages(repoRoot));
   const components = input.components ?? loadRegisteredComponentSources(pages);
   const baselineById = new Map(baseline.components.map((entry) => [entry.id, entry]));
+  const profileGate = createProfileGateCollector(
+    input.profile ?? DEFAULT_PAGE_PROFILE,
+    input.profileMatrix ?? loadDefaultProfileCheckMatrix()
+  );
 
   const componentReports = components
-    .map((component) => analyzeComponent(component, baselineById))
-    .sort((first, second) => first.id.localeCompare(second.id));
-  const pageReports = pages.map(analyzeRenderedPage).sort((first, second) => first.path.localeCompare(second.path));
+    .map((component) => analyzeComponent(component, baselineById, profileGate))
+    .sort((first, second) => codepointCompare(first.id, second.id));
+  const pageReports = pages
+    .map((page) => analyzeRenderedPage(page, profileGate))
+    .sort((first, second) => codepointCompare(first.path, second.path));
   const summary = summarizeFitSafety(componentReports, pageReports);
 
   return {
@@ -163,6 +193,7 @@ export function analyzeFitSafetyLint(input: PdosFitSafetyLintInput = {}, repoRoo
       page.findings.every((finding) => finding.severity !== "error")
     ),
     lint_kind: "source_precondition_lint_not_fit_proof",
+    profile_gate: summarizeProfileGate(profileGate),
     components: componentReports,
     pages: pageReports,
     summary
@@ -209,6 +240,9 @@ export function formatFitSafetyReport(report: PdosFitSafetyReport, format: "json
     "",
     "## Summary",
     `- OK: ${String(report.ok)}`,
+    `- Profile: ${report.profile_gate.profile}`,
+    `- Profile downgrades (advisory): ${formatProfileCodeCounts(report.profile_gate.downgraded_to_advisory)}`,
+    `- Profile skipped: ${formatProfileCodeCounts(report.profile_gate.skipped)}`,
     `- Components: ${report.summary.component_count}`,
     `- Component pass/warn/fail: ${report.summary.component_pass_count}/${report.summary.component_warn_count}/${report.summary.component_fail_count}`,
     `- Pages: ${report.summary.page_count}`,
@@ -226,7 +260,8 @@ export function formatFitSafetyReport(report: PdosFitSafetyReport, format: "json
 export function createFitSafetyLintCliRun(cliArgs: readonly string[], repoRoot = process.cwd()): PdosFitSafetyCliRun {
   const args = parseArgs(cliArgs);
   const baseline = loadFitSafetyBaseline(repoRoot, args.baselinePath ?? DEFAULT_BASELINE_PATH);
-  const report = analyzeFitSafetyLint({ baseline, includeRenderedExamples: !args.noPages }, repoRoot);
+  const profile = args.profile === undefined ? DEFAULT_PAGE_PROFILE : parsePageProfile(args.profile);
+  const report = analyzeFitSafetyLint({ baseline, includeRenderedExamples: !args.noPages, profile }, repoRoot);
 
   return {
     report,
@@ -243,15 +278,35 @@ export function applyFitSafetyLintCliExitCode(report: PdosFitSafetyReport): 0 | 
 
 function analyzeComponent(
   component: PdosFitSafetyComponentSource,
-  baselineById: ReadonlyMap<string, PdosFitSafetyBaselineComponent>
+  baselineById: ReadonlyMap<string, PdosFitSafetyBaselineComponent>,
+  profileGate: ProfileGateCollector
 ): PdosFitSafetyComponentReport {
   const cssHash = hashFitSafetyComponentCss(component.css);
   const baselineEntry = baselineById.get(component.id);
   const baselineStatus = baselineEntry === undefined ? "missing" : baselineEntry.css_sha256 === cssHash ? "matched" : "changed";
   const gate: PdosFitSafetyGate = baselineStatus === "matched" ? "warn_only_baseline" : "blocking";
-  const severity: PdosFitSafetySeverity = gate === "blocking" ? "error" : "warning";
-  const findings = lintComponentCss(component).map((finding) => toGatedFinding(finding, gate, severity));
-  const status: PdosFitSafetyStatus = findings.length === 0 ? "pass" : gate === "blocking" ? "fail" : "warn";
+  const findings: PdosFitSafetyFinding[] = [];
+
+  for (const rawFinding of lintComponentCss(component)) {
+    const resolved = resolveCheckSeverity(rawFinding.code, profileGate.profile, profileGate.matrix);
+    if (resolved === "skipped") {
+      bumpProfileCodeCount(profileGate.skipped, rawFinding.code);
+      continue;
+    }
+    if (gate === "blocking" && resolved === "advisory") {
+      // Profile downgrade: still reported, but no longer flips the gate to fail.
+      bumpProfileCodeCount(profileGate.downgraded, rawFinding.code);
+      findings.push(toGatedFinding(rawFinding, "advisory_profile", "warning"));
+      continue;
+    }
+    findings.push(toGatedFinding(rawFinding, gate, gate === "blocking" ? "error" : "warning"));
+  }
+
+  const status: PdosFitSafetyStatus = findings.some((finding) => finding.severity === "error")
+    ? "fail"
+    : findings.length > 0
+      ? "warn"
+      : "pass";
 
   const report: {
     id: string;
@@ -275,18 +330,72 @@ function analyzeComponent(
   return report;
 }
 
-function analyzeRenderedPage(page: PdosFitSafetyPageSource): PdosFitSafetyPageReport {
-  const findings = lintRenderedPage(page).map((finding) => {
+function analyzeRenderedPage(page: PdosFitSafetyPageSource, profileGate: ProfileGateCollector): PdosFitSafetyPageReport {
+  const findings: PdosFitSafetyFinding[] = [];
+
+  for (const rawFinding of lintRenderedPage(page)) {
+    const resolved = resolveCheckSeverity(rawFinding.code, profileGate.profile, profileGate.matrix);
+    if (resolved === "skipped") {
+      bumpProfileCodeCount(profileGate.skipped, rawFinding.code);
+      continue;
+    }
     const isLangProblem =
-      finding.code === "page_lang_missing" || finding.code === "page_lang_invalid";
-    return toGatedFinding(finding, "advisory_page", isLangProblem ? "error" : "warning");
-  });
+      rawFinding.code === "page_lang_missing" || rawFinding.code === "page_lang_invalid";
+    if (isLangProblem && resolved === "advisory") {
+      // Profile downgrade: still reported, but no longer counts as a page error.
+      bumpProfileCodeCount(profileGate.downgraded, rawFinding.code);
+      findings.push(toGatedFinding(rawFinding, "advisory_profile", "warning"));
+      continue;
+    }
+    findings.push(toGatedFinding(rawFinding, "advisory_page", isLangProblem ? "error" : "warning"));
+  }
 
   return {
     id: page.id,
     path: page.path,
     findings
   };
+}
+
+interface ProfileGateCollector {
+  readonly profile: PageProfile;
+  readonly matrix: ProfileCheckMatrix;
+  readonly downgraded: Map<string, number>;
+  readonly skipped: Map<string, number>;
+}
+
+function createProfileGateCollector(profile: PageProfile, matrix: ProfileCheckMatrix): ProfileGateCollector {
+  return {
+    profile,
+    matrix,
+    downgraded: new Map<string, number>(),
+    skipped: new Map<string, number>()
+  };
+}
+
+function bumpProfileCodeCount(counts: Map<string, number>, code: string): void {
+  counts.set(code, (counts.get(code) ?? 0) + 1);
+}
+
+function summarizeProfileGate(collector: ProfileGateCollector): PdosFitSafetyProfileGate {
+  return {
+    profile: collector.profile,
+    downgraded_to_advisory: toProfileCodeCounts(collector.downgraded),
+    skipped: toProfileCodeCounts(collector.skipped)
+  };
+}
+
+function toProfileCodeCounts(counts: ReadonlyMap<string, number>): readonly PdosFitSafetyProfileCodeCount[] {
+  return [...counts.entries()]
+    .map(([code, count]) => ({ code, count }))
+    .sort((first, second) => codepointCompare(first.code, second.code));
+}
+
+function formatProfileCodeCounts(counts: readonly PdosFitSafetyProfileCodeCount[]): string {
+  if (counts.length === 0) {
+    return "none";
+  }
+  return counts.map((entry) => `${entry.code}(${entry.count})`).join(", ");
 }
 
 // R2/R8: a PURE fixed unit (e.g. "600px", "100vh") — not inside clamp/calc/min/max/var — returns its number.
@@ -303,6 +412,17 @@ function lintComponentCss(component: PdosFitSafetyComponentSource): readonly Raw
   const rules = parseCssRules(component.css);
   const customProperties = extractCustomProperties(component.css);
   const findings: RawFitSafetyFinding[] = [];
+
+  if (!hasMobileMaxWidthBreakpoint(component.css)) {
+    findings.push({
+      code: "missing_mobile_breakpoint",
+      source: "component_css",
+      precondition: "Component responsive CSS must include a phone breakpoint at max-width 480px or narrower.",
+      message: `${component.id} has no @media max-width <= 480px breakpoint.`,
+      snippet: "@media (max-width: 480px)",
+      path: component.sourcePath
+    });
+  }
 
   for (const rule of rules) {
     if (isRuleIgnored(rule.selector, component.html)) {
@@ -707,7 +827,73 @@ function summarizeFitSafety(
 }
 
 function parseCssRules(css: string): readonly CssRule[] {
-  return parseCssBlock(css.replace(/\/\*[\s\S]*?\*\//g, ""));
+  return parseCssBlock(stripCssComments(css));
+}
+
+function hasMobileMaxWidthBreakpoint(css: string): boolean {
+  return extractMediaConditions(stripCssComments(css)).some(mediaConditionHasMobileMaxWidth);
+}
+
+function extractMediaConditions(css: string): readonly string[] {
+  const conditions: string[] = [];
+  const lowerCss = css.toLowerCase();
+  let cursor = 0;
+
+  while (cursor < css.length) {
+    const mediaIndex = lowerCss.indexOf("@media", cursor);
+    if (mediaIndex === -1) {
+      break;
+    }
+
+    const conditionStart = mediaIndex + "@media".length;
+    const openBrace = css.indexOf("{", conditionStart);
+    if (openBrace === -1) {
+      break;
+    }
+
+    const closeBrace = findMatchingBrace(css, openBrace);
+    if (closeBrace === -1) {
+      break;
+    }
+
+    conditions.push(normalizeWhitespace(css.slice(conditionStart, openBrace)));
+    conditions.push(...extractMediaConditions(css.slice(openBrace + 1, closeBrace)));
+    cursor = closeBrace + 1;
+  }
+
+  return conditions;
+}
+
+function mediaConditionHasMobileMaxWidth(condition: string): boolean {
+  return (
+    anyCssLengthAtOrBelow480(/\(\s*max-width\s*:\s*(\d+(?:\.\d+)?)(px|rem|em)\s*\)/gi, condition) ||
+    anyCssLengthAtOrBelow480(/\(\s*width\s*<=\s*(\d+(?:\.\d+)?)(px|rem|em)\s*\)/gi, condition) ||
+    anyCssLengthAtOrBelow480(/\(\s*(\d+(?:\.\d+)?)(px|rem|em)\s*>=\s*width\s*\)/gi, condition)
+  );
+}
+
+function anyCssLengthAtOrBelow480(pattern: RegExp, condition: string): boolean {
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(condition)) !== null) {
+    const value = match[1];
+    const unit = match[2];
+    if (value !== undefined && unit !== undefined && cssLengthToPx(value, unit) <= 480) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function cssLengthToPx(value: string, unit: string): number {
+  const numeric = Number.parseFloat(value);
+  if (!Number.isFinite(numeric)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return unit.toLowerCase() === "px" ? numeric : numeric * REM_IN_PX;
+}
+
+function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
 function parseCssBlock(css: string): readonly CssRule[] {
@@ -1098,11 +1284,13 @@ function formatFindings(findings: readonly PdosFitSafetyFinding[]): readonly str
 function parseArgs(args: readonly string[]): {
   baselinePath?: string;
   format?: "json" | "markdown";
+  profile?: string;
   noPages: boolean;
 } {
   const result: {
     baselinePath?: string;
     format?: "json" | "markdown";
+    profile?: string;
     noPages: boolean;
   } = { noPages: false };
 
@@ -1121,6 +1309,9 @@ function parseArgs(args: readonly string[]): {
       index += 1;
     } else if (key === "--format" && (value === "json" || value === "markdown")) {
       result.format = value;
+      index += 1;
+    } else if (key === "--profile") {
+      result.profile = value;
       index += 1;
     }
   }

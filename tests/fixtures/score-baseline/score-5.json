@@ -44,22 +44,22 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 96,
+        "selected": false,
+        "reasons": [
+          "Project type public_sector is supported.",
+          "Logic/design/motion fit: 9/10/9."
+        ],
+        "penalties": []
+      },
+      {
         "id": "client-portal-trust",
         "score": 64,
         "selected": false,
         "reasons": [
           "Project type public_sector is not a primary fit.",
           "Logic/design/motion fit: 10/9/9."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "dashboard-data-heavy",
-        "score": 64,
-        "selected": false,
-        "reasons": [
-          "Project type public_sector is not a primary fit.",
-          "Logic/design/motion fit: 9/10/9."
         ],
         "penalties": []
       }
@@ -140,6 +140,16 @@
   },
   "rejected": {
     "recipes": [
+      {
+        "id": "dashboard-data-heavy",
+        "score": 64,
+        "selected": false,
+        "reasons": [
+          "Project type public_sector is not a primary fit.",
+          "Logic/design/motion fit: 9/10/9."
+        ],
+        "penalties": []
+      },
       {
         "id": "internal-ops-clean",
         "score": 62,
@@ -350,6 +360,17 @@
         "penalties": []
       },
       {
+        "id": "chart-with-source",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
         "id": "client-task-timeline",
         "score": 68,
         "selected": false,
@@ -368,17 +389,6 @@
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "chart-with-source",
-        "score": 68,
-        "selected": false,
-        "reasons": [
-          "Compared against route public_sector and recipe public-sector-accessible.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 9/7."
         ],
         "penalties": []
       },
@@ -710,6 +720,17 @@
         "penalties": []
       },
       {
+        "id": "checkout-progress-steps",
+        "score": 116,
+        "selected": false,
+        "reasons": [
+          "Compared against route public_sector and recipe public-sector-accessible.",
+          "Asset use_case is not an exact match.",
+          "Creativity/trust/motion: 2/9/1."
+        ],
+        "penalties": []
+      },
+      {
         "id": "client-account-overview",
         "score": 116,
         "selected": false,
@@ -728,17 +749,6 @@
           "Compared against route public_sector and recipe public-sector-accessible.",
           "Asset use_case is not an exact match.",
           "Creativity/trust/motion: 3/9/1."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "checkout-progress-steps",
-        "score": 116,
-        "selected": false,
-        "reasons": [
-          "Compared against route public_sector and recipe public-sector-accessible.",
-          "Asset use_case is not an exact match.",
-          "Creativity/trust/motion: 2/9/1."
         ],
         "penalties": []
       },

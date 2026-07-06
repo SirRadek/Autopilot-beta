@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 121,
+  "file_count": 123,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -11,16 +11,27 @@
     "product-design-os/assets/sections/local-bricklayer-brick-proof.jpg",
     "product-design-os/assets/sections/local-bricklayer-sandstone-wall.jpg",
     "product-design-os/assets/sections/proof-strip-case-study.svg",
+    "product-design-os/briefs/design-contract-template.md",
+    "product-design-os/briefs/motion-brief-template.md",
+    "product-design-os/briefs/motion-brief.schema.json",
     "product-design-os/composition/composition-target.schema.json",
     "product-design-os/contracts/component-contract-manifest.json",
     "product-design-os/contracts/component-contract.schema.json",
     "product-design-os/evidence/evidence.schema.json",
     "product-design-os/evidence/records/example-context7-evidence.json",
+    "product-design-os/evidence/records/gsap-skills-adoption-audit.json",
+    "product-design-os/evidence/records/openrouter-free-route-data-policy.json",
+    "product-design-os/library/design-trend-hypotheses.md",
+    "product-design-os/library/preset-manifest.json",
+    "product-design-os/library/preset.schema.json",
     "product-design-os/qa/buildability-floor/check-buildability-floor-product-design-os.ts",
     "product-design-os/qa/fit-probe/check-fit-probe-product-design-os.ts",
     "product-design-os/qa/fit-probe/fit-probe-core.ts",
     "product-design-os/qa/fit-safety/check-fit-safety-product-design-os.ts",
     "product-design-os/qa/fit-safety/fit-safety-baseline.json",
+    "product-design-os/qa/profile-check-matrix.json",
+    "product-design-os/qa/profile-check-matrix.schema.json",
+    "product-design-os/qa/profile-check-matrix.ts",
     "product-design-os/qa/renderability/fixtures/buildable-marketing.json",
     "product-design-os/qa/renderability/fixtures/component-contract-manifest.fixture.json",
     "product-design-os/qa/renderability/fixtures/nonbuildable-motion.json",
@@ -28,6 +39,7 @@
     "product-design-os/qa/visual-qa-browser/check-visual-qa-browser-product-design-os.ts",
     "product-design-os/qa/visual-qa-browser/visual-qa-browser-core.ts",
     "product-design-os/recipes/recipe.schema.json",
+    "product-design-os/recipes/standard-web-fast.json",
     "product-design-os/renderer/check-point-cloud-scene.ts",
     "product-design-os/renderer/check-render-contract.ts",
     "product-design-os/renderer/components/dot-stage-hero.ts",
@@ -45,6 +57,8 @@
     "product-design-os/renderer/types.ts",
     "product-design-os/renderer/visual-qa-playwright.ts",
     "product-design-os/renderer/wcag-contrast.ts",
+    "product-design-os/rules/motion-stack-decision-tree.md",
+    "product-design-os/rules/preset-curation.md",
     "product-design-os/scripts/build-point-cloud-asset.ts",
     "product-design-os/scripts/check-evidence-freshness-product-design-os.ts",
     "product-design-os/scripts/check-renderability-product-design-os.ts",
@@ -70,6 +84,9 @@
     "src/data/delivery-system/protectiveSupervision.ts",
     "src/data/delivery-system/routingGuards.ts",
     "src/data/delivery-system/toolInventory.ts",
+    "src/governed-core/dispatch.ts",
+    "src/governed-core/index.ts",
+    "src/governed-core/ipc-server.ts",
     "src/lib/decision-mesh/capabilityMirror.ts",
     "src/lib/decision-mesh/graph.ts",
     "src/lib/decision-mesh/index.ts",
@@ -85,6 +102,7 @@
     "src/lib/image-point-cloud/types.ts",
     "src/lib/mesh-tools/changed-files-capabilities-cli.ts",
     "src/lib/mesh-tools/changed-files-capabilities.ts",
+    "src/lib/mesh-tools/related-file-hints.ts",
     "src/lib/mesh-tools/related-files-status-cli.ts",
     "src/lib/mesh-tools/related-files-status.ts"
   ],
@@ -205,12 +223,14 @@
     {
       "source_path": "product-design-os/briefs/brief-template.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "8109199c2a76f25349eeb599c54639a325646e0549339e71d784ed0ab6c97717"
+      "content_hash": "8109199c2a76f25349eeb599c54639a325646e0549339e71d784ed0ab6c97717",
+      "patched_by": "page-profile-p0"
     },
     {
       "source_path": "product-design-os/briefs/project-brief.schema.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "4d5dff848376c3fcf1d1c126159b798939ddf5d138b48c2890e0953c6c3fe81b"
+      "content_hash": "4d5dff848376c3fcf1d1c126159b798939ddf5d138b48c2890e0953c6c3fe81b",
+      "patched_by": "page-profile-p0"
     },
     {
       "source_path": "product-design-os/library/README.md",
@@ -248,7 +268,8 @@
     {
       "source_path": "product-design-os/library/source.schema.json",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "60ff71d246cb233ed77bb6cf7742cd16a1a87cb527e97645a82cd6c45fb6c27e"
+      "content_hash": "60ff71d246cb233ed77bb6cf7742cd16a1a87cb527e97645a82cd6c45fb6c27e",
+      "patched_by": "evidence-claims-d9"
     },
     {
       "source_path": "product-design-os/library/templates/project-library-entry-template.json",
@@ -507,7 +528,8 @@
     {
       "source_path": "product-design-os/rules/design-seo-tradeoff.md",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "b7f698637f1778f697ce2ca1da9c01160c550b4245a19bf4c0da8659dfc0641a"
+      "content_hash": "b7f698637f1778f697ce2ca1da9c01160c550b4245a19bf4c0da8659dfc0641a",
+      "patched_by": "page-profile-p0"
     },
     {
       "source_path": "product-design-os/rules/logic-first.md",
@@ -573,6 +595,11 @@
       "patched_by": "auditD"
     },
     {
+      "source_path": "product-design-os/scripts/codepoint-compare.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "3644e2296e08852168213a20f9ac0b4e698ea2a0a6fa0417a2f7a6bd633f1fd8"
+    },
+    {
       "source_path": "product-design-os/scripts/route-product-design-os.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "f398e981affe0cbb550ab77c98b715e96aa2ac4d68586f17d4ce5dc3a3482287",
@@ -587,7 +614,7 @@
     {
       "source_path": "product-design-os/scripts/update-project-library.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "d76f389fdf0b3517a47a0e1aaa0eee5bb0c80a5664dec25b1ca2f320c0c30d0b"
+      "content_hash": "b41f39d25c0213dd2cb6ccdc6ab7533566e75b1aa35949d2987e255d4d6cc67f"
     },
     {
       "source_path": "product-design-os/scripts/validate-product-design-os.ts",
@@ -696,6 +723,11 @@
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "a19a13f60cbe00101908f5fb197785aa6e86caf9cf91be4f8d814a2e285036d6",
       "patched_by": "C-pass-2a"
+    },
+    {
+      "source_path": "src/data/delivery-system/routingModes.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "8485048fa6144fa11e8be875a903d0fc76f9c7a01dab04ed4343be6697f3d759"
     },
     {
       "source_path": "src/data/delivery-system/sessionState.ts",

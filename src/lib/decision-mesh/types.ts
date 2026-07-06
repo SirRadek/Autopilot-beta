@@ -1,3 +1,5 @@
+import type { RoutingModeId } from "../../data/delivery-system/routingModes";
+
 export interface DecisionMeshNode {
   readonly id: string;
   readonly type: string;
@@ -37,6 +39,12 @@ export interface DecisionMesh {
   readonly rules: readonly DecisionMeshRule[];
 }
 
+export interface DecisionMeshNodeReference {
+  readonly id: string;
+  readonly name: string;
+  readonly score: number;
+}
+
 export interface RelevantSubgraphInput {
   readonly task: string;
   readonly agent?: string;
@@ -46,21 +54,25 @@ export interface RelevantSubgraphInput {
 export interface RelevantSubgraph {
   readonly task: string;
   readonly agent?: string;
-  readonly relevant_nodes: readonly DecisionMeshNode[];
+  readonly relevant_nodes: readonly DecisionMeshNodeReference[];
   readonly relevant_edges: readonly DecisionMeshEdge[];
   readonly required_agents: readonly string[];
-  readonly excluded: readonly string[];
 }
 
 export interface AgentPacketInput {
   readonly task: string;
   readonly agent: string;
   readonly token_budget?: number;
+  readonly mode?: RoutingModeId;
 }
 
 export interface AgentPacket {
   readonly agent: string;
   readonly task: string;
+  /**
+   * The routing mode the packet was built for, echoed back; absent when no mode was requested.
+   */
+  readonly routing_mode?: RoutingModeId;
   readonly objective: readonly string[];
   readonly rules: readonly string[];
   readonly relevant_nodes: readonly string[];
@@ -130,7 +142,7 @@ export interface RequiredAgentsResult {
 
 export interface RiskResult {
   readonly task: string;
-  readonly risks: readonly DecisionMeshNode[];
+  readonly risks: readonly DecisionMeshNodeReference[];
   readonly stop_conditions: readonly string[];
 }
 

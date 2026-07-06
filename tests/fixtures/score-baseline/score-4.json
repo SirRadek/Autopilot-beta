@@ -159,6 +159,16 @@
         "penalties": []
       },
       {
+        "id": "standard-web-fast",
+        "score": 56,
+        "selected": false,
+        "reasons": [
+          "Project type ecommerce is not a primary fit.",
+          "Logic/design/motion fit: 7/8/9."
+        ],
+        "penalties": []
+      },
+      {
         "id": "marketing-premium",
         "score": 50,
         "selected": false,
@@ -371,6 +381,17 @@
         "penalties": []
       },
       {
+        "id": "chart-with-source",
+        "score": 68,
+        "selected": false,
+        "reasons": [
+          "Compared against route ecommerce and recipe ecommerce-conversion.",
+          "Pattern use_case is not an exact match.",
+          "Usability/mobile quality: 9/7."
+        ],
+        "penalties": []
+      },
+      {
         "id": "client-task-timeline",
         "score": 68,
         "selected": false,
@@ -389,17 +410,6 @@
           "Compared against route ecommerce and recipe ecommerce-conversion.",
           "Pattern use_case is not an exact match.",
           "Usability/mobile quality: 8/8."
-        ],
-        "penalties": []
-      },
-      {
-        "id": "chart-with-source",
-        "score": 68,
-        "selected": false,
-        "reasons": [
-          "Compared against route ecommerce and recipe ecommerce-conversion.",
-          "Pattern use_case is not an exact match.",
-          "Usability/mobile quality: 9/7."
         ],
         "penalties": []
       },
