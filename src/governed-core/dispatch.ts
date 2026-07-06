@@ -13,6 +13,11 @@ import {
   type SupervisorRoutingDecision
 } from "../data/delivery-system/modelPolicy";
 import type { TierCircuitBreakerThresholds, TierFailureSignalRecord } from "../data/delivery-system/routingGuards";
+import {
+  isLaneAllowedInMode,
+  resolveRoutingLane,
+  type RoutingModeId
+} from "../data/delivery-system/routingModes";
 import type { SubscriptionSessionBudget } from "../data/delivery-system/subscriptionBudget";
 import {
   buildAgentPacket,
@@ -26,7 +31,8 @@ const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export type DispatchRefusalReason =
   | "packet_provenance_mismatch"
   | "routing_no_viable_provider"
-  | "missing_required_checks";
+  | "missing_required_checks"
+  | "lane_not_allowed_in_mode";
 
 export interface SupervisorRoutingContext {
   readonly layer: ModelPolicyLayer;
@@ -42,6 +48,7 @@ export type GovernedHandoff = CliWorkerInput & {
   readonly agent: string;
   readonly packet_hash: string;
   readonly required_checks: readonly string[];
+  readonly routing_mode?: RoutingModeId;
   readonly routing?: SupervisorRoutingContext;
 };
 
@@ -76,13 +83,14 @@ interface GovernanceHashPacket {
  * is built) is a Phase-2 hardening. The structural bypass-prevention in Phase 1 is the dependency
  * boundary: the spawn lane is reachable only through this module (see dispatch-boundary.test.ts).
  */
-export function computePacketHash(packet: GovernanceHashPacket): string {
+export function computePacketHash(packet: GovernanceHashPacket, routingMode?: RoutingModeId): string {
   const canonical = {
     relevant_nodes: sorted(packet.relevant_nodes),
     rules: sorted(packet.rules),
     required_checks: sorted(packet.required_checks),
     stop_conditions: sorted(packet.stop_conditions),
-    must_not_assume: sorted(packet.must_not_assume)
+    must_not_assume: sorted(packet.must_not_assume),
+    routing_mode: routingMode ?? null
   };
 
   return createHash("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
@@ -99,7 +107,7 @@ export async function dispatchHandoff(
     token_budget: DEFAULT_AGENT_PACKET_TOKEN_BUDGET
   });
 
-  if (computePacketHash(packet) !== handoff.packet_hash) {
+  if (computePacketHash(packet, handoff.routing_mode) !== handoff.packet_hash) {
     return refuse("packet_provenance_mismatch", null, false);
   }
 
@@ -112,6 +120,13 @@ export async function dispatchHandoff(
     return refuse("missing_required_checks", tierId, true);
   }
 
+  if (handoff.routing_mode !== undefined) {
+    const lane = resolveHandoffLane(handoff);
+    if (lane === undefined || !isLaneAllowedInMode(handoff.routing_mode, lane)) {
+      return refuse("lane_not_allowed_in_mode", tierId, true);
+    }
+  }
+
   const result = await runCliWorker(toCliWorkerInput(handoff), stateDir);
 
   return {
@@ -120,6 +135,18 @@ export async function dispatchHandoff(
     tier_id: tierId,
     provenance_verified: true
   };
+}
+
+function resolveHandoffLane(handoff: GovernedHandoff) {
+  try {
+    return resolveRoutingLane({
+      vendor: handoff.vendor,
+      ...(handoff.openrouterMode !== undefined ? { openrouterMode: handoff.openrouterMode } : {}),
+      ...(handoff.model !== undefined ? { model: handoff.model } : {})
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 function resolveTierId(handoff: GovernedHandoff): string | null | undefined {

@@ -97,6 +97,20 @@ export function isLaneAllowedInMode(id: RoutingModeId, lane: RoutingLaneId): boo
   return getRoutingMode(id).allowedLanes.includes(lane);
 }
 
+export function resolveRoutingLane(input: {
+  readonly vendor: "codex_cli" | "agy_cli" | "openrouter_api";
+  readonly openrouterMode?: "qwen3_code_draft" | "nemotron_planning";
+  readonly model?: string;
+}): RoutingLaneId {
+  if (input.vendor === "codex_cli") return "codex_cli";
+  if (input.vendor === "agy_cli") {
+    return /pro/i.test(input.model ?? "") ? "agy_deep" : "agy_fast";
+  }
+  if (input.openrouterMode === "nemotron_planning") return "openrouter_nemotron_planning";
+  if (input.openrouterMode === "qwen3_code_draft") return "openrouter_qwen3_code_draft";
+  throw new Error("routing_lane_unresolved: openrouter_api handoff requires an openrouterMode");
+}
+
 export class LaneNotAllowedInModeError extends Error {
   readonly reason = "lane_not_allowed_in_mode";
   readonly modeId: RoutingModeId;

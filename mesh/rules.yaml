@@ -74,6 +74,15 @@ rules:
     must_not_assume:
       - Do not create duplicate sources of truth.
       - Do not create an unscoped parallel runtime.
+  - id: MODE-ROUTE-001
+    title: Routing-mode lane membership is enforced at dispatch
+    applies_to:
+      - capability_routing
+    instruction: "A governed dispatch that declares a routing_mode must target only a lane the mode allows. The cost-blind guard in routingModes.ts refuses expensive lanes (claude_supervisor, codex_cli) in idea mode via lane_not_allowed_in_mode, and routing_mode is bound into computePacketHash so one mode's handoff cannot replay another mode's hash. routing_mode is an explicit supervisor input, never auto-classified as authority."
+    severity: major
+    must_not_assume:
+      - Do not auto-classify the routing mode as authoritative.
+      - Do not allow an expensive lane in idea mode.
   - id: OBS-SCOPE-001
     title: Observability keeps Autopilot and project problems separate
     applies_to:
