@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 121,
+  "file_count": 122,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -85,8 +85,8 @@
     "src/data/delivery-system/routingGuards.ts",
     "src/data/delivery-system/toolInventory.ts",
     "src/governed-core/dispatch.ts",
-    "src/governed-core/ipc-server.ts",
     "src/governed-core/index.ts",
+    "src/governed-core/ipc-server.ts",
     "src/lib/decision-mesh/capabilityMirror.ts",
     "src/lib/decision-mesh/graph.ts",
     "src/lib/decision-mesh/index.ts",
@@ -718,6 +718,11 @@
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "a19a13f60cbe00101908f5fb197785aa6e86caf9cf91be4f8d814a2e285036d6",
       "patched_by": "C-pass-2a"
+    },
+    {
+      "source_path": "src/data/delivery-system/routingModes.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "dc09c58ab7c5d97fccc551d8c17b126c108b84434249cdd7ff182e16b3373577"
     },
     {
       "source_path": "src/data/delivery-system/sessionState.ts",

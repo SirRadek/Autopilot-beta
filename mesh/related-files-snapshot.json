@@ -1,10 +1,11 @@
 {
   "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
   "src/data/delivery-system/modelPolicy.ts": "e379e13d1f0d98363465a2f86173fa9727203eaf",
+  "src/data/delivery-system/routingModes.ts": "e9b2a20bbf4eb0861b1841c1313da1b9169060f8",
   "src/lib/decision-mesh/query.ts": "da50eca3950ee16e0149b9c6245378c1828d51ae",
   "mcp/server.ts": "94d4fd5a7d14cc22f843d0c0cc9192941663da11",
   "AGENTS.md": "f6f3c959ee35f5999dbfcdf3f07bcd3e0a0cedf7",
-  "mesh/nodes": "tree:ec59ba7185788167ed2404b1af3daf17a4336c9733fa919fba9f8f99600c0f35",
+  "mesh/nodes": "tree:68df634afec9b9e6b0f2b9a2af38696951c9d96e6c2184768229130cdb405617",
   "mesh/rules.yaml": "a4179d9f53b25862de8dae460d1c20cb9e49ae0f",
   "mesh/edges.yaml": "0761193d1699ee0fc92ed271252f401f66273b24",
   ".codex/hooks.json": "dd37d1633446888857a3693eecbbd640e45cba8c",

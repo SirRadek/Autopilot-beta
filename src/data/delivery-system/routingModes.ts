@@ -1,0 +1,118 @@
+/**
+ * Routing modes are explicit supervisor/human input. Keyword auto-classifiers are
+ * advisory only; auto-classification is the first step toward auto-switching,
+ * which is out of scope for this slice.
+ *
+ * Live activation of the Nemotron/Qwen worker lanes remains a future slice
+ * pending the tiered-eval regime and ACCESS-TIER-001: workers are packet-only,
+ * with no self-prompting or learning. This module is pure structure, not live
+ * dispatch.
+ */
+
+export type RoutingModeId = "idea" | "spec" | "build" | "review";
+
+// `agy_*` lanes map to the agy_cli choice in CliVendorSelection; `openrouter_*`
+// lanes mirror OpenRouterMode values; `codex_cli` keeps the CLI vendor id stable.
+export type RoutingLaneId =
+  | "agy_fast"
+  | "agy_deep"
+  | "openrouter_nemotron_planning"
+  | "openrouter_qwen3_code_draft"
+  | "qwen_local"
+  | "deterministic_tools"
+  | "claude_supervisor"
+  | "codex_cli";
+
+// Expensive means owner-subscription decision/implementation lanes, not a cost number; guard is cost-blind.
+export const EXPENSIVE_LANES: readonly RoutingLaneId[] = ["claude_supervisor", "codex_cli"];
+
+export interface RoutingModePolicy {
+  readonly id: RoutingModeId;
+  readonly summary: string;
+  readonly allowedLanes: readonly RoutingLaneId[];
+  readonly expensiveLanesAllowed: boolean;
+  readonly refuseWhen: readonly string[];
+  readonly requiredChecks: readonly string[];
+  readonly stopConditions: readonly string[];
+  readonly slice: "shipped" | "deferred";
+}
+
+export const routingModes = [
+  {
+    id: "idea",
+    summary:
+      "Brainstorming and variants run only on cheap advisory lanes; Claude/Codex decision and implementation lanes are hard-forbidden.",
+    allowedLanes: ["agy_fast", "agy_deep", "openrouter_nemotron_planning"],
+    expensiveLanesAllowed: false,
+    refuseWhen: ["any expensive lane requested (claude_supervisor/codex_cli)"],
+    requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "no_expensive_lane"],
+    stopConditions: ["expensive_lane_requested_in_idea", "auto_mode_classification_used_as_authority"],
+    slice: "shipped"
+  },
+  {
+    id: "spec",
+    summary:
+      "Specification drafting starts with Nemotron or agy planning plus deterministic local context before any deferred supervisor handoff.",
+    allowedLanes: ["openrouter_nemotron_planning", "agy_fast", "agy_deep", "deterministic_tools"],
+    expensiveLanesAllowed: true,
+    refuseWhen: ["cheap draft missing", "task package hash missing"],
+    requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "upstream_spec_draft_present"],
+    stopConditions: ["missing_upstream_draft", "missing_task_package_hash", "auto_mode_classification_used_as_authority"],
+    slice: "deferred"
+  },
+  {
+    id: "build",
+    summary:
+      "Implementation starts with Qwen draft lanes, local worker lanes, and deterministic checks before the deferred Codex patch path.",
+    allowedLanes: ["openrouter_qwen3_code_draft", "qwen_local", "deterministic_tools", "codex_cli"],
+    expensiveLanesAllowed: true,
+    refuseWhen: ["raw prompt sent to build lane", "approved draft or failed-attempt trail missing"],
+    requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "approved_patch_plan_present"],
+    stopConditions: ["missing_upstream_draft", "missing_failed_attempt_trail", "raw_prompt_used_for_build"],
+    slice: "deferred"
+  },
+  {
+    id: "review",
+    summary:
+      "Review starts with agy critique lanes; Claude/Codex review paths remain deferred to declared severity and bounded artifacts.",
+    allowedLanes: ["agy_fast", "agy_deep", "claude_supervisor", "codex_cli"],
+    expensiveLanesAllowed: true,
+    refuseWhen: ["severity not declared", "cheap review artifact absent", "low-severity polish routed to Claude"],
+    requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "review_severity_declared"],
+    stopConditions: ["missing_review_severity", "cheap_artifact_absent", "low_severity_polish_routed_to_claude"],
+    slice: "deferred"
+  }
+] as const satisfies readonly RoutingModePolicy[];
+
+export function getRoutingMode(id: RoutingModeId): RoutingModePolicy {
+  const mode = routingModes.find((candidate) => candidate.id === id);
+  if (!mode) {
+    throw new Error(`routing_mode_not_found: ${String(id)}`);
+  }
+
+  return mode;
+}
+
+export function isLaneAllowedInMode(id: RoutingModeId, lane: RoutingLaneId): boolean {
+  return getRoutingMode(id).allowedLanes.includes(lane);
+}
+
+export class LaneNotAllowedInModeError extends Error {
+  readonly reason = "lane_not_allowed_in_mode";
+  readonly modeId: RoutingModeId;
+  readonly lane: RoutingLaneId;
+
+  constructor(modeId: RoutingModeId, lane: RoutingLaneId) {
+    super(`lane_not_allowed_in_mode: ${lane} is not allowed in ${modeId} mode`);
+    this.name = new.target.name;
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.modeId = modeId;
+    this.lane = lane;
+  }
+}
+
+export function assertLaneAllowedInMode(id: RoutingModeId, lane: RoutingLaneId): void {
+  if (!isLaneAllowedInMode(id, lane)) {
+    throw new LaneNotAllowedInModeError(id, lane);
+  }
+}
