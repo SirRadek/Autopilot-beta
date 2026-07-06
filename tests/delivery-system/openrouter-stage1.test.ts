@@ -110,11 +110,14 @@ describe("OpenRouter Stage 1 worker lane", () => {
   });
 
   it.each([
-    ["qwen3_code_draft", "qwen/qwen3-coder:free"],
-    ["nemotron_planning", "nvidia/nemotron-3-ultra-550b-a55b:free"]
-  ] as readonly [OpenRouterMode, OpenRouterModel][])("runs the %s mode through runCliWorker", async (mode, model) => {
+    // Response mocks echo the CANONICAL model id WITHOUT the ":free" variant suffix — the suffix
+    // is a request-side routing hint and the guard accepts the canonical form defensively (not yet
+    // confirmed by a successful live response; the first live runs hit upstream-error envelopes).
+    ["qwen3_code_draft", "qwen/qwen3-coder:free", "qwen/qwen3-coder"],
+    ["nemotron_planning", "nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-ultra-550b-a55b"]
+  ] as readonly [OpenRouterMode, OpenRouterModel, string][])("runs the %s mode through runCliWorker", async (mode, model, echoedModel) => {
     fetchMock.mockResolvedValueOnce(openRouterResponse({
-      model,
+      model: echoedModel,
       content: "{\"mode\":\"ok\"}"
     }));
 
@@ -201,6 +204,46 @@ describe("OpenRouter Stage 1 worker lane", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(existsSync(join(stateDir, "cli-call-telemetry.jsonl"))).toBe(false);
+  });
+
+  it("surfaces a 200-status error envelope as an upstream provider error (measured live shape)", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          error: {
+            message: "Upstream error from Nvidia: ResourceExhausted: Worker local total request limit reached (115/32)",
+            code: 502
+          }
+        })
+    });
+
+    const result = await runCliWorker(openRouterInput({
+      openrouterMode: "nemotron_planning",
+      taskPacketRef: "packet-upstream-error"
+    }), stateDir);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rawOutput).toBe("");
+    expect(result.errorReason).toContain("openrouter_upstream_error: code 502");
+    expect(result.errorReason).not.toContain("model did not match");
+  });
+
+  it("rejects a response that echoes a genuinely different model", async () => {
+    fetchMock.mockResolvedValueOnce(openRouterResponse({
+      model: "some-other/model",
+      content: "{\"mode\":\"ok\"}"
+    }));
+
+    const result = await runCliWorker(openRouterInput({
+      openrouterMode: "nemotron_planning",
+      taskPacketRef: "packet-mismatch"
+    }), stateDir);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rawOutput).toBe("");
+    expect(result.errorReason).toContain("openrouter_model_rejected");
   });
 
   it("throws before worker side effects when taskPacketRef is missing", async () => {

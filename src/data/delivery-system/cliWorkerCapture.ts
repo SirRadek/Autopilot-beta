@@ -833,6 +833,18 @@ export async function captureOpenRouterResponse(
     throw new OpenRouterProviderError(`openrouter_http_error: status ${response.status}`);
   }
 
+  // OpenRouter can return HTTP 200 whose body is ONLY an error envelope (measured live 2026-07-06:
+  // {"error":{"message":"Upstream error from Nvidia: ResourceExhausted: ...","code":502}} on the
+  // exhausted free pool). Surface that honestly as a provider error instead of letting the
+  // response-model assert below fail with a misleading "model did not match".
+  const errorEnvelope = asUnknownRecord(asUnknownRecord(payload)?.error);
+  if (errorEnvelope !== null) {
+    const upstreamCode = typeof errorEnvelope.code === "number" ? String(errorEnvelope.code) : "unknown";
+    const upstreamMessage =
+      typeof errorEnvelope.message === "string" ? errorEnvelope.message.slice(0, 200) : "no message";
+    throw new OpenRouterProviderError(`openrouter_upstream_error: code ${upstreamCode}: ${upstreamMessage}`);
+  }
+
   assertOpenRouterResponseModel(payload, model);
   assertOpenRouterZeroCost(payload);
 
@@ -875,7 +887,13 @@ function assertOpenRouterResponseModel(payload: unknown, expectedModel: OpenRout
   const record = asUnknownRecord(payload);
   const echoedModel = record ? record.model : undefined;
 
-  if (echoedModel !== expectedModel) {
+  // OpenRouter commonly echoes the canonical model id WITHOUT the ":free" variant suffix (the
+  // suffix is a request-side routing hint) — accepted DEFENSIVELY: exactly the allowlisted id or
+  // its canonical (":free"-stripped) form, nothing else. NOT yet confirmed against a successful
+  // live response (the first live runs hit an upstream-exhausted error envelope instead); the
+  // separate zero-cost assert still fails the run if a paid route actually served it.
+  const canonicalExpected = expectedModel.replace(/:free$/, "");
+  if (echoedModel !== expectedModel && echoedModel !== canonicalExpected) {
     throw new OpenRouterModelGuardError("openrouter_model_rejected: response model did not match allowlisted model");
   }
 }

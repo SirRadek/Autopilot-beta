@@ -6,7 +6,7 @@
   "src/lib/decision-mesh/types.ts": "4b42bd54588452805bd0212a1e16eb241362aabf",
   "mcp/server.ts": "690d6bb346858dc2c98242bfca7c1e0bca2cbf35",
   "AGENTS.md": "f6f3c959ee35f5999dbfcdf3f07bcd3e0a0cedf7",
-  "mesh/nodes": "tree:c94641ca4c4cde0a868aec5a296e03f3042efe5d7a54bd45a0f2cc2a1b01cf42",
+  "mesh/nodes": "tree:705fee32f99da84b1e79a83fc1a9fc11b8d99865ec52c6f7b2bc1d6893081eec",
   "mesh/rules.yaml": "73620f8c0e2891f8074364b093f6c3f3843b3a8c",
   "mesh/edges.yaml": "0761193d1699ee0fc92ed271252f401f66273b24",
   ".codex/hooks.json": "dd37d1633446888857a3693eecbbd640e45cba8c",
@@ -47,6 +47,7 @@
   "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
   "src/data/delivery-system/cliWorker.ts": "b853574e8d5a1eabb0b574b919aa66301dd8ba68",
+  "src/data/delivery-system/cliWorkerCapture.ts": "aacc41ff77bfd16c1d828d82dc4dbe50fa1829bd",
   "src/data/delivery-system/sessionState.ts": "8d6b89a3377e1f8ff486a8c7101365c44657d11b",
   "model-output-evals/": "tree:f16e34569ce48d444527de04f827a3031657716ada5a8d23bf4b1be65ee6d263",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"

@@ -9,3 +9,6 @@ radeq_tmp/
 .codex/state/
 docs/autopilot/session-state/
 .claude/
+
+# OpenRouter attempts budget counter — runtime state, never committed
+docs/autopilot/openrouter-api-attempts.jsonl
