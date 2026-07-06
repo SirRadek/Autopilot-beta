@@ -8,6 +8,7 @@ import {
   assertLaneAllowedInMode,
   getRoutingMode,
   isLaneAllowedInMode,
+  isWithinStepBudget,
   resolveRoutingLane,
   routingModes,
   type RoutingLaneId,
@@ -29,6 +30,34 @@ describe("routing mode catalog", () => {
     const idea = getRoutingMode("idea");
     expect(idea.slice).toBe("shipped");
     expect(idea.expensiveLanesAllowed).toBe(false);
+  });
+
+  it("declares bounded step budgets per routing mode", () => {
+    const expectedStepBudgets = {
+      idea: 2,
+      spec: 3,
+      build: 3,
+      review: 2
+    } as const satisfies Record<RoutingModeId, number>;
+
+    for (const mode of routingModes) {
+      expect(Number.isInteger(mode.step_budget)).toBe(true);
+      expect(mode.step_budget).toBeGreaterThanOrEqual(2);
+      expect(mode.step_budget).toBeLessThanOrEqual(3);
+      expect(mode.step_budget).toBe(expectedStepBudgets[mode.id]);
+    }
+  });
+
+  it("checks step budget boundaries for correction rounds", () => {
+    for (const mode of routingModes) {
+      const budget = mode.step_budget;
+
+      expect(isWithinStepBudget(mode.id, 1)).toBe(true);
+      expect(isWithinStepBudget(mode.id, budget)).toBe(true);
+      expect(isWithinStepBudget(mode.id, budget + 1)).toBe(false);
+      expect(isWithinStepBudget(mode.id, 0)).toBe(false);
+      expect(isWithinStepBudget(mode.id, 1.5)).toBe(false);
+    }
   });
 
   it("allows Idea Mode cheap advisory lanes", () => {

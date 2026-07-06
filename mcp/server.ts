@@ -83,6 +83,7 @@ const routingModeContractOutputSchema = z
     summary: z.string(),
     allowedLanes: stringArraySchema,
     expensiveLanesAllowed: z.boolean(),
+    step_budget: z.number().int().min(1),
     refuseWhen: stringArraySchema,
     requiredChecks: stringArraySchema,
     stopConditions: stringArraySchema,

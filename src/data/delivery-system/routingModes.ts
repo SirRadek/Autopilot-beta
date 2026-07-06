@@ -86,6 +86,12 @@ export interface RoutingModePolicy {
   readonly summary: string;
   readonly allowedLanes: readonly RoutingLaneId[];
   readonly expensiveLanesAllowed: boolean;
+  /**
+   * Max correction/negotiation rounds for the mode before the supervisor must stop and either accept on
+   * evidence or escalate explicit disagreement to the owner. Never unlimited, never "agree to 100%";
+   * concept from the OpenClaude maxSteps review, owner-ratified 2026-07-06.
+   */
+  readonly step_budget: number;
   readonly refuseWhen: readonly string[];
   readonly requiredChecks: readonly string[];
   readonly stopConditions: readonly string[];
@@ -105,6 +111,7 @@ export const routingModes = [
       "openrouter_nemotron_planning"
     ],
     expensiveLanesAllowed: false,
+    step_budget: 2,
     refuseWhen: ["any expensive lane requested (claude_supervisor/codex_cli)"],
     requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "no_expensive_lane"],
     stopConditions: ["expensive_lane_requested_in_idea", "auto_mode_classification_used_as_authority"],
@@ -116,6 +123,7 @@ export const routingModes = [
       "Specification drafting starts with Nemotron or agy planning plus deterministic local context before any deferred supervisor handoff.",
     allowedLanes: ["openrouter_nemotron_planning", "agy_fast", "agy_deep", "deterministic_tools"],
     expensiveLanesAllowed: true,
+    step_budget: 3,
     refuseWhen: ["cheap draft missing", "task package hash missing"],
     requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "upstream_spec_draft_present"],
     stopConditions: ["missing_upstream_draft", "missing_task_package_hash", "auto_mode_classification_used_as_authority"],
@@ -127,6 +135,7 @@ export const routingModes = [
       "Implementation starts with Qwen draft lanes, local worker lanes, and deterministic checks before the deferred Codex patch path.",
     allowedLanes: ["openrouter_qwen3_code_draft", "qwen_local", "deterministic_tools", "codex_cli"],
     expensiveLanesAllowed: true,
+    step_budget: 3,
     refuseWhen: ["raw prompt sent to build lane", "approved draft or failed-attempt trail missing"],
     requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "approved_patch_plan_present"],
     stopConditions: ["missing_upstream_draft", "missing_failed_attempt_trail", "raw_prompt_used_for_build"],
@@ -138,6 +147,7 @@ export const routingModes = [
       "Review starts with agy critique lanes; Claude/Codex review paths remain deferred to declared severity and bounded artifacts.",
     allowedLanes: ["agy_fast", "agy_deep", "agy_gpt_oss_120b", "agy_claude_sonnet_4_6", "claude_supervisor", "codex_cli"],
     expensiveLanesAllowed: true,
+    step_budget: 2,
     refuseWhen: ["severity not declared", "cheap review artifact absent", "low-severity polish routed to Claude"],
     requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "review_severity_declared"],
     stopConditions: ["missing_review_severity", "cheap_artifact_absent", "low_severity_polish_routed_to_claude"],
@@ -156,6 +166,10 @@ export function getRoutingMode(id: RoutingModeId): RoutingModePolicy {
 
 export function isLaneAllowedInMode(id: RoutingModeId, lane: RoutingLaneId): boolean {
   return getRoutingMode(id).allowedLanes.includes(lane);
+}
+
+export function isWithinStepBudget(id: RoutingModeId, round: number): boolean {
+  return Number.isInteger(round) && round >= 1 && round <= getRoutingMode(id).step_budget;
 }
 
 export function resolveRoutingLane(input: {
