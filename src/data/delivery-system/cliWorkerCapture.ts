@@ -1,7 +1,16 @@
 import { execSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { platform } from "node:process";
 
 import { contextWidthSpecs } from "./tokenEfficiency";
@@ -82,6 +91,17 @@ export interface PromptLimitOptions {
   readonly maxPromptChars?: number;
 }
 
+export interface VendorArtifactEntry {
+  readonly path: string;
+  readonly mtimeMs: number;
+  readonly name?: string;
+}
+
+export interface VendorArtifactSweepOptions {
+  readonly ttlDays?: number;
+  readonly now?: number;
+}
+
 export type CodexDispatchMode = "codex_implement" | "codex_review" | "codex_research";
 export type OpenRouterMode = "qwen3_code_draft" | "nemotron_planning";
 export type OpenRouterModel = "qwen/qwen3-coder:free" | "nvidia/nemotron-3-ultra-550b-a55b:free";
@@ -97,6 +117,8 @@ export const OPENROUTER_ATTEMPT_COUNTER_FILE = "openrouter-api-attempts.jsonl";
 // UNVERIFIED at runtime: pricing and free limits must be rechecked before routing activation.
 export const OPENROUTER_FREE_DAILY_ATTEMPT_LIMIT = 50;
 export const OPENROUTER_FREE_MINUTE_ATTEMPT_LIMIT = 20;
+export const DEFAULT_VENDOR_ARTIFACT_TTL_DAYS = 7;
+export const VENDOR_ARTIFACT_TEMP_DIR_NAMES = ["autopilot-handoffs", "autopilot-codex-captures"] as const;
 
 export interface OpenRouterAttemptCounts {
   readonly day: number;
@@ -132,6 +154,13 @@ export const OPENROUTER_PRE_SEND_REDACTION_PATTERNS: readonly OpenRouterRedactio
     pattern: /[A-Za-z]:\\/
   }
 ];
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// No stable eval-retention filename marker exists yet. When tiered-eval artifacts
+// gain one, add it here so flagged full records are preserved while stale raw
+// prompt/output artifacts continue to expire by TTL.
+const EVAL_FLAGGED_ARTIFACT_MARKERS: readonly RegExp[] = [];
 
 export type OpenRouterMissingReason = "openrouter_api_key_missing";
 
@@ -1001,6 +1030,84 @@ function isSpawnTimeout(error: Error | undefined): boolean {
 
 // ─── Prompt file writer (shared) ──────────────────────────────────────────────
 
+export function vendorArtifactDirectories(baseTempDir = tmpdir()): readonly string[] {
+  return VENDOR_ARTIFACT_TEMP_DIR_NAMES.map((directory) => join(baseTempDir, directory));
+}
+
+export function filesToPurge(
+  entries: readonly VendorArtifactEntry[],
+  ttlMs = DEFAULT_VENDOR_ARTIFACT_TTL_DAYS * MS_PER_DAY,
+  now = Date.now()
+): readonly string[] {
+  const effectiveTtlMs = Number.isFinite(ttlMs) && ttlMs >= 0
+    ? ttlMs
+    : DEFAULT_VENDOR_ARTIFACT_TTL_DAYS * MS_PER_DAY;
+
+  return entries
+    .filter((entry) => {
+      if (!Number.isFinite(entry.mtimeMs) || isEvalFlaggedVendorArtifact(entry)) {
+        return false;
+      }
+
+      return now - entry.mtimeMs > effectiveTtlMs;
+    })
+    .map((entry) => entry.path);
+}
+
+export function sweepStaleVendorArtifacts(
+  dir: string,
+  options: VendorArtifactSweepOptions = {}
+): readonly string[] {
+  if (!existsSync(dir)) {
+    return [];
+  }
+
+  const entries: VendorArtifactEntry[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const path = join(dir, entry.name);
+    try {
+      entries.push({ path, name: entry.name, mtimeMs: statSync(path).mtimeMs });
+    } catch {
+      // best-effort sweep: disappearing files should not fail vendor dispatch
+    }
+  }
+
+  const ttlMs = ttlDaysToMs(options.ttlDays ?? DEFAULT_VENDOR_ARTIFACT_TTL_DAYS);
+  const staleFiles = filesToPurge(entries, ttlMs, options.now ?? Date.now());
+  const purgedFiles: string[] = [];
+
+  for (const file of staleFiles) {
+    try {
+      unlinkSync(file);
+      purgedFiles.push(file);
+    } catch {
+      // best-effort sweep: permission races should not fail vendor dispatch
+    }
+  }
+
+  return purgedFiles;
+}
+
+export function sweepStaleVendorArtifactDirectories(
+  options: VendorArtifactSweepOptions = {}
+): readonly string[] {
+  const purgedFiles: string[] = [];
+
+  for (const dir of vendorArtifactDirectories()) {
+    try {
+      purgedFiles.push(...sweepStaleVendorArtifacts(dir, options));
+    } catch {
+      // best-effort sweep: one temp directory must not block another
+    }
+  }
+
+  return purgedFiles;
+}
+
 export function assertPromptWithinLimit(prompt: string, opts: PromptLimitOptions = {}): void {
   const maxPromptChars = resolveMaxPromptChars(opts.maxPromptChars);
   const actualChars = prompt.length;
@@ -1022,6 +1129,17 @@ function resolveMaxPromptChars(maxPromptChars: number | undefined): number {
   }
 
   return maxPromptChars;
+}
+
+function ttlDaysToMs(ttlDays: number): number {
+  return Number.isFinite(ttlDays) && ttlDays >= 0
+    ? ttlDays * MS_PER_DAY
+    : DEFAULT_VENDOR_ARTIFACT_TTL_DAYS * MS_PER_DAY;
+}
+
+function isEvalFlaggedVendorArtifact(entry: VendorArtifactEntry): boolean {
+  const name = entry.name ?? basename(entry.path);
+  return EVAL_FLAGGED_ARTIFACT_MARKERS.some((marker) => marker.test(name));
 }
 
 export function writePromptFile(

@@ -365,6 +365,12 @@
       "kind": "local_docs",
       "location": "docs/autopilot/token-efficiency-operating-model.md",
       "authority": "local-contract"
+    },
+    {
+      "id": "vendor-routing-policy-beta-v2",
+      "kind": "local_docs",
+      "location": "docs/decisions/vendor-routing-policy-beta-v2.md",
+      "authority": "local-contract"
     }
   ]
 }

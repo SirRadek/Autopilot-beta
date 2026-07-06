@@ -12,6 +12,7 @@ import {
   openRouterErrorReason,
   redactOpenRouterApiKey,
   resolveOpenRouterModel,
+  sweepStaleVendorArtifactDirectories,
   type CodexDispatchMode,
   type OpenRouterAttemptCounts,
   type OpenRouterMode,
@@ -381,6 +382,7 @@ export async function runCliWorker(
   input: CliWorkerInput,
   stateDir: string
 ): Promise<CliWorkerResult> {
+  sweepVendorArtifactsBestEffort();
   assertCodexDispatchGuard(input);
   const openRouterConfig = input.vendor === "openrouter_api" ? resolveOpenRouterWorkerConfig(input) : null;
   const taskPacketRef = normalizeTaskPacketRef(input.taskPacketRef);
@@ -699,6 +701,14 @@ export async function runCliWorker(
 
 function promptLimitOptionsFor(input: Pick<CliWorkerInput, "maxPromptChars">): { readonly maxPromptChars?: number } {
   return input.maxPromptChars === undefined ? {} : { maxPromptChars: input.maxPromptChars };
+}
+
+function sweepVendorArtifactsBestEffort(): void {
+  try {
+    sweepStaleVendorArtifactDirectories();
+  } catch {
+    // raw prompt/output TTL cleanup must never block vendor execution
+  }
 }
 
 function assertCodexDispatchGuard(input: CliWorkerInput): void {

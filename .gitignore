@@ -7,4 +7,5 @@ state/
 radeq_tmp/
 *.stackdump
 .codex/state/
+docs/autopilot/session-state/
 .claude/

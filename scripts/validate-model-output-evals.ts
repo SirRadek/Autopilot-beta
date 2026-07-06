@@ -21,6 +21,14 @@ export interface ModelOutputEvalValidationReport {
   readonly errors: readonly ModelOutputEvalValidationIssue[];
 }
 
+export interface ValidateModelOutputEvalRecordInput {
+  readonly record: Record<string, unknown>;
+  readonly schema: Record<string, unknown>;
+  readonly sourceIds: ReadonlySet<string>;
+  readonly file?: string;
+  readonly repoRoot?: string;
+}
+
 export const MODEL_OUTPUT_EVAL_SCHEMA_FILE = "model-output-eval-record.schema.json";
 export const MODEL_OUTPUT_EVAL_REQUIRED_FIELDS = [
   "record_version",
@@ -254,14 +262,7 @@ export function validateModelOutputEvals(repoRoot = process.cwd()): ModelOutputE
       continue;
     }
 
-    for (const issue of validateJsonSchema(record, schema)) {
-      errors.push({
-        file: toRepoPath(repoRoot, file),
-        message: `${issue.path}: ${issue.message}`
-      });
-    }
-
-    validateRecordSemantics(record, sourceIds, file, repoRoot, errors);
+    errors.push(...validateModelOutputEvalRecord({ record, schema, sourceIds, file, repoRoot }));
   }
 
   return {
@@ -270,6 +271,24 @@ export function validateModelOutputEvals(repoRoot = process.cwd()): ModelOutputE
     checkedRecords: recordFiles.length,
     errors
   };
+}
+
+export function validateModelOutputEvalRecord(
+  input: ValidateModelOutputEvalRecordInput
+): readonly ModelOutputEvalValidationIssue[] {
+  const file = input.file ?? "model-output-eval-record.json";
+  const repoRoot = input.repoRoot ?? ".";
+  const errors: ModelOutputEvalValidationIssue[] = [];
+
+  for (const issue of validateJsonSchema(input.record, input.schema)) {
+    errors.push({
+      file: toRepoPath(repoRoot, file),
+      message: `${issue.path}: ${issue.message}`
+    });
+  }
+
+  validateRecordSemantics(input.record, input.sourceIds, file, repoRoot, errors);
+  return errors;
 }
 
 export function formatModelOutputEvalValidationReport(report: ModelOutputEvalValidationReport): string {
@@ -286,6 +305,12 @@ export function formatModelOutputEvalValidationReport(report: ModelOutputEvalVal
   }
 
   return lines.join("\n");
+}
+
+export function modelOutputEvalValidationExitCode(
+  report: Pick<ModelOutputEvalValidationReport, "ok">
+): 0 | 1 {
+  return report.ok ? 0 : 1;
 }
 
 function validateSchemaShape(
@@ -794,7 +819,8 @@ if (invokedFile === currentFile) {
   const report = validateModelOutputEvals();
   console.log(formatModelOutputEvalValidationReport(report));
 
-  if (!report.ok) {
-    process.exit(1);
+  const exitCode = modelOutputEvalValidationExitCode(report);
+  if (exitCode !== 0) {
+    process.exit(exitCode);
   }
 }

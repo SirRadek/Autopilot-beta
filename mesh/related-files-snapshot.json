@@ -14,7 +14,7 @@
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
   "scripts/vendor-check.mjs": "55e860ef0cc23b0c7638e1f546dab06389bec1bf",
   "src/data/delivery-system/modelOutputEvaluation.ts": "e32d29917dfb4fe588cc7cbe7b2579f590412f7a",
-  "scripts/validate-model-output-evals.ts": "c5ae90b87c5a7cd8e531905a57d6585102a6ce95",
+  "scripts/validate-model-output-evals.ts": "c216cb461de3e5640ac0fdcfc5249a466e231dd6",
   "model-output-evals/model-output-eval-record.schema.json": "d84b1b0c694be53d121c760c273d1766bd911a84",
   "src/data/delivery-system/modelSpend.ts": "8bb3c10d6beaadd91f43f9bf43115da07bc3bc9e",
   "src/data/delivery-system/promptLibrary.ts": "d6abab15ddc4af378eb69f2ab9286d669684115f",
@@ -23,7 +23,7 @@
   "docs/autopilot/model-output-evaluation-operating-model.md": "d6a569e14776a040cdf5568deea9935c04d828b4",
   "docs/autopilot/delivery-system-model-policy.md": "9729452e54781ab9022cc42915ea0f3946d22367",
   "prompt-library/source-catalog.md": "20c01ed5df414e25e746d8fc9408442245d94093",
-  "prompt-library/source-catalog.json": "0b1ba156e91bc0130d371d721138843e16b5dad2",
+  "prompt-library/source-catalog.json": "9d16bc3531055c094aa5e9f72070709612d0afe0",
   "docs/autopilot/delivery-system-connector-snapshots.md": "c0aec91d6cceb6d01743ed41b8cc4250fcc69a9b",
   "docs/autopilot/project-architecture-standard.md": "23cac4e7c4995e6cb73fe68a66aaa4f35cbad080",
   "prompt-library/README.md": "10bb5c33523f9fa080ebd9cede21e7cd5e7dfe08",
@@ -38,6 +38,6 @@
   "docs/autopilot/skill-registry.json": "096b21596c383570b42e28384c5ebb95d9ce3210",
   "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
-  "src/data/delivery-system/cliWorker.ts": "42991fbbbb346282ca753860af28989e86c1b88d",
+  "src/data/delivery-system/cliWorker.ts": "ec82e9b74d31a82fdf7b4eacbea910126e7869dc",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
 }

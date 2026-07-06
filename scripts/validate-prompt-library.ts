@@ -46,6 +46,7 @@ export function validatePromptLibrary(repoRoot = process.cwd()): PromptLibraryVa
   const promptSchema = readJsonFile(promptSchemaPath, repoRoot, errors);
   const sourceCatalogSchema = readJsonFile(sourceCatalogSchemaPath, repoRoot, errors);
   const sourceCatalog = readJsonFile(sourceCatalogPath, repoRoot, errors);
+  const knownSourceIds = sourceIdsFromCatalog(sourceCatalog);
 
   if (isRecord(sourceCatalogSchema) && sourceCatalog !== undefined) {
     for (const issue of validateJsonSchema(sourceCatalog, sourceCatalogSchema)) {
@@ -70,6 +71,8 @@ export function validatePromptLibrary(repoRoot = process.cwd()): PromptLibraryVa
     for (const issue of validateJsonSchema(frontmatter, promptSchema)) {
       errors.push({ file: repoPath, message: `${issue.path}: ${issue.message}` });
     }
+
+    validatePromptSources(frontmatter, knownSourceIds, repoPath, errors);
   }
 
   return {
@@ -150,6 +153,43 @@ function readJsonFile(file: string, repoRoot: string, errors: PromptLibraryValid
     errors.push({ file: toRepoPath(repoRoot, file), message });
     return undefined;
   }
+}
+
+function sourceIdsFromCatalog(sourceCatalog: unknown): ReadonlySet<string> {
+  if (!isRecord(sourceCatalog) || !Array.isArray(sourceCatalog.sources)) {
+    return new Set();
+  }
+
+  return new Set(
+    sourceCatalog.sources
+      .filter(isRecord)
+      .map((source) => source.id)
+      .filter((id): id is string => typeof id === "string")
+  );
+}
+
+function validatePromptSources(
+  frontmatter: unknown,
+  knownSourceIds: ReadonlySet<string>,
+  repoPath: string,
+  errors: PromptLibraryValidationIssue[]
+): void {
+  if (!isRecord(frontmatter)) {
+    return;
+  }
+
+  if (!Array.isArray(frontmatter.sources)) {
+    return;
+  }
+
+  frontmatter.sources.forEach((source, index) => {
+    if (typeof source === "string" && !knownSourceIds.has(source)) {
+      errors.push({
+        file: repoPath,
+        message: `$.sources[${index}]: unknown source id "${source}" in prompt-library/source-catalog.json`
+      });
+    }
+  });
 }
 
 function listMarkdownFiles(directory: string): string[] {
