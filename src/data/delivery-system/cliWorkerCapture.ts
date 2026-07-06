@@ -1047,6 +1047,15 @@ export async function captureOpenRouterResponse(
       },
       body: JSON.stringify({
         model,
+        // Doc-verified anti-paid-spill + no-fallback pinning; zero-cost assert remains the response-side guard.
+        provider: {
+          allow_fallbacks: false,
+          max_price: {
+            prompt: 0,
+            completion: 0,
+            request: 0
+          }
+        },
         messages: [
           {
             role: "user",
@@ -1136,16 +1145,21 @@ function parseOpenRouterPayload(responseText: string): unknown {
 
 function assertOpenRouterResponseModel(payload: unknown, expectedModel: OpenRouterModel): void {
   const record = asUnknownRecord(payload);
-  const echoedModel = record ? record.model : undefined;
+  const echoed = record ? record.model : undefined;
+  const canonicalPrefix = expectedModel.replace(/:free$/, "");
 
-  // OpenRouter commonly echoes the canonical model id WITHOUT the ":free" variant suffix (the
-  // suffix is a request-side routing hint) — accepted DEFENSIVELY: exactly the allowlisted id or
-  // its canonical (":free"-stripped) form, nothing else. NOT yet confirmed against a successful
-  // live response (the first live runs hit an upstream-exhausted error envelope instead); the
-  // separate zero-cost assert still fails the run if a paid route actually served it.
-  const canonicalExpected = expectedModel.replace(/:free$/, "");
-  if (echoedModel !== expectedModel && echoedModel !== canonicalExpected) {
-    throw new OpenRouterModelGuardError("openrouter_model_rejected: response model did not match allowlisted model");
+  // Measured 2026-07-06: OpenRouter echoes a canonical slug with a rotating date/provider suffix,
+  // e.g. nvidia/nemotron-3-ultra-550b-a55b-20260604:free. Exact dated pinning would break on
+  // rotation, but the allowlisted family prefix and retained :free variant are required; a paid
+  // variant echo without :free is rejected, with zero-cost and max_price guards backing this up.
+  const isAllowlistedEcho =
+    echoed === expectedModel ||
+    (typeof echoed === "string" && echoed.startsWith(canonicalPrefix) && echoed.endsWith(":free"));
+  if (!isAllowlistedEcho) {
+    const boundedEcho = String(echoed).slice(0, 120);
+    throw new OpenRouterModelGuardError(
+      `openrouter_model_rejected: response model "${boundedEcho}" not in allowlisted family for "${expectedModel}"`
+    );
   }
 }
 

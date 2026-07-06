@@ -1,0 +1,106 @@
+{
+  "record_version": "v0.1",
+  "eval_id": "2026-07-06-openrouter-nemotron-idea-smoke",
+  "created": "2026-07-06",
+  "project": {
+    "slug": "autopilot-control-plane",
+    "name": "Autopilot Control Plane",
+    "control_plane": true
+  },
+  "task": {
+    "task_type": "planning",
+    "summary": "First live governed Idea Mode smoke: draft an acceptance checklist for evaluating cheap-worker planning outputs (6-8 criteria, 3 escalation triggers, sampling note, strict JSON).",
+    "risk_level": "low"
+  },
+  "phase": "learning_immediate_loop",
+  "state": "accepted",
+  "model_or_worker": {
+    "provider": "unknown",
+    "name": "nvidia/nemotron-3-ultra-550b-a55b:free (via OpenRouter, openrouter_mode=nemotron_planning)",
+    "role": "planning_worker"
+  },
+  "reasoning_profile": {
+    "route": "free_cloud_advisory",
+    "reasoning_effort": "model_default",
+    "change_policy": "Route stays packet-only openrouter_free; any change requires tiered eval evidence plus owner decision (ACCESS-TIER-001)."
+  },
+  "token_efficiency_profile": {
+    "mode": "agent_packet",
+    "context_scope": "Redacted self-contained planning packet only (633 input chars); no repository, mesh, or governance context sent.",
+    "caveman_applied": false
+  },
+  "provider_best_practice_sources": [
+    "prompt-source-catalog",
+    "local-agents-md",
+    "token-efficiency-operating-model",
+    "vendor-routing-policy-beta-v2"
+  ],
+  "input_packet_summary": {
+    "summary": "Bounded advisory planning packet dispatched through governed dispatchHandoff with routing_mode=idea (lane openrouter_nemotron_planning allowed by the idea-mode wall); packet hash verified, pre-send redaction gate passed, provider prefs pinned (allow_fallbacks=false, max_price=0).",
+    "allowed_context": [
+      "task requirements embedded in the packet text"
+    ],
+    "forbidden_context": [
+      "raw prompts from other sessions",
+      "repository or mesh content",
+      "secrets",
+      "customer data"
+    ],
+    "source_pointers": [
+      "docs/decisions/lane-cost-tiers-2026-07-06.md",
+      "docs/decisions/master-repair-and-routing-plan-2026-07-05.md"
+    ]
+  },
+  "output_pointer": {
+    "kind": "local_file",
+    "pointer": "docs/autopilot/session-state/cli-call-telemetry.jsonl",
+    "summary": "Redacted vendor-call telemetry line worker_run_id=cli-openrouter-hp-20260706-smoke-nemotron-planning-20260706T180502: outcome=success, exit 0, provider_reported tokens 169 in / 671 out / 840 total, 33.9 s, attempt 1, day budget 4/1000, usage.cost 0 (no spend-ledger entry). Output itself is a 1948-char strict-JSON checklist draft (8 criteria, 3 failure triggers, sampling note); raw output intentionally NOT stored in this record."
+  },
+  "score_by_dimension": {
+    "task_fit": 88,
+    "instruction_following": 95,
+    "source_grounding": 80,
+    "format_contract": 96,
+    "verification_readiness": 85,
+    "privacy_safety": 100,
+    "handoff_clarity": 88,
+    "token_efficiency": 95,
+    "workflow_compatibility": 90
+  },
+  "failure_labels": [],
+  "prompt_or_input_delta": {
+    "changed": false,
+    "summary": "First accepted run of this packet; no prompt tuning needed (three earlier attempts failed on provider-side exhaustion and a guard bug, not output quality).",
+    "changed_fields": [],
+    "rollback_path": "Re-run the packet through the governed dispatch if the checklist draft is discarded."
+  },
+  "rerun_count": 0,
+  "accepted_state": "accepted",
+  "verification_evidence": [
+    {
+      "type": "manual_review",
+      "status": "passed",
+      "evidence": "Supervisor review: exactly 8 criteria (spec 6-8), 3 failure triggers, 1 sampling note; strict JSON parsed (parsed_json_present=true); criteria concrete and checkable; no hallucinated tools or scope creep.",
+      "source_pointer": "docs/autopilot/session-state/cli-call-telemetry.jsonl"
+    },
+    {
+      "type": "mesh_route",
+      "status": "passed",
+      "evidence": "Dispatched via governed dispatchHandoff with routing_mode=idea: lane guard allowed openrouter_nemotron_planning, packet hash verified, dispatch decision recorded (decision=dispatched), zero-cost assert and $1/day spend cap green.",
+      "source_pointer": "docs/autopilot/session-state/dispatch-decisions.jsonl"
+    }
+  ],
+  "source_pointers": [
+    "docs/autopilot/model-output-evaluation-operating-model.md",
+    "docs/decisions/lane-cost-tiers-2026-07-06.md",
+    "src/data/delivery-system/cliWorkerCapture.ts"
+  ],
+  "privacy_review": {
+    "redacted_context_only": true,
+    "raw_output_stored": false,
+    "raw_prompt_stored": false,
+    "raw_logs_stored": false,
+    "secrets_or_customer_data_stored": false,
+    "reviewer": "claude-supervisor"
+  }
+}
