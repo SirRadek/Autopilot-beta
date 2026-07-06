@@ -116,6 +116,7 @@ describe("dispatchHandoff routing_mode lane guard", () => {
       baseHandoff({
         vendor: "openrouter_api",
         openrouterMode: "nemotron_planning",
+        taskPacketRef: "packet-hp-20260630-governed-dispatch",
         routing_mode: "idea"
       }),
       stateDir
@@ -127,6 +128,16 @@ describe("dispatchHandoff routing_mode lane guard", () => {
       expect(result.refused).toBe(false);
     }
     expect(mocks.runCliWorker).toHaveBeenCalledTimes(1);
+    expect(mocks.runCliWorker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendor: "openrouter_api",
+        openrouterMode: "nemotron_planning",
+        taskPacketRef: "packet-hp-20260630-governed-dispatch",
+        routingMode: "idea",
+        lockSource: "governed_dispatch_verified"
+      }),
+      stateDir
+    );
   });
 });
 

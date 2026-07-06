@@ -17,7 +17,7 @@
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
   "scripts/git-hooks": "tree:7fc1b8265fc4eef9ad821a049e0cbff072cf2857da285ec1c37abe8a3cf26dd5",
   "src/lib/mesh-tools": "tree:710af41007fa14b43f4ef741193a8cedd7baeb3eb3df592e00b24c7bfe07f19e",
-  "src/governed-core": "tree:b4ea1439ad251a964ef73a9529417176046ad996773068a77e2e291ab8af8601",
+  "src/governed-core": "tree:88d7c7d69e419bbf15daa88e6885e3bcd78bcd8fed318c2d80e41c4f6081b8ad",
   "scripts/vendor-check.mjs": "53e61bb8918eeead814892250d413dc6230e99a2",
   "src/data/delivery-system/modelOutputEvaluation.ts": "e32d29917dfb4fe588cc7cbe7b2579f590412f7a",
   "scripts/validate-model-output-evals.ts": "c216cb461de3e5640ac0fdcfc5249a466e231dd6",

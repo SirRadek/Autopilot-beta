@@ -255,13 +255,17 @@ function toCliWorkerInput(handoff: GovernedHandoff): CliWorkerInput {
     prompt: handoff.prompt,
     parentSessionHash: handoff.parentSessionHash,
     parentTurnHash: handoff.parentTurnHash,
+    ...(handoff.codexMode !== undefined ? { codexMode: handoff.codexMode } : {}),
+    ...(handoff.openrouterMode !== undefined ? { openrouterMode: handoff.openrouterMode } : {}),
     ...(handoff.model !== undefined ? { model: handoff.model } : {}),
     ...(handoff.routing_mode !== undefined ? { routingMode: handoff.routing_mode } : {}),
+    ...(handoff.taskPacketRef !== undefined ? { taskPacketRef: handoff.taskPacketRef } : {}),
     ...(handoff.cwd !== undefined ? { cwd: handoff.cwd } : {}),
     ...(handoff.addDirs !== undefined ? { addDirs: handoff.addDirs } : {}),
     ...(handoff.images !== undefined ? { images: handoff.images } : {}),
     ...(handoff.timeoutMs !== undefined ? { timeoutMs: handoff.timeoutMs } : {}),
     ...(handoff.outputSchemaPath !== undefined ? { outputSchemaPath: handoff.outputSchemaPath } : {}),
+    ...(handoff.maxPromptChars !== undefined ? { maxPromptChars: handoff.maxPromptChars } : {}),
     lockSource: VERIFIED_LOCK_SOURCE
   };
 }

@@ -1,5 +1,32 @@
 # Autopilot Control Plane Work Log
 
+## 2026-07-06 Governed Dispatch Worker Metadata Pass-Through
+
+Date: 2026-07-06
+Request or trigger: owner ran the Nemotron smoke driver and `runCliWorker()` rejected the governed OpenRouter call because `dispatchHandoff()` dropped `openrouterMode` before narrowing the handoff into `CliWorkerInput`.
+Mode: WRITE_ALLOWED for local governed-core dispatch mapping, regression coverage, architecture record, and work log only. No remote mutation and no live OpenRouter call were performed by this fix.
+Scope:
+
+- Preserve guarded worker metadata when governed-core dispatch forwards a verified handoff to `runCliWorker()`.
+- Add regression coverage that Nemotron idea-mode dispatch forwards `openrouterMode`, `taskPacketRef`, `routingMode`, and verified lock source.
+- Record the architecture invariant that dispatch narrowing must not drop downstream bounded-worker guard fields.
+
+Files changed:
+
+- `src/governed-core/dispatch.ts`
+- `tests/governed-core/dispatch-routing-mode.test.ts`
+- `docs/projects/autopilot-control-plane/architecture.md`
+- `docs/projects/autopilot-control-plane/work-log.md`
+
+Architecture impact: governed-core remains the dispatch chokepoint; the change preserves already-declared worker guard metadata across the chokepoint instead of weakening the `openrouter_api` and `codex_implement` bounded-worker doctrine.
+
+Project mesh impact: no mesh node or rule changes were needed; the active governance was `protective_supervision_policy`, `supervisor_execution_loop`, and routing/worker guard policy.
+
+Verification:
+
+- `npm.cmd test -- governed-core/dispatch-routing-mode` passed: 1 file, 6 tests.
+- `npm.cmd run typecheck` passed.
+
 ## 2026-06-29 Sibling Project Mesh Resolver
 
 Date: 2026-06-29
