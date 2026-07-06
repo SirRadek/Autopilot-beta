@@ -39,6 +39,7 @@ export const AGENT_HANDOFF_INDEX_PATH = "docs/autopilot/session-state/agent-hand
 export const SUBAGENT_EVIDENCE_PATH = "docs/autopilot/session-state/subagent-evidence.jsonl";
 export const CLI_CALL_TELEMETRY_PATH = "docs/autopilot/session-state/cli-call-telemetry.jsonl";
 export const DISPATCH_DECISION_TELEMETRY_PATH = "docs/autopilot/session-state/dispatch-decisions.jsonl";
+export const VENDOR_PROCESS_REGISTRY_PATH = "docs/autopilot/session-state/vendor-process-registry.jsonl";
 export const HISTORY_MAX_ENTRIES = 50;
 
 export function createInitialSessionState(): SessionStateManifest {

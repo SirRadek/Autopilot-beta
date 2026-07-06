@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import {
   appendFileSync,
   existsSync,
@@ -70,6 +70,8 @@ export interface AgyCaptureOptions {
   readonly images?: readonly string[];
   readonly timeoutMs?: number;
   readonly maxPromptChars?: number;
+  readonly workerRunId?: string | null;
+  readonly onProcessEvent?: (record: VendorProcessRecord) => void;
   /**
    * Opt in to agy's `--dangerously-skip-permissions` (full host-permission bypass). Default OFF:
    * agy runs with `--sandbox`, the secure default the audit asked for. `--add-dir` is kept
@@ -102,6 +104,29 @@ export interface VendorArtifactSweepOptions {
   readonly now?: number;
 }
 
+export interface VendorProcessRecord {
+  readonly schema_version: "v1";
+  readonly recorded_at: string;
+  readonly event: "spawned" | "exited";
+  readonly vendor: "agy_cli";
+  readonly pid: number;
+  readonly worker_run_id: string | null;
+}
+
+export interface BuildVendorProcessRecordInput {
+  readonly recordedAt: string;
+  readonly event: VendorProcessRecord["event"];
+  readonly pid: number;
+  readonly workerRunId?: string | null;
+}
+
+export interface VendorProcessSweepInput {
+  readonly records: readonly VendorProcessRecord[];
+  readonly nowMs: number;
+  readonly maxAgeMs: number;
+  readonly isPidAlive: (pid: number) => boolean;
+}
+
 export type CodexDispatchMode = "codex_implement" | "codex_review" | "codex_research";
 export type OpenRouterMode = "qwen3_code_draft" | "nemotron_planning";
 export type OpenRouterModel = "qwen/qwen3-coder:free" | "nvidia/nemotron-3-ultra-550b-a55b:free";
@@ -119,6 +144,7 @@ export const OPENROUTER_FREE_DAILY_ATTEMPT_LIMIT = 50;
 export const OPENROUTER_FREE_MINUTE_ATTEMPT_LIMIT = 20;
 export const DEFAULT_VENDOR_ARTIFACT_TTL_DAYS = 7;
 export const VENDOR_ARTIFACT_TEMP_DIR_NAMES = ["autopilot-handoffs", "autopilot-codex-captures"] as const;
+export const DEFAULT_VENDOR_PROCESS_MAX_AGE_MS = 30 * 60_000;
 
 export interface OpenRouterAttemptCounts {
   readonly day: number;
@@ -320,6 +346,134 @@ export function buildVendorEnv(): NodeJS.ProcessEnv {
     }
   }
   return out;
+}
+
+export function buildVendorProcessRecord(input: BuildVendorProcessRecordInput): VendorProcessRecord {
+  return {
+    schema_version: "v1",
+    recorded_at: input.recordedAt,
+    event: input.event,
+    vendor: "agy_cli",
+    pid: input.pid,
+    worker_run_id: input.workerRunId ?? null
+  };
+}
+
+export function parseVendorProcessRegistryLines(content: string): readonly VendorProcessRecord[] {
+  const records: VendorProcessRecord[] = [];
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (isVendorProcessRecord(parsed)) {
+        records.push(buildVendorProcessRecord({
+          recordedAt: parsed.recorded_at,
+          event: parsed.event,
+          pid: parsed.pid,
+          workerRunId: parsed.worker_run_id
+        }));
+      }
+    } catch {
+      // malformed registry lines are ignored so cleanup never blocks dispatch
+    }
+  }
+
+  return records;
+}
+
+export function selectOrphanedVendorPids(input: VendorProcessSweepInput): readonly number[] {
+  const orphaned = new Set<number>();
+
+  for (let index = 0; index < input.records.length; index += 1) {
+    const record = input.records[index];
+    if (record === undefined) {
+      continue;
+    }
+
+    if (record.event !== "spawned" || orphaned.has(record.pid)) {
+      continue;
+    }
+
+    const spawnedAtMs = Date.parse(record.recorded_at);
+    if (!Number.isFinite(spawnedAtMs) || input.nowMs - spawnedAtMs <= input.maxAgeMs) {
+      continue;
+    }
+
+    if (hasLaterVendorProcessExit(input.records, index, record)) {
+      continue;
+    }
+
+    try {
+      if (input.isPidAlive(record.pid)) {
+        orphaned.add(record.pid);
+      }
+    } catch {
+      // an uncheckable pid is treated as not alive for best-effort cleanup
+    }
+  }
+
+  return [...orphaned];
+}
+
+export function killVendorProcess(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    if (platform === "win32") {
+      // Windows ConPTY can leave agy grandchildren alive after the PTY child exits; /T reaps the tree.
+      const result = spawnSync("taskkill", ["/T", "/F", "/PID", String(pid)], { stdio: "ignore" });
+      return result.status === 0;
+    }
+
+    return process.kill(pid);
+  } catch {
+    return false;
+  }
+}
+
+function isVendorProcessRecord(value: unknown): value is VendorProcessRecord {
+  const record = asUnknownRecord(value);
+  return (
+    record !== null &&
+    record.schema_version === "v1" &&
+    typeof record.recorded_at === "string" &&
+    (record.event === "spawned" || record.event === "exited") &&
+    record.vendor === "agy_cli" &&
+    typeof record.pid === "number" &&
+    Number.isInteger(record.pid) &&
+    record.pid > 0 &&
+    (typeof record.worker_run_id === "string" || record.worker_run_id === null)
+  );
+}
+
+function hasLaterVendorProcessExit(
+  records: readonly VendorProcessRecord[],
+  spawnedIndex: number,
+  spawned: VendorProcessRecord
+): boolean {
+  for (let index = spawnedIndex + 1; index < records.length; index += 1) {
+    const candidate = records[index];
+    if (candidate === undefined) {
+      continue;
+    }
+
+    if (
+      candidate.event === "exited" &&
+      candidate.pid === spawned.pid &&
+      candidate.worker_run_id === spawned.worker_run_id
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // OpenRouter stage-1 guard helpers. These run before any network call.
@@ -605,6 +759,7 @@ export async function captureAgyResponse(
       cwd: opts.cwd ?? process.cwd(),
       env: buildVendorEnv() as Record<string, string>
     });
+    emitAgyProcessEvent(opts, "spawned", proc.pid);
 
     proc.onData((data: string) => {
       collected += data;
@@ -627,6 +782,7 @@ export async function captureAgyResponse(
       if (!settled) {
         settled = true;
         clearTimeout(timeoutHandle);
+        emitAgyProcessEvent(opts, "exited", proc.pid);
         const durationMs = Date.now() - startedAt;
         const cleanOutput = stripAnsi(collected);
         resolve({
@@ -642,6 +798,27 @@ export async function captureAgyResponse(
 }
 
 // ─── File-based capture for codex exec ────────────────────────────────────────
+
+function emitAgyProcessEvent(
+  opts: AgyCaptureOptions,
+  event: VendorProcessRecord["event"],
+  pid: number
+): void {
+  if (!opts.onProcessEvent) {
+    return;
+  }
+
+  try {
+    opts.onProcessEvent(buildVendorProcessRecord({
+      recordedAt: new Date().toISOString(),
+      event,
+      pid,
+      workerRunId: opts.workerRunId ?? null
+    }));
+  } catch {
+    // process registry callbacks are advisory and must not affect capture
+  }
+}
 
 export interface CodexCaptureOptions {
   readonly model?: string;

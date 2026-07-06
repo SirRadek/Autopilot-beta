@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { HandoffId } from "./checkCompletionMatrix";
 import {
@@ -8,18 +8,24 @@ import {
   captureOpenRouterResponse,
   assertOpenRouterAccessTierOptions,
   assertOpenRouterPromptIsSendable,
+  buildVendorProcessRecord,
+  DEFAULT_VENDOR_PROCESS_MAX_AGE_MS,
   incrementOpenRouterAttemptBudget,
+  killVendorProcess,
   openRouterErrorReason,
+  parseVendorProcessRegistryLines,
   redactOpenRouterApiKey,
   resolveOpenRouterModel,
+  selectOrphanedVendorPids,
   sweepStaleVendorArtifactDirectories,
   type CodexDispatchMode,
   type OpenRouterAttemptCounts,
   type OpenRouterMode,
   type OpenRouterModel,
+  type VendorProcessRecord,
   writePromptFile
 } from "./cliWorkerCapture";
-import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH } from "./sessionState";
+import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH, VENDOR_PROCESS_REGISTRY_PATH } from "./sessionState";
 import type { RoutingModeId } from "./routingModes";
 import {
   writeCorrelationEntry,
@@ -389,6 +395,7 @@ export async function runCliWorker(
   stateDir: string
 ): Promise<CliWorkerResult> {
   sweepVendorArtifactsBestEffort();
+  sweepVendorProcessRegistryBestEffort(stateDir);
   assertCodexDispatchGuard(input);
   const openRouterConfig = input.vendor === "openrouter_api" ? resolveOpenRouterWorkerConfig(input) : null;
   const taskPacketRef = normalizeTaskPacketRef(input.taskPacketRef);
@@ -508,6 +515,11 @@ export async function runCliWorker(
         ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
         ...(input.images !== undefined ? { images: input.images } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        workerRunId,
+        onProcessEvent: (record) => appendBestEffort(
+          stateFilePath(stateDir, VENDOR_PROCESS_REGISTRY_PATH),
+          record
+        ),
         ...promptLimitOptions
       });
       exitCode = result.exitCode;
@@ -716,6 +728,96 @@ function sweepVendorArtifactsBestEffort(): void {
     sweepStaleVendorArtifactDirectories();
   } catch {
     // raw prompt/output TTL cleanup must never block vendor execution
+  }
+}
+
+function sweepVendorProcessRegistryBestEffort(stateDir: string): void {
+  try {
+    const registryPath = stateFilePath(stateDir, VENDOR_PROCESS_REGISTRY_PATH);
+    if (!existsSync(registryPath)) {
+      return;
+    }
+
+    const records = parseVendorProcessRegistryLines(readFileSync(registryPath, "utf8"));
+    const orphanedPids = selectOrphanedVendorPids({
+      records,
+      nowMs: Date.now(),
+      maxAgeMs: DEFAULT_VENDOR_PROCESS_MAX_AGE_MS,
+      isPidAlive: isPidAliveBestEffort
+    });
+
+    for (const pid of orphanedPids) {
+      if (killVendorProcess(pid)) {
+        appendBestEffort(registryPath, buildVendorProcessRecord({
+          recordedAt: new Date().toISOString(),
+          event: "exited",
+          pid,
+          workerRunId: openWorkerRunIdForPid(records, pid)
+        }));
+      }
+    }
+  } catch {
+    // vendor process cleanup is best-effort and must never block vendor execution
+  }
+}
+
+function isPidAliveBestEffort(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function openWorkerRunIdForPid(records: readonly VendorProcessRecord[], pid: number): string | null {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    if (record === undefined) {
+      continue;
+    }
+
+    if (record.pid !== pid || record.event !== "spawned") {
+      continue;
+    }
+
+    if (!hasLaterVendorProcessExit(records, index, record)) {
+      return record.worker_run_id;
+    }
+  }
+
+  return null;
+}
+
+function hasLaterVendorProcessExit(
+  records: readonly VendorProcessRecord[],
+  spawnedIndex: number,
+  spawned: VendorProcessRecord
+): boolean {
+  for (let index = spawnedIndex + 1; index < records.length; index += 1) {
+    const candidate = records[index];
+    if (candidate === undefined) {
+      continue;
+    }
+
+    if (
+      candidate.event === "exited" &&
+      candidate.pid === spawned.pid &&
+      candidate.worker_run_id === spawned.worker_run_id
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function appendBestEffort(path: string, record: unknown): void {
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
+  } catch {
+    // registry writes are best-effort and must never affect vendor execution
   }
 }
 
