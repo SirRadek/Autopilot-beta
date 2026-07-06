@@ -105,6 +105,7 @@ describe("OpenRouter Stage 1 worker lane", () => {
     } else {
       process.env.OPENROUTER_API_KEY = priorOpenRouterKey;
     }
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     rmSync(parentDir, { recursive: true, force: true });
   });
@@ -290,6 +291,10 @@ describe("OpenRouter Stage 1 worker lane", () => {
   });
 
   it("records budget exhaustion without calling fetch", async () => {
+    // Freeze Date (only Date — real timers stay live) so the seeded minute-window
+    // records and the budget check's minute key cannot straddle a minute boundary
+    // when a slow parallel run delays the check past :59 of the seeding minute.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date() });
     writeMinuteBudgetAtLimit(stateDir);
 
     const result = await runCliWorker(openRouterInput(), stateDir);
