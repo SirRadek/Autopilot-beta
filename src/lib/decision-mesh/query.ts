@@ -18,6 +18,7 @@ import type {
   RiskResult
 } from "./types";
 import { selectCapabilityModules } from "../../data/delivery-system/capabilities";
+import { getRoutingMode } from "../../data/delivery-system/routingModes";
 
 const DEFAULT_MAX_NODES = 12;
 // Always-applicable root-mesh nodes forced into a packet when a task matched no signal, so an
@@ -169,6 +170,7 @@ function applyGovernanceFloor(
 }
 
 export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): AgentPacket {
+  const modeContract = input.mode !== undefined ? getRoutingMode(input.mode) : undefined;
   const maxNodes = Math.max(4, Math.min(AGENT_PACKET_MAX_NODES, Math.floor((input.token_budget ?? 7000) / 1000)));
   const subgraph = getRelevantSubgraphFull(mesh, {
     task: input.task,
@@ -189,6 +191,7 @@ export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): A
   return {
     agent: input.agent,
     task: input.task,
+    ...(input.mode !== undefined ? { routing_mode: input.mode } : {}),
     objective: unique(
       nodes.flatMap((node) => node.objective ?? [`Answer: ${node.question}`])
     ),
@@ -200,8 +203,14 @@ export function buildAgentPacket(mesh: DecisionMesh, input: AgentPacketInput): A
       ...nodes.flatMap((node) => node.must_not_assume ?? []),
       ...rules.flatMap((rule) => rule.must_not_assume ?? [])
     ]),
-    required_checks: unique(nodes.flatMap((node) => node.required_checks)),
-    stop_conditions: unique(nodes.flatMap((node) => node.stop_conditions ?? [])),
+    required_checks: unique([
+      ...nodes.flatMap((node) => node.required_checks),
+      ...(modeContract?.requiredChecks ?? [])
+    ]),
+    stop_conditions: unique([
+      ...nodes.flatMap((node) => node.stop_conditions ?? []),
+      ...(modeContract?.stopConditions ?? [])
+    ]),
     ...(noGovernanceMatched ? { no_governance_matched: true } : {})
   };
 }

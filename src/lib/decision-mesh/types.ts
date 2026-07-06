@@ -1,3 +1,5 @@
+import type { RoutingModeId } from "../../data/delivery-system/routingModes";
+
 export interface DecisionMeshNode {
   readonly id: string;
   readonly type: string;
@@ -61,11 +63,16 @@ export interface AgentPacketInput {
   readonly task: string;
   readonly agent: string;
   readonly token_budget?: number;
+  readonly mode?: RoutingModeId;
 }
 
 export interface AgentPacket {
   readonly agent: string;
   readonly task: string;
+  /**
+   * The routing mode the packet was built for, echoed back; absent when no mode was requested.
+   */
+  readonly routing_mode?: RoutingModeId;
   readonly objective: readonly string[];
   readonly rules: readonly string[];
   readonly relevant_nodes: readonly string[];
