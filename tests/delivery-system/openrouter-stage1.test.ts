@@ -19,6 +19,8 @@ import {
 } from "../../src/data/delivery-system/cliWorkerCapture";
 
 const secretKey = "sk-or-v1-test-secret-must-not-leak";
+const measuredQwenCanonicalEcho = "qwen/qwen3-coder-480b-a35b-07-25:free";
+const measuredNemotronCanonicalEcho = "nvidia/nemotron-3-ultra-550b-a55b-20260604:free";
 
 interface OpenRouterMockPayload {
   readonly model: OpenRouterModel | string;
@@ -94,7 +96,7 @@ describe("OpenRouter Stage 1 worker lane", () => {
     priorOpenRouterKey = process.env.OPENROUTER_API_KEY;
     process.env.OPENROUTER_API_KEY = secretKey;
     fetchMock = vi.fn<OpenRouterFetch>(async () =>
-      openRouterResponse({ model: "qwen/qwen3-coder:free" })
+      openRouterResponse({ model: measuredQwenCanonicalEcho })
     );
     vi.stubGlobal("fetch", fetchMock);
   });
@@ -111,11 +113,9 @@ describe("OpenRouter Stage 1 worker lane", () => {
   });
 
   it.each([
-    // Response mocks echo the CANONICAL model id WITHOUT the ":free" variant suffix — the suffix
-    // is a request-side routing hint and the guard accepts the canonical form defensively (not yet
-    // confirmed by a successful live response; the first live runs hit upstream-error envelopes).
-    ["qwen3_code_draft", "qwen/qwen3-coder:free", "qwen/qwen3-coder"],
-    ["nemotron_planning", "nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-ultra-550b-a55b"]
+    // Response mocks use measured 2026-07-06 canonical :free echoes; dated/provider suffixes may rotate.
+    ["qwen3_code_draft", "qwen/qwen3-coder:free", measuredQwenCanonicalEcho],
+    ["nemotron_planning", "nvidia/nemotron-3-ultra-550b-a55b:free", measuredNemotronCanonicalEcho]
   ] as readonly [OpenRouterMode, OpenRouterModel, string][])("runs the %s mode through runCliWorker", async (mode, model, echoedModel) => {
     fetchMock.mockResolvedValueOnce(openRouterResponse({
       model: echoedModel,
@@ -129,6 +129,18 @@ describe("OpenRouter Stage 1 worker lane", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(OPENROUTER_CHAT_COMPLETIONS_ENDPOINT);
+    const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}") as Record<string, unknown>;
+    expect(requestBody).toMatchObject({
+      model,
+      provider: {
+        allow_fallbacks: false,
+        max_price: {
+          prompt: 0,
+          completion: 0,
+          request: 0
+        }
+      }
+    });
     expect(result).toMatchObject({
       vendor: "openrouter_api",
       model,
@@ -245,6 +257,24 @@ describe("OpenRouter Stage 1 worker lane", () => {
     expect(result.exitCode).toBe(1);
     expect(result.rawOutput).toBe("");
     expect(result.errorReason).toContain("openrouter_model_rejected");
+    expect(result.errorReason).toContain("some-other/model");
+  });
+
+  it("rejects a paid-variant canonical response echo", async () => {
+    fetchMock.mockResolvedValueOnce(openRouterResponse({
+      model: "nvidia/nemotron-3-ultra-550b-a55b-20260604",
+      content: "{\"mode\":\"ok\"}"
+    }));
+
+    const result = await runCliWorker(openRouterInput({
+      openrouterMode: "nemotron_planning",
+      taskPacketRef: "packet-paid-variant"
+    }), stateDir);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rawOutput).toBe("");
+    expect(result.errorReason).toContain("openrouter_model_rejected");
+    expect(result.errorReason).toContain("nvidia/nemotron-3-ultra-550b-a55b-20260604");
   });
 
   it("throws before worker side effects when taskPacketRef is missing", async () => {
@@ -359,7 +389,7 @@ describe("OpenRouter Stage 1 worker lane", () => {
   it("supports direct mocked fetch injection in captureOpenRouterResponse", async () => {
     const injectedFetch = vi.fn<OpenRouterFetch>(async () =>
       openRouterResponse({
-        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+        model: measuredNemotronCanonicalEcho,
         content: "planning draft"
       })
     );
