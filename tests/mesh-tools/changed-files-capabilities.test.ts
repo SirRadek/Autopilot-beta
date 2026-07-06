@@ -47,6 +47,12 @@ describe("changed-files-capabilities (bind-point ②)", () => {
     expect(r.ungovernedSensitive).not.toContain("docs/notes.md");
   });
 
+  it("flags a newly-added governed-core file with no node coverage as a fail-closed signal", () => {
+    const r = activateForChangedFiles(mesh, ["src/governed-core/new-spawn-policy.ts"]);
+    expect(r.activatedNodes).toEqual([]); // fixture mesh covers no governed-core files
+    expect(r.ungovernedSensitive).toEqual(["src/governed-core/new-spawn-policy.ts"]);
+  });
+
   it("treats newly-added mesh governance SOURCE as a sensitive surface (mesh launder defense)", () => {
     // The fixture mesh covers no mesh source, so an uncovered new node/rule/edge file is a
     // fail-closed signal. In the real mesh these are covered by capability_routing → governed.

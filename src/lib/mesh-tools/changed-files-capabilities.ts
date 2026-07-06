@@ -25,6 +25,7 @@ const SENSITIVE_ROOTS = [
   "mcp",
   "src/lib/decision-mesh",
   "src/lib/mesh-tools",
+  "src/governed-core",
   ".codex/hooks",
   "scripts/git-hooks"
 ] as const;

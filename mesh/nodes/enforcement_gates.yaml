@@ -20,6 +20,7 @@ related_agents:
 related_files:
   - scripts/git-hooks
   - src/lib/mesh-tools
+  - src/governed-core
   - scripts/vendor-check.mjs
 required_checks:
   - gate_change_tested
