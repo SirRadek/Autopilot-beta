@@ -17,8 +17,11 @@ import {
 } from "../data/delivery-system/modelPolicy";
 import type { TierCircuitBreakerThresholds, TierFailureSignalRecord } from "../data/delivery-system/routingGuards";
 import {
+  EXPENSIVE_LANES,
+  isBuildPrepProvenanceSatisfied,
   isLaneAllowedInMode,
   resolveRoutingLane,
+  type BuildPrepProvenance,
   type RoutingLaneId,
   type RoutingModeId
 } from "../data/delivery-system/routingModes";
@@ -36,7 +39,8 @@ export type DispatchRefusalReason =
   | "packet_provenance_mismatch"
   | "routing_no_viable_provider"
   | "missing_required_checks"
-  | "lane_not_allowed_in_mode";
+  | "lane_not_allowed_in_mode"
+  | "missing_upstream_draft";
 
 export interface SupervisorRoutingContext {
   readonly layer: ModelPolicyLayer;
@@ -53,6 +57,8 @@ export type GovernedHandoff = CliWorkerInput & {
   readonly packet_hash: string;
   readonly required_checks: readonly string[];
   readonly routing_mode?: RoutingModeId;
+  readonly task_package_hash?: string;
+  readonly prep_provenance?: BuildPrepProvenance;
   readonly routing?: SupervisorRoutingContext;
 };
 
@@ -177,8 +183,8 @@ export async function dispatchHandoff(
     return refuse("missing_required_checks", tierId, true);
   }
 
+  const lane = handoff.routing_mode !== undefined ? resolveHandoffLane(handoff) : undefined;
   if (handoff.routing_mode !== undefined) {
-    const lane = resolveHandoffLane(handoff);
     if (lane === undefined || !isLaneAllowedInMode(handoff.routing_mode, lane)) {
       recordDispatchDecision(handoff, stateDir, {
         decision: "refused",
@@ -186,6 +192,22 @@ export async function dispatchHandoff(
         tierId
       });
       return refuse("lane_not_allowed_in_mode", tierId, true);
+    }
+  }
+
+  if (handoff.routing_mode === "build" && lane !== undefined && EXPENSIVE_LANES.includes(lane)) {
+    // Like computePacketHash, task_package_hash is a presence-only consistency gate, not unforgeable.
+    if (
+      !hasNonEmptyString(handoff.taskPacketRef) ||
+      !hasNonEmptyString(handoff.task_package_hash) ||
+      !isBuildPrepProvenanceSatisfied(handoff.prep_provenance)
+    ) {
+      recordDispatchDecision(handoff, stateDir, {
+        decision: "refused",
+        refusalReason: "missing_upstream_draft",
+        tierId
+      });
+      return refuse("missing_upstream_draft", tierId, true);
     }
   }
 
@@ -246,6 +268,10 @@ function resolveTierId(handoff: GovernedHandoff): string | null | undefined {
 function hasViableAssignedProvider(decision: SupervisorRoutingDecision): boolean {
   const assignedProvider = (decision as { readonly assignedProvider?: unknown }).assignedProvider;
   return typeof assignedProvider === "string" && assignedProvider.length > 0 && assignedProvider !== "none";
+}
+
+function hasNonEmptyString(value: string | undefined): boolean {
+  return value !== undefined && value.trim().length > 0;
 }
 
 function toCliWorkerInput(handoff: GovernedHandoff): CliWorkerInput {

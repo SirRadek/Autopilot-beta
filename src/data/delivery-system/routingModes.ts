@@ -26,6 +26,28 @@ export type RoutingLaneId =
 // Expensive means owner-subscription decision/implementation lanes, not a cost number; guard is cost-blind.
 export const EXPENSIVE_LANES: readonly RoutingLaneId[] = ["claude_supervisor", "codex_cli"];
 
+export type BuildPrepProvenance =
+  | { readonly kind: "cheap_attempts"; readonly cheap_attempt_refs: readonly string[] }
+  | { readonly kind: "cheap_not_applicable"; readonly reason: string; readonly owner_override: true };
+
+export function isBuildPrepProvenanceSatisfied(p: BuildPrepProvenance | undefined): boolean {
+  if (p === undefined) return false;
+
+  if (p.kind === "cheap_attempts") {
+    return (
+      Array.isArray(p.cheap_attempt_refs) &&
+      p.cheap_attempt_refs.length > 0 &&
+      p.cheap_attempt_refs.every((ref) => typeof ref === "string" && ref.trim().length > 0)
+    );
+  }
+
+  if (p.kind === "cheap_not_applicable") {
+    return typeof p.reason === "string" && p.reason.trim().length > 0 && p.owner_override === true;
+  }
+
+  return false;
+}
+
 export interface RoutingModePolicy {
   readonly id: RoutingModeId;
   readonly summary: string;
@@ -69,7 +91,7 @@ export const routingModes = [
     refuseWhen: ["raw prompt sent to build lane", "approved draft or failed-attempt trail missing"],
     requiredChecks: ["mode_is_explicit_supervisor_input", "lane_in_allowed_set", "approved_patch_plan_present"],
     stopConditions: ["missing_upstream_draft", "missing_failed_attempt_trail", "raw_prompt_used_for_build"],
-    slice: "deferred"
+    slice: "shipped"
   },
   {
     id: "review",
