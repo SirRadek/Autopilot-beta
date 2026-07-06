@@ -1,4 +1,5 @@
 import type { HandoffId } from "./checkCompletionMatrix";
+import { getRoutingMode, type RoutingModeId } from "./routingModes";
 
 export type ModelOutputEvaluationPhase = "learning_immediate_loop" | "weekly_batch_tuning";
 
@@ -51,7 +52,11 @@ export interface CorrectionLoopEntry {
   readonly handoffId: HandoffId;
   readonly provider: ModelProviderFamily;
   readonly iterationCount: number;
-  readonly maxIterations: 3;
+  /**
+   * Mode-aware max iterations: when work runs under a declared routing_mode, this is that mode's
+   * step_budget; default is 3 without a mode.
+   */
+  readonly maxIterations: number;
   readonly lastScore: number | undefined;
   readonly failureLabels: readonly string[];
   readonly correctionApplied: string;
@@ -251,6 +256,10 @@ export function deriveLearningSignal(
           ? "single_observation"
           : "eval_records"
   };
+}
+
+export function correctionLoopMaxIterations(mode?: RoutingModeId): number {
+  return mode === undefined ? 3 : getRoutingMode(mode).step_budget;
 }
 
 export function selectWorkerOutputNextAction(

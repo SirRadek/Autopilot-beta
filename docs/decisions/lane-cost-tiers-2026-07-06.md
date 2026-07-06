@@ -109,7 +109,7 @@ These are still pending verification and/or evals.
 | Candidate | Verification status |
 |---|---|
 | `agy_opus_4_6` | Candidate mid-high advisory reserve; pending live dispatch verification smoke and tiered eval records |
-| `gpt-5.3-codex` via `codex -m` | Candidate MID lane; cheap to verify; pending live dispatch verification smoke and tiered eval records |
+| `gpt-5.3-codex` via `codex -m` | DEAD — measured 2026-07-06: "The 'gpt-5.3-codex' model is not supported when using Codex with a ChatGPT account" (same class as gpt-5.4-mini) |
 | `gpt-5.4-mini` | KNOWN NOT WORKING in codex CLI (verified 2026-07-04) |
 | `sonnet-5` / `haiku-4.5` | No spawned-Claude lane in the control plane; Claude is the supervisor session, never a spawned lane |
 
@@ -133,7 +133,8 @@ routing input; current enforcement stays at the existing cost-blind gates.
 
 - Run tiered eval records before exposing `agy_gpt_oss_120b` or `agy_claude_sonnet_4_6` to `build` or
   `spec`.
-- Verify and evaluate the still-pending candidates (`agy_opus_4_6`, `gpt-5.3-codex`, `sonnet-5` /
-  `haiku-4.5`) before any lane promotion.
+- Verify and evaluate the still-pending candidates (`agy_opus_4_6`, `sonnet-5` / `haiku-4.5`) before
+  any lane promotion. (`gpt-5.3-codex` measured DEAD 2026-07-06 — not supported on a ChatGPT-account
+  codex; removed from the pending list.)
 - Evaluate `antigravity-usage quota` as a programmatic quota reader and candidate input for
   `telemetry:summary`, so telemetry can use real burn instead of only the token proxy.
