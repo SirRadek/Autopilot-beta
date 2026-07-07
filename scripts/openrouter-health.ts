@@ -256,7 +256,10 @@ export function buildRoleRecommendations(models: readonly ModelProbeReport[]): r
         candidate_model_id: candidate.model_id,
         candidate_provider_slug: candidate.provider_slug,
         quality: candidate.quality,
-        message: `${role}: best usable ladder candidate = ${candidate.model_id} @ ${candidate.provider_slug} (quality=${candidate.quality} -> requires supervised smoke + eval before dispatch)`
+        message:
+          candidate.quality === "eval_passed"
+            ? `${role}: best usable ladder candidate = ${candidate.model_id} @ ${candidate.provider_slug} (ADMITTED -> supervisor may select it explicitly on the handoff)`
+            : `${role}: best usable ladder candidate = ${candidate.model_id} @ ${candidate.provider_slug} (quality=${candidate.quality} -> requires supervised smoke + eval before dispatch)`
       };
     }
 

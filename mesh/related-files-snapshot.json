@@ -23,7 +23,7 @@
   "src/data/delivery-system/modelOutputEvaluation.ts": "4365093f3a4578f87c61c40d6e15ccb81979ed8d",
   "scripts/validate-model-output-evals.ts": "c216cb461de3e5640ac0fdcfc5249a466e231dd6",
   "model-output-evals/model-output-eval-record.schema.json": "d84b1b0c694be53d121c760c273d1766bd911a84",
-  "model-output-evals/records/": "tree:f240861fcaa5361ae767639c9d8949613de2cc55c8607c90e56c268300421ef3",
+  "model-output-evals/records/": "tree:2a83c275cbf8051cccb24519ce8a65db36dd9dab5a4d57c7c91c0c793e1c46c3",
   "src/data/delivery-system/modelSpend.ts": "8bb3c10d6beaadd91f43f9bf43115da07bc3bc9e",
   "src/data/delivery-system/promptLibrary.ts": "d6abab15ddc4af378eb69f2ab9286d669684115f",
   "src/data/delivery-system/tokenEfficiency.ts": "7d1df211687145886b1319a97fd6506e80e27c2b",
@@ -48,8 +48,8 @@
   "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
   "src/data/delivery-system/cliWorker.ts": "cd6ccf833c36f82f28c9d7e89e756481441ed9e8",
-  "src/data/delivery-system/cliWorkerCapture.ts": "8c57ed7dd958c11aab908719b26a32c4c97cfd65",
+  "src/data/delivery-system/cliWorkerCapture.ts": "7442daf25b3a7770ea3f161c9333c7b09feb00c8",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
-  "model-output-evals/": "tree:cee3cff8cda20d029613b31ccc801b233d337afae62e60076a8e111028809c94",
+  "model-output-evals/": "tree:16c32a21cbaf4b39e18380506f54bb1eab85e02092fdc31b32573099b9a326f8",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
 }

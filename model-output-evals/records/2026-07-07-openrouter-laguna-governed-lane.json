@@ -1,0 +1,109 @@
+{
+  "record_version": "v0.1",
+  "eval_id": "2026-07-07-openrouter-laguna-governed-lane",
+  "created": "2026-07-07",
+  "project": {
+    "slug": "autopilot-control-plane",
+    "name": "Autopilot Control Plane",
+    "control_plane": true
+  },
+  "task": {
+    "task_type": "development",
+    "summary": "First GOVERNED-LANE dispatch of the admitted substitute laguna-m.1:free (explicit supervisor selection under qwen3_code_draft, build mode): same slugifier code-draft packet as the admission smoke.",
+    "risk_level": "low"
+  },
+  "phase": "learning_immediate_loop",
+  "state": "retry_with_prompt_or_input_tuning",
+  "model_or_worker": {
+    "provider": "unknown",
+    "name": "poolside/laguna-m.1:free (via OpenRouter governed lane; explicit supervisor selection)",
+    "role": "code_draft_substitute"
+  },
+  "reasoning_profile": {
+    "route": "free_cloud_advisory",
+    "reasoning_effort": "model_default",
+    "change_policy": "Model stays admitted (gate 3); this record contributes variance data — do not change routes on a single mixed sample."
+  },
+  "token_efficiency_profile": {
+    "mode": "agent_packet",
+    "context_scope": "Redacted self-contained code-draft packet through governed dispatchHandoff (routing_mode=build, cheap lane — no draft-trail requirement); provider prefs pinned; no repo context.",
+    "caveman_applied": false
+  },
+  "provider_best_practice_sources": [
+    "prompt-source-catalog",
+    "local-agents-md",
+    "token-efficiency-operating-model",
+    "vendor-routing-policy-beta-v2"
+  ],
+  "input_packet_summary": {
+    "summary": "Three governed-lane runs today: (1) default model -> qwen primary 429 with retry_after=17s captured in error_reason (Venice still dead — new 429 diagnostics verified live); (2) explicit laguna -> transient openrouter_invalid_json (non-JSON body; one-off gateway hiccup — parse errors now carry a bounded body snippet for future diagnosis); (3) explicit laguna -> success.",
+    "allowed_context": [
+      "task requirements embedded in the packet text"
+    ],
+    "forbidden_context": [
+      "repository or mesh content",
+      "secrets",
+      "customer data"
+    ],
+    "source_pointers": [
+      "docs/decisions/free-substitute-ladder-2026-07-06.md"
+    ]
+  },
+  "output_pointer": {
+    "kind": "local_file",
+    "pointer": "docs/autopilot/session-state/cli-call-telemetry.jsonl",
+    "summary": "Successful run: exit 0, strict JSON (1567 chars): slugifier implementation + 8 test cases + notes. SUPERVISOR REVIEW FINDING: 2 of 8 expected values are INCONSISTENT with the model's own implementation — case 2 claims dots collapse to a hyphen (contradicting its own case 4, which preserves dots) and case 3 invents a 'd' plus hyphen for the non-NFD-decomposable 'đ' (the char filter actually deletes it). The function itself is reasonable; the test suite needs one correction round. Raw output intentionally NOT stored."
+  },
+  "score_by_dimension": {
+    "task_fit": 85,
+    "instruction_following": 75,
+    "source_grounding": 78,
+    "format_contract": 95,
+    "verification_readiness": 55,
+    "privacy_safety": 100,
+    "handoff_clarity": 82,
+    "token_efficiency": 85,
+    "workflow_compatibility": 88
+  },
+  "failure_labels": [
+    "verification_gap",
+    "ungrounded_claim"
+  ],
+  "prompt_or_input_delta": {
+    "changed": true,
+    "summary": "Rerun 1: input model changed from the mode default (qwen primary, 429 — Venice dead) to the explicit admitted substitute poolside/laguna-m.1:free per the ladder. Rerun 2: identical input after a transient openrouter_invalid_json (non-JSON body, one-off gateway hiccup). The PACKET TEXT never changed — vs the 8/8 admission smoke the quality delta is model variance; a future correction round would ask the model to re-derive expected values by tracing its own implementation.",
+    "changed_fields": [
+      "model"
+    ],
+    "rollback_path": "Revert to the mode default model once the qwen Venice endpoint recovers."
+  },
+  "rerun_count": 2,
+  "accepted_state": "needs_review",
+  "verification_evidence": [
+    {
+      "type": "manual_review",
+      "status": "failed",
+      "evidence": "Supervisor traced all 8 expected values against the returned implementation: cases 1,4,5,6,7,8 consistent; cases 2 and 3 wrong (dot handling self-contradiction; non-decomposable 'đ' hallucinated as 'd-'). 6/8 vs the admission smoke's 8/8 — single-sample variance recorded.",
+      "source_pointer": "docs/decisions/free-substitute-ladder-2026-07-06.md"
+    },
+    {
+      "type": "mesh_route",
+      "status": "passed",
+      "evidence": "Governed path fully exercised for a SUBSTITUTE for the first time: explicit supervisor model selection accepted by the allowlist, build-mode cheap lane passed the upstream-draft gate exemption, family validation passed on the dated-canonical echo, telemetry recorded the substitute model id.",
+      "source_pointer": "docs/autopilot/session-state/dispatch-decisions.jsonl"
+    }
+  ],
+  "source_pointers": [
+    "docs/autopilot/model-output-evaluation-operating-model.md",
+    "docs/decisions/free-substitute-ladder-2026-07-06.md",
+    "src/data/delivery-system/openrouterSubstitutes.ts"
+  ],
+  "privacy_review": {
+    "redacted_context_only": true,
+    "raw_output_stored": false,
+    "raw_prompt_stored": false,
+    "raw_logs_stored": false,
+    "secrets_or_customer_data_stored": false,
+    "reviewer": "claude-supervisor"
+  }
+}
