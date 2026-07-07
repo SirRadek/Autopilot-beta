@@ -21,6 +21,7 @@ import {
 const secretKey = "sk-or-v1-test-secret-must-not-leak";
 const measuredQwenCanonicalEcho = "qwen/qwen3-coder-480b-a35b-07-25:free";
 const measuredNemotronCanonicalEcho = "nvidia/nemotron-3-ultra-550b-a55b-20260604:free";
+const measuredLagunaCanonicalEcho = "poolside/laguna-m.1-20260312:free";
 
 interface OpenRouterMockPayload {
   readonly model: OpenRouterModel | string;
@@ -182,6 +183,72 @@ describe("OpenRouter Stage 1 worker lane", () => {
     });
   });
 
+  it("runs an explicitly supervisor-selected laguna substitute under qwen3_code_draft", async () => {
+    const lagunaModel = "poolside/laguna-m.1:free";
+    fetchMock.mockResolvedValueOnce(openRouterResponse({
+      model: measuredLagunaCanonicalEcho,
+      content: "{\"mode\":\"laguna\"}"
+    }));
+
+    const result = await runCliWorker(openRouterInput({
+      model: lagunaModel,
+      taskPacketRef: "packet-laguna"
+    }), stateDir);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}") as Record<string, unknown>;
+    expect(requestBody.model).toBe(lagunaModel);
+    expect(requestBody).not.toHaveProperty("max_tokens");
+    expect(result).toMatchObject({
+      vendor: "openrouter_api",
+      model: lagunaModel,
+      exitCode: 0,
+      rawOutput: "{\"mode\":\"laguna\"}",
+      parsedJson: { mode: "laguna" },
+      errorReason: null
+    });
+
+    const telemetry = readJsonlRecord(join(stateDir, "cli-call-telemetry.jsonl"));
+    expect(telemetry).toMatchObject({
+      vendor: "openrouter_api",
+      provider: "openrouter",
+      model: lagunaModel,
+      openrouter_mode: "qwen3_code_draft",
+      task_packet_ref: "packet-laguna"
+    });
+
+    const evidence = readJsonlRecord(join(stateDir, "subagent-evidence.jsonl"));
+    expect(evidence).toMatchObject({
+      agent_type: "openrouter_api-external",
+      model: lagunaModel,
+      openrouter_mode: "qwen3_code_draft",
+      task_packet_ref: "packet-laguna"
+    });
+  });
+
+  it("defaults qwen3_code_draft to the qwen primary when no model is requested", async () => {
+    const result = await runCliWorker(openRouterInput({
+      taskPacketRef: "packet-default-primary"
+    }), stateDir);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}") as Record<string, unknown>;
+    expect(requestBody.model).toBe("qwen/qwen3-coder:free");
+    expect(result).toMatchObject({
+      vendor: "openrouter_api",
+      model: "qwen/qwen3-coder:free",
+      exitCode: 0
+    });
+
+    const telemetry = readJsonlRecord(join(stateDir, "cli-call-telemetry.jsonl"));
+    expect(telemetry).toMatchObject({
+      provider: "openrouter",
+      model: "qwen/qwen3-coder:free",
+      openrouter_mode: "qwen3_code_draft",
+      task_packet_ref: "packet-default-primary"
+    });
+  });
+
   it("returns MISSING when OPENROUTER_API_KEY is absent", async () => {
     delete process.env.OPENROUTER_API_KEY;
 
@@ -212,7 +279,7 @@ describe("OpenRouter Stage 1 worker lane", () => {
 
   it("rejects an off-allowlist model before network or telemetry", async () => {
     await expect(runCliWorker(openRouterInput({
-      model: "openrouter/free"
+      model: "poolside/laguna-xs-2.1:free"
     }), stateDir)).rejects.toThrow("openrouter_model_rejected");
 
     expect(fetchMock).not.toHaveBeenCalled();
