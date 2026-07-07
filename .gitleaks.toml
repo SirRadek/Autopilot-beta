@@ -1,0 +1,15 @@
+# Gitleaks config for autopilot-beta.
+# The mesh ratchet snapshot/baseline files store 40-hex git BLOB HASHES of repo files (public,
+# deterministic data — see src/lib/mesh-tools/related-files-status.ts). The generic-api-key rule
+# false-positives on them (measured 2026-07-06: the single "leak" in 185 commits was the
+# tokenEfficiency.ts blob hash in the snapshot). Allowlist those paths; everything else stays scanned.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Mesh ratchet artifacts contain git blob hashes (40-hex), not secrets"
+paths = [
+  '''mesh/related-files-snapshot\.json''',
+  '''mesh/related-files-baseline\.json'''
+]
