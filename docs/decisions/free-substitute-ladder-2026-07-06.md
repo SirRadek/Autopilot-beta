@@ -32,7 +32,7 @@ possible. The ladder is over `(model, provider)` pairs, not only model ids.
 
 | Order | Model | Provider | Quality | Evidence | Notes |
 |---:|---|---|---|---|---|
-| 1 | `poolside/laguna-m.1:free` | Poolside | pending_eval | 72.5% SWE-bench Verified - vendor-run, Poolside blog | Poolside free tier may train on inputs; packet-only redaction required; max_out 32K |
+| 1 | `poolside/laguna-m.1:free` | Poolside | eval_passed, ADMITTED 2026-07-06 | 72.5% SWE-bench Verified - vendor-run, Poolside blog; gate 1 supervised smoke passed; gate 2 accepted eval record `2026-07-06-openrouter-laguna-admission-smoke`; gate 3 owner-gated allowlist landed | Explicit supervisor selection only under `qwen3_code_draft`; no auto-switching; reasoning-first, so do not cap `max_tokens` below about 16k; Poolside free tier may train on inputs; packet-only redaction required; max_out 32K |
 | 2 | `poolside/laguna-xs-2.1:free` | Poolside | pending_eval | 70.9% SWE-V - vendor-run, Poolside blog | Poolside free tier may train on inputs; packet-only redaction required |
 | 3 | `tencent/hy3:free` | Novita | pending_eval | 74.4% SWE-V - Tencent claim, UNVERIFIED independently | De-correlated provider |
 | 4 | `cohere/north-mini-code:free` | Cohere | pending_eval | 67.6% SWE-V pass@1 |  |
@@ -86,6 +86,13 @@ Candidate admission:
 
 Only after those gates may a candidate become dispatchable and flip to `eval_passed`.
 
+`poolside/laguna-m.1:free` is admitted as of 2026-07-06: gate 1 supervised smoke passed, gate 2
+accepted tiered eval record `2026-07-06-openrouter-laguna-admission-smoke`, and gate 3 owner-gated
+allowlist entry is complete. The `qwen3_code_draft` default remains `qwen/qwen3-coder:free`.
+Laguna is dispatchable only when the supervisor explicitly passes it as the handoff model after reading
+health evidence; the health reader must not auto-switch the lane. Laguna is reasoning-first
+(about 95% reasoning tokens measured), so calls must not cap `max_tokens` below about 16k.
+
 ## Paid Ultra-Cheap Shortlist
 
 This section is PROPOSED. It needs a separate owner ADR and `max_price` change before implementation.
@@ -108,6 +115,8 @@ rejected.
 - Every candidate needs response-model family validation before dispatch; provider model echoes may drift.
 - Prompt-format drift can make nominally strong models fail the actual Autopilot packet contract.
 - Flapping burns attempt budget, so hysteresis is mandatory.
+- A third 429 signature is per-account or burst throttling while the public endpoint probe still looks
+  healthy. The public probe cannot see this state; `Retry-After` is the only dispatch-side signal.
 - Poolside free tier may train on inputs. Mitigation: packet-only redaction is required, and this risk must
   be recorded in candidate eval/admission evidence.
 
@@ -115,4 +124,5 @@ rejected.
 
 The new health reader is advisory only. It can recommend a primary, a catalog candidate that still requires
 supervised smoke plus eval before dispatch, or a paid subscription fallback. It must not mutate dispatch
-state, send an API key, write files, or auto-switch during a task.
+state, send an API key, write files, or auto-switch during a task. For admitted substitutes, it informs
+the supervisor's explicit model selection decision only.

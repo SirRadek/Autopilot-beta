@@ -136,6 +136,19 @@ export const OPENROUTER_MODE_MODEL_MAP: Readonly<Record<OpenRouterMode, OpenRout
   qwen3_code_draft: "qwen/qwen3-coder:free",
   nemotron_planning: "nvidia/nemotron-3-ultra-550b-a55b:free"
 };
+
+// Owner-gated substitute allowlist (free-substitute-ladder ADR gate 3). The mode's DEFAULT stays the
+// primary in OPENROUTER_MODE_MODEL_MAP; an admitted substitute is used ONLY when the supervisor
+// explicitly passes it as the handoff model (health-reader-informed decision - never auto-switched).
+export const OPENROUTER_MODE_ALLOWED_MODELS: Readonly<Record<OpenRouterMode, readonly string[]>> = {
+  qwen3_code_draft: [
+    OPENROUTER_MODE_MODEL_MAP.qwen3_code_draft,
+    // Admitted 2026-07-06: smoke + accepted eval record 2026-07-06-openrouter-laguna-admission-smoke.
+    // Reasoning-first (~95% reasoning tokens); do not cap max_tokens below ~16k for this model.
+    "poolside/laguna-m.1:free"
+  ],
+  nemotron_planning: [OPENROUTER_MODE_MODEL_MAP.nemotron_planning]
+};
 export const OPENROUTER_ATTEMPT_COUNTER_FILE = "openrouter-api-attempts.jsonl";
 export const OPENROUTER_SPEND_LEDGER_FILE = "openrouter-api-spend.jsonl";
 
@@ -274,7 +287,7 @@ export interface OpenRouterCaptureResult {
   readonly durationMs: number;
   readonly errorOutput: string;
   readonly timedOut: boolean;
-  readonly model: OpenRouterModel;
+  readonly model: string;
   readonly openrouterMode: OpenRouterMode;
   readonly providerUsage?: OpenRouterProviderUsage;
   readonly attemptCounts?: OpenRouterAttemptCounts;
@@ -491,18 +504,30 @@ function hasLaterVendorProcessExit(
 // OpenRouter stage-1 guard helpers. These run before any network call.
 export function resolveOpenRouterModel(
   openrouterMode: OpenRouterMode | string | undefined,
+  requestedModel: string
+): string;
+export function resolveOpenRouterModel(
+  openrouterMode: OpenRouterMode | string | undefined,
   requestedModel?: string
-): OpenRouterModel {
+): OpenRouterModel;
+export function resolveOpenRouterModel(
+  openrouterMode: OpenRouterMode | string | undefined,
+  requestedModel?: string
+): string {
   if (!isOpenRouterMode(openrouterMode)) {
     throw new OpenRouterModeGuardError("openrouter_mode_required: openrouter_api requires an allowlisted openrouterMode");
   }
 
   const expected = OPENROUTER_MODE_MODEL_MAP[openrouterMode];
-  if (requestedModel !== undefined && requestedModel !== expected) {
+  if (requestedModel === undefined) {
+    return expected;
+  }
+
+  if (!OPENROUTER_MODE_ALLOWED_MODELS[openrouterMode].includes(requestedModel)) {
     throw new OpenRouterModelGuardError("openrouter_model_rejected: requested model is not allowlisted for openrouterMode");
   }
 
-  return expected;
+  return requestedModel;
 }
 
 export function assertOpenRouterAccessTierOptions(opts: Record<string, unknown>): void {
@@ -574,7 +599,7 @@ export function assertOpenRouterDailySpendBudgetAvailable(input: {
 export function incrementOpenRouterAttemptBudget(input: {
   readonly stateDir: string;
   readonly openrouterMode: OpenRouterMode;
-  readonly model: OpenRouterModel;
+  readonly model: string;
   readonly taskPacketRef: string;
   readonly now?: Date;
 }): OpenRouterAttemptCounts {
@@ -1180,7 +1205,7 @@ function parseOpenRouterPayload(responseText: string): unknown {
   }
 }
 
-function assertOpenRouterResponseModel(payload: unknown, expectedModel: OpenRouterModel): void {
+function assertOpenRouterResponseModel(payload: unknown, expectedModel: string): void {
   const record = asUnknownRecord(payload);
   const echoed = record ? record.model : undefined;
   const canonicalPrefix = expectedModel.replace(/:free$/, "");
@@ -1289,7 +1314,7 @@ function firstPositiveOpenRouterCost(value: unknown): number | null {
 function appendOpenRouterSpendLedgerBestEffort(input: {
   readonly spendLedgerPath: string;
   readonly recordedAt: string;
-  readonly model: OpenRouterModel;
+  readonly model: string;
   readonly openrouterMode: OpenRouterMode;
   readonly costUsd: number;
 }): void {

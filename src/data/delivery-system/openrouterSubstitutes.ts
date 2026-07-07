@@ -19,24 +19,24 @@ export interface SubstituteCandidate {
 }
 
 /**
- * Catalog only: the dispatch lane can still send only the two allowlisted
- * OPENROUTER_MODE_MODEL_MAP models. A candidate becomes dispatchable only
- * after (1) a supervised smoke, (2) a tiered eval record, and (3) an explicit
- * owner-gated allowlist plus response-model-family entry per candidate.
- * Candidate quality flips to "eval_passed" only after those gates. This
- * mirrors the lane-cost-tiers ADR rule.
+ * Catalog first: the dispatch lane defaults still come from OPENROUTER_MODE_MODEL_MAP.
+ * A substitute candidate becomes dispatchable only after (1) a supervised smoke,
+ * (2) a tiered eval record, and (3) an explicit owner-gated allowlist plus
+ * response-model-family entry per candidate. Candidate quality flips to
+ * "eval_passed" only after those gates; dispatch still requires explicit
+ * supervisor model selection for the role's mode.
  */
 export const SUBSTITUTE_LADDERS: Readonly<Record<SubstituteRole, readonly SubstituteCandidate[]>> = {
   code_draft: [
     {
       model_id: "poolside/laguna-m.1:free",
       provider_slug: "Poolside",
-      // Admission gates 1+2 PASSED 2026-07-06 (supervised smoke + accepted tiered eval record
-      // 2026-07-06-openrouter-laguna-admission-smoke); gate 3 (owner-gated allowlist entry) pending,
-      // so quality stays pending_eval until the lane allowlist slice lands.
-      quality: "pending_eval",
+      // Admission gates 1-3 PASSED 2026-07-06 (supervised smoke + accepted tiered eval record
+      // 2026-07-06-openrouter-laguna-admission-smoke + owner-gated allowlist entry).
+      // Dispatchable only via explicit supervisor selection under qwen3_code_draft.
+      quality: "eval_passed",
       evidence: "72.5% SWE-bench Verified - vendor-run, Poolside blog; LOCAL eval accepted 2026-07-06 (slugifier draft, 8/8 test cases consistent)",
-      notes: "REASONING-FIRST model: ~95% of output tokens are reasoning (measured 10207/10699) - the lane MUST send max_tokens >= 16k or content comes back empty; echoed canonical poolside/laguna-m.1-20260312:free; Poolside free tier may train on inputs - packet-only redaction required; max_out 32K"
+      notes: "ADMITTED 2026-07-06 for qwen3_code_draft explicit supervisor selection only; no auto-switching. REASONING-FIRST model: ~95% of output tokens are reasoning (measured 10207/10699) - the lane MUST send max_tokens >= 16k or content comes back empty; echoed canonical poolside/laguna-m.1-20260312:free; Poolside free tier may train on inputs - packet-only redaction required; max_out 32K"
     },
     {
       model_id: "poolside/laguna-xs-2.1:free",
