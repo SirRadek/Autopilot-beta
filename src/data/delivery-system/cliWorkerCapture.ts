@@ -1201,7 +1201,15 @@ function parseOpenRouterPayload(responseText: string): unknown {
   try {
     return JSON.parse(responseText) as unknown;
   } catch {
-    throw new OpenRouterProviderError("openrouter_invalid_json: response body was not valid JSON");
+    // Self-diagnosing error (same doctrine as the model guard): a bounded, sanitized prefix of the
+    // body tells us WHAT came back (empty body / HTML gateway page / truncated JSON) without a live
+    // re-diagnosis round. Provider bodies are not secrets; 120 chars, control chars stripped.
+    const snippet = responseText.length === 0
+      ? "<empty body>"
+      : responseText.replace(/[\r\n\t]+/g, " ").slice(0, 120);
+    throw new OpenRouterProviderError(
+      `openrouter_invalid_json: response body was not valid JSON (len=${responseText.length}, body="${snippet}")`
+    );
   }
 }
 
