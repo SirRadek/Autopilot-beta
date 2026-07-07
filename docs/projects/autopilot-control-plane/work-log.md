@@ -1,5 +1,50 @@
 # Autopilot Control Plane Work Log
 
+## 2026-07-05..07 Consolidation + Routing Arc Closed — Handoff Notes for All Agents
+
+Date: 2026-07-07
+Request or trigger: owner closed the two-day consolidation/routing execution arc; next phase is
+testing the control plane ON SUPERVISED PROJECTS. This entry is the cross-agent handoff.
+Mode: session wrap-up; documentation only.
+
+What landed (PRs #9-#14, all verify-gated, 64 test files / 511 tests at end):
+
+- Master plan Phases 0-5 complete: governance hardening (pre-push Mesh-Ack, validator teeth,
+  raw-prompt TTL, whole-repo governed-core wall, directory-hint drift), routing modes
+  idea/spec/build/review (idea + build ENFORCED at the dispatch chokepoint; spec/review deferred),
+  lane cost tiers free->mid->expensive, redacted telemetry spine + `npm run telemetry:summary`.
+- Free worker lanes LIVE: nemotron_planning (eval #1 accepted) + qwen3_code_draft with the first
+  admitted substitute poolside/laguna-m.1:free (evals #2 accepted / #3 honestly MIXED — variance
+  data). Substitute admission pipeline templated: brainstorm -> ladder -> health probe -> supervised
+  smoke -> tiered eval -> owner-gated allowlist. `npm run openrouter:health` = free pre-flight.
+- Paid ultra-cheap ADR ACCEPTED: minimax-m2.5 + deepseek-v4-flash pipeline-admitted,
+  dispatch-blocked; STRICT FREE-FIRST posture; $1 USD/day spend cap enforced by ledger.
+- gitleaks full-history scan CLEAN (config in .gitleaks.toml).
+
+Operational gotchas every agent must know:
+
+- OpenRouter: response `model` echoes a DATED canonical slug + `:free` (e.g.
+  poolside/laguna-m.1-20260312:free) — never pin exact ids, the family validator handles it.
+  THREE distinct 429 signatures: dead pool (uptime_1d=0), saturated pool (degraded short windows),
+  and per-account burst (HEALTHY endpoint + 429; only Retry-After — now captured in error_reason —
+  helps). HTTP 200 can carry an error envelope. Provider CORRELATION is real: ladder fallbacks must
+  change provider, not just model (four Venice-only free lanes died together).
+- laguna-m.1 is REASONING-FIRST (~95% of output tokens): never cap max_tokens below ~16k for it.
+- Substitute use = EXPLICIT supervisor model selection on the handoff only; nothing auto-switches.
+- codex worker hygiene: run codex serially; `git diff --stat` after every run (scope creep +
+  full-file rewrites can flip line endings — repo stores LF, `* -text`); codex must not run git.
+- New file under a sensitive root trips THREE gates: vendor-manifest regen, AF3 mesh mapping,
+  snapshot regen. Hooks must not leak GIT_DIR into subprocesses (lib.sh unsets it; gate scripts
+  scrub GIT_* — a leak once corrupted the host .git/config).
+- Measure, don't infer, provider contracts: three separate bugs came from mocks mirroring
+  assumptions; live one-off probes settled every one. Errors are now self-diagnosing (echoed model
+  id, retry_after, body snippets) — read error_reason before re-diagnosing live.
+
+Next phase: exercise the governed lanes on supervised project work (project repos under
+C:\Programovani\Projects\<slug>); collect more eval samples (laguna variance, hy3/gemma
+admissions, paid gate-1 smokes) before any 5.3 routing activation. qwen@Venice still dead —
+`smoke-qwen.mts` (untracked, worktree root) runs the primary once it recovers.
+
 ## 2026-07-06 Governed Dispatch Worker Metadata Pass-Through
 
 Date: 2026-07-06
