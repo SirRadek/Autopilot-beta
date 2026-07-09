@@ -1,6 +1,9 @@
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
+  AGY_PROJECTS_ACCESS_LANES,
   AGY_VERIFIED_MODELS,
   EXPENSIVE_LANES,
   LANE_COST_TIERS,
@@ -10,6 +13,7 @@ import {
   isLaneAllowedInMode,
   isWithinStepBudget,
   resolveRoutingLane,
+  resolveSupervisedProjectsRoot,
   routingModes,
   type RoutingLaneId,
   type RoutingModeId
@@ -156,5 +160,40 @@ describe("routing mode catalog", () => {
       agy_gpt_oss_120b: "gpt-oss-120b",
       agy_claude_sonnet_4_6: "claude-4.6-sonnet"
     });
+  });
+});
+
+describe("supervised-projects access rule (agy --add-dir)", () => {
+  it("grants project access only to the agy lanes, never expensive or worker lanes", () => {
+    const agyLanes = new Set<RoutingLaneId>(["agy_fast", "agy_deep", "agy_gpt_oss_120b", "agy_claude_sonnet_4_6"]);
+
+    expect([...AGY_PROJECTS_ACCESS_LANES].sort()).toEqual([...agyLanes].sort());
+
+    for (const lane of AGY_PROJECTS_ACCESS_LANES) {
+      expect(agyLanes.has(lane)).toBe(true);
+      expect(EXPENSIVE_LANES).not.toContain(lane);
+    }
+
+    // The chokepoint (claude_supervisor/codex_cli) and packet-only worker lanes are excluded.
+    expect(AGY_PROJECTS_ACCESS_LANES).not.toContain("claude_supervisor");
+    expect(AGY_PROJECTS_ACCESS_LANES).not.toContain("codex_cli");
+    expect(AGY_PROJECTS_ACCESS_LANES).not.toContain("openrouter_nemotron_planning");
+  });
+
+  it("resolves the supervised-projects root as the control-plane sibling by default", () => {
+    expect(resolveSupervisedProjectsRoot("/work/autopilot-beta")).toBe(join("/work/autopilot-beta", "..", "Projects"));
+  });
+
+  it("honors an explicit projects-dir override (AUTOPILOT_PROJECTS_DIR passed by the call site)", () => {
+    expect(resolveSupervisedProjectsRoot("/work/autopilot-beta", "D:/custom/Projects")).toBe("D:/custom/Projects");
+    // Blank override falls back to the sibling default, never to an empty path.
+    expect(resolveSupervisedProjectsRoot("/work/autopilot-beta", "   ")).toBe(
+      join("/work/autopilot-beta", "..", "Projects")
+    );
+  });
+
+  it("refuses an empty control-plane root instead of returning a bare relative path", () => {
+    expect(() => resolveSupervisedProjectsRoot("")).toThrow(/supervised_projects_root_unresolved/);
+    expect(() => resolveSupervisedProjectsRoot("   ")).toThrow(/supervised_projects_root_unresolved/);
   });
 });

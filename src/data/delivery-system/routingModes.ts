@@ -9,6 +9,8 @@
  * dispatch.
  */
 
+import { join } from "node:path";
+
 export type RoutingModeId = "idea" | "spec" | "build" | "review";
 
 // `agy_*` lanes map to the agy_cli choice in CliVendorSelection; `openrouter_*`
@@ -58,6 +60,38 @@ export const AGY_VERIFIED_MODELS = {
   agy_gpt_oss_120b: "gpt-oss-120b",
   agy_claude_sonnet_4_6: "claude-4.6-sonnet"
 } as const;
+
+/**
+ * Owner rule 2026-07-07 (docs/decisions/agy-projects-dir-access-2026-07-07.md): the agy
+ * (Gemini) lanes MAY be granted read access to the supervised-projects sibling directory
+ * via `--add-dir`, per handoff. The agy sandbox stays ON — this grant never implies
+ * `--dangerously-skip-permissions`. Prefer the narrowest useful grant (usually
+ * `<ProjectsRoot>/<slug>`); the whole root is for explicitly cross-project work.
+ */
+export const AGY_PROJECTS_ACCESS_LANES: readonly RoutingLaneId[] = [
+  "agy_fast",
+  "agy_deep",
+  "agy_gpt_oss_120b",
+  "agy_claude_sonnet_4_6"
+];
+
+/**
+ * Canonical supervised-projects root for `--add-dir` grants. Mirrors resolveProjectMeshRoot
+ * (src/lib/decision-mesh/load.ts): an explicit override wins — call sites pass
+ * AUTOPILOT_PROJECTS_DIR themselves, this module stays env-free per the governed-core
+ * boundary — otherwise the control plane's sibling `../Projects`.
+ */
+export function resolveSupervisedProjectsRoot(controlPlaneRoot: string, projectsDirOverride?: string): string {
+  if (typeof controlPlaneRoot !== "string" || controlPlaneRoot.trim().length === 0) {
+    throw new Error("supervised_projects_root_unresolved: controlPlaneRoot is required");
+  }
+
+  if (projectsDirOverride !== undefined && projectsDirOverride.trim().length > 0) {
+    return projectsDirOverride;
+  }
+
+  return join(controlPlaneRoot, "..", "Projects");
+}
 
 export type BuildPrepProvenance =
   | { readonly kind: "cheap_attempts"; readonly cheap_attempt_refs: readonly string[] }
