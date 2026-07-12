@@ -234,11 +234,13 @@ export class TokenGateway {
   private loadState(): GatewayState {
     if (!existsSync(this.statePath)) return { used: {}, reservations: {}, terminal: {} };
     if (statSync(this.statePath).size > MAX_STATE_BYTES) throw new Error("invalid_token_gateway_state");
-    try {
-      const parsed = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<GatewayState>;
-      const terminal = Object.fromEntries(Object.entries(parsed.terminal ?? {}).map(([id, value]) => [id, { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }]));
-      return { used: parsed.used ?? {}, reservations: parsed.reservations ?? {}, terminal };
-    } catch { return { used: {}, reservations: {}, terminal: {} }; }
+    let parsed: Partial<GatewayState>;
+    try { parsed = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<GatewayState>; }
+    catch { throw new Error("invalid_token_gateway_state"); }
+    if (typeof parsed.used !== "object" || parsed.used === null || typeof parsed.reservations !== "object" || parsed.reservations === null || typeof parsed.terminal !== "object" || parsed.terminal === null ||
+      Object.keys(parsed.used).length > MAX_USAGE_KEYS || Object.keys(parsed.reservations).length > MAX_ACTIVE_RESERVATIONS || Object.keys(parsed.terminal).length > MAX_TERMINAL_RESERVATIONS) throw new Error("invalid_token_gateway_state");
+    const terminal = Object.fromEntries(Object.entries(parsed.terminal).map(([id, value]) => [id, { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }]));
+    return { used: parsed.used, reservations: parsed.reservations, terminal };
   }
 
   private persist(): void {

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -71,5 +71,12 @@ describe("token gateway", () => {
     const state = JSON.parse(readFileSync(join(stateDir, "token-gateway-state.json"), "utf8"));
     expect(Object.keys(state.terminal)).toHaveLength(1024);
     expect(readFileSync(join(stateDir, "token-gateway-state.json")).byteLength).toBeLessThanOrEqual(2 * 1024 * 1024);
+  });
+
+  it("rejects loaded state whose entry counts exceed caps", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "token-gateway-loaded-bounds-"));
+    const used = Object.fromEntries(Array.from({ length: 1_537 }, (_, index) => [`session:${index}`, 1]));
+    writeFileSync(join(stateDir, "token-gateway-state.json"), JSON.stringify({ used, reservations: {}, terminal: {} }));
+    expect(() => new TokenGateway({ stateDir })).toThrow("invalid_token_gateway_state");
   });
 });

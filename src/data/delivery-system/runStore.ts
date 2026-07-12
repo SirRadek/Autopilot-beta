@@ -66,6 +66,7 @@ export interface RunRecord {
   readonly reservation_status: "none" | "active" | "settled" | "released";
   readonly provider_result: RunProviderResult | null;
   readonly cancellation_requested: boolean;
+  readonly queue_compensation_requested: boolean;
   readonly artifacts: readonly RunArtifact[];
   readonly updated_at: string;
 }
@@ -169,6 +170,7 @@ function validate(document: unknown): asserts document is RunStoreDocument {
       !validReservation(value.token_reservation) || !["none", "active", "settled", "released"].includes(value.reservation_status) ||
       (value.reservation_status === "none") !== (value.token_reservation === null) || !validProviderResult(value.provider_result) ||
       typeof value.cancellation_requested !== "boolean" ||
+      typeof value.queue_compensation_requested !== "boolean" ||
       !value.artifacts.every((artifact) => validString(artifact.artifact_id, MAX_ID) && !artifactIds.has(artifact.artifact_id) &&
         artifactIds.add(artifact.artifact_id) && ARTIFACT_TYPES.has(artifact.type) && typeof artifact.preview === "string" &&
         artifact.preview.length <= MAX_PREVIEW && validTimestamp(artifact.created_at))) {
@@ -190,7 +192,7 @@ export function readRunStore(stateDir: string): RunStoreDocument {
   }
   if (typeof document === "object" && document !== null && Array.isArray((document as { runs?: unknown }).runs)) {
     document = { ...(document as object), runs: (document as { runs: unknown[] }).runs.map((run) =>
-      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, ...run } : run) };
+      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, ...run } : run) };
   }
   validate(document);
   return document;
@@ -229,7 +231,7 @@ export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
   const draft: RunDraft = { ...input, requested_artifacts: [...input.requested_artifacts], run_id: randomUUID(), revision: 1, created_at: createdAt };
-  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, artifacts: [], updated_at: createdAt };
+  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, artifacts: [], updated_at: createdAt };
   write(stateDir, { ...document, runs: [...document.runs, record] });
   return draft;
 }
@@ -278,7 +280,7 @@ export function bindRunToSupervisor(stateDir: string, runId: string, taskId: str
 export function clearRunSupervisorBinding(stateDir: string, runId: string, updatedAt: string): RunRecord {
   const record = find(stateDir, runId);
   if (record.status !== "approved" || !validTimestamp(updatedAt)) throw new Error("invalid_run_binding");
-  return replace(stateDir, { ...record, supervisor_task_id: null, token_reservation: null, reservation_status: "none", updated_at: updatedAt });
+  return replace(stateDir, { ...record, supervisor_task_id: null, token_reservation: null, reservation_status: "none", queue_compensation_requested: false, updated_at: updatedAt });
 }
 
 export function recordRunProviderResult(stateDir: string, runId: string, result: RunProviderResult, updatedAt: string): RunRecord {
@@ -308,4 +310,11 @@ export function requestRunCancellation(stateDir: string, runId: string, updatedA
   if (record.cancellation_requested) return record;
   if (["completed", "failed", "cancelled"].includes(record.status) || !validTimestamp(updatedAt)) throw new Error("invalid_run_cancellation");
   return replace(stateDir, { ...record, cancellation_requested: true, updated_at: updatedAt });
+}
+
+export function requestRunQueueCompensation(stateDir: string, runId: string, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (record.queue_compensation_requested) return record;
+  if (record.status !== "approved" || record.supervisor_task_id === null || record.token_reservation === null || !validTimestamp(updatedAt)) throw new Error("invalid_run_compensation");
+  return replace(stateDir, { ...record, queue_compensation_requested: true, updated_at: updatedAt });
 }
