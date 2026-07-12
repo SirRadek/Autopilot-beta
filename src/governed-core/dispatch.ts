@@ -28,6 +28,18 @@ import {
 } from "../data/delivery-system/routingModes";
 import type { SubscriptionSessionBudget } from "../data/delivery-system/subscriptionBudget";
 import {
+  estimateTokenCount,
+  TokenGateway,
+  TokenGatewayError,
+  type TokenGatewayLimits,
+  type TokenReservation
+} from "../data/delivery-system/tokenGateway";
+import {
+  prepareGovernedSessionDispatch,
+  skillIdsForHandoff,
+  type GovernedSessionDispatchInput
+} from "../data/delivery-system/sessionDispatch";
+import {
   buildAgentPacket,
   loadDecisionMeshFromRoot
 } from "../lib/decision-mesh";
@@ -41,7 +53,8 @@ export type DispatchRefusalReason =
   | "routing_no_viable_provider"
   | "missing_required_checks"
   | "lane_not_allowed_in_mode"
-  | "missing_upstream_draft";
+  | "missing_upstream_draft"
+  | "token_budget_exhausted";
 
 export interface SupervisorRoutingContext {
   readonly layer: ModelPolicyLayer;
@@ -147,7 +160,8 @@ export function buildDispatchDecisionRecord(input: BuildDispatchDecisionRecordIn
 
 export async function dispatchHandoff(
   handoff: GovernedHandoff,
-  stateDir: string
+  stateDir: string,
+  options: { readonly tokenGateway?: TokenGateway; readonly tokenGatewayLimits?: Partial<TokenGatewayLimits> } = {}
 ): Promise<DispatchResult> {
   const mesh = loadDecisionMeshFromRoot(REPO_ROOT);
   const packet = buildAgentPacket(mesh, {
@@ -212,7 +226,56 @@ export async function dispatchHandoff(
     }
   }
 
-  const result = await runCliWorker(toCliWorkerInput(handoff), stateDir);
+  const workerInput = toCliWorkerInput(handoff);
+  const gateway = options.tokenGateway ?? new TokenGateway({
+    stateDir,
+    ...(options.tokenGatewayLimits === undefined ? {} : { limits: options.tokenGatewayLimits })
+  });
+  let reservation: TokenReservation;
+  try {
+    reservation = gateway.reserve({
+      provider: workerInput.vendor,
+      model: workerInput.model ?? null,
+      sessionId: workerInput.sessionId ?? null,
+      inputTokens: estimateTokenCount(workerInput.prompt),
+      outputTokens: DEFAULT_AGENT_PACKET_TOKEN_BUDGET,
+      handoffId: workerInput.handoffId as string
+    });
+  } catch (error) {
+    if (error instanceof TokenGatewayError) {
+      recordDispatchDecision(handoff, stateDir, {
+        decision: "refused",
+        refusalReason: "token_budget_exhausted",
+        tierId
+      });
+      return refuse("token_budget_exhausted", tierId, true);
+    }
+    throw error;
+  }
+
+  let result: Awaited<ReturnType<typeof runCliWorker>>;
+  try {
+    result = await runCliWorker(workerInput, stateDir);
+  } catch (error) {
+    gateway.release(reservation);
+    throw error;
+  }
+  try {
+    gateway.settle(reservation, {
+      inputTokens: estimateTokenCount(workerInput.prompt),
+      outputTokens: estimateTokenCount(result.rawOutput)
+    });
+  } catch (error) {
+    if (error instanceof TokenGatewayError && result.errorReason === null) {
+      return {
+        ...result,
+        errorReason: error.code,
+        refused: false,
+        tier_id: tierId,
+        provenance_verified: true
+      };
+    }
+  }
   recordDispatchDecision(handoff, stateDir, {
     decision: "dispatched",
     refusalReason: null,
@@ -225,6 +288,21 @@ export async function dispatchHandoff(
     tier_id: tierId,
     provenance_verified: true
   };
+}
+
+/** Resolves the project session and governed skills before entering the vendor dispatch boundary. */
+export async function dispatchGovernedSessionHandoff(
+  handoff: GovernedHandoff,
+  stateDir: string,
+  sessionInput: Omit<GovernedSessionDispatchInput, "task">
+): Promise<DispatchResult> {
+  const plan = prepareGovernedSessionDispatch({ ...sessionInput, task: handoff.task });
+  const skillIds = skillIdsForHandoff(plan, handoff.skillIds);
+  return dispatchHandoff({
+    ...handoff,
+    sessionId: plan.session.session_id,
+    skillIds
+  }, stateDir);
 }
 
 function resolveHandoffLane(handoff: GovernedHandoff): RoutingLaneId | undefined {
@@ -282,6 +360,8 @@ function toCliWorkerInput(handoff: GovernedHandoff): CliWorkerInput {
 
   return {
     handoffId: handoff.handoffId,
+    ...(handoff.sessionId !== undefined ? { sessionId: handoff.sessionId } : {}),
+    ...(handoff.skillIds !== undefined ? { skillIds: handoff.skillIds } : {}),
     vendor: handoff.vendor,
     prompt: handoff.prompt,
     parentSessionHash: handoff.parentSessionHash,

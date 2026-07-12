@@ -132,6 +132,29 @@ describe("CLI worker token telemetry", () => {
     expect(estimateCliWorkerTokens("")).toBe(0);
   });
 
+  it("records the scoped session id when supplied", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-codex-hp-session-20260625T120000",
+      handoffId: "hp-session" as WorkerLockRecord["handoff_id"],
+      sessionId: "session-project-manager",
+      vendor: "codex_cli",
+      model: "gpt-5-codex",
+      tierId: null,
+      prompt: "hello",
+      rawOutput: "world",
+      durationSeconds: 1,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: null
+    });
+
+    expect(record.session_id).toBe("session-project-manager");
+  });
+
   it("builds the requested telemetry shape with estimated token counts", () => {
     const record = buildCliCallTelemetryRecord({
       recordedAt: "2026-06-25T12:00:00.000Z",
@@ -200,6 +223,64 @@ describe("CLI worker token telemetry", () => {
     });
 
     expect(record.routing_mode).toBe("idea");
+  });
+
+  it("records model generation settings when an adapter provides them", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-codex-hp-test-20260625T120000",
+      handoffId: "hp-test" as WorkerLockRecord["handoff_id"],
+      vendor: "codex_cli",
+      model: "gpt-5-codex",
+      tierId: null,
+      prompt: "hello world",
+      rawOutput: "alpha beta gamma",
+      durationSeconds: 1.25,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: null,
+      generationSettings: {
+        temperature: 0,
+        max_output_tokens: 1200
+      }
+    });
+
+    expect(record.generation_settings).toEqual({
+      temperature: 0,
+      max_output_tokens: 1200
+    });
+  });
+
+  it("records adapter governance settings separately from generation settings", () => {
+    const record = buildCliCallTelemetryRecord({
+      recordedAt: "2026-06-25T12:00:00.000Z",
+      workerRunId: "cli-openrouter-hp-test-20260625T120000",
+      handoffId: "hp-test" as WorkerLockRecord["handoff_id"],
+      vendor: "openrouter_api",
+      model: "openrouter/free",
+      tierId: null,
+      prompt: "hello world",
+      rawOutput: "alpha beta gamma",
+      durationSeconds: 1.25,
+      exitCode: 0,
+      lockStatus: "acquired_supervisor_spawn",
+      outcome: "success",
+      failureSignals: [],
+      errorReason: null,
+      parsedJson: null,
+      governanceSettings: {
+        allow_fallbacks: false,
+        max_price: { prompt: 0, completion: 0, request: 0 }
+      }
+    });
+
+    expect(record.governance_settings).toEqual({
+      allow_fallbacks: false,
+      max_price: { prompt: 0, completion: 0, request: 0 }
+    });
   });
 
   it("omits routing_mode from telemetry when absent", () => {

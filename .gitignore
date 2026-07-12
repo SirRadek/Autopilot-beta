@@ -1,4 +1,6 @@
 node_modules/
+cockpit/node_modules/
+cockpit/dist/
 *.log
 .DS_Store
 # Beta keeps evidence/scratch out of git (no raw logs/secrets committed).

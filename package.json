@@ -2,6 +2,7 @@
   "name": "autopilot-beta",
   "version": "0.0.0",
   "private": true,
+  "workspaces": ["cockpit"],
   "type": "module",
   "description": "Clean-install beta of the autopilot product-design-os floor (vendored from autopilot@<base-sha>). Separate product line; no shared git history with canonical.",
   "scripts": {
@@ -26,8 +27,25 @@
     "pdos:build-cloud": "tsx product-design-os/scripts/build-point-cloud-asset.ts",
     "model-output:validate": "tsx scripts/validate-model-output-evals.ts",
     "telemetry:summary": "tsx scripts/telemetry-summary.ts",
+    "skills:discover": "tsx scripts/discover-skill-manifests.ts",
+    "skills:curate": "tsx scripts/curate-skill-manifests.ts",
+    "route:governed": "tsx scripts/route-governed-task.ts",
+    "smoke:governed": "tsx scripts/smoke-governed-dispatch.ts",
+    "approval:queue": "tsx scripts/approval-queue.ts",
+    "approval:submit": "tsx scripts/approval-submit.ts",
+    "approval:dispatch": "tsx scripts/approval-dispatch.ts",
+    "control-plane:status": "tsx scripts/control-plane-status.ts",
+    "control-plane:serve": "tsx scripts/control-plane-server.ts",
+    "session:manager": "tsx scripts/session-manager.ts",
+    "worker:status": "tsx scripts/worker-status.ts",
+    "worker:cancel": "tsx scripts/worker-cancel.ts",
+    "worker:cleanup": "tsx scripts/worker-cleanup.ts",
     "openrouter:health": "tsx scripts/openrouter-health.ts",
     "quota:agy": "tsx scripts/agy-quota.ts",
+    "ops:backup": "tsx scripts/ops-backup.ts",
+    "ops:restore": "tsx scripts/ops-restore.ts",
+    "ops:maintenance": "tsx scripts/ops-maintenance.ts",
+    "ops:health": "tsx scripts/ops-healthcheck.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "baseline:waiver-check": "node scripts/check-baseline-waivers.mjs",
@@ -42,12 +60,19 @@
     "mesh:gate:ci": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --baseline mesh/related-files-baseline.json --prior mesh/related-files-snapshot.json",
     "mesh:snapshot:regen": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --regen-snapshot mesh/related-files-snapshot.json",
     "mesh:changed": "tsx src/lib/mesh-tools/changed-files-capabilities-cli.ts"
+    ,"cockpit:dev": "npm --prefix cockpit run dev"
+    ,"cockpit:build": "npm --prefix cockpit run build"
+    ,"cockpit:test": "npm --prefix cockpit run test"
+    ,"browser:qa": "playwright test --config=playwright.config.ts"
   },
   "dependencies": {
     "pngjs": "^7.0.0",
     "yaml": "^2.9.0",
     "zod": "^4.4.3",
     "@modelcontextprotocol/sdk": "^1.29.0"
+    ,"react": "^19.1.0"
+    ,"react-dom": "^19.1.0"
+    ,"vite": "^7.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -59,5 +84,7 @@
     "tsx": "^4.22.4",
     "typescript": "6.0.3",
     "vitest": "4.1.8"
+    ,"@types/react": "^19.1.0"
+    ,"@types/react-dom": "^19.1.0"
   }
 }

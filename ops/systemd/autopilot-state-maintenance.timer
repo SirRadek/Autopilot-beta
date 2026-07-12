@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily bounded Autopilot state maintenance
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

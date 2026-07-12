@@ -207,11 +207,12 @@ export function isWithinStepBudget(id: RoutingModeId, round: number): boolean {
 }
 
 export function resolveRoutingLane(input: {
-  readonly vendor: "codex_cli" | "agy_cli" | "openrouter_api";
+  readonly vendor: "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
   readonly openrouterMode?: "qwen3_code_draft" | "nemotron_planning";
   readonly model?: string;
 }): RoutingLaneId {
   if (input.vendor === "codex_cli") return "codex_cli";
+  if (input.vendor === "claude_cli") return "agy_claude_sonnet_4_6";
   if (input.vendor === "agy_cli") {
     const model = input.model ?? "";
     if (model === AGY_VERIFIED_MODELS.agy_gpt_oss_120b) return "agy_gpt_oss_120b";

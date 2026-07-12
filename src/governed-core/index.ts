@@ -1,5 +1,6 @@
 export {
   computePacketHash,
+  dispatchGovernedSessionHandoff,
   dispatchHandoff,
   type DispatchRefusalReason,
   type DispatchResult,

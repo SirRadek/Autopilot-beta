@@ -1,0 +1,5 @@
+OpenAI Codex (v0.144.1)
+
+5h limit:        98% left (resets 11:43)
+Weekly limit:    93% left (resets 12:05 on 18 Jul)
+

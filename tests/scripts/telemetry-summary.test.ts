@@ -45,6 +45,7 @@ describe("telemetry summary reader", () => {
         vendorCall({
           vendor: "codex_cli",
           provider: "openai_gpt",
+          model: "gpt-5-codex",
           routing_mode: "build",
           outcome: "success",
           attempt_count: 1,
@@ -55,6 +56,7 @@ describe("telemetry summary reader", () => {
         vendorCall({
           vendor: "codex_cli",
           provider: "openai_gpt",
+          model: "gpt-5-codex",
           outcome: "timeout",
           attempt_count: 2,
           input_tokens: 20,
@@ -64,6 +66,7 @@ describe("telemetry summary reader", () => {
         vendorCall({
           vendor: "agy_cli",
           provider: "gemini_cli",
+          model: null,
           routing_mode: "idea",
           outcome: "success",
           attempt_count: 1,
@@ -95,6 +98,37 @@ describe("telemetry summary reader", () => {
         input_tokens: 7,
         output_tokens: 8,
         total_tokens: 15
+      }
+    });
+    expect(summary.by_model).toEqual({
+      unknown: {
+        total: 1,
+        successful: 1,
+        retried: 0,
+        input_tokens: 7,
+        output_tokens: 8,
+        total_tokens: 15,
+        duration_seconds: 0
+      },
+      "gpt-5-codex": {
+        total: 2,
+        successful: 1,
+        retried: 1,
+        input_tokens: 30,
+        output_tokens: 15,
+        total_tokens: 45,
+        duration_seconds: 0
+      }
+    });
+    expect(summary.by_session).toEqual({
+      none: {
+        total: 3,
+        successful: 2,
+        retried: 1,
+        input_tokens: 37,
+        output_tokens: 23,
+        total_tokens: 60,
+        duration_seconds: 0
       }
     });
   });

@@ -1,0 +1,31 @@
+[Unit]
+Description=Autopilot governed control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/radek/autopilot-beta
+Environment=PATH=/home/radek/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=AUTOPILOT_STATE_DIR=/home/radek/.local/state/autopilot
+EnvironmentFile=/home/radek/.config/autopilot/control-plane.env
+ExecStart=/home/radek/.local/bin/npm run control-plane:serve -- /home/radek/.local/state/autopilot 8787
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+# tmux usage probes communicate through /tmp/tmux-$UID; a private /tmp would hide that socket.
+PrivateTmp=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/radek/.local/state/autopilot
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=default.target

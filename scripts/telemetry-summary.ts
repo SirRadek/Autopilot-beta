@@ -23,6 +23,16 @@ export interface TokenSummary {
   readonly total_tokens: number;
 }
 
+export interface ModelCallSummary {
+  readonly total: number;
+  readonly successful: number;
+  readonly retried: number;
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly total_tokens: number;
+  readonly duration_seconds: number;
+}
+
 export interface VendorCallSummary {
   readonly total: number;
   readonly parse_errors: number;
@@ -30,6 +40,8 @@ export interface VendorCallSummary {
   readonly by_vendor: Record<string, number>;
   readonly by_routing_mode: Record<string, number>;
   readonly by_outcome: Record<string, number>;
+  readonly by_model: Record<string, ModelCallSummary>;
+  readonly by_session: Record<string, ModelCallSummary>;
   readonly retried_calls: number;
   readonly tokens_by_provider: Record<string, TokenSummary>;
 }
@@ -121,6 +133,8 @@ export function summarizeVendorCalls(
   const byVendor: Record<string, number> = {};
   const byRoutingMode: Record<string, number> = {};
   const byOutcome: Record<string, number> = {};
+  const byModel = new Map<string, ModelCallSummary>();
+  const bySession = new Map<string, ModelCallSummary>();
   const providerBudgets = new Map<string, SubscriptionSessionBudget>();
   let total = 0;
   let excluded = 0;
@@ -140,6 +154,47 @@ export function summarizeVendorCalls(
     if (numberBucket(record.attempt_count) > 1) {
       retriedCalls += 1;
     }
+
+    const model = stringBucket(record.model, "unknown");
+    const priorModel = byModel.get(model) ?? {
+      total: 0,
+      successful: 0,
+      retried: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      duration_seconds: 0
+    };
+    const attemptCount = numberBucket(record.attempt_count);
+    byModel.set(model, {
+      total: priorModel.total + 1,
+      successful: priorModel.successful + (record.outcome === "success" ? 1 : 0),
+      retried: priorModel.retried + (attemptCount > 1 ? 1 : 0),
+      input_tokens: priorModel.input_tokens + numberBucket(record.input_tokens),
+      output_tokens: priorModel.output_tokens + numberBucket(record.output_tokens),
+      total_tokens: priorModel.total_tokens + numberBucket(record.total_tokens),
+      duration_seconds: priorModel.duration_seconds + numberBucket(record.duration_seconds)
+    });
+
+    const session = stringBucket(record.session_id, "none");
+    const priorSession = bySession.get(session) ?? {
+      total: 0,
+      successful: 0,
+      retried: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      duration_seconds: 0
+    };
+    bySession.set(session, {
+      total: priorSession.total + 1,
+      successful: priorSession.successful + (record.outcome === "success" ? 1 : 0),
+      retried: priorSession.retried + (attemptCount > 1 ? 1 : 0),
+      input_tokens: priorSession.input_tokens + numberBucket(record.input_tokens),
+      output_tokens: priorSession.output_tokens + numberBucket(record.output_tokens),
+      total_tokens: priorSession.total_tokens + numberBucket(record.total_tokens),
+      duration_seconds: priorSession.duration_seconds + numberBucket(record.duration_seconds)
+    });
 
     const provider = stringBucket(record.provider, "unknown");
     const priorBudget = providerBudgets.get(provider) ?? createZeroBudget(provider);
@@ -161,6 +216,8 @@ export function summarizeVendorCalls(
     by_vendor: byVendor,
     by_routing_mode: byRoutingMode,
     by_outcome: byOutcome,
+    by_model: Object.fromEntries(byModel),
+    by_session: Object.fromEntries(bySession),
     retried_calls: retriedCalls,
     tokens_by_provider: Object.fromEntries(
       [...providerBudgets.entries()].map(([provider, budget]) => [
@@ -270,6 +327,7 @@ function formatTelemetrySummary(summary: TelemetrySummary): string {
     `  by_vendor: ${formatCountMap(summary.vendor_calls.by_vendor)}`,
     `  by_routing_mode: ${formatCountMap(summary.vendor_calls.by_routing_mode)}`,
     `  by_outcome: ${formatCountMap(summary.vendor_calls.by_outcome)}`,
+    `  by_model: ${formatModelMap(summary.vendor_calls.by_model)}`,
     `  tokens_by_provider: ${formatTokenMap(summary.vendor_calls.tokens_by_provider)}`,
     `Dispatch decisions: total=${summary.dispatch_decisions.total} parse_errors=${summary.dispatch_decisions.parse_errors} excluded=${summary.dispatch_decisions.excluded_out_of_window_or_invalid} dispatched=${summary.dispatch_decisions.dispatched} refused=${summary.dispatch_decisions.refused} cheap_lane_dispatched_pct=${summary.dispatch_decisions.cheap_lane_dispatched_pct ?? "null"}`,
     `  by_refusal_reason: ${formatCountMap(summary.dispatch_decisions.by_refusal_reason)}`,
@@ -343,6 +401,18 @@ function formatTokenMap(map: Readonly<Record<string, TokenSummary>>): string {
         .map(
           ([key, tokens]) =>
             `${key}=input:${tokens.input_tokens},output:${tokens.output_tokens},total:${tokens.total_tokens}`
+        )
+        .join(", ");
+}
+
+function formatModelMap(map: Readonly<Record<string, ModelCallSummary>>): string {
+  const entries = Object.entries(map).sort(([left], [right]) => left.localeCompare(right));
+  return entries.length === 0
+    ? "none"
+    : entries
+        .map(
+          ([key, model]) =>
+            `${key}=calls:${model.total},success:${model.successful},retry:${model.retried},tokens:${model.total_tokens},seconds:${model.duration_seconds}`
         )
         .join(", ");
 }
