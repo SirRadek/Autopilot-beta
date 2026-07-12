@@ -57,4 +57,19 @@ describe("token gateway", () => {
     expect(telemetry).not.toContain("password");
     expect(telemetry.length).toBeLessThan(64 * 1024);
   });
+
+  it("bounds active zero-token reservations and prunes the terminal ledger", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "token-gateway-bounds-"));
+    const gateway = new TokenGateway({ stateDir, limits: { inputCapTokens: 1, outputCapTokens: 1, providerBudgetTokens: 1, modelBudgetTokens: 1, sessionBudgetTokens: 1 } });
+    const reservations = Array.from({ length: 512 }, (_, index) => gateway.reserve({ provider: "codex_cli", model: null, sessionId: `s-${index}`, inputTokens: 0, outputTokens: 0, handoffId: `h-${index}` }));
+    expect(() => gateway.reserve({ provider: "codex_cli", model: null, sessionId: "overflow", inputTokens: 0, outputTokens: 0, handoffId: "overflow" })).toThrow("token_reservation_limit");
+    for (const reservation of reservations) gateway.release(reservation);
+    for (let index = 0; index < 1_100; index += 1) {
+      const reservation = gateway.reserve({ provider: "codex_cli", model: null, sessionId: `terminal-${index}`, inputTokens: 0, outputTokens: 0, handoffId: `terminal-${index}` });
+      gateway.release(reservation);
+    }
+    const state = JSON.parse(readFileSync(join(stateDir, "token-gateway-state.json"), "utf8"));
+    expect(Object.keys(state.terminal)).toHaveLength(1024);
+    expect(readFileSync(join(stateDir, "token-gateway-state.json")).byteLength).toBeLessThanOrEqual(2 * 1024 * 1024);
+  });
 });

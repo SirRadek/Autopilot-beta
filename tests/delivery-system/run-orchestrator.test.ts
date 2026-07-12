@@ -195,6 +195,20 @@ describe("governed run orchestration", () => {
     expect(realGateway.snapshot().activeReservations).toBe(1);
   });
 
+  it("finds and releases an orphan reservation after reserve commit and restart cancellation", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-orphan-reserve-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    const realGateway = new TokenGateway({ stateDir });
+    const gateway = { reserve: (input: Parameters<TokenGateway["reserve"]>[0]) => { realGateway.reserve(input); throw new Error("after_reserve"); }, release: realGateway.release.bind(realGateway), settle: realGateway.settle.bind(realGateway) };
+    const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "orphan reserve", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    expect(() => first.approveAndQueueRun(draft.current.run_id, 1, "owner")).toThrow("after_reserve");
+    const restartedGateway = new TokenGateway({ stateDir });
+    const restarted = createRunOrchestrator({ stateDir, tokenGateway: restartedGateway, supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    expect(restarted.cancelRun(draft.current.run_id).status).toBe("cancelled");
+    expect(restartedGateway.snapshot().activeReservations).toBe(0);
+  });
+
   it("cancels a task when enqueue committed before an injected throw", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-enqueue-fault-"));
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
@@ -227,5 +241,49 @@ describe("governed run orchestration", () => {
     const recovered = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
     expect(recovered.cancelRun(draft.current.run_id).status).toBe("cancelled");
     expect(new TokenGateway({ stateDir }).snapshot().activeReservations).toBe(0);
+  });
+
+  it("reconciles when durable bind commits before an injected throw", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-bind-commit-fault-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    let fault = true;
+    const gateway = new TokenGateway({ stateDir });
+    const supervisor = new SupervisorQueue({ stateDir });
+    const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true, afterPhase: (phase) => { if (phase === "bound" && fault) { fault = false; throw new Error("after_bind_commit"); } } });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "bind fault", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    expect(() => first.approveAndQueueRun(draft.current.run_id, 1, "owner")).toThrow("after_bind_commit");
+    const restarted = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    expect(restarted.approveAndQueueRun(draft.current.run_id, 1, "owner").status).toBe("queued");
+    expect(new TokenGateway({ stateDir }).snapshot().activeReservations).toBe(1);
+  });
+
+  it("treats queued transition commit-then-throw as queued without compensating", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-queue-commit-fault-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    let fault = true;
+    const supervisor = new SupervisorQueue({ stateDir });
+    const first = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true, afterPhase: (phase) => { if (phase === "queued" && fault) { fault = false; throw new Error("after_queue_commit"); } } });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "queue fault", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    expect(() => first.approveAndQueueRun(draft.current.run_id, 1, "owner")).toThrow("after_queue_commit");
+    expect(readRunStore(stateDir).runs[0]?.status).toBe("queued");
+    expect(supervisor.snapshot()[0]?.status).toBe("queued");
+    const restarted = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    expect(restarted.approveAndQueueRun(draft.current.run_id, 1, "owner").status).toBe("queued");
+  });
+
+  it("persists cancellation intent and releases even when supervisor cancellation throws", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-cancel-throw-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    const gateway = new TokenGateway({ stateDir });
+    const supervisor = new SupervisorQueue({ stateDir });
+    const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "cancel throw", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    first.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    const throwingSupervisor = { enqueue: supervisor.enqueue.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), cancel: vi.fn(() => { throw new Error("cancel_failed"); }) };
+    const faulty = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor: throwingSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    expect(() => faulty.cancelRun(draft.current.run_id)).toThrow("cancel_failed");
+    expect(readRunStore(stateDir).runs[0]).toMatchObject({ cancellation_requested: true, reservation_status: "released" });
+    const recovered = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    expect(recovered.cancelRun(draft.current.run_id).status).toBe("cancelled");
   });
 });

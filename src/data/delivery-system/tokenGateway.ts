@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export interface TokenBudget {
@@ -23,7 +23,8 @@ export type TokenGatewayRefusalCode =
   | "token_output_cap_exceeded"
   | "token_budget_exhausted"
   | "token_reservation_missing"
-  | "token_route_mismatch";
+  | "token_route_mismatch"
+  | "token_reservation_limit";
 
 export class TokenGatewayError extends Error {
   readonly code: TokenGatewayRefusalCode;
@@ -93,13 +94,17 @@ export interface TokenGatewayTelemetry {
 interface GatewayState {
   readonly used: Record<string, number>;
   readonly reservations: Record<string, TokenReservation>;
-  readonly terminal: Record<string, { readonly event: "settled" | "released"; readonly settlement: TokenSettlement }>;
+  readonly terminal: Record<string, { readonly event: "settled" | "released"; readonly settlement: TokenSettlement; readonly completedAt: string }>;
 }
 
 const STATE_FILE = "token-gateway-state.json";
 const TELEMETRY_FILE = "token-gateway-telemetry.jsonl";
 const MAX_TELEMETRY_LINES = 512;
 const MAX_FIELD_LENGTH = 128;
+const MAX_ACTIVE_RESERVATIONS = 512;
+const MAX_TERMINAL_RESERVATIONS = 1024;
+const MAX_STATE_BYTES = 2 * 1024 * 1024;
+const MAX_USAGE_KEYS = MAX_ACTIVE_RESERVATIONS * 3;
 
 /**
  * The single pre-dispatch token gate. Reservations are bound to one provider,
@@ -130,6 +135,10 @@ export class TokenGateway {
         return existing;
       }
     }
+    if (Object.keys(this.state.reservations).length >= MAX_ACTIVE_RESERVATIONS) throw this.refuse(request, "token_reservation_limit");
+    const routeKeys = [`provider:${request.provider}`, `model:${request.provider}:${request.model ?? "default"}`, `session:${request.sessionId ?? "unscoped"}`];
+    const newUsageKeys = routeKeys.filter((key) => this.state.used[key] === undefined).length;
+    if (Object.keys(this.state.used).length + newUsageKeys > MAX_USAGE_KEYS) throw this.refuse(request, "token_reservation_limit");
     if (request.inputTokens > this.limits.inputCapTokens) throw this.refuse(request, "token_input_cap_exceeded");
     if (request.outputTokens > this.limits.outputCapTokens) throw this.refuse(request, "token_output_cap_exceeded");
     const total = request.inputTokens + request.outputTokens;
@@ -172,7 +181,8 @@ export class TokenGateway {
     this.addUsage(active, -(active.totalTokens));
     this.addUsage(active, inputTokens + outputTokens);
     delete this.state.reservations[reservation.reservationId];
-    this.state.terminal[reservation.reservationId] = { event: "settled", settlement: settled };
+    this.state.terminal[reservation.reservationId] = { event: "settled", settlement: settled, completedAt: new Date().toISOString() };
+    this.pruneTerminal();
     this.persist();
     this.record({ event: "settled", reservation: active, ...settled, reason: null });
     return settled;
@@ -187,7 +197,8 @@ export class TokenGateway {
     assertRoute(active, reservation);
     this.addUsage(active, -active.totalTokens);
     delete this.state.reservations[reservation.reservationId];
-    this.state.terminal[reservation.reservationId] = { event: "released", settlement: { inputTokens: 0, outputTokens: 0, released: true } };
+    this.state.terminal[reservation.reservationId] = { event: "released", settlement: { inputTokens: 0, outputTokens: 0, released: true }, completedAt: new Date().toISOString() };
+    this.pruneTerminal();
     this.persist();
     this.record({ event: "released", reservation: active, inputTokens: 0, outputTokens: 0, reason: null });
   }
@@ -196,11 +207,22 @@ export class TokenGateway {
     return { used: { ...this.state.used }, activeReservations: Object.keys(this.state.reservations).length };
   }
 
+  findActiveReservation(handoffId: string): TokenReservation | null {
+    return Object.values(this.state.reservations).find((reservation) => reservation.handoffId === handoffId) ?? null;
+  }
+
+  acknowledgeTerminal(reservationId: string): void {
+    if (this.state.terminal[reservationId] === undefined) return;
+    delete this.state.terminal[reservationId];
+    this.persist();
+  }
+
   private used(key: string): number { return this.state.used[key] ?? 0; }
 
   private addUsage(reservation: TokenReservation, amount: number): void {
     for (const key of [`provider:${reservation.provider}`, `model:${reservation.provider}:${reservation.model ?? "default"}`, `session:${reservation.sessionId ?? "unscoped"}`]) {
-      this.state.used[key] = Math.max(0, (this.state.used[key] ?? 0) + amount);
+      const usage = Math.max(0, (this.state.used[key] ?? 0) + amount);
+      if (usage === 0) delete this.state.used[key]; else this.state.used[key] = usage;
     }
   }
 
@@ -211,13 +233,24 @@ export class TokenGateway {
 
   private loadState(): GatewayState {
     if (!existsSync(this.statePath)) return { used: {}, reservations: {}, terminal: {} };
+    if (statSync(this.statePath).size > MAX_STATE_BYTES) throw new Error("invalid_token_gateway_state");
     try {
       const parsed = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<GatewayState>;
-      return { used: parsed.used ?? {}, reservations: parsed.reservations ?? {}, terminal: parsed.terminal ?? {} };
+      const terminal = Object.fromEntries(Object.entries(parsed.terminal ?? {}).map(([id, value]) => [id, { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }]));
+      return { used: parsed.used ?? {}, reservations: parsed.reservations ?? {}, terminal };
     } catch { return { used: {}, reservations: {}, terminal: {} }; }
   }
 
-  private persist(): void { writeFileSync(this.statePath, JSON.stringify(this.state), { mode: 0o600 }); }
+  private persist(): void {
+    const serialized = JSON.stringify(this.state);
+    if (Buffer.byteLength(serialized) > MAX_STATE_BYTES) throw new Error("token_gateway_state_limit");
+    writeFileSync(this.statePath, serialized, { mode: 0o600 });
+  }
+
+  private pruneTerminal(): void {
+    const entries = Object.entries(this.state.terminal).sort(([leftId, left], [rightId, right]) => left.completedAt.localeCompare(right.completedAt) || leftId.localeCompare(rightId));
+    for (const [reservationId] of entries.slice(0, Math.max(0, entries.length - MAX_TERMINAL_RESERVATIONS))) delete this.state.terminal[reservationId];
+  }
 
   private record(input: { readonly event: TokenGatewayTelemetry["event"]; readonly reservation: TokenGatewayRoute & { readonly reservationId?: string; readonly handoffId?: string }; readonly inputTokens: number; readonly outputTokens: number; readonly reason: TokenGatewayRefusalCode | null }): void {
     const record: TokenGatewayTelemetry = {
