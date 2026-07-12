@@ -384,4 +384,56 @@ describe("governed run orchestration", () => {
     expect((await second.runSupervisorOnce())?.status).toBe("completed");
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
+
+  it("replays no-task enqueue compensation when release commits before throwing", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-no-task-release-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    const realGateway = new TokenGateway({ stateDir });
+    let releaseFault = true;
+    const gateway = { reserve: realGateway.reserve.bind(realGateway), settle: realGateway.settle.bind(realGateway), findActiveReservation: realGateway.findActiveReservation.bind(realGateway), release: (reservation: Parameters<TokenGateway["release"]>[0]) => { realGateway.release(reservation); if (releaseFault) { releaseFault = false; throw new Error("after_release_commit"); } } };
+    const supervisor = new SupervisorQueue({ stateDir });
+    const noTaskSupervisor = { claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: () => { throw new Error("enqueue_before_commit"); } };
+    const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor: noTaskSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "no task", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    expect(() => first.approveAndQueueRun(draft.current.run_id, 1, "owner")).toThrow("enqueue_before_commit");
+    expect(readRunStore(stateDir).runs[0]?.queue_compensation_requested).toBe(true);
+    const restarted = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    expect(restarted.approveAndQueueRun(draft.current.run_id, 1, "owner").status).toBe("queued");
+    expect(new TokenGateway({ stateDir }).snapshot().activeReservations).toBe(1);
+  });
+
+  it("replays no-task enqueue compensation when clear commits before throwing", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-no-task-clear-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    const supervisor = new SupervisorQueue({ stateDir });
+    const noTaskSupervisor = { claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: () => { throw new Error("enqueue_before_commit"); } };
+    let clearFault = true;
+    const first = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: noTaskSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true, afterPhase: (phase) => { if (phase === "compensation_cleared" && clearFault) { clearFault = false; throw new Error("after_clear_commit"); } } });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "no task clear", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    expect(() => first.approveAndQueueRun(draft.current.run_id, 1, "owner")).toThrow("enqueue_before_commit");
+    expect(readRunStore(stateDir).runs[0]).toMatchObject({ queue_compensation_requested: false, supervisor_task_id: null, reservation_status: "none" });
+    const restarted = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
+    expect(restarted.approveAndQueueRun(draft.current.run_id, 1, "owner").status).toBe("queued");
+  });
+
+  for (const phase of ["release", "reservation_terminal", "finalized"] as const) {
+    it(`replays terminal dispatch failure after ${phase} commit fault`, async () => {
+      const stateDir = mkdtempSync(join(tmpdir(), `run-orchestrator-failure-${phase}-`));
+      writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+      const realGateway = new TokenGateway({ stateDir });
+      let releaseFault = phase === "release";
+      const gateway = { reserve: realGateway.reserve.bind(realGateway), settle: realGateway.settle.bind(realGateway), findActiveReservation: realGateway.findActiveReservation.bind(realGateway), acknowledgeTerminal: realGateway.acknowledgeTerminal.bind(realGateway), release: (reservation: Parameters<TokenGateway["release"]>[0]) => { realGateway.release(reservation); if (releaseFault) { releaseFault = false; throw new Error("after_failure_release"); } } };
+      let phaseFault = true;
+      const faultPhase: "reservation_terminal" | "finalized" | null = phase === "release" ? null : phase;
+      const dispatch = vi.fn(async () => { throw new Error("provider_crash"); });
+      const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor: new SupervisorQueue({ stateDir }), dispatch, supervisorMaxAttempts: 1, now: () => now, isRouteAvailable: () => true, afterPhase: (current) => { if (faultPhase !== null && current === faultPhase && phaseFault) { phaseFault = false; throw new Error(`after_failure_${phase}`); } } });
+      const draft = first.prepareRun({ project_id: "alpha", prompt: "fail", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+      first.approveAndQueueRun(draft.current.run_id, 1, "owner");
+      await expect(first.runSupervisorOnce()).rejects.toThrow();
+      const restarted = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch, supervisorMaxAttempts: 1, now: () => now, isRouteAvailable: () => true });
+      await restarted.runSupervisorOnce();
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(readRunStore(stateDir).runs[0]).toMatchObject({ status: "failed", terminal_reason: "provider_crash", reservation_status: "released" });
+    });
+  }
 });

@@ -67,6 +67,7 @@ export interface RunRecord {
   readonly provider_result: RunProviderResult | null;
   readonly cancellation_requested: boolean;
   readonly queue_compensation_requested: boolean;
+  readonly dispatch_failure: string | null;
   readonly artifacts: readonly RunArtifact[];
   readonly updated_at: string;
 }
@@ -171,6 +172,7 @@ function validate(document: unknown): asserts document is RunStoreDocument {
       (value.reservation_status === "none") !== (value.token_reservation === null) || !validProviderResult(value.provider_result) ||
       typeof value.cancellation_requested !== "boolean" ||
       typeof value.queue_compensation_requested !== "boolean" ||
+      !validNullableString(value.dispatch_failure, MAX_TERMINAL_REASON) ||
       !value.artifacts.every((artifact) => validString(artifact.artifact_id, MAX_ID) && !artifactIds.has(artifact.artifact_id) &&
         artifactIds.add(artifact.artifact_id) && ARTIFACT_TYPES.has(artifact.type) && typeof artifact.preview === "string" &&
         artifact.preview.length <= MAX_PREVIEW && validTimestamp(artifact.created_at))) {
@@ -192,7 +194,7 @@ export function readRunStore(stateDir: string): RunStoreDocument {
   }
   if (typeof document === "object" && document !== null && Array.isArray((document as { runs?: unknown }).runs)) {
     document = { ...(document as object), runs: (document as { runs: unknown[] }).runs.map((run) =>
-      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, ...run } : run) };
+      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, ...run } : run) };
   }
   validate(document);
   return document;
@@ -231,7 +233,7 @@ export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
   const draft: RunDraft = { ...input, requested_artifacts: [...input.requested_artifacts], run_id: randomUUID(), revision: 1, created_at: createdAt };
-  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, artifacts: [], updated_at: createdAt };
+  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, artifacts: [], updated_at: createdAt };
   write(stateDir, { ...document, runs: [...document.runs, record] });
   return draft;
 }
@@ -317,4 +319,18 @@ export function requestRunQueueCompensation(stateDir: string, runId: string, upd
   if (record.queue_compensation_requested) return record;
   if (record.status !== "approved" || record.supervisor_task_id === null || record.token_reservation === null || !validTimestamp(updatedAt)) throw new Error("invalid_run_compensation");
   return replace(stateDir, { ...record, queue_compensation_requested: true, updated_at: updatedAt });
+}
+
+export function recordRunDispatchFailure(stateDir: string, runId: string, reason: string, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (record.dispatch_failure !== null) return record;
+  if (!["queued", "running"].includes(record.status) || !validString(reason, MAX_TERMINAL_REASON) || !validTimestamp(updatedAt)) throw new Error("invalid_run_dispatch_failure");
+  return replace(stateDir, { ...record, dispatch_failure: reason, updated_at: updatedAt });
+}
+
+export function clearRunDispatchFailure(stateDir: string, runId: string, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (record.dispatch_failure === null) return record;
+  if (!validTimestamp(updatedAt)) throw new Error("invalid_run_dispatch_failure");
+  return replace(stateDir, { ...record, dispatch_failure: null, updated_at: updatedAt });
 }

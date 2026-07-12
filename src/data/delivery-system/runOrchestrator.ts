@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
 import { readProviderQuotaStore } from "./providerQuotaStore";
 import { resolveEnabledProject } from "./projectRegistry";
-import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
+import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import { estimateTokenCount, type TokenReservation, type TokenReservationRequest, type TokenSettlement } from "./tokenGateway";
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { computePacketHash } from "../../governed-core/dispatch";
@@ -25,7 +25,7 @@ interface SupervisorTaskView {
 }
 
 interface Supervisor {
-  enqueue(input: { readonly taskId: string; readonly handoff: GovernedHandoff; readonly sessionId: string; readonly requiresApproval: true; readonly approvalGranted: true; readonly now: string }): unknown;
+  enqueue(input: { readonly taskId: string; readonly handoff: GovernedHandoff; readonly sessionId: string; readonly requiresApproval: true; readonly approvalGranted: true; readonly now: string; readonly maxAttempts?: number }): unknown;
   claim(now: string): SupervisorTaskView | null;
   complete(taskId: string, now?: string): unknown;
   fail(taskId: string, reason: string, now?: string): { readonly status?: string };
@@ -43,6 +43,7 @@ export function createRunOrchestrator(options: {
   readonly now?: () => string;
   readonly isRouteAvailable?: (provider: string, model: string | null) => boolean;
   readonly afterPhase?: (phase: "bound" | "queued" | "reservation_terminal" | "artifact" | "finalized" | "compensation_cleared") => void;
+  readonly supervisorMaxAttempts?: number;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
   function record(runId: string): RunRecord {
@@ -92,7 +93,8 @@ export function createRunOrchestrator(options: {
     if (!run.queue_compensation_requested || run.supervisor_task_id === null || run.token_reservation === null) return run;
     let firstError: unknown;
     const task = options.supervisor.snapshot?.().find((candidate) => candidate.task_id === run.supervisor_task_id);
-    if (task?.status === undefined || !["cancelled", "failed", "completed"].includes(task.status)) {
+    const taskNeedsCancellation = options.supervisor.snapshot === undefined || (task !== undefined && !["cancelled", "failed", "completed"].includes(task.status ?? ""));
+    if (taskNeedsCancellation) {
       try { options.supervisor.cancel(run.supervisor_task_id, "enqueue_failed", now()); } catch (error) { firstError = error; }
     }
     if (run.reservation_status === "active") {
@@ -142,16 +144,10 @@ export function createRunOrchestrator(options: {
     }
     const existingTask = options.supervisor.snapshot?.().find((task) => task.task_id === taskId);
     if (existingTask === undefined) {
-      try { options.supervisor.enqueue({ taskId, handoff, sessionId: runId, requiresApproval: true, approvalGranted: true, now: now() }); }
+      try { options.supervisor.enqueue({ taskId, handoff, sessionId: runId, requiresApproval: true, approvalGranted: true, now: now(), ...(options.supervisorMaxAttempts === undefined ? {} : { maxAttempts: options.supervisorMaxAttempts }) }); }
       catch (error) {
-        const enqueued = options.supervisor.snapshot?.().find((task) => task.task_id === taskId);
-        if (enqueued === undefined) {
-          options.tokenGateway.release(reservation);
-          clearRunSupervisorBinding(options.stateDir, runId, now());
-        } else {
-          const compensating = requestRunQueueCompensation(options.stateDir, runId, now());
-          try { reconcileQueueCompensation(compensating); } catch { /* durable compensation is replayed on retry */ }
-        }
+        const compensating = requestRunQueueCompensation(options.stateDir, runId, now());
+        try { reconcileQueueCompensation(compensating); } catch { /* durable compensation is replayed on retry */ }
         throw error;
       }
     }
@@ -217,12 +213,31 @@ export function createRunOrchestrator(options: {
     return { ...finalized, result };
   }
 
+  function finishDispatchFailure(run: RunRecord): RunRecord {
+    const reservation = run.token_reservation!;
+    if (run.reservation_status === "active") {
+      options.tokenGateway.release(reservation);
+      run = markRunReservationTerminal(options.stateDir, run.current.run_id, "released", now());
+      options.afterPhase?.("reservation_terminal");
+    }
+    const finalized = finalizeRun(options.stateDir, run.current.run_id, "failed", run.dispatch_failure, now());
+    options.afterPhase?.("finalized");
+    options.tokenGateway.acknowledgeTerminal?.(reservation.reservationId);
+    return finalized;
+  }
+
   async function runSupervisorOnce(): Promise<(RunRecord & { readonly result: DispatchResult }) | null> {
     for (const terminal of readRunStore(options.stateDir).runs.filter((run) => ["completed", "failed", "cancelled"].includes(run.status) && run.token_reservation !== null && run.reservation_status !== "active")) {
       options.tokenGateway.acknowledgeTerminal?.(terminal.token_reservation!.reservationId);
     }
     const cancellation = readRunStore(options.stateDir).runs.find((run) => run.cancellation_requested && run.status !== "cancelled");
     if (cancellation !== undefined) { cancelRun(cancellation.current.run_id); return null; }
+    const failure = readRunStore(options.stateDir).runs.find((run) => run.dispatch_failure !== null && !["completed", "failed", "cancelled"].includes(run.status));
+    if (failure !== undefined) {
+      const task = options.supervisor.snapshot?.().find((candidate) => candidate.task_id === failure.supervisor_task_id);
+      if (task?.status === "failed") { finishDispatchFailure(failure); return null; }
+      if (task?.status === "queued") { clearRunDispatchFailure(options.stateDir, failure.current.run_id, now()); }
+    }
     const task = taskForPendingResult() ?? options.supervisor.claim(now());
     if (task === null) return null;
     const taskId = task.task_id ?? task.taskId;
@@ -233,6 +248,7 @@ export function createRunOrchestrator(options: {
     try {
       result = await options.dispatch(task.handoff, options.stateDir);
     } catch (error) {
+      run = recordRunDispatchFailure(options.stateDir, run.current.run_id, error instanceof Error ? error.message.slice(0, 32_000) : "dispatch_failed", now());
       let failed: { readonly status?: string };
       try { failed = options.supervisor.fail(taskId, error instanceof Error ? error.message : "dispatch_failed", now()); }
       catch (failError) {
@@ -241,14 +257,9 @@ export function createRunOrchestrator(options: {
         failed = persisted;
       }
       if (failed.status === "failed") {
-        if (run.reservation_status === "active") {
-          options.tokenGateway.release(run.token_reservation!);
-          run = markRunReservationTerminal(options.stateDir, run.current.run_id, "released", now());
-          options.afterPhase?.("reservation_terminal");
-        }
-        finalizeRun(options.stateDir, run.current.run_id, "failed", error instanceof Error ? error.message : "dispatch_failed", now());
-        options.afterPhase?.("finalized");
-        options.tokenGateway.acknowledgeTerminal?.(run.token_reservation!.reservationId);
+        finishDispatchFailure(run);
+      } else {
+        clearRunDispatchFailure(options.stateDir, run.current.run_id, now());
       }
       throw error;
     }
