@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -81,5 +81,50 @@ describe("project registry", () => {
         enabled: true
       }]
     })).toThrow("invalid_project_registry");
+  });
+
+  it("bounds project IDs, names, and canonical paths", () => {
+    const stateDir = createStateDir();
+    const project = {
+      schema_version: "v1" as const,
+      project_id: "valid-project",
+      name: "Valid Project",
+      cwd: "/srv/valid-project",
+      enabled: true
+    };
+
+    expect(() => writeProjectRegistry(stateDir, {
+      schema_version: "v1",
+      projects: [{ ...project, project_id: `p${"a".repeat(80)}` }]
+    })).toThrow("invalid_project_registry");
+    expect(() => writeProjectRegistry(stateDir, {
+      schema_version: "v1",
+      projects: [{ ...project, name: "n".repeat(161) }]
+    })).toThrow("invalid_project_registry");
+    expect(() => writeProjectRegistry(stateDir, {
+      schema_version: "v1",
+      projects: [{ ...project, cwd: `/${"a".repeat(1_024)}` }]
+    })).toThrow("invalid_project_registry");
+  });
+
+  it("rejects an oversized on-disk registry before parsing", () => {
+    const stateDir = createStateDir();
+    writeFileSync(join(stateDir, "projects.json"), Buffer.alloc(128 * 1_024 + 1, 0x20));
+
+    expect(() => readProjectRegistry(stateDir)).toThrow("invalid_project_registry");
+  });
+
+  it("rejects a registry whose serialized representation exceeds the byte limit", () => {
+    const stateDir = createStateDir();
+    const projects = Array.from({ length: 64 }, (_, index) => ({
+      schema_version: "v1" as const,
+      project_id: `project-${index}`,
+      name: "Valid Project",
+      cwd: `/${"€".repeat(1_023)}`,
+      enabled: true
+    }));
+
+    expect(() => writeProjectRegistry(stateDir, { schema_version: "v1", projects }))
+      .toThrow("invalid_project_registry");
   });
 });

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize } from "node:path";
 
 export interface ProjectEntry {
@@ -17,7 +17,9 @@ export interface ProjectRegistryDocument {
 const PROJECT_REGISTRY_FILE = "projects.json";
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const MAX_PROJECTS = 64;
+const MAX_PROJECT_NAME_LENGTH = 160;
 const MAX_CWD_LENGTH = 1_024;
+const MAX_REGISTRY_BYTES = 128 * 1_024;
 
 function validateProjectRegistry(document: unknown): asserts document is ProjectRegistryDocument {
   if (typeof document !== "object" || document === null) {
@@ -43,6 +45,7 @@ function validateProjectRegistry(document: unknown): asserts document is Project
         !PROJECT_ID_PATTERN.test(project.project_id) ||
         projectIds.has(project.project_id) ||
         typeof project.name !== "string" ||
+        project.name.length > MAX_PROJECT_NAME_LENGTH ||
         typeof project.cwd !== "string" ||
         project.cwd.length > MAX_CWD_LENGTH ||
         !isAbsolute(project.cwd) ||
@@ -59,6 +62,9 @@ export function readProjectRegistry(stateDir: string): ProjectRegistryDocument {
   if (!existsSync(path)) {
     return { schema_version: "v1", projects: [] };
   }
+  if (statSync(path).size > MAX_REGISTRY_BYTES) {
+    throw new Error("invalid_project_registry");
+  }
 
   const document: unknown = JSON.parse(readFileSync(path, "utf8"));
   validateProjectRegistry(document);
@@ -69,8 +75,12 @@ export function writeProjectRegistry(stateDir: string, document: ProjectRegistry
   validateProjectRegistry(document);
   const path = join(stateDir, PROJECT_REGISTRY_FILE);
   const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  const serialized = `${JSON.stringify(document, null, 2)}\n`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_REGISTRY_BYTES) {
+    throw new Error("invalid_project_registry");
+  }
   try {
-    writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+    writeFileSync(temporaryPath, serialized, "utf8");
     renameSync(temporaryPath, path);
   } catch (error) {
     if (existsSync(temporaryPath)) {
