@@ -30,6 +30,25 @@ export interface RunArtifact {
   readonly created_at: string;
 }
 
+export interface RunReservation {
+  readonly reservationId: string;
+  readonly provider: string;
+  readonly model: string | null;
+  readonly sessionId: string | null;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly handoffId?: string;
+  readonly reservedAt: string;
+  readonly totalTokens: number;
+}
+
+export interface RunProviderResult {
+  readonly refused: boolean;
+  readonly reason: string | null;
+  readonly worker_run_id: string | null;
+  readonly raw_output: string;
+}
+
 export type RunArtifactInput = Omit<RunArtifact, "created_at">;
 
 export interface RunRecord {
@@ -43,6 +62,9 @@ export interface RunRecord {
   readonly supervisor_task_id: string | null;
   readonly worker_run_id: string | null;
   readonly terminal_reason: string | null;
+  readonly token_reservation: RunReservation | null;
+  readonly reservation_status: "none" | "active" | "settled" | "released";
+  readonly provider_result: RunProviderResult | null;
   readonly artifacts: readonly RunArtifact[];
   readonly updated_at: string;
 }
@@ -103,6 +125,19 @@ function validNullableString(value: unknown, maximum: number): boolean {
   return value === null || validString(value, maximum);
 }
 
+function validReservation(value: RunReservation | null): boolean {
+  return value === null || (validString(value.reservationId, MAX_ID) && validString(value.provider, MAX_ID) &&
+    validNullableString(value.model, MAX_MODEL) && validNullableString(value.sessionId, MAX_ID) &&
+    Number.isSafeInteger(value.inputTokens) && value.inputTokens >= 0 && Number.isSafeInteger(value.outputTokens) && value.outputTokens >= 0 &&
+    Number.isSafeInteger(value.totalTokens) && value.totalTokens === value.inputTokens + value.outputTokens && validTimestamp(value.reservedAt) &&
+    (value.handoffId === undefined || validString(value.handoffId, MAX_ID)));
+}
+
+function validProviderResult(value: RunProviderResult | null): boolean {
+  return value === null || (typeof value.refused === "boolean" && validNullableString(value.reason, MAX_TERMINAL_REASON) &&
+    validNullableString(value.worker_run_id, MAX_ID) && typeof value.raw_output === "string" && value.raw_output.length <= MAX_PREVIEW);
+}
+
 function hasApproval(record: RunRecord): boolean {
   return record.approved_revision === record.current.revision &&
     validString(record.approved_by, MAX_OPERATOR) && validTimestamp(record.approved_at);
@@ -130,6 +165,8 @@ function validate(document: unknown): asserts document is RunStoreDocument {
       !value.revisions.every((revision, index) => validDraft(revision) && revision.run_id === value.current.run_id && revision.revision === index + 1) ||
       !validNullableString(value.supervisor_task_id, MAX_ID) || !validNullableString(value.worker_run_id, MAX_ID) ||
       !validNullableString(value.terminal_reason, MAX_TERMINAL_REASON) || !validTimestamp(value.updated_at) ||
+      !validReservation(value.token_reservation) || !["none", "active", "settled", "released"].includes(value.reservation_status) ||
+      (value.reservation_status === "none") !== (value.token_reservation === null) || !validProviderResult(value.provider_result) ||
       !value.artifacts.every((artifact) => validString(artifact.artifact_id, MAX_ID) && !artifactIds.has(artifact.artifact_id) &&
         artifactIds.add(artifact.artifact_id) && ARTIFACT_TYPES.has(artifact.type) && typeof artifact.preview === "string" &&
         artifact.preview.length <= MAX_PREVIEW && validTimestamp(artifact.created_at))) {
@@ -148,6 +185,10 @@ export function readRunStore(stateDir: string): RunStoreDocument {
     document = JSON.parse(readFileSync(path, "utf8"));
   } catch {
     throw new Error("invalid_run_store");
+  }
+  if (typeof document === "object" && document !== null && Array.isArray((document as { runs?: unknown }).runs)) {
+    document = { ...(document as object), runs: (document as { runs: unknown[] }).runs.map((run) =>
+      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, ...run } : run) };
   }
   validate(document);
   return document;
@@ -186,7 +227,7 @@ export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
   const draft: RunDraft = { ...input, requested_artifacts: [...input.requested_artifacts], run_id: randomUUID(), revision: 1, created_at: createdAt };
-  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, artifacts: [], updated_at: createdAt };
+  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, artifacts: [], updated_at: createdAt };
   write(stateDir, { ...document, runs: [...document.runs, record] });
   return draft;
 }
@@ -224,4 +265,38 @@ export function appendRunArtifact(stateDir: string, runId: string, input: RunArt
     throw new Error("invalid_run_artifact");
   }
   return replace(stateDir, { ...record, artifacts: [...record.artifacts, { ...input, created_at: createdAt }], updated_at: createdAt });
+}
+
+export function bindRunToSupervisor(stateDir: string, runId: string, taskId: string, reservation: RunReservation, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (record.status !== "approved" || record.supervisor_task_id !== null || !validString(taskId, MAX_ID) || !validReservation(reservation) || !validTimestamp(updatedAt)) throw new Error("invalid_run_binding");
+  return replace(stateDir, { ...record, supervisor_task_id: taskId, token_reservation: reservation, reservation_status: "active", updated_at: updatedAt });
+}
+
+export function clearRunSupervisorBinding(stateDir: string, runId: string, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (record.status !== "approved" || !validTimestamp(updatedAt)) throw new Error("invalid_run_binding");
+  return replace(stateDir, { ...record, supervisor_task_id: null, token_reservation: null, reservation_status: "none", updated_at: updatedAt });
+}
+
+export function recordRunProviderResult(stateDir: string, runId: string, result: RunProviderResult, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (!["queued", "running"].includes(record.status) || !validProviderResult(result) || !validTimestamp(updatedAt)) throw new Error("invalid_run_provider_result");
+  if (record.provider_result !== null) return record;
+  return replace(stateDir, { ...record, provider_result: result, worker_run_id: result.worker_run_id, updated_at: updatedAt });
+}
+
+export function markRunReservationTerminal(stateDir: string, runId: string, status: "settled" | "released", updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (record.reservation_status === status) return record;
+  if (record.reservation_status !== "active" || !validTimestamp(updatedAt)) throw new Error("invalid_run_reservation_transition");
+  return replace(stateDir, { ...record, reservation_status: status, updated_at: updatedAt });
+}
+
+export function finalizeRun(stateDir: string, runId: string, status: "completed" | "failed", reason: string | null, updatedAt: string): RunRecord {
+  let record = find(stateDir, runId);
+  if (record.status === status) return record;
+  if (record.status === "queued") record = transitionRun(stateDir, runId, "running", updatedAt);
+  if (record.status !== "running" || !validNullableString(reason, MAX_TERMINAL_REASON)) throw new Error("invalid_run_transition");
+  return replace(stateDir, { ...record, status, terminal_reason: reason, updated_at: updatedAt });
 }

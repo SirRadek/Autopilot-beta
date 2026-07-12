@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
@@ -27,6 +27,26 @@ export interface ApprovalQueueDocument {
 }
 
 export const APPROVAL_QUEUE_FILE = "approval-queue.json";
+const MAX_QUEUE_BYTES = 1024 * 1024;
+const MAX_RECORDS = 512;
+const MAX_FIELD = 512;
+
+function validText(value: unknown, maximum = MAX_FIELD): value is string { return typeof value === "string" && value.length > 0 && value.length <= maximum; }
+function validate(document: unknown): asserts document is ApprovalQueueDocument {
+  if (typeof document !== "object" || document === null) throw new Error("invalid_approval_queue");
+  const value = document as ApprovalQueueDocument;
+  if (value.schema_version !== "v1" || !Array.isArray(value.records) || value.records.length > MAX_RECORDS) throw new Error("invalid_approval_queue");
+  for (const record of value.records) {
+    if (typeof record !== "object" || record === null || record.schema_version !== "v1" || !validText(record.approval_id) ||
+      (record.run_id !== null && !validText(record.run_id)) || (record.revision !== null && (!Number.isSafeInteger(record.revision) || record.revision < 1)) ||
+      !validText(record.session_id) || !validText(record.vendor) || (record.model !== null && !validText(record.model)) ||
+      !Array.isArray(record.skill_ids) || record.skill_ids.length > 64 || !record.skill_ids.every((item: unknown) => validText(item)) ||
+      typeof record.prompt_preview !== "string" || record.prompt_preview.length > 500 || (record.prompt_file !== null && !validText(record.prompt_file, 2048)) ||
+      !Number.isSafeInteger(record.estimated_tokens) || record.estimated_tokens < 0 || !["pending", "approved", "rejected"].includes(record.status) ||
+      !validText(record.created_at, 32) || (record.decided_at !== null && !validText(record.decided_at, 32)) ||
+      (record.rejection_reason !== null && !validText(record.rejection_reason, 200))) throw new Error("invalid_approval_queue");
+  }
+}
 
 export function createApprovalRecord(input: {
   readonly approvalId: string;
@@ -88,11 +108,23 @@ export function requireApprovedApproval(
 export function readApprovalQueue(stateDir: string): ApprovalQueueDocument {
   const path = join(stateDir, APPROVAL_QUEUE_FILE);
   if (!existsSync(path)) return { schema_version: "v1", records: [] };
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as ApprovalQueueDocument;
-  if (parsed.schema_version !== "v1" || !Array.isArray(parsed.records)) throw new Error("invalid_approval_queue");
+  if (statSync(path).size > MAX_QUEUE_BYTES) throw new Error("invalid_approval_queue");
+  let parsed: unknown;
+  try { parsed = JSON.parse(readFileSync(path, "utf8")); } catch { throw new Error("invalid_approval_queue"); }
+  if (typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { records?: unknown }).records)) {
+    parsed = { ...(parsed as object), records: (parsed as { records: unknown[] }).records.map((record) =>
+      typeof record === "object" && record !== null ? { run_id: null, revision: null, ...record } : record) };
+  }
+  validate(parsed);
   return parsed;
 }
 
 export function writeApprovalQueue(stateDir: string, document: ApprovalQueueDocument): void {
-  writeFileSync(join(stateDir, APPROVAL_QUEUE_FILE), `${JSON.stringify(document, null, 2)}\n`, "utf8");
+  validate(document);
+  const path = join(stateDir, APPROVAL_QUEUE_FILE);
+  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
+  const serialized = `${JSON.stringify(document, null, 2)}\n`;
+  if (Buffer.byteLength(serialized) > MAX_QUEUE_BYTES) throw new Error("invalid_approval_queue");
+  try { writeFileSync(temporary, serialized, "utf8"); renameSync(temporary, path); }
+  catch (error) { if (existsSync(temporary)) unlinkSync(temporary); throw error; }
 }

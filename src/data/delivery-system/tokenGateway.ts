@@ -93,6 +93,7 @@ export interface TokenGatewayTelemetry {
 interface GatewayState {
   readonly used: Record<string, number>;
   readonly reservations: Record<string, TokenReservation>;
+  readonly terminal: Record<string, { readonly event: "settled" | "released"; readonly settlement: TokenSettlement }>;
 }
 
 const STATE_FILE = "token-gateway-state.json";
@@ -122,6 +123,13 @@ export class TokenGateway {
 
   reserve(input: TokenReservationRequest): TokenReservation {
     const request = normalizeRequest(input);
+    if (request.handoffId !== undefined) {
+      const existing = Object.values(this.state.reservations).find((reservation) => reservation.handoffId === request.handoffId);
+      if (existing !== undefined) {
+        if (existing.provider !== request.provider || existing.model !== request.model || existing.sessionId !== request.sessionId || existing.inputTokens !== request.inputTokens || existing.outputTokens !== request.outputTokens) throw new TokenGatewayError("token_route_mismatch");
+        return existing;
+      }
+    }
     if (request.inputTokens > this.limits.inputCapTokens) throw this.refuse(request, "token_input_cap_exceeded");
     if (request.outputTokens > this.limits.outputCapTokens) throw this.refuse(request, "token_output_cap_exceeded");
     const total = request.inputTokens + request.outputTokens;
@@ -150,27 +158,36 @@ export class TokenGateway {
 
   settle(reservation: TokenReservation, usage: TokenSettlement): TokenSettlement {
     const active = this.state.reservations[reservation.reservationId];
-    if (!active) throw new TokenGatewayError("token_reservation_missing");
+    if (!active) {
+      const terminal = this.state.terminal[reservation.reservationId];
+      if (terminal?.event === "settled") return terminal.settlement;
+      throw new TokenGatewayError("token_reservation_missing");
+    }
     assertRoute(active, reservation);
     const inputTokens = safeCount(usage.inputTokens);
     const outputTokens = safeCount(usage.outputTokens);
     if (inputTokens > this.limits.inputCapTokens) throw new TokenGatewayError("token_input_cap_exceeded");
     if (outputTokens > this.limits.outputCapTokens) throw new TokenGatewayError("token_output_cap_exceeded");
+    const settled = { inputTokens, outputTokens, released: usage.released === true };
     this.addUsage(active, -(active.totalTokens));
     this.addUsage(active, inputTokens + outputTokens);
     delete this.state.reservations[reservation.reservationId];
+    this.state.terminal[reservation.reservationId] = { event: "settled", settlement: settled };
     this.persist();
-    const settled = { inputTokens, outputTokens, released: usage.released === true };
     this.record({ event: "settled", reservation: active, ...settled, reason: null });
     return settled;
   }
 
   release(reservation: TokenReservation): void {
     const active = this.state.reservations[reservation.reservationId];
-    if (!active) throw new TokenGatewayError("token_reservation_missing");
+    if (!active) {
+      if (this.state.terminal[reservation.reservationId] !== undefined) return;
+      throw new TokenGatewayError("token_reservation_missing");
+    }
     assertRoute(active, reservation);
     this.addUsage(active, -active.totalTokens);
     delete this.state.reservations[reservation.reservationId];
+    this.state.terminal[reservation.reservationId] = { event: "released", settlement: { inputTokens: 0, outputTokens: 0, released: true } };
     this.persist();
     this.record({ event: "released", reservation: active, inputTokens: 0, outputTokens: 0, reason: null });
   }
@@ -193,11 +210,11 @@ export class TokenGateway {
   }
 
   private loadState(): GatewayState {
-    if (!existsSync(this.statePath)) return { used: {}, reservations: {} };
+    if (!existsSync(this.statePath)) return { used: {}, reservations: {}, terminal: {} };
     try {
       const parsed = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<GatewayState>;
-      return { used: parsed.used ?? {}, reservations: parsed.reservations ?? {} };
-    } catch { return { used: {}, reservations: {} }; }
+      return { used: parsed.used ?? {}, reservations: parsed.reservations ?? {}, terminal: parsed.terminal ?? {} };
+    } catch { return { used: {}, reservations: {}, terminal: {} }; }
   }
 
   private persist(): void { writeFileSync(this.statePath, JSON.stringify(this.state), { mode: 0o600 }); }

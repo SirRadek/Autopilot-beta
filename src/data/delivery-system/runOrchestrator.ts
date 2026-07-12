@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
 import { readProviderQuotaStore } from "./providerQuotaStore";
 import { resolveEnabledProject } from "./projectRegistry";
-import { appendRunArtifact, approveRunRevision, createRunDraft, readRunStore, transitionRun, type RunDraftInput, type RunRecord } from "./runStore";
+import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunProviderResult, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import { estimateTokenCount, type TokenReservation, type TokenReservationRequest, type TokenSettlement } from "./tokenGateway";
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { computePacketHash } from "../../governed-core/dispatch";
@@ -15,12 +15,20 @@ interface Gateway {
   settle(reservation: TokenReservation, usage: TokenSettlement): TokenSettlement | void;
 }
 
+interface SupervisorTaskView {
+  readonly task_id?: string;
+  readonly taskId?: string;
+  readonly status?: string;
+  readonly handoff: GovernedHandoff;
+}
+
 interface Supervisor {
   enqueue(input: { readonly taskId: string; readonly handoff: GovernedHandoff; readonly sessionId: string; readonly requiresApproval: true; readonly approvalGranted: true; readonly now: string }): unknown;
-  claim(now: string): ({ readonly task_id?: string; readonly taskId?: string; readonly handoff: GovernedHandoff } & Record<string, unknown>) | null;
+  claim(now: string): SupervisorTaskView | null;
   complete(taskId: string, now?: string): unknown;
   fail(taskId: string, reason: string, now?: string): { readonly status?: string };
   cancel(taskId: string, reason?: string, now?: string): unknown;
+  snapshot?(): readonly SupervisorTaskView[];
 }
 
 export interface QueuedRun extends RunRecord { readonly supervisor_task_id: string; }
@@ -34,8 +42,6 @@ export function createRunOrchestrator(options: {
   readonly isRouteAvailable?: (provider: string, model: string | null) => boolean;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
-  const bindings = new Map<string, { runId: string; taskId: string; reservation: TokenReservation; handoff: GovernedHandoff; terminal: boolean }>();
-
   function record(runId: string): RunRecord {
     const value = readRunStore(options.stateDir).runs.find((run) => run.current.run_id === runId);
     if (value === undefined) throw new Error("run_not_found");
@@ -81,83 +87,117 @@ export function createRunOrchestrator(options: {
 
   function approveAndQueueRun(runId: string, revision: number, operator: string): QueuedRun {
     const before = record(runId);
-    if (before.status !== "draft" || before.current.revision !== revision) throw new Error("run_revision_conflict");
+    if (before.current.revision !== revision || !["draft", "approved"].includes(before.status) || before.supervisor_task_id !== null) throw new Error("run_revision_conflict");
     const queue = readApprovalQueue(options.stateDir);
     const index = queue.records.findIndex((item) => item.run_id === runId && item.revision === revision);
     if (index < 0) throw new Error("approval_not_found");
-    const decided = decideApproval(queue.records[index]!, "approved", now());
-    writeApprovalQueue(options.stateDir, { ...queue, records: queue.records.map((item, candidate) => candidate === index ? decided : item) });
+    const approval = queue.records[index]!;
+    if (approval.status === "pending") {
+      const decided = decideApproval(approval, "approved", now());
+      writeApprovalQueue(options.stateDir, { ...queue, records: queue.records.map((item, candidate) => candidate === index ? decided : item) });
+    } else if (approval.status !== "approved") throw new Error("approval_not_approved");
     const approved = approveRunRevision(options.stateDir, runId, revision, operator, now());
     const handoff = handoffFor(approved);
     const inputTokens = Math.min(approved.current.estimated_tokens, estimateTokenCount(approved.current.prompt));
     const reservation = options.tokenGateway.reserve({ provider: approved.current.provider, model: approved.current.model, sessionId: runId, inputTokens, outputTokens: approved.current.estimated_tokens - inputTokens, handoffId: handoff.handoffId as string });
     const taskId = `run-task-${randomUUID()}`;
+    bindRunToSupervisor(options.stateDir, runId, taskId, reservation as RunReservation, now());
     try {
       options.supervisor.enqueue({ taskId, handoff, sessionId: runId, requiresApproval: true, approvalGranted: true, now: now() });
     } catch (error) {
+      const enqueued = options.supervisor.snapshot?.().find((task) => task.task_id === taskId);
+      if (enqueued !== undefined && !["cancelled", "failed", "completed"].includes(enqueued.status ?? "")) options.supervisor.cancel(taskId, "enqueue_failed", now());
       options.tokenGateway.release(reservation);
+      clearRunSupervisorBinding(options.stateDir, runId, now());
       throw error;
     }
-    bindings.set(taskId, { runId, taskId, reservation, handoff, terminal: false });
-    const queued = transitionRun(options.stateDir, runId, "queued", now());
+    let queued: RunRecord;
+    try {
+      queued = transitionRun(options.stateDir, runId, "queued", now());
+    } catch (error) {
+      options.supervisor.cancel(taskId, "queue_transition_failed", now());
+      options.tokenGateway.release(reservation);
+      clearRunSupervisorBinding(options.stateDir, runId, now());
+      throw error;
+    }
     return { ...queued, supervisor_task_id: taskId };
   }
 
+  function bindingForTask(taskId: string): RunRecord {
+    const run = readRunStore(options.stateDir).runs.find((item) => item.supervisor_task_id === taskId);
+    if (run === undefined || run.token_reservation === null) throw new Error("run_binding_not_found");
+    return run;
+  }
+
+  function taskForPendingResult(): SupervisorTaskView | null {
+    const pending = readRunStore(options.stateDir).runs.find((run) => run.provider_result !== null && !["completed", "failed", "cancelled"].includes(run.status));
+    if (pending?.supervisor_task_id === null || pending?.supervisor_task_id === undefined) return null;
+    return options.supervisor.snapshot?.().find((task) => task.task_id === pending.supervisor_task_id) ?? null;
+  }
+
+  function persistResult(run: RunRecord, result: DispatchResult): RunRecord {
+    return recordRunProviderResult(options.stateDir, run.current.run_id, result.refused
+      ? { refused: true, reason: result.reason, worker_run_id: null, raw_output: "" }
+      : { refused: false, reason: null, worker_run_id: result.workerRunId, raw_output: result.rawOutput }, now());
+  }
+
+  function reconstructedResult(run: RunRecord): DispatchResult {
+    const result = run.provider_result!;
+    if (result.refused) return { refused: true, reason: result.reason as Extract<DispatchResult, { refused: true }>["reason"], tier_id: null, provenance_verified: true };
+    return { refused: false, workerRunId: result.worker_run_id!, handoffId: "persisted" as Extract<DispatchResult, { refused: false }>["handoffId"], vendor: run.current.provider, model: run.current.model, exitCode: 0, rawOutput: result.raw_output, parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
+  }
+
+  function finishProviderResult(taskId: string, run: RunRecord, result: DispatchResult): RunRecord & { readonly result: DispatchResult } {
+    const reservation = run.token_reservation!;
+    if (result.refused) {
+      options.tokenGateway.release(reservation);
+      markRunReservationTerminal(options.stateDir, run.current.run_id, "released", now());
+      const task = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
+      if (task?.status === undefined || !["cancelled", "failed", "completed"].includes(task.status)) options.supervisor.cancel(taskId, result.reason, now());
+      return { ...finalizeRun(options.stateDir, run.current.run_id, "failed", result.reason, now()), result };
+    }
+    options.tokenGateway.settle(reservation, { inputTokens: estimateTokenCount(run.current.prompt), outputTokens: estimateTokenCount(result.rawOutput) });
+    markRunReservationTerminal(options.stateDir, run.current.run_id, "settled", now());
+    const task = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
+    if (task === undefined || task.status === "running") options.supervisor.complete(taskId, now());
+    const latest = record(run.current.run_id);
+    if (!latest.artifacts.some((artifact) => artifact.artifact_id === `text-${result.workerRunId}`)) appendRunArtifact(options.stateDir, run.current.run_id, { artifact_id: `text-${result.workerRunId}`, type: "text", preview: result.rawOutput }, now());
+    return { ...finalizeRun(options.stateDir, run.current.run_id, "completed", null, now()), result };
+  }
+
   async function runSupervisorOnce(): Promise<(RunRecord & { readonly result: DispatchResult }) | null> {
-    const task = options.supervisor.claim(now());
+    const task = taskForPendingResult() ?? options.supervisor.claim(now());
     if (task === null) return null;
     const taskId = task.task_id ?? task.taskId;
     if (taskId === undefined) throw new Error("invalid_supervisor_task");
-    const binding = bindings.get(taskId);
-    if (binding === undefined) throw new Error("run_binding_not_found");
+    let run = bindingForTask(taskId);
+    if (run.provider_result !== null) return finishProviderResult(taskId, run, reconstructedResult(run));
     let result: DispatchResult;
     try {
       result = await options.dispatch(task.handoff, options.stateDir);
     } catch (error) {
       const failed = options.supervisor.fail(taskId, error instanceof Error ? error.message : "dispatch_failed", now());
-      if (failed.status === "failed" && !binding.terminal) {
-        options.tokenGateway.release(binding.reservation);
-        binding.terminal = true;
-        transitionRun(options.stateDir, binding.runId, "running", now());
-        transitionRun(options.stateDir, binding.runId, "failed", now());
-      }
-      throw error;
-    }
-    if (result.refused) {
-      const failed = options.supervisor.fail(taskId, result.reason, now());
       if (failed.status === "failed") {
-        options.tokenGateway.release(binding.reservation);
-        binding.terminal = true;
-        transitionRun(options.stateDir, binding.runId, "running", now());
-        return { ...transitionRun(options.stateDir, binding.runId, "failed", now()), result };
+        options.tokenGateway.release(run.token_reservation!);
+        markRunReservationTerminal(options.stateDir, run.current.run_id, "released", now());
+        finalizeRun(options.stateDir, run.current.run_id, "failed", error instanceof Error ? error.message : "dispatch_failed", now());
       }
-      return { ...record(binding.runId), result };
-    }
-    try {
-      options.tokenGateway.settle(binding.reservation, { inputTokens: estimateTokenCount(binding.handoff.prompt), outputTokens: estimateTokenCount(result.rawOutput) });
-    } catch (error) {
-      options.tokenGateway.release(binding.reservation);
-      binding.terminal = true;
-      options.supervisor.fail(taskId, error instanceof Error ? error.message : "token_settlement_failed", now());
-      transitionRun(options.stateDir, binding.runId, "running", now());
-      transitionRun(options.stateDir, binding.runId, "failed", now());
       throw error;
     }
-    binding.terminal = true;
-    options.supervisor.complete(taskId, now());
-    appendRunArtifact(options.stateDir, binding.runId, { artifact_id: `text-${result.workerRunId}`, type: "text", preview: result.rawOutput }, now());
-    transitionRun(options.stateDir, binding.runId, "running", now());
-    return { ...transitionRun(options.stateDir, binding.runId, "completed", now()), result };
+    run = persistResult(run, result);
+    return finishProviderResult(taskId, run, result);
   }
 
   function cancelRun(runId: string): RunRecord {
     const current = record(runId);
     if (current.status === "cancelled") return current;
-    const binding = [...bindings.values()].find((item) => item.runId === runId);
-    if (binding !== undefined && !binding.terminal) {
-      options.supervisor.cancel(binding.taskId, "run_cancelled", now());
-      options.tokenGateway.release(binding.reservation);
-      binding.terminal = true;
+    if (current.supervisor_task_id !== null && current.token_reservation !== null) {
+      const task = options.supervisor.snapshot?.().find((item) => item.task_id === current.supervisor_task_id);
+      if (task?.status === undefined || !["cancelled", "failed", "completed"].includes(task.status)) options.supervisor.cancel(current.supervisor_task_id, "run_cancelled", now());
+      if (current.reservation_status === "active") {
+        options.tokenGateway.release(current.token_reservation);
+        markRunReservationTerminal(options.stateDir, runId, "released", now());
+      }
     }
     return transitionRun(options.stateDir, runId, "cancelled", now());
   }
