@@ -6,6 +6,8 @@ export type ApprovalStatus = "pending" | "approved" | "rejected";
 export interface ApprovalQueueRecord {
   readonly schema_version: "v1";
   readonly approval_id: string;
+  readonly run_id: string | null;
+  readonly revision: number | null;
   readonly session_id: string;
   readonly vendor: string;
   readonly model: string | null;
@@ -28,6 +30,8 @@ export const APPROVAL_QUEUE_FILE = "approval-queue.json";
 
 export function createApprovalRecord(input: {
   readonly approvalId: string;
+  readonly runId?: string;
+  readonly revision?: number;
   readonly sessionId: string;
   readonly vendor: string;
   readonly model?: string;
@@ -40,6 +44,8 @@ export function createApprovalRecord(input: {
   return {
     schema_version: "v1",
     approval_id: input.approvalId,
+    run_id: input.runId ?? null,
+    revision: input.revision ?? null,
     session_id: input.sessionId,
     vendor: input.vendor,
     model: input.model ?? null,
