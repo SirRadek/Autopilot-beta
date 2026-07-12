@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import { resolveEnabledProject } from "./projectRegistry";
 
@@ -57,41 +58,97 @@ const MAX_REVISIONS = 20;
 const MAX_PROMPT = 32_000;
 const MAX_ARTIFACTS = 32;
 const MAX_PREVIEW = 32_000;
+const MAX_STORE_BYTES = 16 * 1024 * 1024;
+const MAX_ID = 256;
+const MAX_MODEL = 256;
+const MAX_OPERATOR = 256;
+const MAX_TERMINAL_REASON = 32_000;
+const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const PROVIDERS = new Set<RunProvider>(["codex_cli", "claude_cli", "agy_cli", "openrouter_api"]);
 const ARTIFACT_TYPES = new Set<RunArtifactType>(["text", "visual"]);
+const STATUSES = new Set<RunStatus>(["draft", "approved", "queued", "running", "completed", "failed", "cancelled"]);
 const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
   draft: ["cancelled"], approved: ["queued", "cancelled"], queued: ["running", "cancelled"],
   running: ["completed", "failed", "cancelled"], completed: [], failed: [], cancelled: []
 };
 
-function validDraft(input: RunDraftInput): boolean {
-  return typeof input.project_id === "string" && typeof input.prompt === "string" && input.prompt.length <= MAX_PROMPT &&
-    PROVIDERS.has(input.provider) && (input.model === null || typeof input.model === "string") &&
+function validString(value: unknown, maximum: number, allowEmpty = false): value is string {
+  return typeof value === "string" && (allowEmpty || value.length > 0) && value.length <= maximum;
+}
+
+function validTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 32) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function validDraftInput(input: RunDraftInput): boolean {
+  return typeof input.project_id === "string" && PROJECT_ID_PATTERN.test(input.project_id) &&
+    typeof input.prompt === "string" && input.prompt.length <= MAX_PROMPT &&
+    PROVIDERS.has(input.provider) && (input.model === null || validString(input.model, MAX_MODEL, true)) &&
     Number.isSafeInteger(input.estimated_tokens) && input.estimated_tokens >= 0 &&
-    Array.isArray(input.requested_artifacts) && input.requested_artifacts.every((type) => ARTIFACT_TYPES.has(type));
+    Array.isArray(input.requested_artifacts) && input.requested_artifacts.length <= ARTIFACT_TYPES.size &&
+    new Set(input.requested_artifacts).size === input.requested_artifacts.length &&
+    input.requested_artifacts.every((type) => ARTIFACT_TYPES.has(type));
+}
+
+function validDraft(value: unknown): value is RunDraft {
+  if (typeof value !== "object" || value === null) return false;
+  const draft = value as RunDraft;
+  return validString(draft.run_id, MAX_ID) && Number.isSafeInteger(draft.revision) && draft.revision > 0 &&
+    validTimestamp(draft.created_at) && validDraftInput(draft);
+}
+
+function validNullableString(value: unknown, maximum: number): boolean {
+  return value === null || validString(value, maximum);
+}
+
+function hasApproval(record: RunRecord): boolean {
+  return record.approved_revision === record.current.revision &&
+    validString(record.approved_by, MAX_OPERATOR) && validTimestamp(record.approved_at);
+}
+
+function lacksApproval(record: RunRecord): boolean {
+  return record.approved_revision === null && record.approved_by === null && record.approved_at === null;
 }
 
 function validate(document: unknown): asserts document is RunStoreDocument {
   if (typeof document !== "object" || document === null) throw new Error("invalid_run_store");
   const candidate = document as Partial<RunStoreDocument>;
   if (candidate.schema_version !== "v1" || !Array.isArray(candidate.runs) || candidate.runs.length > MAX_RUNS) throw new Error("invalid_run_store");
+  const runIds = new Set<string>();
   for (const record of candidate.runs) {
     if (typeof record !== "object" || record === null) throw new Error("invalid_run_store");
     const value = record as RunRecord;
+    const approvalIsValid = value.status === "draft" ? lacksApproval(value) :
+      value.status === "cancelled" ? lacksApproval(value) || hasApproval(value) : hasApproval(value);
+    const artifactIds = new Set<string>();
     if (value.schema_version !== "v1" || !Array.isArray(value.revisions) || value.revisions.length === 0 || value.revisions.length > MAX_REVISIONS ||
-      !Array.isArray(value.artifacts) || value.artifacts.length > MAX_ARTIFACTS || !validDraft(value.current) || value.current.revision !== value.revisions.length ||
+      !Array.isArray(value.artifacts) || value.artifacts.length > MAX_ARTIFACTS || !validDraft(value.current) ||
+      runIds.has(value.current.run_id) || value.current.revision !== value.revisions.length || !STATUSES.has(value.status) || !approvalIsValid ||
+      !isDeepStrictEqual(value.current, value.revisions.at(-1)) ||
       !value.revisions.every((revision, index) => validDraft(revision) && revision.run_id === value.current.run_id && revision.revision === index + 1) ||
-      !value.artifacts.every((artifact) => typeof artifact.artifact_id === "string" && ARTIFACT_TYPES.has(artifact.type) && typeof artifact.preview === "string" && artifact.preview.length <= MAX_PREVIEW)) {
+      !validNullableString(value.supervisor_task_id, MAX_ID) || !validNullableString(value.worker_run_id, MAX_ID) ||
+      !validNullableString(value.terminal_reason, MAX_TERMINAL_REASON) || !validTimestamp(value.updated_at) ||
+      !value.artifacts.every((artifact) => validString(artifact.artifact_id, MAX_ID) && !artifactIds.has(artifact.artifact_id) &&
+        artifactIds.add(artifact.artifact_id) && ARTIFACT_TYPES.has(artifact.type) && typeof artifact.preview === "string" &&
+        artifact.preview.length <= MAX_PREVIEW && validTimestamp(artifact.created_at))) {
       throw new Error("invalid_run_store");
     }
+    runIds.add(value.current.run_id);
   }
 }
 
 export function readRunStore(stateDir: string): RunStoreDocument {
   const path = join(stateDir, FILE);
   if (!existsSync(path)) return { schema_version: "v1", runs: [] };
-  if (statSync(path).size > 16 * 1024 * 1024) throw new Error("invalid_run_store");
-  const document: unknown = JSON.parse(readFileSync(path, "utf8"));
+  if (statSync(path).size > MAX_STORE_BYTES) throw new Error("invalid_run_store");
+  let document: unknown;
+  try {
+    document = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    throw new Error("invalid_run_store");
+  }
   validate(document);
   return document;
 }
@@ -100,8 +157,10 @@ function write(stateDir: string, document: RunStoreDocument): void {
   validate(document);
   const path = join(stateDir, FILE);
   const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
+  const serialized = `${JSON.stringify(document, null, 2)}\n`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_STORE_BYTES) throw new Error("invalid_run_store");
   try {
-    writeFileSync(temporary, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+    writeFileSync(temporary, serialized, "utf8");
     renameSync(temporary, path);
   } catch (error) {
     if (existsSync(temporary)) unlinkSync(temporary);
@@ -123,7 +182,7 @@ function find(stateDir: string, runId: string): RunRecord {
 
 export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt: string): RunDraft {
   resolveEnabledProject(stateDir, input.project_id);
-  if (!validDraft(input)) throw new Error("invalid_run_draft");
+  if (!validDraftInput(input) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
   const draft: RunDraft = { ...input, requested_artifacts: [...input.requested_artifacts], run_id: randomUUID(), revision: 1, created_at: createdAt };
@@ -137,7 +196,7 @@ export function reviseRunDraft(stateDir: string, runId: string, revision: number
   if (record.status !== "draft" || record.current.revision !== revision) throw new Error("run_revision_conflict");
   if (record.revisions.length >= MAX_REVISIONS) throw new Error("run_revision_limit");
   resolveEnabledProject(stateDir, input.project_id);
-  if (!validDraft(input)) throw new Error("invalid_run_draft");
+  if (!validDraftInput(input) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const draft: RunDraft = { ...input, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: revision + 1, created_at: createdAt };
   replace(stateDir, { ...record, current: draft, revisions: [...record.revisions, draft], updated_at: createdAt });
   return draft;
@@ -145,20 +204,24 @@ export function reviseRunDraft(stateDir: string, runId: string, revision: number
 
 export function approveRunRevision(stateDir: string, runId: string, revision: number, operator: string, approvedAt: string): RunRecord {
   const record = find(stateDir, runId);
-  if (record.status === "approved" && record.approved_revision === revision && record.approved_by === operator) return record;
+  if (record.approved_revision === revision && record.approved_by === operator) return record;
   if (record.status !== "draft" || record.current.revision !== revision) throw new Error("run_revision_conflict");
+  if (!validString(operator, MAX_OPERATOR) || !validTimestamp(approvedAt)) throw new Error("invalid_run_approval");
   return replace(stateDir, { ...record, status: "approved", approved_revision: revision, approved_by: operator, approved_at: approvedAt, updated_at: approvedAt });
 }
 
 export function transitionRun(stateDir: string, runId: string, status: RunStatus, updatedAt: string): RunRecord {
   const record = find(stateDir, runId);
-  if (!transitions[record.status].includes(status)) throw new Error("invalid_run_transition");
+  if (!STATUSES.has(status) || !validTimestamp(updatedAt) || !transitions[record.status].includes(status)) throw new Error("invalid_run_transition");
   return replace(stateDir, { ...record, status, updated_at: updatedAt });
 }
 
 export function appendRunArtifact(stateDir: string, runId: string, input: RunArtifactInput, createdAt: string): RunRecord {
   const record = find(stateDir, runId);
   if (record.artifacts.length >= MAX_ARTIFACTS) throw new Error("run_artifact_limit");
-  if (typeof input.artifact_id !== "string" || !ARTIFACT_TYPES.has(input.type) || typeof input.preview !== "string" || input.preview.length > MAX_PREVIEW) throw new Error("invalid_run_artifact");
+  if (!validString(input.artifact_id, MAX_ID) || record.artifacts.some((artifact) => artifact.artifact_id === input.artifact_id) ||
+    !ARTIFACT_TYPES.has(input.type) || typeof input.preview !== "string" || input.preview.length > MAX_PREVIEW || !validTimestamp(createdAt)) {
+    throw new Error("invalid_run_artifact");
+  }
   return replace(stateDir, { ...record, artifacts: [...record.artifacts, { ...input, created_at: createdAt }], updated_at: createdAt });
 }

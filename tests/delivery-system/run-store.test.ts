@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +30,12 @@ function stateDir(): string {
   return path;
 }
 
+function tamper(dir: string, mutate: (document: any) => void): void {
+  const document = readRunStore(dir);
+  mutate(document);
+  writeFileSync(join(dir, "runs.json"), JSON.stringify(document));
+}
+
 afterEach(() => {
   for (const path of stateDirs.splice(0)) rmSync(path, { recursive: true, force: true });
 });
@@ -50,6 +56,16 @@ describe("run store", () => {
     const draft = createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");
     const approved = approveRunRevision(dir, draft.run_id, draft.revision, "owner", "2026-07-12T10:01:00.000Z");
     expect(approveRunRevision(dir, draft.run_id, draft.revision, "owner", "2026-07-12T11:00:00.000Z")).toEqual(approved);
+  });
+
+  it("keeps approval idempotent after execution progresses", () => {
+    const dir = stateDir();
+    const draft = createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");
+    approveRunRevision(dir, draft.run_id, draft.revision, "owner", "2026-07-12T10:01:00.000Z");
+    transitionRun(dir, draft.run_id, "queued", "2026-07-12T10:02:00.000Z");
+    const running = transitionRun(dir, draft.run_id, "running", "2026-07-12T10:03:00.000Z");
+
+    expect(approveRunRevision(dir, draft.run_id, draft.revision, "owner", "2026-07-12T11:00:00.000Z")).toEqual(running);
   });
 
   it("permits only legal status transitions", () => {
@@ -86,5 +102,92 @@ describe("run store", () => {
       appendRunArtifact(dir, draft.run_id, { artifact_id: `artifact-${index}`, type: "text", preview: "done" }, "2026-07-12T10:01:00.000Z");
     }
     expect(() => appendRunArtifact(dir, draft.run_id, { artifact_id: "overflow", type: "text", preview: "done" }, "2026-07-12T10:02:00.000Z")).toThrow("run_artifact_limit");
+  });
+
+  it("rejects tampered draft identity, revision metadata, and non-identical current values", () => {
+    for (const mutate of [
+      (document: any) => { document.runs[0].current.run_id = ""; document.runs[0].revisions[0].run_id = ""; },
+      (document: any) => { document.runs[0].revisions[0].revision = 0; },
+      (document: any) => { document.runs[0].current.prompt = "not-the-revision"; },
+      (document: any) => { document.runs[0].current.created_at = "not-a-timestamp"; document.runs[0].revisions[0].created_at = "not-a-timestamp"; }
+    ]) {
+      const dir = stateDir();
+      createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");
+      tamper(dir, mutate);
+      expect(() => readRunStore(dir)).toThrow("invalid_run_store");
+    }
+  });
+
+  it("rejects unknown statuses and inconsistent approval state on reload", () => {
+    for (const mutate of [
+      (document: any) => { document.runs[0].status = "mystery"; },
+      (document: any) => { document.runs[0].status = "approved"; },
+      (document: any) => { document.runs[0].approved_revision = 1; document.runs[0].approved_by = "owner"; document.runs[0].approved_at = "2026-07-12T10:01:00.000Z"; }
+    ]) {
+      const dir = stateDir();
+      createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");
+      tamper(dir, mutate);
+      expect(() => readRunStore(dir)).toThrow("invalid_run_store");
+    }
+  });
+
+  it("bounds every persisted draft and artifact collection field", () => {
+    const dir = stateDir();
+    expect(() => createRunDraft(dir, { ...input, project_id: "p".repeat(81) }, "2026-07-12T10:00:00.000Z")).toThrow();
+    expect(() => createRunDraft(dir, { ...input, model: "m".repeat(257) }, "2026-07-12T10:00:00.000Z")).toThrow("invalid_run_draft");
+    expect(() => createRunDraft(dir, { ...input, requested_artifacts: Array(3).fill("text") }, "2026-07-12T10:00:00.000Z")).toThrow("invalid_run_draft");
+    const draft = createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");
+    expect(() => appendRunArtifact(dir, draft.run_id, { artifact_id: "a".repeat(257), type: "text", preview: "done" }, "2026-07-12T10:01:00.000Z")).toThrow("invalid_run_artifact");
+  });
+
+  it("rejects oversized stores before parsing", () => {
+    const dir = stateDir();
+    writeFileSync(join(dir, "runs.json"), Buffer.alloc(16 * 1024 * 1024 + 1, 0x20));
+    expect(() => readRunStore(dir)).toThrow("invalid_run_store");
+  });
+
+  it("rejects a write above the read cap without replacing the readable store", () => {
+    const dir = stateDir();
+    const draft = createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");
+    const template: any = readRunStore(dir).runs[0];
+    const document: any = { schema_version: "v1", runs: [] };
+    for (let runIndex = 0; runIndex < 17; runIndex += 1) {
+      const record = structuredClone(template);
+      const runId = `${draft.run_id}-${runIndex}`;
+      record.current.run_id = runId;
+      record.revisions = [structuredClone(record.current)];
+      const artifactCount = runIndex === 0 ? 31 : 32;
+      record.artifacts = Array.from({ length: artifactCount }, (_, artifactIndex) => ({
+        artifact_id: `artifact-${artifactIndex}`,
+        type: "text",
+        preview: "",
+        created_at: "2026-07-12T10:00:00.000Z"
+      }));
+      document.runs.push(record);
+    }
+    const cap = 16 * 1024 * 1024;
+    let remaining = cap - 1_000 - Buffer.byteLength(`${JSON.stringify(document, null, 2)}\n`);
+    for (const record of document.runs) {
+      for (const artifact of record.artifacts) {
+        const length = Math.min(32_000, remaining);
+        artifact.preview = "x".repeat(length);
+        remaining -= length;
+      }
+    }
+    expect(remaining).toBe(0);
+    writeFileSync(join(dir, "runs.json"), `${JSON.stringify(document, null, 2)}\n`);
+    expect(readRunStore(dir).runs).toHaveLength(17);
+
+    expect(() => appendRunArtifact(dir, document.runs[0].current.run_id, {
+      artifact_id: "overflow", type: "text", preview: "x".repeat(2_000)
+    }, "2026-07-12T10:01:00.000Z")).toThrow("invalid_run_store");
+    expect(readRunStore(dir).runs[0]?.artifacts).toHaveLength(31);
+  });
+
+  it("allows exactly 256 runs and rejects the next", () => {
+    const dir = stateDir();
+    for (let index = 0; index < 256; index += 1) createRunDraft(dir, { ...input, prompt: `run ${index}` }, "2026-07-12T10:00:00.000Z");
+    expect(readRunStore(dir).runs).toHaveLength(256);
+    expect(() => createRunDraft(dir, input, "2026-07-12T10:01:00.000Z")).toThrow("run_limit");
   });
 });
