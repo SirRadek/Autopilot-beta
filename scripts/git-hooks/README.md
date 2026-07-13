@@ -1,38 +1,44 @@
-# Autopilot Git Hooks
+# Autopilot Git hooks
 
-Committed Git hooks install through local Git config:
+Install the committed hooks from the Ubuntu repository root:
 
-```powershell
-npm.cmd run hooks:install
+```bash
+npm run hooks:install
 ```
 
-`npm install` also runs the same installer through `prepare`.
+`npm install` and `npm ci` invoke the same installer through `prepare`. The installer configures the
+relative `core.hooksPath=scripts/git-hooks`, preserves a foreign hooks path instead of overwriting it,
+and installs `pre-commit`, `commit-msg`, and `pre-push`.
 
-## Gates
+## Pre-commit
 
-`pre-commit` keeps the fast gates local:
+- Runs `mesh:gate:ci` for related-file drift.
+- Checks newly added files under sensitive roots with `mesh:changed --fail-on-ungoverned`.
+- Does not evaluate blocker acknowledgement because the commit message does not exist yet.
 
-- `npm run mesh:gate:ci` (bind-point 1 — related_files ratchet)
-- staged file list piped to `npm run mesh:changed -- --root . --fail-on-blocker`
-  (bind-point 2 — blocks a commit touching a blocker-governed mesh node)
+## Commit-msg
 
-`pre-push` checks committed push ranges and heavier local gates:
+- Evaluates all staged files with `mesh:changed --fail-on-blocker`.
+- Reads auditable `Mesh-Ack: <node-id> — <reason>` trailers.
+- An acknowledgement suppresses a blocker only when every activated node to which that blocker
+  applies is acknowledged; the rule remains visible in output.
 
-- `npm run mesh:changed -- --root . --since <range> --fail-on-blocker`
-- `npm run baseline:waiver-check -- --range <range>` (report-first, per pushed range)
-- `npm run beta:vendor-check`
-- `npm run typecheck`
-- `npm run test`
-- `npm run pdos:fit-safety-lint -- --no-pages`
+## Pre-push
 
-## Boundaries
+For each pushed commit range, the hook:
 
-These hooks are local deterministic guardrails. They do not call the network,
-mutate remotes, deploy, spawn agents, or store raw logs. They block only when an
-existing local npm gate exits nonzero.
+- runs changed-file blocker governance with acknowledgements collected from commit messages;
+- reports baseline-waiver growth without blocking;
+- checks vendor provenance, TypeScript, the full Vitest suite, and Product & Design OS fit safety.
 
-Rollback:
+CI remains authoritative and may run a broader matrix. Local hooks never call providers, mutate
+remotes, deploy, spawn agents, or persist raw logs.
 
-```powershell
+## Rollback
+
+```bash
 git config --unset core.hooksPath
 ```
+
+Disabling hooks does not waive CI or review requirements. Record why a local hook was disabled before
+continuing work.

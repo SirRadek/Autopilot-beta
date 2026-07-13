@@ -1,5 +1,9 @@
 # Recommended Workstream Plan
 
+> **Historical/superseded:** This pre-runtime product-direction prompt is retained as planning
+> evidence. It is not the current Autopilot roadmap or blocker list. See
+> [Current status](../status/current-status.md) and [Cockpit user guide](../user/cockpit-guide.md).
+
 ## Current Blocker
 
 [BLOCKER] Product/design target is missing.

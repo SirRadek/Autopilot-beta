@@ -18,7 +18,7 @@
   "src/data/delivery-system/contextEconomy.ts": "70dda4331e15e3ff4bddb1bb42ae2ab1f55dc975",
   "GEMINI.md": "c1852287f258de48aaf6f5efcc486a0e9756b27a",
   "docs/autopilot/product-brief-template.md": "e4916f592e1c57ad5fa379c96ac3dba9978b8187",
-  "scripts/git-hooks": "tree:fcb39ff7fe400f3514bfabfbf4fa632402c0cb56ba9e5279b4c8bd294d0af9ab",
+  "scripts/git-hooks": "tree:5bf65b588beadf69103564f9380c885e231b5cc8702525a5120a02560456c894",
   "src/lib/mesh-tools": "tree:710af41007fa14b43f4ef741193a8cedd7baeb3eb3df592e00b24c7bfe07f19e",
   "src/governed-core": "tree:413d1629d58efd7cae2d9e9b8fc624dfa32a49b0187e845efbb8515032232347",
   "scripts/vendor-check.mjs": "53e61bb8918eeead814892250d413dc6230e99a2",
@@ -78,5 +78,5 @@
   "src/data/delivery-system/tokenGateway.ts": "3092f5a24532370ac9aef44eebe4c332d4dd8a2f",
   "src/data/delivery-system/workerOutputPolicy.ts": "c64e262ffde6b5bc7dad0a330c17378ff5d44d57",
   "model-output-evals/": "tree:16c32a21cbaf4b39e18380506f54bb1eab85e02092fdc31b32573099b9a326f8",
-  "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
+  "docs/autopilot/workstream-plan.md": "9b9d4c829a6f163a48331a828cd169c940db2b91"
 }

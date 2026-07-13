@@ -1,11 +1,15 @@
 # Multi-Agent Autonomous Delivery System Architecture
 
+> **Historical/superseded:** This document records an earlier read-only subsystem phase and is not
+> the current operational contract. See [System architecture](../../architecture/system-overview.md)
+> and [Current status](../../status/current-status.md).
+
 Last updated: 2026-07-13
 Next review: 2026-07-20
-Status: phase-3 read-only Decision Mesh context router
+Status: historical/superseded phase-3 context-router record
 Slug: `multi-agent-autonomous-delivery-system`
 Canonical remote repository: `SirRadek/autopilot`
-Local workspace: `C:\Programování\Codex`
+Historical workspace: `C:\Programování\Codex`
 Separation status: `autopilot_subsystem`
 Visibility: Autopilot control-plane subsystem; external/private project details must be redacted
 

@@ -1,5 +1,10 @@
 # Decision Mesh MCP Decision
 
+> **Historical/superseded architecture phase:** The read-only MCP boundary remains useful evidence,
+> but this page predates the current execution Control Plane. See
+> [System architecture](../architecture/system-overview.md) and
+> [Current status](../status/current-status.md) for the current contract.
+
 Date introduced: 2026-05-24
 Status: phase-3 read-only context-router decision
 Owner: Autopilot Control Plane

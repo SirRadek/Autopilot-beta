@@ -1,5 +1,46 @@
 # Autopilot Control Plane Work Log
 
+> **Historical log:** Entries preserve the command syntax and architecture assumptions of their date.
+> They are not current operating instructions. See [System architecture](../../architecture/system-overview.md),
+> [Service runbook](../../operations/service-runbook.md), and
+> [Current status](../../status/current-status.md).
+
+## 2026-07-13 Release-baseline repair and canonical documentation
+
+Scope: close audited state/runtime blockers, verify the exact candidate on the Ubuntu VM, replace
+competing current documentation, and retain live cutover as an owner decision.
+
+Implemented evidence:
+
+- State-safety commits `c6dc0a5` through `1fa02ea` added coordinated writers, locked mutations,
+  centralized output sanitation, bounded incidents, validation-before-rotation, recovery drill, and
+  the final independent-review fixes.
+- `04604b5` added deterministic canonical Markdown link validation.
+- `fadd4df` repaired browser QA targeting of persisted incidents.
+- `2108bbf` retained the token-gateway bound test while allowing the measured VM runtime.
+- `5a9ea88` changed the supported deployment to root-managed system units and added a fail-closed
+  positive/negative write probe after the VM proved user-manager containment ineffective.
+- `9de1a79` and `662baf1` published canonical user, architecture, service, configuration, recovery,
+  troubleshooting, and status pages; `docs:links` is now part of `verify`.
+
+Verification:
+
+- Host Node 24: 100 test files / 912 tests plus provenance, typecheck, documentation links, Product &
+  Design OS, prompt-library, model-output, and Decision Mesh gates.
+- Exact VM commit `5a9ea88982ebca7f62a2aeeae1826ce8aec10c9d`: `npm ci`, typecheck, and the same 912-test gate passed.
+- Isolated VM state initialization, deterministic no-provider Cockpit run, backup validation, recovery
+  reconciliation/readiness, liveness/readiness, cookie auth/logout, same-origin proxy, and headless
+  Chromium login passed without changing live state.
+- The old user systemd boundary was reproduced as ineffective; the new startup probe detected it and
+  returned `installation_write_boundary_not_enforced` instead of starting unsafely.
+
+Decision Mesh impact: `recovery_mesh` now requires `verify_runtime_write_boundary` and points to the
+canonical recovery/service/troubleshooting documents. Snapshot drift is zero.
+
+Remaining release blockers: install system Node 24 and root-managed units with sudo, prove the
+positive system-manager write boundary, run the final Claude Opus 4.8 review, update the final SHA,
+and obtain explicit owner approval before live cutover.
+
 ## 2026-07-06 Governed Dispatch Worker Metadata Pass-Through
 
 Date: 2026-07-06
