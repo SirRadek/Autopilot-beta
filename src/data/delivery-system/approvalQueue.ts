@@ -15,6 +15,8 @@ export interface ApprovalQueueRecord {
   readonly prompt_preview: string;
   readonly prompt_file: string | null;
   readonly estimated_tokens: number;
+  readonly input_token_bound: number;
+  readonly output_token_allowance: number;
   readonly prompt_review_acknowledged: boolean;
   readonly status: ApprovalStatus;
   readonly created_at: string;
@@ -43,7 +45,8 @@ function validate(document: unknown): asserts document is ApprovalQueueDocument 
       !validText(record.session_id) || !validText(record.vendor) || (record.model !== null && !validText(record.model)) ||
       !Array.isArray(record.skill_ids) || record.skill_ids.length > 64 || !record.skill_ids.every((item: unknown) => validText(item)) ||
       typeof record.prompt_preview !== "string" || record.prompt_preview.length > 500 || (record.prompt_file !== null && !validText(record.prompt_file, 2048)) ||
-      !Number.isSafeInteger(record.estimated_tokens) || record.estimated_tokens < 0 || typeof record.prompt_review_acknowledged !== "boolean" || !["pending", "approved", "rejected"].includes(record.status) ||
+      !Number.isSafeInteger(record.input_token_bound) || record.input_token_bound < 0 || !Number.isSafeInteger(record.output_token_allowance) || record.output_token_allowance < 0 ||
+      !Number.isSafeInteger(record.estimated_tokens) || record.estimated_tokens !== record.input_token_bound + record.output_token_allowance || typeof record.prompt_review_acknowledged !== "boolean" || !["pending", "approved", "rejected"].includes(record.status) ||
       !validText(record.created_at, 32) || (record.decided_at !== null && !validText(record.decided_at, 32)) ||
       (record.rejection_reason !== null && !validText(record.rejection_reason, 200))) throw new Error("invalid_approval_queue");
   }
@@ -60,6 +63,8 @@ export function createApprovalRecord(input: {
   readonly prompt: string;
   readonly promptFile?: string;
   readonly estimatedTokens: number;
+  readonly inputTokenBound: number;
+  readonly outputTokenAllowance: number;
   readonly promptReviewAcknowledged?: boolean;
   readonly now?: string;
 }): ApprovalQueueRecord {
@@ -75,6 +80,8 @@ export function createApprovalRecord(input: {
     prompt_preview: input.prompt.slice(0, 500),
     prompt_file: input.promptFile ?? null,
     estimated_tokens: Math.max(0, Math.floor(input.estimatedTokens)),
+    input_token_bound: input.inputTokenBound,
+    output_token_allowance: input.outputTokenAllowance,
     prompt_review_acknowledged: input.promptReviewAcknowledged === true,
     status: "pending",
     created_at: input.now ?? new Date().toISOString(),

@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { resolveEnabledProject } from "./projectRegistry";
 import type { CliWorkerResult } from "./cliWorker";
-import { assertRunPromptPolicy, canonicalRunTokenBudget } from "./runPromptPolicy";
+import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens, RUN_OUTPUT_TOKEN_ALLOWANCE, RUN_OUTPUT_TOKEN_ALLOWANCE_MAX } from "./runPromptPolicy";
 
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
@@ -19,12 +19,14 @@ export interface RunDraft {
   readonly provider: RunProvider;
   readonly model: string | null;
   readonly estimated_tokens: number;
+  readonly input_token_bound: number;
+  readonly output_token_allowance: number;
   readonly requested_artifacts: readonly RunArtifactType[];
   readonly prompt_review_acknowledged: boolean;
   readonly created_at: string;
 }
 
-export type RunDraftInput = Omit<RunDraft, "run_id" | "revision" | "created_at" | "prompt_review_acknowledged"> & { readonly prompt_review_acknowledged?: boolean };
+export type RunDraftInput = Omit<RunDraft, "run_id" | "revision" | "created_at" | "prompt_review_acknowledged" | "input_token_bound" | "output_token_allowance"> & { readonly prompt_review_acknowledged?: boolean };
 
 export interface RunArtifact {
   readonly artifact_id: string;
@@ -115,12 +117,14 @@ function validTimestamp(value: unknown): value is string {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
-function validDraftInput(input: RunDraftInput): boolean {
+function validDraftInput(input: RunDraftInput & Pick<RunDraft, "input_token_bound" | "output_token_allowance">): boolean {
   try { assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true); } catch { return false; }
   return typeof input.project_id === "string" && PROJECT_ID_PATTERN.test(input.project_id) &&
     typeof input.prompt === "string" && input.prompt.length <= MAX_PROMPT &&
     PROVIDERS.has(input.provider) && (input.model === null || validString(input.model, MAX_MODEL, true)) &&
-    typeof input.prompt_review_acknowledged === "boolean" && input.estimated_tokens === canonicalRunTokenBudget(input.prompt) &&
+    typeof input.prompt_review_acknowledged === "boolean" && input.input_token_bound === conservativeRunPromptTokens(input.prompt) &&
+    input.output_token_allowance === RUN_OUTPUT_TOKEN_ALLOWANCE && input.output_token_allowance <= RUN_OUTPUT_TOKEN_ALLOWANCE_MAX &&
+    input.estimated_tokens === input.input_token_bound + input.output_token_allowance &&
     Array.isArray(input.requested_artifacts) && input.requested_artifacts.length <= ARTIFACT_TYPES.size &&
     new Set(input.requested_artifacts).size === input.requested_artifacts.length &&
     input.requested_artifacts.every((type) => ARTIFACT_TYPES.has(type));
@@ -249,7 +253,7 @@ export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
   const canonicalBudget = canonicalRunTokenBudget(input.prompt);
   if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");
-  const normalized = { ...input, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  const normalized = { ...input, input_token_bound: conservativeRunPromptTokens(input.prompt), output_token_allowance: RUN_OUTPUT_TOKEN_ALLOWANCE, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
   if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
@@ -267,7 +271,7 @@ export function reviseRunDraft(stateDir: string, runId: string, revision: number
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
   const canonicalBudget = canonicalRunTokenBudget(input.prompt);
   if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");
-  const normalized = { ...input, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  const normalized = { ...input, input_token_bound: conservativeRunPromptTokens(input.prompt), output_token_allowance: RUN_OUTPUT_TOKEN_ALLOWANCE, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
   if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: revision + 1, created_at: createdAt };
   replace(stateDir, { ...record, current: draft, revisions: [...record.revisions, draft], updated_at: createdAt });

@@ -47,7 +47,7 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
     scheduler: { start() {}, stop() {} },
     supervisorPollMs: 5,
     dispatch: async (handoff) => {
-      dispatchOutput = { refused: false, workerRunId: "smoke-worker-1", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "deterministic cockpit smoke result", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
+      dispatchOutput = { refused: false, workerRunId: "smoke-worker-1", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: `deterministic cockpit smoke result\n${"x".repeat(2_048)}`, parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
       return dispatchOutput;
     }
   });
@@ -64,7 +64,7 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
       if (!response.ok) throw new Error(`smoke_control_plane_${response.status}:${await response.text()}`);
       return response.json() as Promise<any>;
     };
-    const prepared = await call("/runs", { project_id: "cockpit-smoke", prompt: "Return deterministic cockpit smoke result", provider: "codex_cli", model: "smoke-model", estimated_tokens: 1_000, requested_artifacts: ["text"] });
+    const prepared = await call("/runs", { project_id: "cockpit-smoke", prompt: "Return deterministic cockpit smoke result", provider: "codex_cli", model: "smoke-model", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     const runId = prepared.current.run_id as string;
     await call(`/runs/${runId}/approve`, { revision: 1, operator: "cockpit-smoke" });
 

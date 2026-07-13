@@ -33,7 +33,9 @@ const record = createApprovalRecord({
   skillIds: (args.get("skills") ?? "").split(",").map((skill) => skill.trim()).filter(Boolean),
   prompt,
   promptFile,
-  estimatedTokens
+  estimatedTokens,
+  inputTokenBound: estimatedTokens,
+  outputTokenAllowance: 0
 });
 const document = readApprovalQueue(stateDir);
 writeApprovalQueue(stateDir, { ...document, records: [...document.records, record] });

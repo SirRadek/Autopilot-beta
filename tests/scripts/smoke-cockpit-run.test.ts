@@ -17,9 +17,10 @@ describe("cockpit governed run smoke harness", () => {
       supervisor_tasks: 1,
       worker_results: 1,
       reservation_status: "settled",
-      run_status: "completed",
-      artifact_preview: "deterministic cockpit smoke result"
+      run_status: "completed"
     });
+    expect(result.artifact_preview).toHaveLength(2_083);
+    expect(result.artifact_preview).toMatch(/^deterministic cockpit smoke result\n/);
     expect(result.correlation_ids).toEqual({
       run_id: result.run_id,
       session_id: result.run_id,

@@ -40,7 +40,7 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
   const activePrepareKeys = useRef(new Set<string>());
   const approveActive = useRef(false);
   const promptTokens = estimatePromptTokens(prompt);
-  const estimatedTokens = promptTokens + 64;
+  const estimatedTokens = promptTokens + 8_192;
   const input: RunDraftInput = { project_id: projectId, prompt, provider: provider as RunProvider, model: selectedModel || null, estimated_tokens: estimatedTokens, requested_artifacts: visual ? ["text", "visual"] : ["text"], ...(promptTokens > 1_000 ? { prompt_review_acknowledged: promptReviewAcknowledged } : {}) };
   const boundKey = JSON.stringify(input);
   const routeKey = JSON.stringify({ project: selectedProject ?? null, provider, selectedModel, quota: quota && { freshness: quota.freshness, health: quota.health, models: quota.models }, catalog: models && { freshness: models.freshness, models: models.models } });

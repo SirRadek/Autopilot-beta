@@ -40,10 +40,10 @@ describe("RunComposer", () => {
     const { host, root, onPrepare, onApprove } = mount();
     change(host.querySelector('[aria-label="Projekt"]')!, "autopilot-beta");
     change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
-    expect(host.textContent).toContain("200 / 1,000"); expect(host.textContent).toContain("1.25 USD"); expect(host.textContent).toContain("Odhad tokenů: 78");
+    expect(host.textContent).toContain("200 / 1,000"); expect(host.textContent).toContain("1.25 USD"); expect(host.textContent).toContain("Odhad tokenů: 8,206");
     act(() => (host.querySelector('[aria-label="Vizuální výstup"]') as HTMLInputElement).click());
     await act(async () => button(host, "Připravit běh").click());
-    expect(onPrepare).toHaveBeenCalledWith({ project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: "gpt-5", estimated_tokens: 78, requested_artifacts: ["text", "visual"] });
+    expect(onPrepare).toHaveBeenCalledWith({ project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: "gpt-5", estimated_tokens: 8_206, requested_artifacts: ["text", "visual"] });
     expect(onApprove).not.toHaveBeenCalled(); expect(button(host, "Schválit a spustit").disabled).toBe(false);
     await act(async () => button(host, "Schválit a spustit").click());
     expect(onApprove).toHaveBeenCalledWith("run-1", 1);
@@ -83,8 +83,8 @@ describe("RunComposer", () => {
     const first = deferred<RunRecord>(); const second = deferred<RunRecord>(); const onPrepare = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const { host, root, onApprove } = mount({ onPrepare }); change(host.querySelector('[aria-label="Prompt"]')!, "First"); act(() => button(host, "Připravit běh").click());
     change(host.querySelector('[aria-label="Prompt"]')!, "Second"); act(() => button(host, "Připravit běh").click());
-    const secondRun = { ...prepared, current: { ...prepared.current, run_id: "run-2", revision: 2, prompt: "Second", estimated_tokens: 70 } };
-    await act(async () => second.resolve(secondRun)); await act(async () => first.resolve({ ...prepared, current: { ...prepared.current, prompt: "First", estimated_tokens: 69 } }));
+    const secondRun = { ...prepared, current: { ...prepared.current, run_id: "run-2", revision: 2, prompt: "Second", estimated_tokens: 8_198 } };
+    await act(async () => second.resolve(secondRun)); await act(async () => first.resolve({ ...prepared, current: { ...prepared.current, prompt: "First", estimated_tokens: 8_197 } }));
     expect(host.textContent).toContain("Revize 2 připravena"); await act(async () => button(host, "Schválit a spustit").click());
     expect(onApprove).toHaveBeenCalledWith("run-2", 2);
     act(() => root.unmount()); host.remove();

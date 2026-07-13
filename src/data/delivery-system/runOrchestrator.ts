@@ -63,7 +63,7 @@ export function createRunOrchestrator(options: {
     resolveEnabledProject(options.stateDir, input.project_id);
     if (!routeAvailable(input.provider, input.model)) throw new Error("run_route_unavailable");
     const draft = createRunDraft(options.stateDir, input, now());
-    const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, promptReviewAcknowledged: draft.prompt_review_acknowledged, now: now() });
+    const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, inputTokenBound: draft.input_token_bound, outputTokenAllowance: draft.output_token_allowance, promptReviewAcknowledged: draft.prompt_review_acknowledged, now: now() });
     const queue = readApprovalQueue(options.stateDir);
     writeApprovalQueue(options.stateDir, { ...queue, records: [...queue.records, approval] });
     return record(draft.run_id);
@@ -125,14 +125,13 @@ export function createRunOrchestrator(options: {
     const index = queue.records.findIndex((item) => item.run_id === runId && item.revision === revision);
     if (index < 0) throw new Error("approval_not_found");
     const approval = queue.records[index]!;
-    if (approval.prompt_review_acknowledged !== before.current.prompt_review_acknowledged || approval.estimated_tokens !== before.current.estimated_tokens) throw new Error("run_revision_conflict");
+    if (approval.prompt_review_acknowledged !== before.current.prompt_review_acknowledged || approval.estimated_tokens !== before.current.estimated_tokens || approval.input_token_bound !== before.current.input_token_bound || approval.output_token_allowance !== before.current.output_token_allowance) throw new Error("run_revision_conflict");
     if (approval.status === "pending") {
       const decided = decideApproval(approval, "approved", now());
       writeApprovalQueue(options.stateDir, { ...queue, records: queue.records.map((item, candidate) => candidate === index ? decided : item) });
     } else if (approval.status !== "approved") throw new Error("approval_not_approved");
     const approved = approveRunRevision(options.stateDir, runId, revision, operator, now());
     const handoff = handoffFor(approved);
-    const inputTokens = conservativeRunPromptTokens(approved.current.prompt);
     let durable = record(runId);
     if (durable.queue_compensation_requested) durable = reconcileQueueCompensation(durable);
     if (durable.status === "approved" && durable.reservation_status === "released") {
@@ -141,7 +140,7 @@ export function createRunOrchestrator(options: {
     let reservation = durable.token_reservation;
     let taskId = durable.supervisor_task_id;
     if (reservation === null || taskId === null) {
-      reservation = options.tokenGateway.reserve({ provider: approved.current.provider, model: approved.current.model, sessionId: runId, inputTokens, outputTokens: approved.current.estimated_tokens - inputTokens, handoffId: handoff.handoffId as string });
+      reservation = options.tokenGateway.reserve({ provider: approved.current.provider, model: approved.current.model, sessionId: runId, inputTokens: approved.current.input_token_bound, outputTokens: approved.current.output_token_allowance, handoffId: handoff.handoffId as string });
       taskId = `run-task-${randomUUID()}`;
       bindRunToSupervisor(options.stateDir, runId, taskId, reservation as RunReservation, now());
       options.afterPhase?.("bound");
@@ -212,7 +211,7 @@ export function createRunOrchestrator(options: {
       const outcome = options.supervisor.fail(taskId, result.errorReason ?? `worker_exit_${result.exitCode}`, now());
       retryQueued = outcome.status === "queued";
     }
-    if (cumulativeInputTokens + cumulativeOutputTokens > run.current.estimated_tokens) {
+    if (cumulativeOutputTokens > run.current.output_token_allowance || cumulativeInputTokens + cumulativeOutputTokens > run.current.estimated_tokens) {
       const latestTask = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
       if (!cancelled && (retryQueued || !failed) && (latestTask === undefined || !["completed", "failed", "cancelled"].includes(latestTask.status ?? ""))) options.supervisor.cancel(taskId, "token_settlement_exceeds_reservation", now());
       if (run.reservation_status === "active") {

@@ -142,3 +142,45 @@ Fresh isolated VM verification passed:
 - `--live`: rejected with `live_execution_forbidden`, exit 1.
 
 The live checkout, service, persistent state, credentials, and providers were not touched.
+
+## Final output-allowance and wire-contract review
+
+The approved governance envelope now persists three separate immutable values on every draft and
+approval revision: the conservative UTF-8 `input_token_bound`, an 8,192-unit
+`output_token_allowance`, and their exact canonical `estimated_tokens` total. The allowance has an
+explicit 16,000 hard maximum aligned with the gateway's session/output ceiling. Clients can neither
+raise the allowance nor replace the canonical total: explicit underestimates are rejected and
+larger estimates are normalized. Loaded state missing or altering either component fails validation;
+there is no migration default for these new authority fields.
+
+Reservation uses the two approved components directly. Settlement rejects cumulative retry output
+above the allowance or cumulative input plus output above the total. Tests prove a realistic
+multi-KiB result succeeds, exactly 8,192 output bytes succeeds, 8,193 fails, and failure-then-success
+usage accumulates under one reservation. Existing gateway tests cover atomic overrun rejection and
+provider/model/session exhaustion. The deterministic smoke now returns a representative 2,048-byte
+payload after its result header.
+
+Cockpit `RunProviderResult` now matches Control Plane JSON exactly with `exit_code`, `error_reason`,
+and `lock_status`; the typed inspector and browser fixtures exercise those wire names, the separate
+budget fields, and cumulative retry accounting.
+
+Fresh host Node 24 verification passed: typecheck; 85 backend files / 716 tests; 13 cockpit files /
+79 tests; production build / 42 modules; browser QA 7/7; representative dry-run; guarded live-mode
+rejection.
+
+Fresh isolated VM verification at `/home/radek/autopilot-beta-phase8-final` passed the same matrix:
+
+- Node `v24.18.0`, `.env` absent.
+- Backend: 85 files, 716 tests passed.
+- Cockpit: 13 files, 79 tests passed.
+- Build: 42 modules transformed.
+- Browser QA: 7/7 passed on the confirming run (the first run exposed the known stale-provider
+  timing flake; the immediate isolated rerun passed 7/7 without code or state changes).
+- Dry-run: `provider_invoked: false`, 2,083-byte artifact preview, one reservation, one `settled`
+  terminal event.
+- Run `a53483c5-beab-4804-97d2-ed1f6719016f`; task
+  `run-task-069bd587-bd9a-49fb-8e42-dd100a31ed5a`; reservation
+  `tgr-1a333c2f-f895-4658-892a-f120456b3d59`.
+- `--live`: rejected with `live_execution_requires_explicit_provider_authorization`, non-zero exit.
+
+The live checkout, service, persistent state, credentials, and providers were not touched.

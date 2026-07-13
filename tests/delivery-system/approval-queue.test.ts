@@ -22,6 +22,8 @@ describe("approval queue", () => {
       skillIds: ["model-usage", "model-usage"],
       prompt: "x".repeat(700),
       estimatedTokens: 12.8,
+      inputTokenBound: 12,
+      outputTokenAllowance: 0,
       now: "2026-07-10T16:00:00.000Z"
     });
     expect(record.status).toBe("pending");
@@ -32,7 +34,7 @@ describe("approval queue", () => {
 
   it("persists and rejects a pending approval once", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "approval-queue-"));
-    const record = createApprovalRecord({ approvalId: "approval-2", sessionId: "s", vendor: "claude_cli", skillIds: [], prompt: "review", estimatedTokens: 4 });
+    const record = createApprovalRecord({ approvalId: "approval-2", sessionId: "s", vendor: "claude_cli", skillIds: [], prompt: "review", estimatedTokens: 4, inputTokenBound: 4, outputTokenAllowance: 0 });
     writeApprovalQueue(stateDir, { schema_version: "v1", records: [record] });
     const loaded = readApprovalQueue(stateDir);
     const rejected = decideApproval(loaded.records[0]!, "rejected", "2026-07-10T16:02:00.000Z", "budget");

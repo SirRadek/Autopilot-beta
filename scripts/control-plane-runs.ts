@@ -95,7 +95,7 @@ export function reviseRunWithApproval(stateDir: string, runId: string, expectedR
   else draft = revise(stateDir, runId, expectedRevision, input, new Date().toISOString());
   const queue = readApprovalQueue(stateDir);
   if (!queue.records.some((record) => record.run_id === runId && record.revision === draft.revision)) {
-    const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, promptReviewAcknowledged: draft.prompt_review_acknowledged });
+    const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, inputTokenBound: draft.input_token_bound, outputTokenAllowance: draft.output_token_allowance, promptReviewAcknowledged: draft.prompt_review_acknowledged });
     writeApprovals(stateDir, { ...queue, records: [...queue.records, approval] });
   }
   return readRunStore(stateDir).runs.find((run) => run.current.run_id === runId)!;

@@ -6,7 +6,7 @@ import type { ApprovalRecord } from "../../types/controlPlane";
 import { boundedPromptPreview, sortApprovals } from "./approvalSelectors";
 import { ApprovalPane } from "./ApprovalPane";
 
-const base: ApprovalRecord = { schema_version: "v1", approval_id: "a-1", session_id: "s-1", vendor: "claude_cli", model: "claude", skill_ids: ["model-usage"], prompt_preview: "show usage", prompt_file: null, estimated_tokens: 25, status: "pending", created_at: "2026-07-11T10:00:00.000Z", decided_at: null, rejection_reason: null };
+const base: ApprovalRecord = { schema_version: "v1", approval_id: "a-1", session_id: "s-1", vendor: "claude_cli", model: "claude", skill_ids: ["model-usage"], prompt_preview: "show usage", prompt_file: null, input_token_bound: 10, output_token_allowance: 15, estimated_tokens: 25, status: "pending", created_at: "2026-07-11T10:00:00.000Z", decided_at: null, rejection_reason: null };
 function mount(node: React.ReactNode) { const host = document.createElement("div"); document.body.append(host); const root = createRoot(host); act(() => root.render(node)); return { host, root }; }
 
 describe("approval selectors", () => {
