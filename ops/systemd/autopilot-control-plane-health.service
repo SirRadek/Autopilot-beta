@@ -5,8 +5,8 @@ After=autopilot-control-plane.service
 [Service]
 Type=oneshot
 WorkingDirectory=/home/radek/autopilot-beta
-Environment=PATH=/home/radek/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/home/radek/.local/bin/npm run ops:health -- 8787
+Environment=PATH=/usr/bin:/bin
+ExecStart=/usr/bin/npm run ops:health -- 8787
 UMask=0077
 NoNewPrivileges=true
 PrivateUsers=true

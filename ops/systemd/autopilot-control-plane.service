@@ -6,11 +6,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/radek/autopilot-beta
-Environment=PATH=/home/radek/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/usr/bin:/bin
 Environment=AUTOPILOT_STATE_DIR=/home/radek/.local/state/autopilot
 Environment=AUTOPILOT_PROJECTS_DIR=%h/projects
 EnvironmentFile=/home/radek/.config/autopilot/control-plane.env
-ExecStart=/home/radek/.local/bin/npm run control-plane:serve -- /home/radek/.local/state/autopilot 8787
+ExecStart=/usr/bin/npm run control-plane:serve -- /home/radek/.local/state/autopilot 8787
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM

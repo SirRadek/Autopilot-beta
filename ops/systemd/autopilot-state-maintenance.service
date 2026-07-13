@@ -5,10 +5,10 @@ ConditionPathIsDirectory=%h/.local/state/autopilot
 [Service]
 Type=oneshot
 WorkingDirectory=/home/radek/autopilot-beta
-Environment=PATH=/home/radek/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/home/radek/.local/bin/npm run ops:maintenance -- %h/.local/state/autopilot %h/.config/autopilot/control-plane.env
-ExecStart=/home/radek/.local/bin/npm run ops:backup -- %h/.local/state/autopilot %h/.local/state/autopilot/backups
-ExecStart=/home/radek/.local/bin/npm run ops:maintenance -- %h/.local/state/autopilot %h/.config/autopilot/control-plane.env --apply-rotation
+Environment=PATH=/usr/bin:/bin
+ExecStart=/usr/bin/npm run ops:maintenance -- %h/.local/state/autopilot %h/.config/autopilot/control-plane.env
+ExecStart=/usr/bin/npm run ops:backup -- %h/.local/state/autopilot %h/.local/state/autopilot/backups
+ExecStart=/usr/bin/npm run ops:maintenance -- %h/.local/state/autopilot %h/.config/autopilot/control-plane.env --apply-rotation
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

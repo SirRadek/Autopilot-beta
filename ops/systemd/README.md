@@ -1,5 +1,18 @@
 # VM control-plane service
 
+The supported VM runtime is Node `>=24 <25` installed at `/usr/bin/node`, with npm at
+`/usr/bin/npm`. Verify the exact service runtime before installation:
+
+```bash
+test "$(command -v node)" = /usr/bin/node
+test "$(command -v npm)" = /usr/bin/npm
+/usr/bin/node --version
+/usr/bin/npm --version
+```
+
+The Node command must report `v24.x`. User-local Node/npm shims are intentionally excluded from
+the unit `PATH`; upgrade the system runtime instead of changing the service back to a home path.
+
 Install on the VM as the `radek` user:
 
 ```bash

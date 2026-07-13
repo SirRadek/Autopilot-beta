@@ -41,6 +41,26 @@ function environmentValue(directives: Map<string, string[]>, name: string): stri
 }
 
 describe("systemd unit writable boundaries", () => {
+  it("pins metadata, CI, and service execution to Node 24 from /usr/bin", () => {
+    const rootPackage = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { engines?: { node?: string } };
+    const cockpitPackage = JSON.parse(readFileSync(join(process.cwd(), "cockpit", "package.json"), "utf8")) as { engines?: { node?: string } };
+    const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "verify.yml"), "utf8");
+
+    expect(rootPackage.engines?.node).toBe(">=24 <25");
+    expect(cockpitPackage.engines?.node).toBe(">=24 <25");
+    expect(readFileSync(join(process.cwd(), ".nvmrc"), "utf8").trim()).toBe("24");
+    expect(workflow).toContain("node-version: '24'");
+    for (const name of [
+      "autopilot-control-plane.service",
+      "autopilot-control-plane-health.service",
+      "autopilot-state-maintenance.service"
+    ]) {
+      const directives = activeServiceDirectives(readSystemdFile(name));
+      expect(directives.get("Environment"), name).toContain("PATH=/usr/bin:/bin");
+      expect(directives.get("ExecStart")?.every((command) => command.startsWith("/usr/bin/npm ")), name).toBe(true);
+    }
+  });
+
   it("limits the control plane to managed state and the configured projects root", () => {
     const directives = activeServiceDirectives(readSystemdFile("autopilot-control-plane.service"));
 
@@ -62,7 +82,7 @@ describe("systemd unit writable boundaries", () => {
     expect(directives.get("PrivateUsers")).toEqual(["true"]);
     expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot"]);
     expect(directives.get("ExecStart")).toContain(
-      "/home/radek/.local/bin/npm run ops:backup -- %h/.local/state/autopilot %h/.local/state/autopilot/backups"
+      "/usr/bin/npm run ops:backup -- %h/.local/state/autopilot %h/.local/state/autopilot/backups"
     );
     expect(directives.get("ExecStart")?.join("\n")).not.toContain("autopilot-backups");
   });
