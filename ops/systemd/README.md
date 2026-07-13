@@ -6,7 +6,8 @@ Install on the VM as the `radek` user:
 mkdir -p ~/.config/autopilot ~/.local/state/autopilot/backups ~/projects
 chmod 700 ~/.config/autopilot ~/.local/state/autopilot ~/.local/state/autopilot/backups ~/projects
 printf 'CONTROL_PLANE_TOKEN=%s\n' "$(openssl rand -hex 32)" > ~/.config/autopilot/control-plane.env
-printf 'CONTROL_PLANE_SECURE_COOKIES=true\n' >> ~/.config/autopilot/control-plane.env
+printf 'CONTROL_PLANE_SECURE_COOKIES=false\n' >> ~/.config/autopilot/control-plane.env
+printf 'CONTROL_PLANE_USAGE_PROBES=\n' >> ~/.config/autopilot/control-plane.env
 chmod 600 ~/.config/autopilot/control-plane.env
 mkdir -p ~/.config/systemd/user
 cp ops/systemd/*.service ops/systemd/*.timer ~/.config/systemd/user/
@@ -16,6 +17,15 @@ systemctl --user enable --now autopilot-control-plane-health.timer autopilot-sta
 ```
 
 The service binds only to `127.0.0.1`. Keep the environment file outside the repository.
+The safe loopback default is `CONTROL_PLANE_SECURE_COOKIES=false`; change it to the only other
+accepted value, `true`, only when the cockpit is served through the reviewed same-origin TLS
+proxy. Any other non-empty value is invalid and prevents startup.
+
+`CONTROL_PLANE_USAGE_PROBES` is an explicit comma-separated allowlist. The only accepted probe
+names are `codex`, `claude`, and `agy`; unknown names are ignored and the value never accepts a
+command, path, or arguments. Keep it empty until the corresponding trusted tmux sessions are
+available. `ops/config/control-plane.env.example` intentionally contains neither
+`CONTROL_PLANE_TOKEN` nor `OPENROUTER_API_KEY`; provision secrets outside the repository.
 
 The control plane defaults `AUTOPILOT_PROJECTS_DIR` to `%h/projects`. `ProtectHome=read-only`
 keeps the installation and the rest of the home directory read-only, while

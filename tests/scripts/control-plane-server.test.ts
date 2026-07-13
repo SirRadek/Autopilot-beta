@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
-import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment } from "../../scripts/control-plane-server";
+import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment, secureCookiesFromEnvironment } from "../../scripts/control-plane-server";
 import { readApprovalQueue, writeApprovalQueue } from "../../src/data/delivery-system/approvalQueue";
 import { readIncidentStore, recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
@@ -535,6 +535,13 @@ describe("control plane provider endpoints", () => {
     });
     expect(providerUsageCommandsFromEnvironment({})).toEqual({});
   });
+  it("parses secure-cookie configuration strictly", () => {
+    expect(secureCookiesFromEnvironment({})).toBe(false);
+    expect(secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: "true" })).toBe(true);
+    expect(secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: " FALSE " })).toBe(false);
+    expect(() => secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: "maybe" }))
+      .toThrow("invalid_secure_cookie_configuration");
+  });
   it("creates an HttpOnly browser session and accepts it for protected requests", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     const server = createControlPlaneServer(stateDir, "secret");
@@ -550,6 +557,7 @@ describe("control plane provider endpoints", () => {
     const cookie = login.headers.get("set-cookie");
     expect(cookie).toContain("autopilot_session=");
     expect(cookie).toContain("HttpOnly");
+    expect(cookie).not.toContain("Secure");
     const session = await fetch(`${base}/auth/session`, { headers: { cookie: cookie!.split(";")[0]! } });
     expect(session.status).toBe(200);
     const protectedResponse = await fetch(`${base}/status`, { headers: { cookie: cookie!.split(";")[0]! } });

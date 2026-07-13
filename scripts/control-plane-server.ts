@@ -59,6 +59,15 @@ export function providerUsageCommandsFromEnvironment(
   };
 }
 
+export function secureCookiesFromEnvironment(
+  environment: Readonly<Record<string, string | undefined>>
+): boolean {
+  const value = environment.CONTROL_PLANE_SECURE_COOKIES?.trim().toLowerCase();
+  if (value === undefined || value === "" || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error("invalid_secure_cookie_configuration");
+}
+
 export interface ControlPlaneServerOptions {
   /** Add Secure to browser cookies; disabled by default for loopback HTTP development. */
   readonly secureCookies?: boolean;
@@ -360,7 +369,7 @@ async function runProviderCommand(input: { readonly command: string; readonly ar
 const stateDir = process.argv[2] ?? process.env.CONTROL_PLANE_STATE_DIR ?? "";
 const port = Number(process.argv[3] ?? process.env.CONTROL_PLANE_PORT ?? "8787");
 const authToken = process.env.CONTROL_PLANE_TOKEN?.trim();
-const secureCookies = /^(1|true|yes)$/i.test(process.env.CONTROL_PLANE_SECURE_COOKIES?.trim() ?? "");
+const secureCookies = secureCookiesFromEnvironment(process.env);
 if (process.argv[1]?.endsWith("control-plane-server.ts")) {
   if (!stateDir || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("usage: control-plane-server STATE_DIR [PORT]");
   const providerCommands = providerUsageCommandsFromEnvironment(process.env);
