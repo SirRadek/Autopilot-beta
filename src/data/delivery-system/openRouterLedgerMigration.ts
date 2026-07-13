@@ -170,6 +170,10 @@ function readBoundedLedger(fileDescriptor: number, path: string): Buffer {
 }
 
 function validateJsonl(bytes: Buffer, kind: OpenRouterLedgerKind, path: string): void {
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    throw new Error(`openrouter_ledger_migration_malformed: ${path}`);
+  }
+
   let ledgerText: string;
   try {
     ledgerText = new TextDecoder("utf-8", { fatal: true }).decode(bytes);

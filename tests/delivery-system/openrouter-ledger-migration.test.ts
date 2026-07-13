@@ -266,4 +266,52 @@ describe("managed OpenRouter ledger migration", () => {
     expect(manifest.beta_authored).toContain(sourcePath);
     expect(manifest.files?.map((entry) => entry.source_path)).not.toContain(sourcePath);
   });
+
+  it.each([
+    [OPENROUTER_ATTEMPT_COUNTER_FILE, attemptRecord()],
+    [OPENROUTER_SPEND_LEDGER_FILE, spendRecord()]
+  ])("rejects a UTF-8 BOM at the start of %s", (fileName, record) => {
+    const bomLedger = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(jsonl([record]))
+    ]);
+    writeFileSync(join(parentDir, fileName), bomLedger);
+
+    expect(() => ensureOpenRouterLedgersMigrated(stateDir)).toThrow("openrouter_ledger_migration_malformed");
+    expect(existsSync(join(stateDir, fileName))).toBe(false);
+  });
+
+  it("rejects a BOM before OpenRouter attempt accounting or provider fetch", async () => {
+    const bomAttemptLedger = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(jsonl([attemptRecord("packet-bom")]))
+    ]);
+    writeFileSync(join(parentDir, OPENROUTER_ATTEMPT_COUNTER_FILE), bomAttemptLedger);
+    const fetchMock = vi.fn<OpenRouterFetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    const priorKey = process.env.OPENROUTER_API_KEY;
+    process.env.OPENROUTER_API_KEY = "sk-or-v1-test-secret-must-not-leak";
+    const input: CliWorkerInput = {
+      handoffId: "hp-openrouter-bom" as CliWorkerInput["handoffId"],
+      vendor: "openrouter_api",
+      prompt: "bounded BOM migration packet",
+      openrouterMode: "qwen3_code_draft",
+      taskPacketRef: "packet-openrouter-bom",
+      parentSessionHash: "session-hash",
+      parentTurnHash: "turn-hash"
+    };
+
+    try {
+      const result = await runCliWorker(input, stateDir);
+      expect(result.errorReason).toContain("openrouter_ledger_migration_malformed");
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(existsSync(openRouterAttemptCounterPathForStateDir(stateDir))).toBe(false);
+    } finally {
+      if (priorKey === undefined) {
+        delete process.env.OPENROUTER_API_KEY;
+      } else {
+        process.env.OPENROUTER_API_KEY = priorKey;
+      }
+    }
+  });
 });
