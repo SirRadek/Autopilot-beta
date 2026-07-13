@@ -7,8 +7,10 @@ import { readApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { writeProjectRegistry } from "../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
+import { readRunStore } from "../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway, type TokenGatewayTelemetry } from "../src/data/delivery-system/tokenGateway";
+import type { DispatchResult } from "../src/governed-core/dispatch";
 
 type SmokeMode = "dry-run" | "live";
 
@@ -37,7 +39,7 @@ export interface CockpitSmokeReport {
   };
 }
 
-export async function runCockpitSmoke(options: { readonly mode: SmokeMode }): Promise<CockpitSmokeReport> {
+export async function runCockpitSmoke(options: { readonly mode: SmokeMode; readonly beforeEvidenceInspection?: (stateDir: string) => void }): Promise<CockpitSmokeReport> {
   if (options.mode !== "dry-run") throw new Error("live_execution_forbidden");
   const stateDir = mkdtempSync(join(tmpdir(), "autopilot-cockpit-smoke-"));
   const token = "cockpit-smoke-local-token";
@@ -60,27 +62,45 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode }): Pr
 
     const gateway = new TokenGateway({ stateDir });
     const supervisor = new SupervisorQueue({ stateDir });
+    let dispatchOutput: DispatchResult | undefined;
     const orchestrator = createRunOrchestrator({
       stateDir,
       tokenGateway: gateway,
       supervisor,
-      dispatch: async (handoff) => ({ refused: false, workerRunId: "smoke-worker-1", handoffId: handoff.handoffId, vendor: "codex_cli", model: "smoke-model", exitCode: 0, rawOutput: "deterministic cockpit smoke result", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true })
+      dispatch: async (handoff) => {
+        dispatchOutput = { refused: false, workerRunId: "smoke-worker-1", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "deterministic cockpit smoke result", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
+        return dispatchOutput;
+      }
     });
     const completed = await orchestrator.runSupervisorOnce();
-    if (completed === null || completed.token_reservation === null || completed.supervisor_task_id === null || completed.provider_result?.refused !== false) throw new Error("smoke_run_did_not_complete");
+    if (completed === null || dispatchOutput === undefined || dispatchOutput.refused || completed.token_reservation === null || completed.supervisor_task_id === null) throw new Error("smoke_run_did_not_complete");
+    options.beforeEvidenceInspection?.(stateDir);
     const telemetry = readTelemetry(stateDir);
-    const reservationEvents = telemetry.filter((event) => event.reservation_id === completed.token_reservation!.reservationId);
+    const tokenState = JSON.parse(readFileSync(join(stateDir, "token-gateway-state.json"), "utf8")) as { reservations: Record<string, unknown>; terminal: Record<string, unknown> };
+    const persistedRuns = readRunStore(stateDir).runs;
+    const persistedTasks = new SupervisorQueue({ stateDir }).snapshot();
+    const persistedRun = persistedRuns.find((run) => run.current.run_id === runId);
+    if (persistedRun === undefined || persistedRun.token_reservation === null || persistedRun.supervisor_task_id === null || persistedRun.provider_result?.refused !== false) throw new Error("smoke_persisted_result_missing");
+    const reservationEvents = telemetry.filter((event) => event.reservation_id === persistedRun.token_reservation!.reservationId);
+    const reservedEvents = reservationEvents.filter((event) => event.event === "reserved");
     const terminalEvents = reservationEvents.filter((event) => event.event === "settled" || event.event === "released").map((event) => event.event);
-    const task = supervisor.snapshot().filter((item) => item.task_id === completed.supervisor_task_id);
+    const tasks = persistedTasks.filter((item) => item.task_id === persistedRun.supervisor_task_id);
+    const workerResults = persistedRuns.filter((run) => run.provider_result !== null);
+    const artifacts = persistedRuns.flatMap((run) => run.artifacts);
     const approvals = readApprovalQueue(stateDir).records.filter((item) => item.run_id === runId && item.status === "approved");
-    if (completed.status !== "completed" || completed.reservation_status !== "settled" || approvals.length !== 1 || reservationEvents.filter((event) => event.event === "reserved").length !== 1 || terminalEvents.length !== 1 || terminalEvents[0] !== "settled" || task.length !== 1 || task[0]?.status !== "completed" || completed.artifacts.length !== 1) throw new Error("smoke_invariant_failed");
+    if (reservedEvents.length !== 1 || terminalEvents.length !== 1 || terminalEvents[0] !== "settled" || Object.keys(tokenState.reservations).length !== 0 || Object.keys(tokenState.terminal).length !== 0) throw new Error("smoke_reservation_lifecycle_mismatch");
+    if (persistedRuns.length !== 1 || workerResults.length !== 1 || artifacts.length !== 1 || approvals.length !== 1 || tasks.length !== 1 || tasks[0]?.status !== "completed") throw new Error("smoke_persisted_count_mismatch");
+    const task = tasks[0]!;
+    const reservation = persistedRun.token_reservation;
+    const result = persistedRun.provider_result;
+    if (persistedRun.status !== "completed" || persistedRun.reservation_status !== "settled" || task.session_id !== runId || task.handoff.sessionId !== runId || String(task.handoff.handoffId) !== reservation.handoffId || task.handoff.vendor !== persistedRun.current.provider || (task.handoff.model ?? null) !== persistedRun.current.model || reservedEvents[0]?.session_id !== runId || reservedEvents[0]?.handoff_id !== reservation.handoffId || reservedEvents[0]?.provider !== persistedRun.current.provider || reservedEvents[0]?.model !== persistedRun.current.model || dispatchOutput.workerRunId !== result.worker_run_id || dispatchOutput.handoffId !== task.handoff.handoffId || dispatchOutput.vendor !== task.handoff.vendor || dispatchOutput.model !== (task.handoff.model ?? null) || persistedRun.worker_run_id !== result.worker_run_id || persistedRun.supervisor_task_id !== task.task_id) throw new Error("smoke_correlation_mismatch");
     return {
       mode: "dry-run", provider_invoked: false, state_dir: stateDir, run_id: runId,
-      supervisor_task_id: completed.supervisor_task_id, reservation_id: completed.token_reservation.reservationId,
-      approved_revisions: approvals.length, reservations: 1, supervisor_tasks: task.length, worker_results: 1,
-      reservation_status: "settled", run_status: "completed", artifact_preview: completed.artifacts[0]!.preview,
+      supervisor_task_id: task.task_id, reservation_id: reservation.reservationId,
+      approved_revisions: approvals.length, reservations: reservedEvents.length, supervisor_tasks: tasks.length, worker_results: workerResults.length,
+      reservation_status: "settled", run_status: "completed", artifact_preview: artifacts[0]!.preview,
       terminal_reservation_events: terminalEvents,
-      correlation_ids: { run_id: runId, session_id: completed.token_reservation.sessionId!, handoff_id: completed.token_reservation.handoffId!, worker_run_id: completed.provider_result.worker_run_id!, supervisor_task_id: completed.supervisor_task_id, reservation_id: completed.token_reservation.reservationId }
+      correlation_ids: { run_id: runId, session_id: reservation.sessionId!, handoff_id: reservation.handoffId!, worker_run_id: result.worker_run_id!, supervisor_task_id: task.task_id, reservation_id: reservation.reservationId }
     };
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));

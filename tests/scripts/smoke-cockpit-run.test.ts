@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -33,6 +34,23 @@ describe("cockpit governed run smoke harness", () => {
 
   it("rejects live execution before creating state or invoking a provider", async () => {
     await expect(runCockpitSmoke({ mode: "live" })).rejects.toThrow("live_execution_forbidden");
+  });
+
+  it("rejects a duplicated persisted reservation lifecycle", async () => {
+    await expect(runCockpitSmoke({ mode: "dry-run", beforeEvidenceInspection: (stateDir) => {
+      const path = join(stateDir, "token-gateway-telemetry.jsonl");
+      const reserved = readFileSync(path, "utf8").split("\n").find((line) => line.includes('"event":"reserved"'))!;
+      appendFileSync(path, `${reserved}\n`);
+    } })).rejects.toThrow("smoke_reservation_lifecycle_mismatch");
+  });
+
+  it("rejects a mismatched persisted supervisor handoff", async () => {
+    await expect(runCockpitSmoke({ mode: "dry-run", beforeEvidenceInspection: (stateDir) => {
+      const path = join(stateDir, "supervisor-queue.json");
+      const state = JSON.parse(readFileSync(path, "utf8"));
+      state.tasks[0].handoff.sessionId = "mismatched-session";
+      writeFileSync(path, JSON.stringify(state));
+    } })).rejects.toThrow("smoke_correlation_mismatch");
   });
 
   it("leaves no provider credentials or dispatch capability in its source", () => {

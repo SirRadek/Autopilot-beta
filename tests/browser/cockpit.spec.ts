@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const browserStateDir = "/tmp/autopilot-browser-qa-state";
 
 async function login(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
@@ -115,23 +119,32 @@ test("prepares without a worker, approves, and inspects terminal evidence", asyn
   await expect(page.getByLabel("Artefakty").getByText("browser deterministic artifact")).toBeVisible();
 });
 
-test("shows a persistent internal incident, redacted repair packet, and acknowledgement", async ({ page }) => {
-  const incident: any = { incident_id: "browser-incident-1", recorded_at: "2026-07-13T10:00:00Z", status: "open", acknowledged_at: null, acknowledged_by: null, severity: "high", stage: "control_plane_http", summary: "autopilot_internal_error", correlation_ids: { run_id: "browser-run-1" }, impact: "Bearer [REDACTED]", retry_count: 0, event_refs: [] };
-  const handleIncidentRoute = async (route: import("@playwright/test").Route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/repair-packet")) return route.fulfill({ contentType: "application/json", body: JSON.stringify({ schema_version: "v1", intent: "external_autopilot_repair", execution: "manual", incident, expected: "authorization: Bearer [REDACTED]", actual: "password=[REDACTED]", reproduction_steps: [], verification_commands: [] }) });
-    if (path.endsWith("/acknowledge")) { incident.status = "acknowledged"; incident.acknowledged_by = "cockpit-operator"; return route.fulfill({ contentType: "application/json", body: JSON.stringify(incident) }); }
-    return route.fulfill({ contentType: "application/json", body: JSON.stringify([incident]) });
-  };
-  await page.route(/\/incidents(?:\/[^/]+\/(?:acknowledge|repair-packet))?$/, handleIncidentRoute);
+test("persists, redacts, exports, and acknowledges a real internal incident", async ({ page }) => {
   await login(page);
+  writeFileSync(join(browserStateDir, "runs.json"), "not-json authorization: Bearer secret-value", "utf8");
+  const failure = await page.evaluate(async () => { const response = await fetch("/runs"); return { status: response.status, body: await response.json() }; });
+  expect(failure.status).toBe(500);
+  const failureBody = failure.body as { error: string; incident_id: string };
+  expect(failureBody.error).toBe("autopilot_internal_error");
+  writeFileSync(join(browserStateDir, "runs.json"), `${JSON.stringify({ schema_version: "v1", runs: [] })}\n`, "utf8");
+  await page.reload();
   await page.getByRole("tab", { name: "Chyby" }).click();
-  await expect(page.getByText("autopilot_internal_error")).toBeVisible();
-  await page.getByRole("button", { name: "Připravit balíček pro opravu" }).click();
-  const packet = page.getByLabel("Ruční balíček pro opravu");
+  await expect(page.getByText("Unexpected control plane route failure").first()).toBeVisible();
+  await expect(page.getByText(failureBody.incident_id).first()).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("secret-value");
+  const repair = await page.evaluate(async ({ incidentId }) => { const response = await fetch(`/incidents/${incidentId}/repair-packet`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ expected: "authorization: Bearer secret-value", actual: "password=secret-value" }) }); return { status: response.status, text: await response.text() }; }, { incidentId: failureBody.incident_id });
+  expect(repair.status).toBe(200);
+  const repairText = repair.text;
+  expect(repairText).toContain("[REDACTED]");
+  expect(repairText).not.toContain("secret-value");
+  await page.getByRole("button", { name: "Připravit balíček pro opravu" }).first().click();
+  const packet = page.getByLabel("Ruční balíček pro opravu").first();
   await expect(packet).toContainText("external_autopilot_repair");
-  await expect(packet).toContainText("[REDACTED]");
   await expect(packet).not.toContainText("secret-value");
-  await page.getByRole("button", { name: "Potvrdit incident" }).click();
+  await page.getByRole("button", { name: "Potvrdit incident" }).first().click();
   await expect(page.getByText("Incident byl potvrzen.")).toBeVisible();
+  await page.reload();
+  await page.getByRole("tab", { name: "Chyby" }).click();
+  await expect(page.getByText("Potvrzeno: cockpit-operator").first()).toBeVisible();
+  await expect(page.getByText(failureBody.incident_id).first()).toBeVisible();
 });

@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 
-const protectedPaths = ["/auth", "/status", "/sessions", "/approvals", "/workers", "/providers"];
+const protectedPaths = ["/auth", "/status", "/sessions", "/approvals", "/workers", "/providers", "/projects", "/runs", "/incidents", "/observability"];
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");

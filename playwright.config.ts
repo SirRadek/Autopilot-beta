@@ -11,7 +11,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "CONTROL_PLANE_TOKEN=browser-test-token tsx scripts/control-plane-server.ts \"$(mktemp -d)\" 8878",
+      command: "rm -rf /tmp/autopilot-browser-qa-state && mkdir -p /tmp/autopilot-browser-qa-state && CONTROL_PLANE_TOKEN=browser-test-token tsx scripts/control-plane-server.ts /tmp/autopilot-browser-qa-state 8878",
       url: "http://127.0.0.1:8878/health",
       reuseExistingServer: false,
       timeout: 30_000
