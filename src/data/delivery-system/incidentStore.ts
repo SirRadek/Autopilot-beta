@@ -15,6 +15,8 @@ const MAX_EVENT_REFS = 32;
 const MAX_REPAIR_STEPS = 20;
 const MAX_PACKET_BYTES = 64 * 1_024;
 const MAX_PACKET_ITEM_CHARS = 512;
+const INCIDENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 export type IncidentSeverity = "low" | "medium" | "high" | "critical";
 export type IncidentStatus = "open" | "acknowledged";
@@ -73,7 +75,7 @@ export function readIncidentStore(stateDir: string): IncidentStoreDocument {
   try {
     const initialSize = fstatSync(descriptor).size;
     if (initialSize > MAX_STORE_BYTES) throw new Error("invalid_incident_store");
-    const buffer = Buffer.alloc(initialSize + 1);
+    const buffer = Buffer.alloc(initialSize);
     let bytesRead = 0;
     while (bytesRead < buffer.length) {
       const count = readSync(descriptor, buffer, bytesRead, buffer.length - bytesRead, bytesRead);
@@ -175,7 +177,9 @@ function validateDocument(value: unknown): asserts value is IncidentStoreDocumen
 
 function isIncident(value: unknown): value is AutopilotIncident {
   if (!isExactRecord(value, ["incident_id", "recorded_at", "status", "acknowledged_at", "acknowledged_by", "severity", "stage", "summary", "correlation_ids", "impact", "retry_count", "event_refs"])) return false;
-  if (!boundedString(value.incident_id, MAX_ID_CHARS) || !boundedString(value.recorded_at, MAX_ID_CHARS) || !["open", "acknowledged"].includes(value.status as string) || !["low", "medium", "high", "critical"].includes(value.severity as string)) return false;
+  if (!boundedString(value.incident_id, MAX_ID_CHARS) || !INCIDENT_ID_PATTERN.test(value.incident_id) || !isRedacted(value.incident_id)) return false;
+  if (!boundedString(value.recorded_at, MAX_ID_CHARS) || !isIsoTimestamp(value.recorded_at) || !isRedacted(value.recorded_at)) return false;
+  if (!["open", "acknowledged"].includes(value.status as string) || !["low", "medium", "high", "critical"].includes(value.severity as string)) return false;
   if (!boundedString(value.stage, MAX_ID_CHARS) || !boundedString(value.summary, MAX_SUMMARY_CHARS) || !boundedString(value.impact, MAX_TEXT_CHARS)) return false;
   if (![value.stage, value.summary, value.impact].every(isRedacted)) return false;
   if (!Number.isInteger(value.retry_count) || (value.retry_count as number) < 0 || (value.retry_count as number) > 1_000) return false;
@@ -218,6 +222,15 @@ function boundedText(value: string, chars: number): string {
 
 function isRedacted(value: string): boolean {
   return redactTelemetryText(value, value.length) === value;
+}
+
+function isIsoTimestamp(value: string): boolean {
+  if (!ISO_TIMESTAMP_PATTERN.test(value)) return false;
+  try {
+    return new Date(value).toISOString() === value;
+  } catch {
+    return false;
+  }
 }
 
 function requireSeverity(value: IncidentSeverity): IncidentSeverity {

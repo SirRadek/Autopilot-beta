@@ -1,7 +1,7 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { redactTelemetryText } from "./telemetryRedaction";
+import { redactLegacyObservabilityText } from "./telemetryRedaction";
 
 const SOURCES = [
   ["dispatch-decisions.jsonl", "dispatch"],
@@ -67,7 +67,7 @@ interface WasteSignal {
 }
 
 const safeString = (value: unknown): string | null => typeof value === "string" && value.length > 0
-  ? redactTelemetryText(value.slice(0, 200), 200)
+  ? redactLegacyObservabilityText(value.slice(0, 200))
   : null;
 const safeNumber = (value: unknown): number => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 

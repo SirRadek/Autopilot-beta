@@ -36,3 +36,12 @@ This implements the already-approved incident/repair boundary and does not chang
 - Replaced path-based stat-then-read with one open descriptor, bounded allocation/read, before/after descriptor size checks, and rejection of overflow, shrink, or growth.
 - Added RED/GREEN coverage spanning summary, impact, correlation IDs, event references, expected/actual state, reproduction steps, verification commands, multivalue cookies, private-key material, loaded secrets, and oversized state.
 - Follow-up verification: incident and observability suites pass 12/12 tests; typecheck and `git diff --check` pass.
+
+## Second review follow-up
+
+- Split redaction policies: incident persistence/repair export uses the strong governed-secret policy, while observability calls an explicit legacy wrapper after its original 200-character pre-slice, preserving output compatibility.
+- Strong incident redaction now handles quoted JSON key/value secrets, quoted Cookie and Set-Cookie values, and every PEM `BEGIN` marker through the remaining bounded field even when the block is truncated or unterminated.
+- Loaded incidents now require redacted RFC 4122-style IDs and canonical millisecond UTC timestamps; generated UUIDs and ISO timestamps satisfy the same validators.
+- The single-descriptor reader allocates and requests only the `fstat`-approved size, never `MAX + 1`, reads no more than 2 MiB, and rejects short reads or descriptor size changes.
+- Added adversarial persistence, export, load-validation, identity/timestamp, and legacy observability compatibility tests.
+- Second follow-up verification: incident and observability suites pass 15/15 tests; typecheck and `git diff --check` pass.

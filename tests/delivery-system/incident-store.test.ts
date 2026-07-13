@@ -63,6 +63,25 @@ describe("Autopilot incident store", () => {
     expect(exported.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(11);
   });
 
+  it("redacts quoted structured secrets, quoted cookies, and unterminated PEM from persistence and export", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "incident-adversarial-secrets-"));
+    const incident = recordAutopilotIncident(stateDir, {
+      ...incidentInput('{"password":"json-password-secret"}'),
+      impact: "-----BEGIN CERTIFICATE-----\nunterminated-pem-secret",
+      event_refs: ["Cookie: \"session=quoted-cookie-secret\"", "Set-Cookie: 'auth=quoted-set-cookie-secret'"]
+    });
+    const packet = prepareRepairPacket(stateDir, incident.incident_id, {
+      expected: '{"client_secret":"json-client-secret"}',
+      actual: "-----BEGIN OPENSSH PRIVATE KEY-----\ntruncated-private-secret",
+      reproduction_steps: ["{\"api_key\":\"json-api-secret\"}", '{"aws_secret_access_key":"json-aws-secret"}'],
+      verification_commands: ["Cookie: \"repair-cookie-secret\""]
+    });
+    const persisted = readFileSync(join(stateDir, "autopilot-incidents.json"), "utf8");
+    const exported = JSON.stringify(packet);
+
+    expect(`${persisted}${exported}`).not.toMatch(/json-password-secret|unterminated-pem-secret|quoted-cookie-secret|quoted-set-cookie-secret|json-client-secret|truncated-private-secret|json-api-secret|json-aws-secret|repair-cookie-secret/);
+  });
+
   it("redacts before persistence and bounds incident fields and count", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "incident-bounds-"));
     for (let index = 0; index < 260; index += 1) {
@@ -79,7 +98,7 @@ describe("Autopilot incident store", () => {
     expect(document.incidents[0]?.event_refs).toHaveLength(32);
     expect(Object.keys(document.incidents[0]?.correlation_ids ?? {})).toHaveLength(32);
     expect(readFileSync(join(stateDir, "autopilot-incidents.json"), "utf8")).not.toContain("abcdefghijk");
-  });
+  }, 15_000);
 
   it("bounds repair packet steps and serialized size", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "repair-bounds-"));
@@ -149,6 +168,25 @@ describe("Autopilot incident store", () => {
     for (const summary of secrets) {
       writeFileSync(path, JSON.stringify({ schema_version: "v1", incidents: [{ ...incident, summary }] }));
       expect(() => readIncidentStore(stateDir), summary).toThrow("invalid_incident_store");
+    }
+  });
+
+  it("rejects unsafe loaded identity, timestamp, structured secrets, and truncated PEM", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "incident-loaded-adversarial-"));
+    const path = join(stateDir, "autopilot-incidents.json");
+    const incident = recordAutopilotIncident(stateDir, incidentInput("safe"));
+    const mutations = [
+      { ...incident, incident_id: "password=identity-secret" },
+      { ...incident, incident_id: "not-a-safe-generated-id" },
+      { ...incident, recorded_at: "access_token=timestamp-secret" },
+      { ...incident, recorded_at: "yesterday" },
+      { ...incident, summary: '{"password":"loaded-json-secret"}' },
+      { ...incident, impact: "Cookie: \"loaded-quoted-cookie-secret\"" },
+      { ...incident, event_refs: ["-----BEGIN CERTIFICATE-----\nloaded-truncated-pem"] }
+    ];
+    for (const candidate of mutations) {
+      writeFileSync(path, JSON.stringify({ schema_version: "v1", incidents: [candidate] }));
+      expect(() => readIncidentStore(stateDir)).toThrow("invalid_incident_store");
     }
   });
 

@@ -67,4 +67,11 @@ describe("bounded observability", () => {
 
     expect(buildObservability(stateDir).timeline[0]?.detail).toBe(`Authorization: Bearer [REDACTED] ${"x".repeat(137)}`);
   });
+
+  it("keeps the legacy observability redaction policy separate from incident hardening", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "observability-legacy-redaction-"));
+    writeJsonl(stateDir, "dispatch-decisions.jsonl", [{ refusal_reason: "password=legacy-observability-value" }]);
+
+    expect(buildObservability(stateDir).timeline[0]?.detail).toBe("password=legacy-observability-value");
+  });
 });
