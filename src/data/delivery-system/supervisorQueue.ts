@@ -106,6 +106,8 @@ export class SupervisorQueue {
     if (this.state.tasks.length >= this.maxTasks) throw new Error("supervisor_queue_full");
     const now = input.now ?? new Date().toISOString();
     assertSupervisorTimestamp(now);
+    const maxAttempts = boundedIntegerInput(input.maxAttempts, 3, 1, MAX_ATTEMPTS);
+    const timeoutMs = boundedIntegerInput(input.timeoutMs, DEFAULT_TIMEOUT_MS, 1_000, Number.MAX_SAFE_INTEGER);
     const dependencyIds = [...new Set(input.dependencyIds ?? [])].slice(0, MAX_DEPENDENCIES);
     const dependencyGraph = [...this.state.tasks, { task_id: input.taskId, dependency_ids: dependencyIds }];
     if (dependencyIds.some((id) => !id.trim() || id === input.taskId) || hasDependencyCycle(dependencyGraph)) {
@@ -124,8 +126,8 @@ export class SupervisorQueue {
       handoff_ref: handoffRef,
       status: input.requiresApproval === true && input.approvalGranted !== true ? "blocked" : "queued",
       attempt: 0,
-      max_attempts: Math.min(MAX_ATTEMPTS, Math.max(1, input.maxAttempts ?? 3)),
-      timeout_ms: Math.max(1_000, input.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      max_attempts: maxAttempts,
+      timeout_ms: timeoutMs,
       queued_at: now,
       updated_at: now,
       next_attempt_at: now,
@@ -136,9 +138,8 @@ export class SupervisorQueue {
       requires_approval: input.requiresApproval === true,
       approval_granted: input.approvalGranted === true
     };
-    this.state = { ...this.state, tasks: [...this.state.tasks, task] };
-    this.persist();
-    return task;
+    this.publish({ ...this.state, tasks: [...this.state.tasks, task] });
+    return this.require(input.taskId);
   }
 
   approve(taskId: string, now = new Date().toISOString()): SupervisorTask {
@@ -194,8 +195,7 @@ export class SupervisorQueue {
   recover(now = new Date().toISOString()): readonly SupervisorTask[] {
     assertSupervisorTimestamp(now);
     const changed = this.state.tasks.map((task) => task.status === "running" ? this.recoveredTask(task, now) : task);
-    this.state = { ...this.state, tasks: changed };
-    this.persist();
+    this.publish({ ...this.state, tasks: changed });
     return this.state.tasks;
   }
 
@@ -208,7 +208,7 @@ export class SupervisorQueue {
         ? { ...task, status: "failed" as const, run_started_at: null, updated_at: now, last_error: "timeout" }
         : this.requeue(task, "timeout", now);
     });
-    if (changed.some((task, index) => task !== this.state.tasks[index])) { this.state = { ...this.state, tasks: changed }; this.persist(); }
+    if (changed.some((task, index) => task !== this.state.tasks[index])) this.publish({ ...this.state, tasks: changed });
   }
 
   async dispatchClaimed(taskId: string, stateDir: string, dispatch: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>): Promise<DispatchResult> {
@@ -254,9 +254,8 @@ export class SupervisorQueue {
   }
 
   private replace(task: SupervisorTask): SupervisorTask {
-    this.state = { ...this.state, tasks: this.state.tasks.map((candidate) => candidate.task_id === task.task_id ? task : candidate) };
-    this.persist();
-    return task;
+    this.publish({ ...this.state, tasks: this.state.tasks.map((candidate) => candidate.task_id === task.task_id ? task : candidate) });
+    return this.require(task.task_id);
   }
 
   private require(taskId: string): SupervisorTask { const task = this.state.tasks.find((candidate) => candidate.task_id === taskId); if (!task) throw new Error("task_not_found"); return task; }
@@ -265,11 +264,23 @@ export class SupervisorQueue {
     return readSupervisorState(this.path, this.maxTasks, this.maxPromptChars);
   }
 
-  private persist(): void {
+  private publish(next: SupervisorState): void {
+    let serialized: string;
+    try {
+      serialized = `${JSON.stringify(next)}\n`;
+    } catch {
+      throw new Error("invalid_supervisor_state");
+    }
+    if (Buffer.byteLength(serialized, "utf8") > MAX_SUPERVISOR_STATE_BYTES) {
+      throw new Error("supervisor_state_too_large");
+    }
+    const persisted: unknown = JSON.parse(serialized);
+    if (!isSupervisorState(persisted, this.maxTasks, this.maxPromptChars)) throw new Error("invalid_supervisor_state");
     mkdirSync(dirname(this.path), { recursive: true });
     const temporary = `${this.path}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(this.state)}\n`, "utf8");
+    writeFileSync(temporary, serialized, "utf8");
     renameSync(temporary, this.path);
+    this.state = persisted;
   }
 }
 
@@ -305,6 +316,7 @@ function isSupervisorState(value: unknown, maxTasks: number, maxPromptChars: num
       (task.handoff_ref.task_packet_ref === null || typeof task.handoff_ref.task_packet_ref === "string") &&
       ["queued", "running", "blocked", "completed", "failed", "cancelled"].includes(String(task.status)) &&
       isNonNegativeInteger(task.attempt) && isPositiveInteger(task.max_attempts) && task.max_attempts <= MAX_ATTEMPTS && task.attempt <= task.max_attempts &&
+      (task.status !== "queued" || task.attempt < task.max_attempts) &&
       isPositiveInteger(task.timeout_ms) && task.timeout_ms >= 1_000 &&
       [task.queued_at, task.updated_at, task.next_attempt_at].every(isValidTimestamp) &&
       (task.run_started_at === null || isValidTimestamp(task.run_started_at)) &&
@@ -337,7 +349,7 @@ function isGovernedHandoff(value: Record<string, unknown>, maxPromptChars: numbe
     typeof value.task === "string" &&
     typeof value.agent === "string" &&
     typeof value.packet_hash === "string" &&
-    isStringArray(value.required_checks) && value.required_checks.length > 0 &&
+    isStringArray(value.required_checks) &&
     isOptionalString(value.sessionId) &&
     isOptionalStringArray(value.skillIds) &&
     isOptionalString(value.outputSchemaPath) &&
@@ -460,6 +472,12 @@ function hasDependencyCycle(tasks: readonly unknown[]): boolean {
 
 function assertSupervisorTimestamp(value: string): void {
   if (!isValidTimestamp(value)) throw new Error("invalid_supervisor_timestamp");
+}
+
+function boundedIntegerInput(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value)) throw new Error("invalid_supervisor_numeric_input");
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function isValidTimestamp(value: unknown): value is string {

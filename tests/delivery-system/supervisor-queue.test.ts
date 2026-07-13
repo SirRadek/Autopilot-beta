@@ -46,6 +46,11 @@ function rewritePersistedState(
   writeFileSync(path, `${JSON.stringify(state)}\n`, "utf8");
 }
 
+function expectRoundTrip(stateDir: string, queue: SupervisorQueue): void {
+  expect(() => validateSupervisorState(stateDir)).not.toThrow();
+  expect(new SupervisorQueue({ stateDir }).snapshot()).toEqual(queue.snapshot());
+}
+
 describe("SupervisorQueue", () => {
   it("inspects the exact next claimable task without consuming an attempt", () => {
     const q = queue();
@@ -152,7 +157,8 @@ describe("SupervisorQueue", () => {
   });
 
   it("routes a claimed task through the existing dispatcher", async () => {
-    const q = queue();
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-dispatch-"));
+    const q = new SupervisorQueue({ stateDir });
     q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
     const result = await q.runOnce("/tmp/state", async (packet) => ({
       ...({ workerRunId: "run", handoffId: packet.handoffId, vendor: packet.vendor, model: null, exitCode: 0, rawOutput: "ok", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null } as const),
@@ -162,6 +168,95 @@ describe("SupervisorQueue", () => {
     }), "2026-07-12T00:00:01.000Z");
     expect(result?.task.status).toBe("completed");
     expect(result?.result.refused).toBe(false);
+    expectRoundTrip(stateDir, q);
+  });
+
+  it("round-trips empty required checks through every public lifecycle transition", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-round-trip-"));
+    const q = new SupervisorQueue({ stateDir, baseRetryDelayMs: 0, maxRetryDelayMs: 0 });
+    const unchecked = { ...handoff("hp-empty-checks"), required_checks: [] };
+    const at = "2026-07-12T00:00:00.000Z";
+
+    q.enqueue({ taskId: "approved", handoff: unchecked, requiresApproval: true, now: at });
+    expectRoundTrip(stateDir, q);
+    q.approve("approved", at);
+    expectRoundTrip(stateDir, q);
+    q.claim(at);
+    expectRoundTrip(stateDir, q);
+    q.retry("approved", "retry", at);
+    expectRoundTrip(stateDir, q);
+    q.claim(at);
+    q.complete("approved", at);
+    expectRoundTrip(stateDir, q);
+
+    q.enqueue({ taskId: "cancelled", handoff: unchecked, now: at });
+    q.cancel("cancelled", "cancelled", at);
+    expectRoundTrip(stateDir, q);
+
+    q.enqueue({ taskId: "recovered", handoff: unchecked, now: at });
+    q.claim(at);
+    q.recover(at);
+    expectRoundTrip(stateDir, q);
+    q.cancel("recovered", "recovered", at);
+
+    q.enqueue({ taskId: "reconciled", handoff: unchecked, timeoutMs: 1_000, now: at });
+    q.claim(at);
+    q.reconcile("2026-07-12T00:00:02.000Z");
+    expectRoundTrip(stateDir, q);
+    q.cancel("reconciled", "reconciled", at);
+
+    q.enqueue({ taskId: "failed", handoff: unchecked, maxAttempts: 1, now: at });
+    q.claim(at);
+    q.fail("failed", "failed", at);
+    expectRoundTrip(stateDir, q);
+  });
+
+  it.each([
+    ["fractional max attempts", { maxAttempts: 1.5 }],
+    ["non-finite max attempts", { maxAttempts: Number.NaN }],
+    ["unsafe max attempts", { maxAttempts: Number.MAX_SAFE_INTEGER + 1 }],
+    ["fractional timeout", { timeoutMs: 1_000.5 }],
+    ["non-finite timeout", { timeoutMs: Number.POSITIVE_INFINITY }],
+    ["unsafe timeout", { timeoutMs: Number.MAX_SAFE_INTEGER + 1 }]
+  ])("rejects %s before mutating supervisor state", (_case, numericInput) => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-numeric-input-"));
+    const q = new SupervisorQueue({ stateDir });
+    q.enqueue({ taskId: "existing", handoff: handoff("hp-existing"), now: "2026-07-12T00:00:00.000Z" });
+    const path = join(stateDir, "supervisor-queue.json");
+    const bytes = readFileSync(path);
+    const snapshot = q.snapshot();
+
+    expect(() => q.enqueue({
+      taskId: "invalid",
+      handoff: handoff("hp-invalid"),
+      now: "2026-07-12T00:00:00.000Z",
+      ...numericInput
+    })).toThrow("invalid_supervisor_numeric_input");
+    expect(q.snapshot()).toEqual(snapshot);
+    expect(readFileSync(path)).toEqual(bytes);
+    expectRoundTrip(stateDir, q);
+  });
+
+  it("refuses an oversized optional handoff before replacing valid memory or disk state", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-large-state-"));
+    const q = new SupervisorQueue({ stateDir });
+    q.enqueue({ taskId: "existing", handoff: handoff("hp-existing"), now: "2026-07-12T00:00:00.000Z" });
+    const path = join(stateDir, "supervisor-queue.json");
+    const bytes = readFileSync(path);
+    const snapshot = q.snapshot();
+    const oversized = {
+      ...handoff("hp-oversized"),
+      task_package_hash: "x".repeat(4 * 1024 * 1024)
+    };
+
+    expect(() => q.enqueue({
+      taskId: "oversized",
+      handoff: oversized,
+      now: "2026-07-12T00:00:00.000Z"
+    })).toThrow("supervisor_state_too_large");
+    expect(q.snapshot()).toEqual(snapshot);
+    expect(readFileSync(path)).toEqual(bytes);
+    expectRoundTrip(stateDir, q);
   });
 
   it.each([
@@ -190,6 +285,7 @@ describe("SupervisorQueue", () => {
     ["empty task id", (state: Record<string, any>) => { state.tasks[0].task_id = "   "; }],
     ["duplicate task id", (state: Record<string, any>) => { state.tasks.push({ ...state.tasks[0] }); }],
     ["attempt above task maximum", (state: Record<string, any>) => { state.tasks[0].attempt = 4; state.tasks[0].max_attempts = 3; }],
+    ["queued task at maximum attempts", (state: Record<string, any>) => { state.tasks[0].attempt = 3; state.tasks[0].max_attempts = 3; }],
     ["maximum attempts above writer cap", (state: Record<string, any>) => { state.tasks[0].max_attempts = 9; }],
     ["oversized dependency list", (state: Record<string, any>) => { state.tasks[0].dependency_ids = Array.from({ length: 33 }, (_, index) => `task-${index}`); }],
     ["duplicate dependency", (state: Record<string, any>) => { state.tasks[0].dependency_ids = ["task-b", "task-b"]; }],
@@ -238,8 +334,10 @@ describe("SupervisorQueue", () => {
       };
       state.tasks[0].handoff_ref.task_packet_ref = "packet.json";
       state.tasks[0].handoff.prompt = "x".repeat(32_000);
+      state.tasks[0].status = "running";
       state.tasks[0].attempt = 8;
       state.tasks[0].max_attempts = 8;
+      state.tasks[0].run_started_at = "2026-07-12T00:00:00.000Z";
       state.tasks[0].last_error = "x".repeat(512);
     });
 

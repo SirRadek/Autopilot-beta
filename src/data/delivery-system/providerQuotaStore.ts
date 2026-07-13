@@ -72,10 +72,14 @@ export function writeProviderQuotaStore(stateDir: string, document: ProviderQuot
     const snapshot = sanitizeProviderSnapshot(value);
     return snapshot === null ? [] : [snapshot];
   });
+  const serialized = `${JSON.stringify({ schema_version: "v1", snapshots }, null, 2)}\n`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_PROVIDER_QUOTA_STORE_BYTES) {
+    throw new Error("provider_quota_store_limit");
+  }
   stateDirectory(stateDir);
   const path = join(stateDir, PROVIDER_QUOTA_SNAPSHOTS_FILE);
   const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify({ schema_version: "v1", snapshots }, null, 2)}\n`, "utf8");
+  writeFileSync(temporaryPath, serialized, "utf8");
   renameSync(temporaryPath, path);
 }
 
