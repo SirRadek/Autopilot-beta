@@ -23,3 +23,9 @@ rules:
       - model_routing_boundary
     instruction: "Routine worker tasks stay local or low-cost by default; frontier models are reserved for strategic reasoning, review, audit, planning, and hard edge cases."
     severity: major
+  - id: MAS-LEDGER-001
+    title: Provider ledgers stay bounded and managed
+    applies_to:
+      - managed_provider_ledger_boundary
+    instruction: "Validate bounded v1 provider ledgers before atomic no-overwrite publication under managed state, retain every legacy source, and fail before provider use on any unsafe or conflicting input."
+    severity: blocker

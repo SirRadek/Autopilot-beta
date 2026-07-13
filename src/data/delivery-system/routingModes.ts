@@ -9,7 +9,7 @@
  * dispatch.
  */
 
-import { join } from "node:path";
+import { resolveConfiguredProjectRoot } from "./runtimePaths";
 
 export type RoutingModeId = "idea" | "spec" | "build" | "review";
 
@@ -76,21 +76,14 @@ export const AGY_PROJECTS_ACCESS_LANES: readonly RoutingLaneId[] = [
 ];
 
 /**
- * Canonical supervised-projects root for `--add-dir` grants. Mirrors resolveProjectMeshRoot
- * (src/lib/decision-mesh/load.ts): an explicit override wins — call sites pass
- * AUTOPILOT_PROJECTS_DIR themselves, this module stays env-free per the governed-core
- * boundary — otherwise the control plane's sibling `../Projects`.
+ * Canonical supervised-projects root for `--add-dir` grants. This shares the same configured root
+ * as Decision Mesh lookup and the rest of the delivery runtime.
  */
-export function resolveSupervisedProjectsRoot(controlPlaneRoot: string, projectsDirOverride?: string): string {
-  if (typeof controlPlaneRoot !== "string" || controlPlaneRoot.trim().length === 0) {
-    throw new Error("supervised_projects_root_unresolved: controlPlaneRoot is required");
-  }
-
-  if (projectsDirOverride !== undefined && projectsDirOverride.trim().length > 0) {
-    return projectsDirOverride;
-  }
-
-  return join(controlPlaneRoot, "..", "Projects");
+export function resolveSupervisedProjectsRoot(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  homeDirectory?: string
+): string {
+  return resolveConfiguredProjectRoot(environment, homeDirectory);
 }
 
 export type BuildPrepProvenance =

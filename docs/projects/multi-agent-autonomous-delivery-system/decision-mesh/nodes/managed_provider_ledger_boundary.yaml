@@ -1,0 +1,42 @@
+id: managed_provider_ledger_boundary
+type: persistence_boundary
+name: Managed provider ledger boundary
+question: "Are provider accounting ledgers bounded, validated, and stored inside the managed state directory?"
+why: "Provider attempts and spend evidence must remain inside the backed-up and permission-scoped state root without losing legacy evidence during migration."
+signals:
+  - provider ledger
+  - OpenRouter ledger
+  - spend ledger
+  - attempt counter
+  - state migration
+  - managed state
+related_agents:
+  - backend_database
+  - security
+  - qa
+related_files:
+  - src/data/delivery-system/openRouterLedgerMigration.ts
+  - src/data/delivery-system/cliWorkerCapture.ts
+  - src/data/delivery-system/cliWorker.ts
+  - tests/delivery-system/openrouter-ledger-migration.test.ts
+required_checks:
+  - legacy_sources_retained
+  - ledger_bounds_enforced
+  - jsonl_schema_validated
+  - atomic_no_overwrite_publication
+  - byte_count_and_hash_verified
+  - migration_precedes_provider_call
+  - retained_sources_revalidated_after_publication
+  - legacy_writer_generations_quiesced_at_cutover
+stop_conditions:
+  - legacy_ledger_removed
+  - ledger_outside_managed_state
+  - malformed_ledger_migrated
+  - conflicting_ledger_overwritten
+  - unbounded_ledger_migration
+  - provider_called_before_migration
+  - legacy_writer_active_during_cutover
+objective:
+  - Keep provider accounting evidence in managed state while retaining legacy files indefinitely.
+  - Fail closed before provider use when migration input is unsafe, malformed, oversized, or conflicting.
+  - Require D3 and live cutover to quiesce every legacy writer because final revalidation is not a shared writer protocol.

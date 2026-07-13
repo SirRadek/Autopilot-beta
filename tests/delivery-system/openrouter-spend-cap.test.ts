@@ -10,6 +10,7 @@ import {
 } from "../../src/data/delivery-system/cliWorker";
 import {
   OPENROUTER_DAILY_SPEND_CAP_USD,
+  OPENROUTER_SPEND_LEDGER_FILE,
   openRouterSpendLedgerPathForStateDir,
   sumOpenRouterSpendForDay,
   type OpenRouterFetch,
@@ -189,6 +190,7 @@ describe("OpenRouter spend cap ledger", () => {
       cost_usd: 0.42
     });
     expect(typeof ledgerRecords[0]?.recorded_at).toBe("string");
+    expect(existsSync(join(parentDir, OPENROUTER_SPEND_LEDGER_FILE))).toBe(false);
   });
 
   it("does not append a spend ledger line for a zero-cost response", async () => {

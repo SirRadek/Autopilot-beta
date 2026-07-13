@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -31,6 +31,7 @@ import {
   type CodexDispatchMode
 } from "../../src/data/delivery-system/cliWorker";
 import { buildCodexBashCommand } from "../../src/data/delivery-system/cliWorkerCapture";
+import { readIncidentStore } from "../../src/data/delivery-system/incidentStore";
 
 function baseInput(overrides: Partial<CliWorkerInput> = {}): CliWorkerInput {
   return {
@@ -154,5 +155,58 @@ describe("CLI worker Codex dispatch modes", () => {
     const evidence = readJsonlRecord(join(stateDir, "subagent-evidence.jsonl"));
     expect(evidence.codex_mode).toBe("codex_implement");
     expect(evidence.task_packet_ref).toBe("handoff-packet-456");
+  });
+
+  it("sanitizes Codex output before persistence or return and removes the raw capture", async () => {
+    const rawCapture = join(stateDir, "raw-codex-capture.json");
+    const rawOutput = '{"password":"secret-password","cookie":"secret-cookie","answer":42}';
+    writeFileSync(rawCapture, rawOutput);
+    captureCodexResponseMock.mockResolvedValueOnce({
+      exitCode: 0,
+      outputFilePath: rawCapture,
+      rawFileContent: rawOutput,
+      parsedJson: { password: "secret-password", cookie: "secret-cookie", answer: 42 } as unknown as { ok: boolean },
+      durationMs: 25,
+      errorOutput: "",
+      timedOut: false,
+      attempts: 1
+    });
+
+    const result = await runCliWorker(baseInput(), stateDir);
+
+    expect(result.rawOutput).not.toContain("secret-password");
+    expect(result.rawOutput).not.toContain("secret-cookie");
+    expect(result.parsedJson).toEqual({ password: "[REDACTED]", cookie: "[REDACTED]", answer: 42 });
+    expect(result.workerOutputPath).not.toBe(rawCapture);
+    expect(readFileSync(result.workerOutputPath!, "utf8")).toBe(result.rawOutput);
+    expect(existsSync(rawCapture)).toBe(false);
+  });
+
+  it("records a fixed worker-output incident for a failed worker", async () => {
+    captureCodexResponseMock.mockResolvedValueOnce({
+      exitCode: 1,
+      outputFilePath: join(stateDir, "missing-raw-capture.json"),
+      rawFileContent: "password=injected-secret",
+      parsedJson: null as unknown as { ok: boolean },
+      durationMs: 25,
+      errorOutput: "provider failure injected-secret",
+      timedOut: false,
+      attempts: 1
+    });
+
+    const result = await runCliWorker(baseInput(), stateDir);
+    const incidents = readIncidentStore(stateDir).incidents;
+
+    expect(result.exitCode).toBe(1);
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]).toMatchObject({
+      stage: "worker_output",
+      summary: "operational_failure:worker_output",
+      correlation_ids: {
+        worker_run_id: result.workerRunId,
+        handoff_id: "hp-dispatch-mode"
+      }
+    });
+    expect(JSON.stringify(incidents)).not.toContain("injected-secret");
   });
 });

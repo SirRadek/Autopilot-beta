@@ -1,11 +1,15 @@
 # Multi-Agent Autonomous Delivery System Architecture
 
-Last updated: 2026-05-31
-Next review: 2026-06-07
-Status: phase-3 read-only Decision Mesh context router
+> **Historical/superseded:** This document records an earlier read-only subsystem phase and is not
+> the current operational contract. See [System architecture](../../architecture/system-overview.md)
+> and [Current status](../../status/current-status.md).
+
+Last updated: 2026-07-13
+Next review: 2026-07-20
+Status: historical/superseded phase-3 context-router record
 Slug: `multi-agent-autonomous-delivery-system`
 Canonical remote repository: `SirRadek/autopilot`
-Local workspace: `C:\Programování\Codex`
+Historical workspace: `C:\Programování\Codex`
 Separation status: `autopilot_subsystem`
 Visibility: Autopilot control-plane subsystem; external/private project details must be redacted
 
@@ -44,8 +48,16 @@ In this project:
 - capability routing, context economy, and model spend policies
 - seeded project-specific Decision Mesh under `docs/projects/multi-agent-autonomous-delivery-system/decision-mesh/`
 - project-specific delivery observability boundary for worker, governance, model-routing, and verification symptoms
+- bounded OpenRouter attempt and spend ledgers under the managed state directory, with fail-closed migration from retained parent-directory legacy files
 - static read-only command-center view at `/autopilot`
 - local browser/e2e smoke tests for the command center
+
+Provider ledger persistence uses `stateDir/openrouter-api-attempts.jsonl` and
+`stateDir/openrouter-api-spend.jsonl`. Before an OpenRouter worker can account
+an attempt, check spend, or call the provider, legacy files directly under
+`dirname(stateDir)` are validated and copied without overwrite. Migration is
+bounded to 4 MiB and 20,000 non-empty v1 JSONL records per ledger, verifies
+bytes and SHA-256 after fsync, and never deletes the legacy source.
 
 External to this project:
 

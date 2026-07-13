@@ -1,5 +1,51 @@
 # Multi-Agent Autonomous Delivery System Work Log
 
+## 2026-07-13 Retained OpenRouter Source Revalidation
+
+Date: 2026-07-13
+Request or trigger: integrated R6 quality review found that a legacy writer could append after the migration's initial snapshot and publication, allowing one new worker attempt to continue from stale managed evidence.
+Mode: WRITE_ALLOWED for the bounded OpenRouter migration, deterministic concurrency test, operational cutover contract, project mesh, and verification report only.
+Scope: revalidate every retained legacy ledger after publication and before migration success; do not change project registry or orchestrator behavior.
+
+Architecture impact: migration now performs a final retained-source check after all no-replace publications. The check reopens and strictly validates each source and requires unchanged device/inode identity, byte length, SHA-256, and bytes. A detected mutation fails before the caller can append a managed attempt or fetch the provider. Published managed snapshots and retained legacy sources are not deleted or overwritten.
+
+Operational boundary: final revalidation narrows the race window but is not a mutual-exclusion protocol with old binaries. D3 and live cutover must stop and verify quiescence of every legacy writer generation before enabling the new runtime. Code does not claim to exclude an append after its final check.
+
+Verification: deterministic post-publication mutation coverage and exact gate output are recorded in `.superpowers/sdd/task-r6-ledger-remediation-report.md`.
+
+Project mesh impact: the managed-provider-ledger boundary now requires post-publication source revalidation and cutover writer quiescence, and stops on an active legacy writer during cutover.
+
+## 2026-07-13 Managed OpenRouter Ledgers
+
+Date: 2026-07-13
+Request or trigger: release-baseline repair Task R4 required OpenRouter accounting ledgers to move inside managed state without deleting legacy evidence.
+Mode: WRITE_ALLOWED for the bounded migration, worker integration, tests, provenance, and project governance evidence.
+Scope: validate and migrate the two v1 OpenRouter JSONL ledgers from exactly `dirname(stateDir)` to `stateDir` before spend, attempt, or provider activity.
+
+Architecture impact: OpenRouter attempt and spend persistence now lives under the managed state boundary. Legacy parent-directory files remain immutable migration inputs and are retained indefinitely. Migration is bounded, schema-validated, conflict-detecting, partial-retry safe, fsynced, hash-verified, and atomically published without overwrite.
+
+Decisions:
+
+- Limit each ledger to 4 MiB and 20,000 non-empty records during migration.
+- Validate both legacy and managed files before publishing either missing managed file.
+- Reject symlinks, non-regular files, malformed or non-v1 records, and byte conflicts.
+- Use an exclusive same-directory temporary file plus atomic hard-link publication so an existing managed ledger is never replaced.
+- Keep the legacy ledgers forever; automated migration never archives or deletes them.
+- Run migration before OpenRouter spend checks, attempt accounting, or provider fetch.
+
+Verification:
+
+- TDD red run failed because `openRouterLedgerMigration.ts` did not exist; the 24 pre-existing focused tests passed.
+- Focused migration and OpenRouter tests cover managed paths, byte retention, modes, idempotency, conflicts, partial retry, malformed JSONL, wrong schemas, symlinks, non-regular files, 4 MiB and 20,000-record bounds, permissions, and no provider call on failure.
+- Exact final gate results are recorded in `.superpowers/sdd/task-4-report.md`.
+
+Risks:
+
+- Automatic archival remains intentionally out of scope; operators must retain legacy sources until a separately approved archival procedure exists.
+- Atomic publication uses same-filesystem hard links and therefore depends on the temporary file remaining in the managed ledger directory.
+
+Project mesh impact: added `managed_provider_ledger_boundary` and blocker rule `MAS-LEDGER-001` so future provider-ledger work routes to retention, bounds, validation, atomic publication, verification, and pre-provider ordering checks.
+
 ## 2026-05-24 Mesh Audit Implementation
 
 Date: 2026-05-24

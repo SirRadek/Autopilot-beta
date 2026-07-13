@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+import { writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
@@ -132,9 +134,7 @@ export function readApprovalQueue(stateDir: string): ApprovalQueueDocument {
 export function writeApprovalQueue(stateDir: string, document: ApprovalQueueDocument): void {
   validate(document);
   const path = join(stateDir, APPROVAL_QUEUE_FILE);
-  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
   const serialized = `${JSON.stringify(document, null, 2)}\n`;
   if (Buffer.byteLength(serialized) > MAX_QUEUE_BYTES) throw new Error("invalid_approval_queue");
-  try { writeFileSync(temporary, serialized, "utf8"); renameSync(temporary, path); }
-  catch (error) { if (existsSync(temporary)) unlinkSync(temporary); throw error; }
+  writeStateFileAtomically(stateDir, path, serialized);
 }

@@ -1,17 +1,18 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
-import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment } from "../../scripts/control-plane-server";
+import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment, secureCookiesFromEnvironment } from "../../scripts/control-plane-server";
 import { readApprovalQueue, writeApprovalQueue } from "../../src/data/delivery-system/approvalQueue";
-import { recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
+import { readIncidentStore, recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
-import { readRunStore, reviseRunDraft } from "../../src/data/delivery-system/runStore";
+import { createRunDraft, readRunStore, reviseRunDraft } from "../../src/data/delivery-system/runStore";
 import type { ProviderQuotaStoreDocument } from "../../src/data/delivery-system/providerQuotaStore";
+import type { ReadinessReport } from "../../src/data/delivery-system/readiness";
 
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
@@ -25,6 +26,85 @@ async function request(path: string, token?: string) {
   return fetch(`http://127.0.0.1:${address.port}${path}`, token ? { headers: { authorization: `Bearer ${token}` } } : {});
 }
 
+const readinessReport = (ready: boolean): ReadinessReport => ({
+  ready,
+  status: ready ? "ready" : "unavailable",
+  checked_at: "2026-07-13T12:00:00.000Z",
+  components: {
+    configuration: { status: ready ? "ready" : "unavailable", error_code: ready ? null : "invalid_configuration" },
+    managed_state: { status: "ready", error_code: null },
+    project_registry: { status: "ready", error_code: null },
+    supervisor: { status: "ready", error_code: null },
+    token_gateway: { status: "ready", error_code: null },
+    providers: {
+      codex_cli: { status: "degraded", error_code: "not_observed" },
+      claude_cli: { status: "degraded", error_code: "not_observed" },
+      agy_cli: { status: "degraded", error_code: "not_observed" },
+      openrouter_api: { status: "degraded", error_code: "not_observed" }
+    }
+  }
+});
+
+describe("control plane liveness and readiness", () => {
+  async function publicGet(path: string, readiness: () => ReadinessReport) {
+    const server = createControlPlaneServer(mkdtempSync(join(tmpdir(), "control-plane-ready-")), "secret-value", { readiness });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`);
+    return { status: response.status, body: await response.json() as unknown };
+  }
+
+  it("keeps health public and independent of readiness", async () => {
+    expect(await publicGet("/health", () => { throw new Error("secret-value"); }))
+      .toEqual({ status: 200, body: { ok: true } });
+  });
+
+  it("serves healthy and unavailable readiness without authentication", async () => {
+    expect(await publicGet("/ready", () => readinessReport(true)))
+      .toEqual({ status: 200, body: readinessReport(true) });
+    expect(await publicGet("/ready", () => readinessReport(false)))
+      .toEqual({ status: 503, body: readinessReport(false) });
+  });
+
+  it("maps readiness exceptions to a fixed redacted 503 report", async () => {
+    const result = await publicGet("/ready", () => { throw new Error("secret-value:/private/path"); });
+
+    expect(result.status).toBe(503);
+    expect(result.body).toMatchObject({ ready: false, status: "unavailable" });
+    expect(JSON.stringify(result.body)).not.toContain("secret-value");
+    expect(JSON.stringify(result.body)).not.toContain("/private/path");
+  });
+
+  it("wires the pure readiness builder into the production runtime", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-ready-"));
+    const projectRoot = join(stateDir, "projects");
+    mkdirSync(projectRoot, { mode: 0o700 });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      providerCommands: {},
+      openRouterConfigured: false,
+      supervisorPollMs: 60_000
+    });
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = runtime.server.address();
+      if (address === null || typeof address === "string") throw new Error("missing address");
+      const response = await fetch(`http://127.0.0.1:${address.port}/ready`);
+      const body = await response.json() as ReadinessReport;
+
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ ready: true, status: "degraded" });
+      expect(body.components.configuration).toEqual({ status: "ready", error_code: null });
+    } finally {
+      await runtime.stop();
+    }
+  });
+});
+
 const snapshot = (provider: string, fetchedAt: string) => ({
   provider, source: "api" as const, fetched_at: fetchedAt, observed_at: fetchedAt,
   five_hour: { limit: 100, used: 20, remaining: 80, resets_at: null },
@@ -34,9 +114,12 @@ const snapshot = (provider: string, fetchedAt: string) => ({
 
 async function governedApi() {
   const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runs-"));
-  writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+  const projectRoot = join(stateDir, "projects");
+  const projectCwd = join(projectRoot, "autopilot-beta");
+  mkdirSync(projectCwd, { recursive: true });
+  writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
   writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-  const server = createControlPlaneServer(stateDir, "secret");
+  const server = createControlPlaneServer(stateDir, "secret", { projectRoot });
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -47,11 +130,163 @@ async function governedApi() {
     headers: { authorization: "Bearer secret", ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) })
   });
-  return { stateDir, base, call };
+  return { stateDir, projectRoot, base, call };
 }
 
 describe("control plane governed run API", () => {
   const draft = { project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: null, requested_artifacts: ["text"] };
+
+  it("rejects an out-of-root HTTP run through the server fallback", async () => {
+    const root = mkdtempSync(join(tmpdir(), "control-plane-default-root-"));
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "projects");
+    const outside = join(root, "outside");
+    mkdirSync(stateDir);
+    mkdirSync(projectRoot);
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+    writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    const previous = process.env.AUTOPILOT_PROJECTS_DIR;
+    process.env.AUTOPILOT_PROJECTS_DIR = projectRoot;
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("missing address");
+      const response = await fetch(`http://127.0.0.1:${address.port}/runs`, {
+        method: "POST",
+        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        body: JSON.stringify(draft)
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: "project_path_outside_root" });
+      expect(readRunStore(stateDir).runs).toEqual([]);
+    } finally {
+      if (previous === undefined) delete process.env.AUTOPILOT_PROJECTS_DIR;
+      else process.env.AUTOPILOT_PROJECTS_DIR = previous;
+    }
+  });
+
+  it("threads the configured project root through revision operations", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-revision-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(stateDir, "outside");
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true }] });
+    const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 20_000 };
+    const created = createRunDraft(stateDir, input, "2026-07-13T10:00:00.000Z", { projectRoot });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+
+    expect(() => reviseRunWithApproval(stateDir, created.run_id, created.revision, input, { projectRoot }))
+      .toThrow("project_path_outside_root");
+  });
+
+  it("rechecks the project root while recovering an already committed revision", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-revision-recovery-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(stateDir, "outside");
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true }] });
+    const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 20_000 };
+    const created = createRunDraft(stateDir, input, "2026-07-13T10:00:00.000Z", { projectRoot });
+    reviseRunWithApproval(stateDir, created.run_id, created.revision, input, { projectRoot });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+
+    expect(() => reviseRunWithApproval(stateDir, created.run_id, created.revision, input, { projectRoot }))
+      .toThrow("project_path_outside_root");
+  });
+
+  it("threads the configured project root into the runtime orchestrator", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const outside = join(stateDir, "outside");
+    mkdirSync(projectRoot);
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 60_000
+    });
+    try {
+      expect(() => runtime.orchestrator.prepareRun({ ...draft, provider: "codex_cli", requested_artifacts: ["text"], estimated_tokens: 20_000 }))
+        .toThrow("project_path_outside_root");
+    } finally {
+      await runtime.stop();
+    }
+  });
+
+  it("rejects an out-of-root HTTP revision without mutating revisions or approvals", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-http-revision-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(stateDir, "outside");
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true }] });
+    writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 60_000
+    });
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = runtime.server.address();
+      if (address === null || typeof address === "string") throw new Error("missing address");
+      const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, {
+        method: "POST",
+        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const createdResponse = await call("/runs", draft);
+      expect(createdResponse.status).toBe(201);
+      const created = await createdResponse.json() as { current: { run_id: string } };
+      const runsBefore = readRunStore(stateDir);
+      const approvalsBefore = readApprovalQueue(stateDir);
+      writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+
+      const response = await call(`/runs/${created.current.run_id}/revisions`, { ...draft, prompt: "revised", revision: 1 });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: "project_path_outside_root" });
+      expect(readRunStore(stateDir)).toEqual(runsBefore);
+      expect(readApprovalQueue(stateDir)).toEqual(approvalsBefore);
+      expect(readIncidentStore(stateDir).incidents).toEqual([]);
+    } finally {
+      await runtime.stop();
+    }
+  });
+
+  it("reports a non-regular project registry as invalid configuration without leaking paths", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-registry-io-secret-"));
+    mkdirSync(join(stateDir, "projects.json"));
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: "Bearer secret" } });
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({ error: "invalid_project_registry" });
+    expect(JSON.stringify(body)).not.toContain(stateDir);
+    expect(JSON.stringify(body)).not.toContain("EISDIR");
+    expect(JSON.stringify(body)).not.toContain("secret");
+    const incidents = readIncidentStore(stateDir).incidents;
+    expect(incidents).toEqual([]);
+    expect(JSON.stringify(incidents)).not.toContain(stateDir);
+    expect(JSON.stringify(incidents)).not.toContain("EISDIR");
+    expect(JSON.stringify(incidents)).not.toContain("secret");
+  });
 
   it("prepares but does not execute a run", async () => {
     const api = await governedApi();
@@ -124,9 +359,12 @@ describe("control plane governed run API", () => {
 
   it("runs the production supervisor loop to a terminal result", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-"));
-    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+    const projectRoot = join(stateDir, "projects");
+    const projectCwd = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectCwd, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-    const runtime = createControlPlaneRuntime(stateDir, "secret", { scheduler: { start() {}, stop() {} }, dispatch: async (handoff) => ({ refused: false, workerRunId: "runtime-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "runtime terminal", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }), supervisorPollMs: 5 });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", { projectRoot, scheduler: { start() {}, stop() {} }, dispatch: async (handoff) => ({ refused: false, workerRunId: "runtime-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "runtime terminal", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }), supervisorPollMs: 5 });
     servers.push(runtime.server);
     await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
     const address = runtime.server.address();
@@ -138,11 +376,34 @@ describe("control plane governed run API", () => {
     runtime.stop();
   });
 
+  it("records only the transition into a repeated supervisor-loop failure", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-supervisor-failure-"));
+    const projectRoot = join(stateDir, "projects");
+    mkdirSync(projectRoot, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 5
+    });
+
+    writeFileSync(join(stateDir, "runs.json"), "not-json injected-secret");
+    await vi.waitFor(() => {
+      expect(readIncidentStore(stateDir).incidents.filter((incident) => incident.stage === "supervisor_loop")).toHaveLength(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const incidents = readIncidentStore(stateDir).incidents.filter((incident) => incident.stage === "supervisor_loop");
+    expect(incidents).toHaveLength(1);
+    expect(JSON.stringify(incidents)).not.toContain("injected-secret");
+    await runtime.stop();
+  });
+
   it("recovers an orphan running cancellation on runtime restart", async () => {
     const api = await governedApi();
     const supervisor = new SupervisorQueue({ stateDir: api.stateDir });
     const gateway = new (await import("../../src/data/delivery-system/tokenGateway")).TokenGateway({ stateDir: api.stateDir });
-    const first = (await import("../../src/data/delivery-system/runOrchestrator")).createRunOrchestrator({ stateDir: api.stateDir, tokenGateway: gateway, supervisor, dispatch: async () => new Promise(() => {}), isRouteAvailable: () => true });
+    const first = (await import("../../src/data/delivery-system/runOrchestrator")).createRunOrchestrator({ stateDir: api.stateDir, projectRoot: api.projectRoot, tokenGateway: gateway, supervisor, dispatch: async () => new Promise(() => {}), isRouteAvailable: () => true });
     const draft = first.prepareRun({ project_id: "autopilot-beta", prompt: "cancel after crash", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     first.approveAndQueueRun(draft.current.run_id, 1, "owner");
     supervisor.claim(new Date().toISOString());
@@ -156,10 +417,13 @@ describe("control plane governed run API", () => {
 
   it("drains an in-flight supervisor poll before stop resolves", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-drain-"));
-    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+    const projectRoot = join(stateDir, "projects");
+    const projectCwd = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectCwd, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
     let finish!: () => void;
-    const runtime = createControlPlaneRuntime(stateDir, "secret", { scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", { projectRoot, scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
     const orchestrator = (runtime as any).orchestrator;
     const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
@@ -227,7 +491,8 @@ describe("control plane governed run API", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       error: "autopilot_internal_error",
-      incident_id: expect.stringMatching(/^[0-9a-f-]{36}$/i)
+      incident_id: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      request_id: expect.stringMatching(/^[0-9a-f-]{36}$/i)
     });
   });
 
@@ -237,13 +502,14 @@ describe("control plane governed run API", () => {
     const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 20_000 };
     let revisionFault = true;
     expect(() => reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input, {
+      projectRoot: api.projectRoot,
       revise: (...args) => {
         const revised = reviseRunDraft(...args);
         if (revisionFault) { revisionFault = false; throw new Error("commit_then_throw"); }
         return revised;
       }
     })).toThrow("commit_then_throw");
-    const recovered = reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input);
+    const recovered = reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input, { projectRoot: api.projectRoot });
     expect(recovered.current.revision).toBe(2);
     expect(recovered.revisions).toHaveLength(2);
     expect(readApprovalQueue(api.stateDir).records.filter((record) => record.run_id === created.current.run_id && record.revision === 2)).toHaveLength(1);
@@ -251,12 +517,13 @@ describe("control plane governed run API", () => {
     const next = { ...input, prompt: "third revision" };
     let approvalFault = true;
     expect(() => reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next, {
+      projectRoot: api.projectRoot,
       writeApprovals: (...args) => {
         writeApprovalQueue(...args);
         if (approvalFault) { approvalFault = false; throw new Error("approval_commit_then_throw"); }
       }
     })).toThrow("approval_commit_then_throw");
-    const restarted = reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next);
+    const restarted = reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next, { projectRoot: api.projectRoot });
     expect(restarted.current.revision).toBe(3);
     expect(readRunStore(api.stateDir).runs[0]?.revisions).toHaveLength(3);
     expect(readApprovalQueue(api.stateDir).records.filter((record) => record.run_id === created.current.run_id && record.revision === 3)).toHaveLength(1);
@@ -264,6 +531,30 @@ describe("control plane governed run API", () => {
 });
 
 describe("control plane provider endpoints", () => {
+  it.each([
+    ["status", "/status", (stateDir: string) => writeFileSync(join(stateDir, "session-registry.json"), "not-json injected-secret")],
+    ["sessions", "/sessions", (stateDir: string) => writeFileSync(join(stateDir, "session-registry.json"), "not-json injected-secret")],
+    ["workers", "/workers", (stateDir: string) => mkdirSync(join(stateDir, "agent-registry.jsonl"))],
+    ["providers", "/providers/quotas", (stateDir: string) => writeFileSync(join(stateDir, "provider-quota-snapshots.json"), "not-json injected-secret")],
+    ["observability", "/observability/summary", (stateDir: string) => mkdirSync(join(stateDir, "cli-call-telemetry.jsonl"))],
+    ["approvals", "/approvals", (stateDir: string) => writeFileSync(join(stateDir, "approval-queue.json"), "not-json injected-secret")]
+  ])("records a bounded incident when the %s route fails", async (_name, path, injectFailure) => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-route-failure-"));
+    injectFailure(stateDir);
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { headers: { authorization: "Bearer secret" } });
+    const body = await response.json() as { error: string; incident_id: string; request_id: string };
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({ error: "autopilot_internal_error", incident_id: expect.any(String), request_id: expect.any(String) });
+    expect(JSON.stringify(body)).not.toContain("injected-secret");
+    expect(readIncidentStore(stateDir).incidents.some((incident) => incident.incident_id === body.incident_id)).toBe(true);
+  });
   it("serves authenticated bounded observability summary and filtered timeline", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-observability-"));
     writeFileSync(join(stateDir, "cli-call-telemetry.jsonl"), [
@@ -292,6 +583,13 @@ describe("control plane provider endpoints", () => {
     });
     expect(providerUsageCommandsFromEnvironment({})).toEqual({});
   });
+  it("parses secure-cookie configuration strictly", () => {
+    expect(secureCookiesFromEnvironment({})).toBe(false);
+    expect(secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: "true" })).toBe(true);
+    expect(secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: " FALSE " })).toBe(false);
+    expect(() => secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: "maybe" }))
+      .toThrow("invalid_secure_cookie_configuration");
+  });
   it("creates an HttpOnly browser session and accepts it for protected requests", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     const server = createControlPlaneServer(stateDir, "secret");
@@ -307,6 +605,7 @@ describe("control plane provider endpoints", () => {
     const cookie = login.headers.get("set-cookie");
     expect(cookie).toContain("autopilot_session=");
     expect(cookie).toContain("HttpOnly");
+    expect(cookie).not.toContain("Secure");
     const session = await fetch(`${base}/auth/session`, { headers: { cookie: cookie!.split(";")[0]! } });
     expect(session.status).toBe(200);
     const protectedResponse = await fetch(`${base}/status`, { headers: { cookie: cookie!.split(";")[0]! } });
@@ -387,7 +686,7 @@ describe("control plane provider endpoints", () => {
   it("bounds worker output and ignores unsafe worker ids", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     writeFileSync(join(stateDir, "agent-registry.jsonl"), `${JSON.stringify({ event: "subagent_start", agent_id: "../outside", agent_type: "codex", started_at: new Date().toISOString() })}\n${JSON.stringify({ event: "subagent_start", agent_id: "safe-worker", agent_type: "codex", started_at: new Date().toISOString() })}\n`);
-    writeFileSync(join(stateDir, "safe-worker-output.txt"), "x".repeat(50_000));
+    writeFileSync(join(stateDir, "safe-worker-output.txt"), `${"x".repeat(50_000)}\npassword=worker-secret cookie: session-secret`);
     const server = createControlPlaneServer(stateDir, "secret");
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -396,7 +695,10 @@ describe("control plane provider endpoints", () => {
     const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: "Bearer secret" } });
     const workers = await response.json() as Array<{ worker_run_id: string; output: string }>;
     expect(workers.find((worker) => worker.worker_run_id === "../outside")?.output).toBe("");
-    expect(workers.find((worker) => worker.worker_run_id === "safe-worker")?.output.length).toBeLessThanOrEqual(16 * 1024);
+    const safeOutput = workers.find((worker) => worker.worker_run_id === "safe-worker")?.output ?? "";
+    expect(safeOutput.length).toBeLessThanOrEqual(16 * 1024);
+    expect(safeOutput).not.toContain("worker-secret");
+    expect(safeOutput).not.toContain("session-secret");
   });
 
   it("requires bearer auth", async () => {

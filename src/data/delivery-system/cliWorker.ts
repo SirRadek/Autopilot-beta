@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { HandoffId } from "./checkCompletionMatrix";
@@ -30,6 +30,10 @@ import {
   writePromptFile
 } from "./cliWorkerCapture";
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH, VENDOR_PROCESS_REGISTRY_PATH } from "./sessionState";
+import { appendStateFile, removeStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
+import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
+import { recordOperationalIncident } from "./operationalIncidents";
+import { ensureOpenRouterLedgersMigrated } from "./openRouterLedgerMigration";
 import type { RoutingModeId } from "./routingModes";
 import {
   writeCorrelationEntry,
@@ -333,30 +337,27 @@ export function acquireWorkerLock(
   lock: WorkerLockRecord,
   stateDir: string
 ): "acquired_supervisor_spawn" | "already_locked" | "stale_replaced" {
-  mkdirSync(stateDir, { recursive: true });
-  const existing = readWorkerLock(stateDir);
-
-  if (existing) {
-    if (!isWorkerLockStale(existing)) {
-      return "already_locked";
+  return withStateMaintenanceLock(stateDir, () => {
+    const existing = readWorkerLock(stateDir);
+    if (existing) {
+      if (!isWorkerLockStale(existing)) {
+        return "already_locked";
+      }
+      writeStateFileAtomically(stateDir, lockFilePath(stateDir), JSON.stringify(lock, null, 2));
+      return "stale_replaced";
     }
-    writeFileSync(lockFilePath(stateDir), JSON.stringify(lock, null, 2), "utf8");
-    return "stale_replaced";
-  }
-
-  writeFileSync(lockFilePath(stateDir), JSON.stringify(lock, null, 2), "utf8");
-  return "acquired_supervisor_spawn";
+    writeStateFileAtomically(stateDir, lockFilePath(stateDir), JSON.stringify(lock, null, 2));
+    return "acquired_supervisor_spawn";
+  });
 }
 
 export function releaseWorkerLock(workerRunId: string, stateDir: string): void {
-  const existing = readWorkerLock(stateDir);
-  if (existing?.worker_run_id === workerRunId) {
-    try {
-      unlinkSync(lockFilePath(stateDir));
-    } catch {
-      // already gone
+  withStateMaintenanceLock(stateDir, () => {
+    const existing = readWorkerLock(stateDir);
+    if (existing?.worker_run_id === workerRunId) {
+      removeStateFile(stateDir, lockFilePath(stateDir));
     }
-  }
+  });
 }
 
 // ─── Worker run ID ────────────────────────────────────────────────────────────
@@ -560,6 +561,7 @@ export async function runCliWorker(
   let openRouterAttemptCounts: OpenRouterAttemptCounts | undefined;
   let missing: CliWorkerResult["missing"] | undefined;
   let providerUsage: CliWorkerProviderUsage | undefined;
+  let rawCapturePath: string | null = null;
 
   try {
     if (input.vendor === "claude_cli") {
@@ -573,7 +575,6 @@ export async function runCliWorker(
       durationSeconds = result.durationMs / 1000;
       captureErrorText = result.errorOutput;
       captureTimedOut = result.timedOut;
-      workerOutputPath = writeResponseFile(result.rawOutput, workerRunId, stateDir);
     } else if (input.vendor === "agy_cli") {
       const result = await captureAgyResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
@@ -594,13 +595,12 @@ export async function runCliWorker(
       durationSeconds = result.durationMs / 1000;
       attemptCount = 1;
 
-      // Persist the clean output to a file as the worker_output artifact
-      workerOutputPath = writeResponseFile(result.cleanOutput, workerRunId, stateDir);
     } else if (input.vendor === "openrouter_api") {
       if (openRouterConfig === null) {
         throw new Error("openrouter_api internal error: missing resolved config");
       }
 
+      ensureOpenRouterLedgersMigrated(stateDir);
       const spendLedgerPath = openRouterSpendLedgerPathForStateDir(stateDir);
       const result = await captureOpenRouterResponse(input.prompt, {
         openrouterMode: openRouterConfig.openrouterMode,
@@ -638,9 +638,6 @@ export async function runCliWorker(
       providerUsage = result.providerUsage;
       missing = result.missing;
 
-      if (!result.missing) {
-        workerOutputPath = writeResponseFile(result.rawOutput, workerRunId, stateDir);
-      }
     } else {
       const result = await captureCodexResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
@@ -657,12 +654,23 @@ export async function runCliWorker(
       parsedJson = result.parsedJson;
       durationSeconds = result.durationMs / 1000;
       attemptCount = result.attempts;
-      workerOutputPath = result.outputFilePath;
+      rawCapturePath = result.outputFilePath;
       captureErrorText = result.errorOutput;
       captureTimedOut = result.timedOut;
     }
   } catch (err) {
     captureErrorText = sanitizeCaptureErrorText(err, input.vendor);
+  }
+
+  rawOutput = sanitizeWorkerOutput(rawOutput);
+  parsedJson = sanitizeParsedWorkerJson(parsedJson);
+  captureErrorText = sanitizeWorkerError(captureErrorText);
+  try {
+    if (rawOutput.length > 0 && missing === undefined) {
+      workerOutputPath = writeResponseFile(rawOutput, workerRunId, stateDir);
+    }
+  } finally {
+    if (rawCapturePath !== null) unlinkBestEffort(rawCapturePath);
   }
 
   const classification = classifyCliWorkerOutcome({
@@ -676,6 +684,25 @@ export async function runCliWorker(
   errorReason = input.vendor === "openrouter_api" && captureErrorText
     ? captureErrorText
     : classification.errorReason;
+  errorReason = sanitizeWorkerError(errorReason);
+
+  if (
+    classification.outcome !== "success"
+    || rawOutput === "[REDACTION_FAILED]"
+    || errorReason === "[REDACTION_FAILED]"
+  ) {
+    try {
+      recordOperationalIncident(stateDir, {
+        stage: "worker_output",
+        correlation_ids: {
+          worker_run_id: workerRunId,
+          handoff_id: input.handoffId
+        }
+      });
+    } catch {
+      // Incident persistence must never replace the governed worker result.
+    }
+  }
 
   const stoppedAt = new Date().toISOString();
 
@@ -887,8 +914,7 @@ function hasLaterVendorProcessExit(
 
 function appendBestEffort(path: string, record: unknown): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
+    appendStateFile(dirname(path), path, `${JSON.stringify(record)}\n`);
   } catch {
     // registry writes are best-effort and must never affect vendor execution
   }
@@ -954,7 +980,24 @@ function sanitizeCaptureErrorText(err: unknown, vendor: CliVendor): string {
     ? openRouterErrorReason(err) ?? errorText(err)
     : errorText(err);
 
-  return vendor === "openrouter_api" ? redactOpenRouterApiKey(raw) : raw;
+  return sanitizeWorkerError(vendor === "openrouter_api" ? redactOpenRouterApiKey(raw) : raw) ?? "worker_capture_failed";
+}
+
+function sanitizeParsedWorkerJson(value: unknown): unknown | null {
+  if (value === null) return null;
+  try {
+    return parseSanitizedWorkerJson(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
+
+function unlinkBestEffort(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    // Governed ingestion must not fail because a temporary capture is already gone.
+  }
 }
 
 function errorText(err: unknown): string {
@@ -967,12 +1010,12 @@ function errorText(err: unknown): string {
 
 function appendRegistryEntry(entry: Record<string, unknown>, stateDir: string): void {
   const path = join(stateDir, "agent-registry.jsonl");
-  appendFileSync(path, `${JSON.stringify(entry)}\n`, "utf8");
+  appendStateFile(stateDir, path, `${JSON.stringify(entry)}\n`);
 }
 
 function writeResponseFile(content: string, runId: string, stateDir: string): string {
   const path = join(stateDir, `${runId}-output.txt`);
-  writeFileSync(path, content, "utf8");
+  writeStateFileAtomically(stateDir, path, content);
   return path;
 }
 
@@ -1053,8 +1096,7 @@ function safeTelemetryTokenCount(value: number): number {
 }
 
 function writeCliCallTelemetryRecord(record: CliCallTelemetryRecord, stateDir: string): void {
-  mkdirSync(stateDir, { recursive: true });
-  appendFileSync(stateFilePath(stateDir, CLI_CALL_TELEMETRY_PATH), `${JSON.stringify(record)}\n`, "utf8");
+  appendStateFile(stateDir, stateFilePath(stateDir, CLI_CALL_TELEMETRY_PATH), `${JSON.stringify(record)}\n`);
 }
 
 function emitSupervisorAlert(

@@ -1,37 +1,44 @@
-# Claude Code Instructions
+# Claude Code instructions
 
-This repository is the Autopilot control plane. It is a governance, prompt,
-Decision Mesh, and read-only command-center project, not a product runtime.
+This repository is the Autopilot Beta Ubuntu control plane. It contains an implemented loopback
+Control Plane, governed supervisor/dispatch path, Cockpit, Decision Mesh, managed state, and recovery
+tooling. Canonical current documentation starts at `docs/README.md`; dated plans, ADRs, audits, and
+work logs are evidence rather than runtime authority.
 
-Before planning or editing:
+Before planning, reviewing, or editing:
 
-- Follow `AGENTS.md` and the relevant Decision Mesh/project mesh packet.
-- Use `rg` before opening files and keep context narrow.
-- Read only the files required by the active task plus direct dependencies.
-- Keep routine worker loops local by default; Claude is not the default worker.
-- Treat Claude output as advisory or implementation draft until local tests,
-  source files, docs, and owner decisions verify it.
+- Follow `AGENTS.md`, the relevant Decision Mesh node, and the registered project's architecture.
+- Use `rg` first, read only direct task dependencies, and cite repository-relative evidence.
+- Keep routine worker loops local. Claude is reserved for owner-scoped architecture, security,
+  difficult implementation, or independent final review.
+- Treat Claude output as advisory until local files, deterministic tests, VM evidence, and owner
+  decisions verify it.
+- Use exact `claude-opus-4-8` when the owner requests the release review.
 
 Hard boundaries:
 
-- Do not add product runtime code, multi-provider gateways, connector clients,
-  deployments, background queues, or remote mutation unless an explicit
-  architecture decision and owner approval exist.
-- Do not print, store, or summarize secrets, credentials, auth tokens, raw
-  prompts, raw logs, customer data, or private account identifiers.
-- Do not treat model output as source-of-truth evidence.
-- Do not approve your own work or bypass verification gates.
-- For supervised project work, use that project's architecture record and
-  `docs/projects/<project-slug>/decision-mesh/` before implementation planning.
+- Do not create a parallel runtime, new mutating connector, deployment surface, background queue, or
+  provider gateway without an explicit architecture decision and owner approval.
+- Do not print, persist, or summarize secrets, auth tokens, cookies, raw prompts, raw provider logs,
+  customer data, or private account identifiers.
+- Do not call a paid API for acceptance unless the owner explicitly approves that cost.
+- Do not approve your own work, bypass mesh/token/approval gates, or treat provider narration as proof.
+- Do not mutate the live checkout or `~/.local/state/autopilot` during isolated candidate acceptance.
 
-Useful local checks (all verified to exist in `package.json`):
+Supported local checks use Node 24 from the repository root on Ubuntu:
 
-- `npm.cmd run verify` (aggregate gate: vendor-check + typecheck + tests + pdos:validate + renderability + buildability-floor + fit-safety + model-output:validate + mesh:gate:ci)
-- `npm.cmd run mesh:gate:ci` (bind-point ① related_files ratchet)
-- `npm.cmd run mesh:changed -- --since origin/main --fail-on-blocker --fail-on-ungoverned` (bind-point ② changed-file governance; `--fail-on-blocker` alone is fail-open on files no node maps — `--fail-on-ungoverned` adds the AF3 newly-added-sensitive deny that the pre-commit hook also enforces)
-- `npm.cmd run pdos:validate`
-- `npm.cmd run typecheck`
-- `npm.cmd test -- <target>`
+```bash
+npm run docs:links
+npm run mesh:gate:ci
+npm run mesh:changed -- --since origin/main --fail-on-blocker --fail-on-ungoverned
+npm run typecheck
+npm test -- <target>
+npm run verify
+npm run cockpit:test
+npm run cockpit:build
+npm run browser:qa
+```
 
-Use `npm.cmd`, not `npm`, from PowerShell in this Windows environment because
-PowerShell script execution policy may block `npm.ps1`.
+`verify` covers vendor provenance, typecheck, all Vitest tests, canonical documentation links,
+Product & Design OS checks, prompt-library validation, model-output validation, and the Decision Mesh
+ratchet. Use `npm`, not Windows-only `npm.cmd`, in the supported Ubuntu environment.

@@ -1,8 +1,14 @@
-import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
+import { appendStateFile } from "../src/data/delivery-system/stateMaintenanceLock";
+import { sanitizeWorkerOutput } from "../src/data/delivery-system/workerOutputPolicy";
+import {
+  recordOperationalIncident,
+  type OperationalIncidentStage
+} from "../src/data/delivery-system/operationalIncidents";
 import { promisify } from "node:util";
 
 import { decideApproval, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
@@ -14,8 +20,10 @@ import { createProviderQuotaScheduler } from "../src/data/delivery-system/provid
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
+import { buildReadiness, type ReadinessReport } from "../src/data/delivery-system/readiness";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
+import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
 import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
 
 const execFileAsync = promisify(execFile);
@@ -33,12 +41,14 @@ export interface ControlPlaneRuntime {
 }
 
 export interface ControlPlaneRuntimeOptions {
+  readonly projectRoot?: string;
   readonly scheduler?: ControlPlaneScheduler;
   readonly commandRunner?: ProviderCommandRunner;
   /** Explicit provider CLI capabilities; omitted providers remain unavailable. */
   readonly providerCommands?: Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>>;
   /** Add Secure to browser cookies when the public cockpit is served over TLS. */
   readonly secureCookies?: boolean;
+  readonly openRouterConfigured?: boolean;
   readonly dispatch?: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
   readonly supervisorPollMs?: number;
   readonly shutdownDrainMs?: number;
@@ -55,17 +65,31 @@ export function providerUsageCommandsFromEnvironment(
   };
 }
 
+export function secureCookiesFromEnvironment(
+  environment: Readonly<Record<string, string | undefined>>
+): boolean {
+  const value = environment.CONTROL_PLANE_SECURE_COOKIES?.trim().toLowerCase();
+  if (value === undefined || value === "" || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error("invalid_secure_cookie_configuration");
+}
+
 export interface ControlPlaneServerOptions {
   /** Add Secure to browser cookies; disabled by default for loopback HTTP development. */
   readonly secureCookies?: boolean;
   readonly runOrchestrator?: ReturnType<typeof createRunOrchestrator>;
+  readonly projectRoot?: string;
+  readonly readiness?: () => ReadinessReport;
 }
 
 export function createControlPlaneServer(stateDir: string, authToken: string | undefined, options: ControlPlaneServerOptions = {}) {
   const browserSessions = new Map<string, number>();
   const sessionTtlMs = 8 * 60 * 60 * 1000;
   return createServer(async (request, response) => {
+  const requestId = randomUUID();
+  try {
   if (request.method === "GET" && request.url === "/health") returnJson(response, { ok: true });
+  else if (request.method === "GET" && request.url === "/ready") return readinessHttp(response, options.readiness);
   else if (request.method === "POST" && request.url === "/auth/login") await loginBrowser(request, response, authToken, browserSessions, sessionTtlMs, options.secureCookies === true);
   else if (request.method === "POST" && request.url === "/auth/logout") {
     if (cookieValue(request.headers.cookie, "autopilot_session") !== null && !isBearerAuthenticated(request, authToken) && !isSameOriginMutation(request)) returnJson(response, { error: "csrf_origin_required" }, 403);
@@ -93,9 +117,71 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     }
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
-    else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator)) return;
+    else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else returnJson(response, { error: "not_found" }, 404);
+  } catch {
+    if (response.writableEnded) return;
+    if (response.headersSent) {
+      response.end();
+      return;
+    }
+    const incidentId = recordRouteIncidentBestEffort(stateDir, operationalStageForRequest(request), requestId);
+    returnJson(response, { error: "autopilot_internal_error", incident_id: incidentId, request_id: requestId }, 500);
+  }
   });
+}
+
+function operationalStageForRequest(request: IncomingMessage): OperationalIncidentStage {
+  const path = new URL(request.url ?? "/", "http://control-plane.local").pathname;
+  if (path === "/workers") return "control_plane_workers";
+  if (path.startsWith("/sessions")) return "control_plane_sessions";
+  if (path.startsWith("/providers")) return "control_plane_providers";
+  if (path.startsWith("/observability")) return "control_plane_observability";
+  if (path.startsWith("/approvals")) return "control_plane_approvals";
+  if (path.startsWith("/runs") || path.startsWith("/projects") || path.startsWith("/incidents")) return "control_plane_runs";
+  return "control_plane_status";
+}
+
+function recordRouteIncidentBestEffort(
+  stateDir: string,
+  stage: OperationalIncidentStage,
+  requestId: string
+): string {
+  try {
+    return recordOperationalIncident(stateDir, { stage, correlation_ids: { request_id: requestId } }).incident_id;
+  } catch {
+    return randomUUID();
+  }
+}
+
+function readinessHttp(response: ServerResponse, readiness: (() => ReadinessReport) | undefined): void {
+  try {
+    const report = readiness?.() ?? failedReadinessReport();
+    returnJson(response, report, report.ready ? 200 : 503);
+  } catch {
+    returnJson(response, failedReadinessReport(), 503);
+  }
+}
+
+function failedReadinessReport(): ReadinessReport {
+  return {
+    ready: false,
+    status: "unavailable",
+    checked_at: new Date().toISOString(),
+    components: {
+      configuration: { status: "unavailable", error_code: "invalid_configuration" },
+      managed_state: { status: "unavailable", error_code: "state_unavailable" },
+      project_registry: { status: "unavailable", error_code: "invalid_project_registry" },
+      supervisor: { status: "unavailable", error_code: "invalid_supervisor_state" },
+      token_gateway: { status: "unavailable", error_code: "invalid_token_gateway_state" },
+      providers: {
+        codex_cli: { status: "unavailable", error_code: "not_observed" },
+        claude_cli: { status: "unavailable", error_code: "not_observed" },
+        agy_cli: { status: "unavailable", error_code: "not_observed" },
+        openrouter_api: { status: "unavailable", error_code: "not_observed" }
+      }
+    }
+  };
 }
 
 function observabilityTimeline(stateDir: string, requestUrl: string) {
@@ -241,45 +327,80 @@ function readBoundedText(path: string, maxBytes = 16 * 1024): string {
     const start = Math.max(0, size - maxBytes);
     const buffer = Buffer.alloc(Number(size - start));
     readSync(fd, buffer, 0, buffer.length, start);
-    return redactWorkerOutput(buffer.toString("utf8"));
+    return sanitizeWorkerOutput(buffer.toString("utf8"), maxBytes);
   } finally {
     closeSync(fd);
   }
 }
 
-function redactWorkerOutput(value: string): string { return value.replace(/\b(?:sk|or|ghp|github_pat|xoxb)-[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]").replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]"); }
-
-function audit(directory: string, action: string, details: Record<string, unknown>): void { appendFileSync(join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action, ...details })}\n`, "utf8"); }
+function audit(directory: string, action: string, details: Record<string, unknown>): void { appendStateFile(directory, join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action, ...details })}\n`); }
 
 export function createControlPlaneRuntime(
   stateDir: string,
   authToken: string | undefined,
   options: ControlPlaneRuntimeOptions = {}
 ): ControlPlaneRuntime {
+  const projectRoot = options.projectRoot ?? resolveConfiguredProjectRoot();
+  const providerCommands = options.providerCommands ?? {};
   const scheduler = options.scheduler ?? createProviderQuotaScheduler({
     sessions: () => readSessionRegistry(stateDir).sessions,
     adapters: createProviderQuotaAdapters({
       runCommand: options.commandRunner ?? runProviderCommand,
-      ...(options.providerCommands === undefined ? {} : { commands: options.providerCommands })
+      commands: providerCommands
     }),
-    store: { stateDir }
+    store: { stateDir },
+    onPollFailure: ({ provider }) => {
+      try {
+        recordOperationalIncident(stateDir, {
+          stage: "provider_poll",
+          correlation_ids: { provider }
+        });
+      } catch {
+        // Provider polling must remain available when incident persistence is unavailable.
+      }
+    }
   });
   const supervisor = new SupervisorQueue({ stateDir });
   supervisor.recover();
   const orchestrator = createRunOrchestrator({
     stateDir,
+    projectRoot,
     tokenGateway: new TokenGateway({ stateDir }),
     supervisor,
     dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
   });
-  const server = createControlPlaneServer(stateDir, authToken, { ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }), runOrchestrator: orchestrator });
+  const server = createControlPlaneServer(stateDir, authToken, {
+    ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }),
+    runOrchestrator: orchestrator,
+    projectRoot,
+    readiness: () => buildReadiness({
+      stateDir,
+      projectRoot,
+      authToken,
+      providerCommands,
+      openRouterConfigured: options.openRouterConfigured ?? Boolean(process.env.OPENROUTER_API_KEY?.trim())
+    })
+  });
   scheduler.start();
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let activePoll: Promise<void> | null = null;
+  let supervisorFailureActive = false;
   const poll = async () => {
     if (stopped) return;
-    try { await orchestrator.runSupervisorOnce(); } catch (error) { process.stderr.write(`control-plane supervisor: ${error instanceof Error ? error.message : "dispatch_failed"}\n`); }
+    try {
+      await orchestrator.runSupervisorOnce();
+      supervisorFailureActive = false;
+    } catch {
+      if (!supervisorFailureActive) {
+        supervisorFailureActive = true;
+        try {
+          recordOperationalIncident(stateDir, { stage: "supervisor_loop" });
+        } catch {
+          // The supervisor retry loop must survive unavailable incident persistence.
+        }
+      }
+    }
     if (!stopped) timer = setTimeout(startPoll, options.supervisorPollMs ?? 250);
   };
   const startPoll = () => { activePoll = poll().finally(() => { activePoll = null; }); };
@@ -309,7 +430,7 @@ async function runProviderCommand(input: { readonly command: string; readonly ar
 const stateDir = process.argv[2] ?? process.env.CONTROL_PLANE_STATE_DIR ?? "";
 const port = Number(process.argv[3] ?? process.env.CONTROL_PLANE_PORT ?? "8787");
 const authToken = process.env.CONTROL_PLANE_TOKEN?.trim();
-const secureCookies = /^(1|true|yes)$/i.test(process.env.CONTROL_PLANE_SECURE_COOKIES?.trim() ?? "");
+const secureCookies = secureCookiesFromEnvironment(process.env);
 if (process.argv[1]?.endsWith("control-plane-server.ts")) {
   if (!stateDir || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("usage: control-plane-server STATE_DIR [PORT]");
   const providerCommands = providerUsageCommandsFromEnvironment(process.env);
@@ -333,7 +454,7 @@ async function decideApprovalHttp(request: IncomingMessage, response: ServerResp
         ? decideApproval(record, decision, new Date().toISOString(), typeof body.reason === "string" ? body.reason : undefined)
         : record);
       writeApprovalQueue(directory, { ...document, records });
-      appendFileSync(join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action: decision, approval_id: approvalId })}\n`, "utf8");
+      appendStateFile(directory, join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action: decision, approval_id: approvalId })}\n`);
       returnJson(response, records.find((record) => record.approval_id === approvalId));
     }
   }

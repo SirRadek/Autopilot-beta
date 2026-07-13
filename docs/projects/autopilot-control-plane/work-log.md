@@ -1,5 +1,46 @@
 # Autopilot Control Plane Work Log
 
+> **Historical log:** Entries preserve the command syntax and architecture assumptions of their date.
+> They are not current operating instructions. See [System architecture](../../architecture/system-overview.md),
+> [Service runbook](../../operations/service-runbook.md), and
+> [Current status](../../status/current-status.md).
+
+## 2026-07-13 Release-baseline repair and canonical documentation
+
+Scope: close audited state/runtime blockers, verify the exact candidate on the Ubuntu VM, replace
+competing current documentation, and retain live cutover as an owner decision.
+
+Implemented evidence:
+
+- State-safety commits `c6dc0a5` through `1fa02ea` added coordinated writers, locked mutations,
+  centralized output sanitation, bounded incidents, validation-before-rotation, recovery drill, and
+  the final independent-review fixes.
+- `04604b5` added deterministic canonical Markdown link validation.
+- `fadd4df` repaired browser QA targeting of persisted incidents.
+- `2108bbf` retained the token-gateway bound test while allowing the measured VM runtime.
+- `5a9ea88` changed the supported deployment to root-managed system units and added a fail-closed
+  positive/negative write probe after the VM proved user-manager containment ineffective.
+- `9de1a79` and `662baf1` published canonical user, architecture, service, configuration, recovery,
+  troubleshooting, and status pages; `docs:links` is now part of `verify`.
+
+Verification:
+
+- Host Node 24: 100 test files / 912 tests plus provenance, typecheck, documentation links, Product &
+  Design OS, prompt-library, model-output, and Decision Mesh gates.
+- Exact VM commit `5a9ea88982ebca7f62a2aeeae1826ce8aec10c9d`: `npm ci`, typecheck, and the same 912-test gate passed.
+- Isolated VM state initialization, deterministic no-provider Cockpit run, backup validation, recovery
+  reconciliation/readiness, liveness/readiness, cookie auth/logout, same-origin proxy, and headless
+  Chromium login passed without changing live state.
+- The old user systemd boundary was reproduced as ineffective; the new startup probe detected it and
+  returned `installation_write_boundary_not_enforced` instead of starting unsafely.
+
+Decision Mesh impact: `recovery_mesh` now requires `verify_runtime_write_boundary` and points to the
+canonical recovery/service/troubleshooting documents. Snapshot drift is zero.
+
+Remaining release blockers: install system Node 24 and root-managed units with sudo, prove the
+positive system-manager write boundary, run the final Claude Opus 4.8 review, update the final SHA,
+and obtain explicit owner approval before live cutover.
+
 ## 2026-07-06 Governed Dispatch Worker Metadata Pass-Through
 
 Date: 2026-07-06
@@ -3069,3 +3110,36 @@ Verification:
   - `vitest run`
   - `astro build`
   - `playwright test`
+
+## 2026-07-13 Idempotent Project Registry Bootstrap
+
+Date: 2026-07-13
+Request or trigger: release-baseline runtime-path task 3 required a safe, repeatable operator bootstrap for the project registry.
+Mode: WRITE_ALLOWED for the bounded registry initializer, CLI, tests, package script, provenance check, and mesh ratchet refresh. No project discovery, registration, remote mutation, or live-state mutation was added.
+
+Files changed:
+
+- `src/data/delivery-system/projectRegistry.ts`
+- `scripts/project-registry-init.ts`
+- `package.json`
+- `tests/delivery-system/project-registry.test.ts`
+- `tests/scripts/project-registry-init.test.ts`
+- `mesh/related-files-snapshot.json`
+
+Architecture and project-mesh impact:
+
+- No architecture boundary changed. The bootstrap creates only an empty schema-v1 registry and never discovers or registers project directories.
+- Existing `supervisor_execution_loop` governance already covers `projectRegistry.ts`; its guidance remains accurate, so no mesh node or rule change was needed.
+- The related-files snapshot was refreshed after reviewing that existing coverage.
+
+Verification:
+
+- Focused registry and CLI tests passed.
+- CLI temporary-state smoke produced an empty registry with `0700` directories and a `0600` registry file.
+- Typecheck, vendor provenance, mesh ratchet, and diff checks passed.
+
+### R3 atomic publication review remediation
+
+The initialization publisher now fsyncs a private same-directory temporary file and atomically hard-links it into place with create-if-absent semantics. A contending registry can never be overwritten: `EEXIST` routes through full validation, valid winner bytes remain unchanged, and malformed winner bytes remain unchanged while initialization fails closed.
+
+Additional coverage proves valid and malformed contention outcomes, independently formatted populated-registry preservation, portable malformed-file assertions, repeated CLI idempotence, and isolated default-project-root resolution. This strengthens the existing persistence invariant without changing architecture or project-mesh topology; the `supervisor_execution_loop` snapshot was refreshed after review.

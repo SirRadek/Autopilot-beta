@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -53,10 +53,11 @@ describe("bounded observability", () => {
     expect(result.limits).toEqual({ files_scanned: 6, max_bytes_per_file: 2_048, max_lines_per_file: 5, max_events: 3, truncated: true });
   });
 
-  it("finds the OpenRouter ledger at its production parent-state location", () => {
+  it("finds the OpenRouter ledger at its managed-state location", () => {
     const parentDir = mkdtempSync(join(tmpdir(), "observability-spend-"));
     const stateDir = join(parentDir, "state");
-    writeJsonl(parentDir, "openrouter-api-spend.jsonl", [{ recorded_at: "2026-07-12T10:00:00Z", model: "m", cost_usd: 0.5 }]);
+    mkdirSync(stateDir);
+    writeJsonl(stateDir, "openrouter-api-spend.jsonl", [{ recorded_at: "2026-07-12T10:00:00Z", model: "m", cost_usd: 0.5 }]);
     expect(buildObservability(stateDir).summary.openrouter_cost_usd).toBe(0.5);
   });
 

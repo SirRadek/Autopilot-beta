@@ -1,21 +1,19 @@
 import { resolve } from "node:path";
 
-import {
-  rotateStateLogs,
-  scanOperationalSecrets,
-  verifyOperationalPermissions
-} from "../src/data/delivery-system/operationalHardening";
+import { performStateMaintenance } from "../src/data/delivery-system/stateMaintenance";
 
 const arguments_ = process.argv.slice(2);
-const apply = arguments_.includes("--apply-rotation");
-const positional = arguments_.filter((argument) => argument !== "--apply-rotation");
-const [stateDirectoryValue, environmentFileValue] = positional;
-if (!stateDirectoryValue || !environmentFileValue) throw new Error("usage: tsx scripts/ops-maintenance.ts STATE_DIR ENV_FILE [--apply-rotation]");
-const stateDirectory = resolve(stateDirectoryValue);
-const environmentFile = resolve(environmentFileValue);
-const permissions = verifyOperationalPermissions(stateDirectory, environmentFile);
-const secrets = scanOperationalSecrets(stateDirectory);
-const rotated = apply ? rotateStateLogs(stateDirectory) : [];
-const report = { ok: permissions.length === 0 && secrets.length === 0, mode: apply ? "rotation_applied" : "dry_run", permissions, secrets, rotated };
+const apply = arguments_.includes("--apply");
+const positional = arguments_.filter((argument) => argument !== "--apply");
+const [stateDirectoryValue, backupDirectoryValue, environmentFileValue] = positional;
+if (!stateDirectoryValue || !backupDirectoryValue || !environmentFileValue) {
+  throw new Error("usage: tsx scripts/ops-maintenance.ts STATE_DIR BACKUP_DIR ENV_FILE [--apply]");
+}
+const report = performStateMaintenance({
+  stateDirectory: resolve(stateDirectoryValue),
+  backupDirectory: resolve(backupDirectoryValue),
+  environmentFile: resolve(environmentFileValue),
+  mode: apply ? "apply" : "dry_run"
+});
 console.log(JSON.stringify(report, null, 2));
 if (!report.ok) process.exitCode = 1;

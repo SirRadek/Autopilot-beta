@@ -5,11 +5,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=radek
+Group=radek
 WorkingDirectory=/home/radek/autopilot-beta
-Environment=PATH=/home/radek/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/usr/bin:/bin
 Environment=AUTOPILOT_STATE_DIR=/home/radek/.local/state/autopilot
+Environment=AUTOPILOT_PROJECTS_DIR=%h/projects
 EnvironmentFile=/home/radek/.config/autopilot/control-plane.env
-ExecStart=/home/radek/.local/bin/npm run control-plane:serve -- /home/radek/.local/state/autopilot 8787
+ExecStartPre=+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool
+ExecStartPre=/usr/bin/npm run ops:boundary-check -- /home/radek/autopilot-beta ${AUTOPILOT_STATE_DIR} ${AUTOPILOT_PROJECTS_DIR}
+ExecStart=/usr/bin/npm run control-plane:serve -- /home/radek/.local/state/autopilot 8787
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM
@@ -18,9 +23,10 @@ UMask=0077
 NoNewPrivileges=true
 # tmux usage probes communicate through /tmp/tmux-$UID; a private /tmp would hide that socket.
 PrivateTmp=false
+PrivateUsers=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/radek/.local/state/autopilot
+ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects
 RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
@@ -28,4 +34,4 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

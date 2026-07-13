@@ -1,13 +1,17 @@
 # Autopilot Control Plane Architecture
 
+> **Historical/superseded:** This document records an earlier Windows/read-only architecture phase
+> and is not the current operational contract. See [System architecture](../../architecture/system-overview.md)
+> and [Current status](../../status/current-status.md).
+
 Last updated: 2026-06-17
 Next review: 2026-06-24
-Status: active process layer
+Status: historical/superseded process layer
 Release: `v0.2.0`
 Slug: `autopilot-control-plane`
-Canonical local root: `C:\Programování\autopilot-beta` (the single self-contained source of truth; the former canonical `autopilot` at `C:\Programování\Codex` / `SirRadek/autopilot` is archived/dead)
+Historical local root: `C:\Programování\autopilot-beta` (retained as phase evidence only)
 Canonical remote repository: `SirRadek/Autopilot-beta`
-Local workspace: `C:\Programování\autopilot-beta`
+Historical workspace: `C:\Programování\autopilot-beta`
 Separation status: `separated`
 Visibility: dedicated control-plane repository, with private inventory redacted when needed
 

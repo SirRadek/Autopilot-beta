@@ -1,5 +1,8 @@
 # Autopilot VM recovery runbook
 
+> **Superseded:** This page is retained for historical compatibility. Use the canonical
+> [State and recovery](state-and-recovery.md) guide and [Service runbook](service-runbook.md).
+
 ## Safety invariants
 
 - The live state directory is `~/.local/state/autopilot` and must be mode `0700`.
@@ -11,14 +14,15 @@
 ## Routine checks
 
 ```bash
-systemctl --user status autopilot-control-plane.service
-systemctl --user list-timers 'autopilot-*'
+sudo systemctl status autopilot-control-plane.service
+sudo systemctl list-timers 'autopilot-*'
 npm run ops:health -- 8787
-npm run ops:maintenance -- ~/.local/state/autopilot ~/.config/autopilot/control-plane.env
+npm run ops:maintenance -- ~/.local/state/autopilot ~/.local/state/autopilot/backups ~/.config/autopilot/control-plane.env
 ```
 
-The maintenance command is a dry run unless `--apply-rotation` is supplied. Findings contain only
-file names and rule identifiers, never secret values.
+The maintenance command is a dry run unless `--apply` is supplied. Findings contain only bounded
+rule identifiers, never secret values. Apply holds one state lease across backup, validation,
+rotation, and retention pruning.
 
 Maintenance writes and validates the backup before rotation. Rotation retains only a bounded recent
 archive plus a bounded current JSONL file; older history remains in that pre-rotation backup. If a
@@ -27,8 +31,8 @@ state file exceeds the backup safety cap, maintenance stops instead of rotating 
 ## Create and validate a backup
 
 ```bash
-npm run ops:backup -- ~/.local/state/autopilot ~/.local/state/autopilot-backups
-npm run ops:restore -- ~/.local/state/autopilot-backups/FILE.apbackup.json /tmp/autopilot-restore-check
+npm run ops:backup -- ~/.local/state/autopilot ~/.local/state/autopilot/backups
+npm run ops:restore -- ~/.local/state/autopilot/backups/FILE.apbackup.json /tmp/autopilot-restore-check
 ```
 
 The second command validates schema, safe relative paths, sizes, and SHA-256 checksums. It writes
@@ -36,12 +40,22 @@ nothing in validation mode.
 
 ## Recovery drill or real recovery
 
+Run the isolated automated drill first. It accepts only an archive path, restores into an owned
+temporary directory, performs supervisor restart reconciliation and pure readiness validation,
+and removes the restored copy before returning:
+
+```bash
+npm run ops:recovery-drill -- ~/.local/state/autopilot/backups/FILE.apbackup.json
+```
+
+For a real recovery:
+
 1. Validate the selected backup using the command above.
 2. Choose a new empty staging directory; do not select the live state directory.
 3. Apply into staging:
 
    ```bash
-   npm run ops:restore -- ~/.local/state/autopilot-backups/FILE.apbackup.json ~/.local/state/autopilot-restore-staging --apply
+   npm run ops:restore -- ~/.local/state/autopilot/backups/FILE.apbackup.json ~/.local/state/autopilot-restore-staging --apply
    ```
 
 4. Inspect staged permissions and run read-only status commands against it.

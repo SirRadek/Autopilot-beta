@@ -12,6 +12,7 @@ signals:
   - correction
   - eval
   - routing decision
+  - provider ledger migration
 related_agents:
   - architect
   - qa
@@ -21,7 +22,19 @@ related_files:
   - src/data/delivery-system/modelOutputEvaluation.ts
   - src/data/delivery-system/cliWorker.ts
   - src/data/delivery-system/cliWorkerCapture.ts
+  - src/data/delivery-system/managedStateFile.ts
+  - src/data/delivery-system/openRouterLedgerMigration.ts
+  - src/data/delivery-system/operationalIncidents.ts
   - src/data/delivery-system/sessionState.ts
+  - src/data/delivery-system/stateMaintenanceLock.ts
+  - src/data/delivery-system/projectRegistry.ts
+  - src/data/delivery-system/providerQuotaStore.ts
+  - src/data/delivery-system/readiness.ts
+  - src/data/delivery-system/runStore.ts
+  - src/data/delivery-system/runOrchestrator.ts
+  - src/data/delivery-system/supervisorQueue.ts
+  - src/data/delivery-system/tokenGateway.ts
+  - src/data/delivery-system/workerOutputPolicy.ts
   - model-output-evals/
   - docs/autopilot/agent-handoff-packet-template.md
 required_checks:
@@ -32,6 +45,7 @@ required_checks:
   - supervisor_routing_decision_recorded
   - eval_record_noted_after_output
   - worker_cli_vendor_dispatched_via_runCliWorker
+  - provider_ledger_migrated_before_vendor_dispatch
 stop_conditions:
   - raw_agent_output_chained_as_prompt
   - correction_loop_exceeded_without_escalation
@@ -40,6 +54,7 @@ stop_conditions:
   - eval_record_not_written_after_output
   - claude_agent_roleplay_as_vendor_worker
   - worker_delegated_without_runCliWorker
+  - provider_called_before_ledger_migration
 must_not_assume:
   - Do not pass raw agent output directly into the next prompt.
   - Do not continue correction loops after the maximum iteration count.

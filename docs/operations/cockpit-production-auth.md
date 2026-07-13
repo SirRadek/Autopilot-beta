@@ -1,5 +1,8 @@
 # Cockpit production authentication
 
+> **Superseded:** This focused note is retained for historical compatibility. Use canonical
+> [Configuration](configuration.md) and [Ubuntu VM installation](install-ubuntu-vm.md).
+
 The Control Plane keeps `CONTROL_PLANE_TOKEN` server-side. Browser access uses
 `POST /auth/login` once and receives an eight-hour `HttpOnly`, `SameSite=Lax`
 `autopilot_session` cookie. The cookie is held in the Control Plane process and
@@ -8,7 +11,9 @@ invalidates it. CLI and service-to-service callers may continue using
 `Authorization: Bearer $CONTROL_PLANE_TOKEN`.
 
 Set `CONTROL_PLANE_SECURE_COOKIES=true` for a TLS deployment. Loopback HTTP
-development leaves this unset so the browser can receive the cookie. Browser
+uses the explicit `false` value so the browser can receive the cookie. These
+are the only accepted non-empty values; an invalid value fails startup with
+`invalid_secure_cookie_configuration` instead of silently weakening cookie policy. Browser
 cookie-authenticated mutations require a same-origin `Origin` (or `Referer`)
 header; bearer-authenticated CLI calls are not subject to this browser CSRF
 check.

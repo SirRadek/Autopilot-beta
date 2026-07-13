@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 124,
+  "file_count": 130,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -73,36 +73,40 @@
     "product-design-os/tokens/TOKEN_FLOOR.md",
     "product-design-os/tokens/style.json",
     "scripts/validate-model-output-evals.ts",
-    "src/data/delivery-system/sessionRegistry.ts",
-    "src/data/delivery-system/sessionDispatch.ts",
     "src/data/delivery-system/approvalQueue.ts",
-    "src/data/delivery-system/incidentStore.ts",
-    "src/data/delivery-system/observability.ts",
-    "src/data/delivery-system/operationalHardening.ts",
-    "src/data/delivery-system/projectRegistry.ts",
-    "src/data/delivery-system/providerUsageProbe.ts",
-    "src/data/delivery-system/runOrchestrator.ts",
-    "src/data/delivery-system/runPromptPolicy.ts",
-    "src/data/delivery-system/runRouteEligibility.ts",
-    "src/data/delivery-system/runStore.ts",
-    "src/data/delivery-system/tokenGateway.ts",
-    "src/data/delivery-system/providerQuotaStore.ts",
-    "src/data/delivery-system/skillRegistry.ts",
-    "src/data/delivery-system/providerQuota.ts",
-    "src/data/delivery-system/providerQuotaAdapters.ts",
-    "src/data/delivery-system/providerQuotaScheduler.ts",
-    "src/data/delivery-system/supervisorQueue.ts",
-    "src/data/delivery-system/telemetryRedaction.ts",
     "src/data/delivery-system/capabilities.ts",
     "src/data/delivery-system/contextEconomy.ts",
     "src/data/delivery-system/dependencyFreshness.ts",
     "src/data/delivery-system/designIntelligence.ts",
     "src/data/delivery-system/graphicAgent.ts",
+    "src/data/delivery-system/incidentStore.ts",
     "src/data/delivery-system/localWorkers.ts",
+    "src/data/delivery-system/managedStateFile.ts",
     "src/data/delivery-system/modelSpend.ts",
+    "src/data/delivery-system/observability.ts",
+    "src/data/delivery-system/openRouterLedgerMigration.ts",
+    "src/data/delivery-system/operationalHardening.ts",
+    "src/data/delivery-system/projectRegistry.ts",
     "src/data/delivery-system/promptLibrary.ts",
     "src/data/delivery-system/protectiveSupervision.ts",
+    "src/data/delivery-system/providerQuota.ts",
+    "src/data/delivery-system/providerQuotaAdapters.ts",
+    "src/data/delivery-system/providerQuotaScheduler.ts",
+    "src/data/delivery-system/providerQuotaStore.ts",
+    "src/data/delivery-system/providerUsageProbe.ts",
+    "src/data/delivery-system/readiness.ts",
     "src/data/delivery-system/routingGuards.ts",
+    "src/data/delivery-system/runOrchestrator.ts",
+    "src/data/delivery-system/runPromptPolicy.ts",
+    "src/data/delivery-system/runRouteEligibility.ts",
+    "src/data/delivery-system/runStore.ts",
+    "src/data/delivery-system/runtimePaths.ts",
+    "src/data/delivery-system/sessionDispatch.ts",
+    "src/data/delivery-system/sessionRegistry.ts",
+    "src/data/delivery-system/skillRegistry.ts",
+    "src/data/delivery-system/supervisorQueue.ts",
+    "src/data/delivery-system/telemetryRedaction.ts",
+    "src/data/delivery-system/tokenGateway.ts",
     "src/data/delivery-system/toolInventory.ts",
     "src/governed-core/dispatch.ts",
     "src/governed-core/index.ts",
@@ -750,6 +754,11 @@
       "content_hash": "bd5a8aad8ade52c584db95f57620ef01efc33489693aa5c113b156ba3792e72c"
     },
     {
+      "source_path": "src/data/delivery-system/operationalIncidents.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "7993981b1132c56b9c9cad419c8a7480ef80b08c72e9b6172ad7b223b79aa0be"
+    },
+    {
       "source_path": "src/data/delivery-system/routingModes.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "74b7a84e601974a3f9fd18e2ab959b97cc214ae24883a6531ace1e00e5354168",
@@ -762,9 +771,30 @@
       "patched_by": "auditC"
     },
     {
+      "source_path": "src/data/delivery-system/stateBackup.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "c896b71c74d1638c47ab860d087c28caaf7b2fb6d4f242bcfcfdbc7da5600407"
+    },
+    {
+      "source_path": "src/data/delivery-system/stateMaintenance.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "412dedf5a50e09d21d7b11831ca65ab8187b80bad2837445676a925625df5df7"
+    },
+    {
+      "source_path": "src/data/delivery-system/stateMaintenanceLock.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "cfbd8a6aac0017c51347559f29199f628f79ee9832815be9938029bd3f3b975f",
+      "patched_by": "S7"
+    },
+    {
+      "source_path": "src/data/delivery-system/stateRecovery.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "3469109cdf32d3dc515b4d812587205610e27f8332f01fa03e2fc953a21ee8ba"
+    },
+    {
       "source_path": "src/data/delivery-system/subagentEvidence.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "d7646b92e25b3c4712ce4c8de58e9ca5f18c68ac34253336d8018b50214f1b30"
+      "content_hash": "ffcc05fcf148ce8e50c2670b8c461c4f656a9f88a7288cf4744be947c8c81f7f"
     },
     {
       "source_path": "src/data/delivery-system/subscriptionBudget.ts",
@@ -782,6 +812,11 @@
       "source_path": "src/data/delivery-system/tokenEfficiency.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "36693c3b3cc9671c70dacc97a38f801e36d318b2c5fdda3cdbe36e492e7cf9de"
+    },
+    {
+      "source_path": "src/data/delivery-system/workerOutputPolicy.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "3cacc88335f116c6d3ed679088aa25620010b673a8e4f36492442a277e7a2543"
     },
     {
       "source_path": "src/data/delivery-system/workflows.ts",

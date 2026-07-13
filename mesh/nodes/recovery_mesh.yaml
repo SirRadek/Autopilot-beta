@@ -19,9 +19,24 @@ related_agents:
   - backend_database
 related_files:
   - src/data/delivery-system/capabilities.ts
+  - src/data/delivery-system/operationalHardening.ts
+  - src/data/delivery-system/stateBackup.ts
+  - src/data/delivery-system/stateMaintenance.ts
+  - src/data/delivery-system/stateRecovery.ts
+  - scripts/ops-backup.ts
+  - scripts/ops-maintenance.ts
+  - scripts/ops-boundary-check.ts
+  - scripts/ops-recovery-drill.ts
+  - ops/systemd/autopilot-control-plane.service
+  - ops/systemd/autopilot-state-maintenance.service
+  - docs/operations/state-and-recovery.md
+  - docs/operations/service-runbook.md
+  - docs/operations/troubleshooting.md
   - docs/autopilot/product-brief-template.md
 required_checks:
   - backup_current_state
+  - validate_backup_before_rotation
+  - verify_runtime_write_boundary
   - identify_platform
   - crawl_current_site
   - scan_basic_security
@@ -29,6 +44,7 @@ stop_conditions:
   - no_current_backup
   - update_everything_blindly
   - migrate_without_url_map
+  - runtime_write_boundary_unverified
 must_not_assume:
   - Do not update, delete, migrate, or redesign first.
 objective:

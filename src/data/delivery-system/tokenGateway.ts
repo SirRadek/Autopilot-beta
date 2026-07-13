@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { readManagedStateTextFile } from "./managedStateFile";
+import { appendStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export interface TokenBudget {
   readonly max_tokens: number;
@@ -107,12 +110,17 @@ const MAX_TERMINAL_RESERVATIONS = 1024;
 const MAX_STATE_BYTES = 2 * 1024 * 1024;
 const MAX_USAGE_KEYS = MAX_ACTIVE_RESERVATIONS * 3;
 
+export function validateTokenGatewayState(stateDir: string): void {
+  readGatewayState(join(stateDir, STATE_FILE));
+}
+
 /**
  * The single pre-dispatch token gate. Reservations are bound to one provider,
  * model and session and must be settled with the same route; callers cannot
  * silently switch providers while a task is in flight.
  */
 export class TokenGateway {
+  private readonly stateDir: string;
   private readonly statePath: string;
   private readonly telemetryPath: string;
   private readonly limits: TokenGatewayLimits;
@@ -121,6 +129,7 @@ export class TokenGateway {
   constructor(options: { readonly stateDir?: string; readonly limits?: Partial<TokenGatewayLimits> } = {}) {
     const stateDir = options.stateDir ?? ".autopilot-state";
     mkdirSync(stateDir, { recursive: true });
+    this.stateDir = stateDir;
     this.statePath = join(stateDir, STATE_FILE);
     this.telemetryPath = join(stateDir, TELEMETRY_FILE);
     this.limits = { ...DEFAULT_TOKEN_GATEWAY_LIMITS, ...(options.limits ?? {}) };
@@ -238,21 +247,13 @@ export class TokenGateway {
   }
 
   private loadState(): GatewayState {
-    if (!existsSync(this.statePath)) return { used: {}, reservations: {}, terminal: {} };
-    if (statSync(this.statePath).size > MAX_STATE_BYTES) throw new Error("invalid_token_gateway_state");
-    let parsed: Partial<GatewayState>;
-    try { parsed = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<GatewayState>; }
-    catch { throw new Error("invalid_token_gateway_state"); }
-    if (typeof parsed.used !== "object" || parsed.used === null || typeof parsed.reservations !== "object" || parsed.reservations === null || typeof parsed.terminal !== "object" || parsed.terminal === null ||
-      Object.keys(parsed.used).length > MAX_USAGE_KEYS || Object.keys(parsed.reservations).length > MAX_ACTIVE_RESERVATIONS || Object.keys(parsed.terminal).length > MAX_TERMINAL_RESERVATIONS) throw new Error("invalid_token_gateway_state");
-    const terminal = Object.fromEntries(Object.entries(parsed.terminal).map(([id, value]) => [id, { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }]));
-    return { used: parsed.used, reservations: parsed.reservations, terminal };
+    return readGatewayState(this.statePath);
   }
 
   private persist(): void {
     const serialized = JSON.stringify(this.state);
     if (Buffer.byteLength(serialized) > MAX_STATE_BYTES) throw new Error("token_gateway_state_limit");
-    writeFileSync(this.statePath, serialized, { mode: 0o600 });
+    writeStateFileAtomically(this.stateDir, this.statePath, serialized);
   }
 
   private pruneTerminal(): void {
@@ -276,9 +277,13 @@ export class TokenGateway {
       reason: input.reason
     };
     try {
-      const lines = existsSync(this.telemetryPath) ? readFileSync(this.telemetryPath, "utf8").trim().split("\n").filter(Boolean) : [];
-      lines.push(JSON.stringify(record));
-      writeFileSync(this.telemetryPath, `${lines.slice(-MAX_TELEMETRY_LINES).join("\n")}\n`, { mode: 0o600 });
+      withStateMaintenanceLock(this.stateDir, () => {
+        appendStateFile(this.stateDir, this.telemetryPath, `${JSON.stringify(record)}\n`);
+        const lines = readFileSync(this.telemetryPath, "utf8").trim().split("\n").filter(Boolean);
+        if (lines.length > MAX_TELEMETRY_LINES) {
+          writeStateFileAtomically(this.stateDir, this.telemetryPath, `${lines.slice(-MAX_TELEMETRY_LINES).join("\n")}\n`);
+        }
+      });
     } catch { /* telemetry is best effort and must never bypass the gate */ }
   }
 }
@@ -310,4 +315,143 @@ function bounded(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const clean = value.replace(/[\r\n\t]/g, " ").slice(0, MAX_FIELD_LENGTH);
   return clean.length > 0 ? clean : null;
+}
+
+function readGatewayState(path: string): GatewayState {
+  try {
+    const file = readManagedStateTextFile(path, { maxBytes: MAX_STATE_BYTES });
+    if (file.status === "missing") return { used: {}, reservations: {}, terminal: {} };
+    const parsed: unknown = JSON.parse(file.text);
+    if (!isGatewayState(parsed)) throw new Error("invalid_token_gateway_state");
+    const terminal = Object.fromEntries(Object.entries(parsed.terminal).map(([id, value]) => [
+      id,
+      { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }
+    ]));
+    return { used: parsed.used, reservations: parsed.reservations, terminal };
+  } catch {
+    throw new Error("invalid_token_gateway_state");
+  }
+}
+
+function isGatewayState(value: unknown): value is GatewayState {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["used", "reservations", "terminal"]) ||
+    !isRecord(value.used) || !isRecord(value.reservations) || !isRecord(value.terminal) ||
+    Object.keys(value.used).length > MAX_USAGE_KEYS ||
+    Object.keys(value.reservations).length > MAX_ACTIVE_RESERVATIONS ||
+    Object.keys(value.terminal).length > MAX_TERMINAL_RESERVATIONS) {
+    return false;
+  }
+  const reservationEntries = Object.entries(value.reservations);
+  const terminalEntries = Object.entries(value.terminal);
+  if (!reservationEntries.every(([id, reservation]) => isReservation(id, reservation)) ||
+    !terminalEntries.every(([id, terminal]) => isPersistedString(id) && isTerminalReservation(terminal))) {
+    return false;
+  }
+  const reservations = reservationEntries.map(([, reservation]) => reservation as TokenReservation);
+  const handoffIds = reservations.flatMap((reservation) => reservation.handoffId === undefined ? [] : [reservation.handoffId]);
+  const terminalIds = new Set(terminalEntries.map(([id]) => id));
+  if (new Set(handoffIds).size !== handoffIds.length ||
+    reservationEntries.some(([id]) => terminalIds.has(id))) {
+    return false;
+  }
+  return usageIsCoherent(value.used, reservations);
+}
+
+function isReservation(id: string, value: unknown): value is TokenReservation {
+  return isPersistedString(id) && isRecord(value) &&
+    hasOnlyKeys(value, ["provider", "model", "sessionId", "inputTokens", "outputTokens", "reservationId", "reservedAt", "totalTokens"], ["handoffId"]) &&
+    value.reservationId === id && isPersistedString(value.provider) &&
+    (value.model === null || isPersistedString(value.model)) &&
+    (value.sessionId === null || isPersistedString(value.sessionId)) &&
+    (value.handoffId === undefined || isPersistedString(value.handoffId)) &&
+    isTimestamp(value.reservedAt) &&
+    isNonNegativeSafeInteger(value.inputTokens) &&
+    isNonNegativeSafeInteger(value.outputTokens) &&
+    isNonNegativeSafeInteger(value.totalTokens) &&
+    Number.isSafeInteger(value.inputTokens + value.outputTokens) &&
+    value.totalTokens === value.inputTokens + value.outputTokens;
+}
+
+function isTerminalReservation(value: unknown): value is GatewayState["terminal"][string] {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["event", "settlement"], ["completedAt"]) ||
+    (value.event !== "settled" && value.event !== "released") || !isRecord(value.settlement) ||
+    !hasOnlyKeys(value.settlement, ["inputTokens", "outputTokens"], ["released"]) ||
+    !isNonNegativeSafeInteger(value.settlement.inputTokens) ||
+    !isNonNegativeSafeInteger(value.settlement.outputTokens) ||
+    !Number.isSafeInteger(value.settlement.inputTokens + value.settlement.outputTokens) ||
+    (value.settlement.released !== undefined && typeof value.settlement.released !== "boolean") ||
+    (value.completedAt !== undefined && !isTimestamp(value.completedAt))) {
+    return false;
+  }
+  return value.event !== "released" ||
+    (value.settlement.inputTokens === 0 && value.settlement.outputTokens === 0 && value.settlement.released === true);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isPersistedString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_FIELD_LENGTH && bounded(value) === value;
+}
+
+function isTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 32) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function usageIsCoherent(used: Record<string, unknown>, reservations: readonly TokenReservation[]): boolean {
+  const totals = { provider: 0, model: 0, session: 0 };
+  for (const [key, value] of Object.entries(used)) {
+    const kind = usageKeyKind(key);
+    if (kind === null || !isNonNegativeSafeInteger(value) || value === 0 || !safeIncrement(totals, kind, value)) return false;
+  }
+  if (totals.provider !== totals.model || totals.provider !== totals.session) return false;
+
+  const required = new Map<string, number>();
+  for (const reservation of reservations) {
+    if (reservation.totalTokens === 0) continue;
+    for (const key of routeUsageKeys(reservation)) {
+      const next = (required.get(key) ?? 0) + reservation.totalTokens;
+      if (!Number.isSafeInteger(next)) return false;
+      required.set(key, next);
+    }
+  }
+  return [...required].every(([key, minimum]) => isNonNegativeSafeInteger(used[key]) && used[key] >= minimum);
+}
+
+function usageKeyKind(key: string): keyof { provider: number; model: number; session: number } | null {
+  if (key.startsWith("provider:")) return isPersistedString(key.slice("provider:".length)) ? "provider" : null;
+  if (key.startsWith("session:")) return isPersistedString(key.slice("session:".length)) ? "session" : null;
+  if (!key.startsWith("model:")) return null;
+  const route = key.slice("model:".length);
+  for (let separator = 1; separator < route.length - 1; separator += 1) {
+    if (route[separator] === ":" && isPersistedString(route.slice(0, separator)) && isPersistedString(route.slice(separator + 1))) return "model";
+  }
+  return null;
+}
+
+function safeIncrement(totals: { provider: number; model: number; session: number }, kind: "provider" | "model" | "session", amount: number): boolean {
+  const next = totals[kind] + amount;
+  if (!Number.isSafeInteger(next)) return false;
+  totals[kind] = next;
+  return true;
+}
+
+function routeUsageKeys(reservation: TokenReservation): readonly string[] {
+  return [
+    `provider:${reservation.provider}`,
+    `model:${reservation.provider}:${reservation.model ?? "default"}`,
+    `session:${reservation.sessionId ?? "unscoped"}`
+  ];
 }

@@ -122,7 +122,14 @@ export const capabilityModules = [
       "wordpress"
     ],
     requiredAgents: ["qa_recovery", "security", "seo_performance", "backend_database"],
-    requiredChecks: ["backup_current_state", "identify_platform", "crawl_current_site", "scan_basic_security"]
+    requiredChecks: [
+      "backup_current_state",
+      "validate_backup_before_rotation",
+      "verify_runtime_write_boundary",
+      "identify_platform",
+      "crawl_current_site",
+      "scan_basic_security"
+    ]
   },
   {
     id: "observability_mesh",

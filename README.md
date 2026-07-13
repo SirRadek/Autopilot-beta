@@ -1,44 +1,80 @@
-# autopilot-beta
+# Autopilot Beta
 
-Clean-install beta of the `autopilot` product-design-os **floor**. A separate
-product line: **no shared git history** with canonical `autopilot`. The
-relationship to canonical is held by [`vendor-manifest.json`](vendor-manifest.json)
-(provenance + hash), not by git ancestry.
+Autopilot Beta is a governed, single-operator control plane for approved Codex, Claude, AGY, and
+OpenRouter work. It combines a loopback HTTP service, a browser Cockpit, project allowlisting,
+owner approval, token reservations, a durable supervisor queue, Decision Mesh routing, bounded
+worker-output handling, and operational recovery tooling.
 
-- **Pinned base:** `autopilot@599785fb710cc01100ae1d5028af433e8fcfabbd`
-- **Plan:** external canonical context at
-  `autopilot/output/autopilot-beta-development-plan.md` in the sibling
-  canonical checkout, not a live path inside this beta repository.
+The current branch is a release candidate for an Ubuntu 24.04 VM. Repository and isolated-VM
+acceptance pass, but the live service has not been cut over. The supported deployment uses
+root-managed systemd units whose processes run as the unprivileged `radek` account. A fail-closed
+startup probe prevents service start when the installation is writable from inside the service.
 
-## Vendored vs new
+## Supported boundary
 
-- **Vendored byte-identically** (`product-design-os/`, `src/`): registry +
-  schemas + the scripts/harness later phases modify. Recorded in
-  `vendor-manifest.json`. `beta:vendor-check` is the hash gate.
-- **New (beta-only):** `scripts/vendor-check.mjs`, and the layers introduced by
-  later phases (composition.schema, recipe.schema, component contract, requires
-  taxonomy).
+- One trusted operator on one Ubuntu VM.
+- Control Plane and development Cockpit bind to loopback only.
+- Managed state is under `~/.local/state/autopilot`.
+- Executable projects must be explicitly registered beneath `~/projects` or a reviewed custom root.
+- Credentials stay outside the repository and state backups.
+- Codex, Claude, and AGY use trusted local CLI capabilities; OpenRouter is a separate API lane.
+- Provider health, quota, model, and cost data are evidence for an owner decision, never authority
+  to switch providers automatically.
 
-## Why byte-identical
+This is not a public multi-user service. Browser sessions are process-local, visual artifact
+production is not implemented, worker cancellation is not wired into the Cockpit, repair packets
+are manual, and batch, scheduled, dependency-graph, and automatic multivendor orchestration remain
+planned work.
 
-An additive/report-only change to a vendored file diffs cleanly against the
-pinned canonical baseline, so merge-back is a patch (`git format-patch`), not a
-manual reimplementation. The hash gate enforces that invariant.
+## Quick verification
 
-## Boundary
+From the repository root with Node 24:
 
-Canonical `autopilot` lives in a **separate folder** and is never in this
-working tree → beta cannot mutate the base by construction (plan §2.4). No raw
-logs / secrets committed.
-
-## Commands
-
-```
-npm install
-npm run beta:vendor-check     # provenance + drift gate
+```bash
+npm ci
 npm run typecheck
-npm run pdos:validate         # F0 report-only integrity inventory
-npm run verify                # deterministic gate: vendor-check + typecheck + test + PDOS checks
-npm run pdos:evidence-freshness -- --now YYYY-MM-DD --fail-on-stale
-                              # real-project CI freshness gate; intentionally separate from verify
+npm run verify
+npm run cockpit:test
+npm run cockpit:build
+npm run browser:qa
+npm run smoke:cockpit-run -- --dry-run
 ```
+
+The dry-run smoke creates temporary state, uses a deterministic injected worker, invokes no
+provider, and removes its state when complete. Follow the Ubuntu installation guide before running
+the persistent service.
+
+## Governed run flow
+
+```text
+Cockpit or CLI -> Control Plane -> project/readiness checks -> owner approval
+  -> token gateway -> supervisor queue -> Decision Mesh/dispatch -> provider
+  -> redaction -> locked persistence -> observability and inspection
+```
+
+The operator prepares and revises a prompt, approves an exact revision, and only then permits the
+supervisor to dispatch it. The token gateway reserves before execution and settles or releases at a
+terminal outcome. Autopilot never treats a provider's self-report as proof that work succeeded.
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Getting started](docs/getting-started.md)
+- [Cockpit user guide](docs/user/cockpit-guide.md)
+- [System architecture](docs/architecture/system-overview.md)
+- [Ubuntu VM installation](docs/operations/install-ubuntu-vm.md)
+- [Configuration](docs/operations/configuration.md)
+- [Service runbook](docs/operations/service-runbook.md)
+- [State and recovery](docs/operations/state-and-recovery.md)
+- [Troubleshooting](docs/operations/troubleshooting.md)
+- [Current status](docs/status/current-status.md)
+
+Historical plans, ADRs, audits, and work logs are evidence, not the current operational contract.
+Use the pages above for current behavior.
+
+## Provenance
+
+The beta began from the pinned canonical Product & Design OS base
+`599785fb710cc01100ae1d5028af433e8fcfabbd`. [`vendor-manifest.json`](vendor-manifest.json)
+records byte-identical and intentionally patched files. `npm run beta:vendor-check` enforces that
+provenance boundary.

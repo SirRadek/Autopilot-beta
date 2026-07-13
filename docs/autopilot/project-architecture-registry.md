@@ -1,5 +1,10 @@
 # Project Architecture Registry
 
+> **Historical/superseded:** This registry records the earlier Windows architecture catalog. It is
+> not the executable project allowlist and does not describe the current runtime. See
+> [System architecture](../architecture/system-overview.md) and
+> [Current status](../status/current-status.md). The runtime allowlist is managed state `projects.json`.
+
 Date introduced: 2026-05-13
 
 This is the central index for project architecture records and work logs. See `docs/autopilot/project-architecture-standard.md` and `docs/autopilot/repository-separation-policy.md` for the required format and separation rules.

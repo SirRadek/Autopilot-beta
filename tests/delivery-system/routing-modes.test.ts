@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -180,20 +178,22 @@ describe("supervised-projects access rule (agy --add-dir)", () => {
     expect(AGY_PROJECTS_ACCESS_LANES).not.toContain("openrouter_nemotron_planning");
   });
 
-  it("resolves the supervised-projects root as the control-plane sibling by default", () => {
-    expect(resolveSupervisedProjectsRoot("/work/autopilot-beta")).toBe(join("/work/autopilot-beta", "..", "Projects"));
+  it("resolves the supervised-projects root through the canonical home default", () => {
+    expect(resolveSupervisedProjectsRoot({}, "/home/radek")).toBe("/home/radek/projects");
   });
 
-  it("honors an explicit projects-dir override (AUTOPILOT_PROJECTS_DIR passed by the call site)", () => {
-    expect(resolveSupervisedProjectsRoot("/work/autopilot-beta", "D:/custom/Projects")).toBe("D:/custom/Projects");
-    // Blank override falls back to the sibling default, never to an empty path.
-    expect(resolveSupervisedProjectsRoot("/work/autopilot-beta", "   ")).toBe(
-      join("/work/autopilot-beta", "..", "Projects")
-    );
+  it("honors the canonical projects-dir environment override", () => {
+    expect(
+      resolveSupervisedProjectsRoot(
+        { AUTOPILOT_PROJECTS_DIR: "/srv/autopilot-projects" },
+        "/home/radek"
+      )
+    ).toBe("/srv/autopilot-projects");
   });
 
-  it("refuses an empty control-plane root instead of returning a bare relative path", () => {
-    expect(() => resolveSupervisedProjectsRoot("")).toThrow(/supervised_projects_root_unresolved/);
-    expect(() => resolveSupervisedProjectsRoot("   ")).toThrow(/supervised_projects_root_unresolved/);
+  it("rejects an invalid configured projects root", () => {
+    expect(() =>
+      resolveSupervisedProjectsRoot({ AUTOPILOT_PROJECTS_DIR: "relative" }, "/home/radek")
+    ).toThrow("invalid_project_root");
   });
 });

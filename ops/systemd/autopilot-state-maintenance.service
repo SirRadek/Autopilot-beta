@@ -1,19 +1,21 @@
 [Unit]
 Description=Validate, back up, and rotate Autopilot state
-ConditionPathIsDirectory=/home/radek/.local/state/autopilot
+ConditionPathIsDirectory=%h/.local/state/autopilot
 
 [Service]
 Type=oneshot
+User=radek
+Group=radek
 WorkingDirectory=/home/radek/autopilot-beta
-Environment=PATH=/home/radek/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/home/radek/.local/bin/npm run ops:maintenance -- /home/radek/.local/state/autopilot /home/radek/.config/autopilot/control-plane.env
-ExecStart=/home/radek/.local/bin/npm run ops:backup -- /home/radek/.local/state/autopilot /home/radek/.local/state/autopilot-backups
-ExecStart=/home/radek/.local/bin/npm run ops:maintenance -- /home/radek/.local/state/autopilot /home/radek/.config/autopilot/control-plane.env --apply-rotation
+Environment=PATH=/usr/bin:/bin
+ExecStartPre=+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool
+ExecStart=/usr/bin/npm run ops:maintenance -- %h/.local/state/autopilot %h/.local/state/autopilot/backups %h/.config/autopilot/control-plane.env --apply
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateUsers=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/radek/.local/state/autopilot /home/radek/.local/state/autopilot-backups
+ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool
 RestrictSUIDSGID=true
 LockPersonality=true
