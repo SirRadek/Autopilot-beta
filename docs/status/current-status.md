@@ -2,16 +2,19 @@
 
 [Back to the documentation index](../README.md)
 
-Status date: 2026-07-13. Evidence candidate: `5a9ea88982ebca7f62a2aeeae1826ce8aec10c9d`.
+Status date: 2026-07-13. Evidence candidate: `b0448b2d0db13dfe277e119d7045cadc3d4fab1a`.
 This is an isolated release candidate, not a live cutover revision.
 
 Repository verification passed under Node 24 with 100 test files and 912 tests. The same exact commit
-passed `npm ci`, typecheck, and the complete deterministic repository gate in the Ubuntu 24.04 VM.
-Isolated VM smoke, maintenance, backup validation, recovery drill, readiness, auth, same-origin proxy,
-and headless Cockpit login passed without provider calls. The VM also proved that its previous user
-systemd manager did not enforce the intended negative-write boundary; commit `5a9ea88` now fails
-closed there. Final positive proof under the root system manager awaits the operator's sudo install of
-system Node 24 and the reviewed units.
+passed `npm ci`, typecheck, and the complete deterministic repository gate in the Ubuntu 24.04 VM;
+host Cockpit tests, production build, and all seven Playwright scenarios also passed. Runtime ancestor
+`5a9ea88` passed isolated VM smoke, maintenance, backup validation, recovery drill, readiness, auth,
+same-origin proxy, and headless Cockpit login without provider calls; the intervening commits are
+documentation and test-timeout evidence only. The VM also proved that its previous user systemd
+manager did not enforce the intended negative-write boundary, and the candidate now fails closed
+there. An independent read-only `claude-opus-4-8` review of `b0448b2` returned `PASS` with no
+actionable findings. Final positive proof under the root system manager awaits the operator's sudo
+install of system Node 24 and the reviewed units.
 
 | Capability | Repository-tested | VM-verified | Runtime configuration | Limitations | Next step |
 |---|---|---|---|---|---|

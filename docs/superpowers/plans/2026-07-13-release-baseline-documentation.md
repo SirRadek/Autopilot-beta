@@ -177,7 +177,7 @@ Run:
 
 ```bash
 ssh -i "$AUTOPILOT_VM_KEY" "$AUTOPILOT_VM_HOST" \
-  'cd ~/autopilot-beta-release-baseline && npm run smoke:cockpit-run -- --dry-run && npm run ops:maintenance -- ~/.local/state/autopilot-release-baseline ~/.config/autopilot/control-plane.env ~/.local/state/autopilot-release-baseline/backups --apply && npm run ops:recovery-drill -- "$(ls -1t ~/.local/state/autopilot-release-baseline/backups/*.apbackup.json | head -1)"'
+  'cd ~/autopilot-beta-release-baseline && npm run smoke:cockpit-run -- --dry-run && npm run ops:maintenance -- ~/.local/state/autopilot-release-baseline ~/.local/state/autopilot-release-baseline/backups ~/.config/autopilot/control-plane.env --apply && npm run ops:recovery-drill -- "$(ls -1t ~/.local/state/autopilot-release-baseline/backups/*.apbackup.json | head -1)"'
 ```
 
 Expected: deterministic run settles, backup validates before rotation, drill succeeds in temporary staging, and live state sentinel remains unchanged.
