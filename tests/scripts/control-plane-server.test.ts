@@ -3,11 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
 import { createControlPlaneServer, providerUsageCommandsFromEnvironment } from "../../scripts/control-plane-server";
+import { readApprovalQueue, writeApprovalQueue } from "../../src/data/delivery-system/approvalQueue";
 import { recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
+import { readRunStore, reviseRunDraft } from "../../src/data/delivery-system/runStore";
 import type { ProviderQuotaStoreDocument } from "../../src/data/delivery-system/providerQuotaStore";
 
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
@@ -64,6 +67,17 @@ describe("control plane governed run API", () => {
     const oversized = await api.call("POST", "/runs", `{"prompt":"${"x".repeat(64 * 1024)}"}`);
     expect(oversized.status).toBe(413);
     expect(await oversized.json()).toEqual({ error: "request_body_too_large" });
+  });
+
+  it("requires application/json for every mutation body", async () => {
+    const api = await governedApi();
+    const missing = await fetch(`${api.base}/runs`, { method: "POST", headers: { authorization: "Bearer secret" }, body: JSON.stringify(draft) });
+    expect(missing.status).toBe(415);
+    expect(await missing.json()).toEqual({ error: "unsupported_media_type" });
+    const wrong = await api.call("POST", "/runs", JSON.stringify(draft), { "content-type": "text/plain" });
+    expect(wrong.status).toBe(415);
+    const accepted = await api.call("POST", "/runs", draft, { "content-type": "application/json; charset=utf-8" });
+    expect(accepted.status).toBe(201);
   });
 
   it("maps unavailable models and stale revisions to conflict", async () => {
@@ -123,6 +137,49 @@ describe("control plane governed run API", () => {
     const incidents = await (await api.call("GET", "/incidents")).text();
     expect(incidents).toContain(body.incident_id);
     expect(incidents).not.toContain("secret-token");
+  });
+
+  it("returns a stable internal error when incident persistence also fails", async () => {
+    const api = await governedApi();
+    writeFileSync(join(api.stateDir, "runs.json"), "not json");
+    writeFileSync(join(api.stateDir, "autopilot-incidents.json"), "not json");
+    const response = await api.call("GET", "/runs");
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "autopilot_internal_error",
+      incident_id: expect.stringMatching(/^[0-9a-f-]{36}$/i)
+    });
+  });
+
+  it("recovers exact committed revisions and missing approvals without rewriting history", async () => {
+    const api = await governedApi();
+    const created = await (await api.call("POST", "/runs", draft)).json() as { current: { run_id: string } };
+    const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 4 };
+    let revisionFault = true;
+    expect(() => reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input, {
+      revise: (...args) => {
+        const revised = reviseRunDraft(...args);
+        if (revisionFault) { revisionFault = false; throw new Error("commit_then_throw"); }
+        return revised;
+      }
+    })).toThrow("commit_then_throw");
+    const recovered = reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input);
+    expect(recovered.current.revision).toBe(2);
+    expect(recovered.revisions).toHaveLength(2);
+    expect(readApprovalQueue(api.stateDir).records.filter((record) => record.run_id === created.current.run_id && record.revision === 2)).toHaveLength(1);
+
+    const next = { ...input, prompt: "third revision" };
+    let approvalFault = true;
+    expect(() => reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next, {
+      writeApprovals: (...args) => {
+        writeApprovalQueue(...args);
+        if (approvalFault) { approvalFault = false; throw new Error("approval_commit_then_throw"); }
+      }
+    })).toThrow("approval_commit_then_throw");
+    const restarted = reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next);
+    expect(restarted.current.revision).toBe(3);
+    expect(readRunStore(api.stateDir).runs[0]?.revisions).toHaveLength(3);
+    expect(readApprovalQueue(api.stateDir).records.filter((record) => record.run_id === created.current.run_id && record.revision === 3)).toHaveLength(1);
   });
 });
 

@@ -1,11 +1,13 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { isDeepStrictEqual } from "node:util";
 
 import { createApprovalRecord, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { acknowledgeIncident, prepareRepairPacket, readIncidentStore, recordAutopilotIncident } from "../src/data/delivery-system/incidentStore";
 import { readProjectRegistry } from "../src/data/delivery-system/projectRegistry";
 import { readProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
-import { readRunStore, reviseRunDraft, type RunDraftInput, type RunProvider, type RunStatus } from "../src/data/delivery-system/runStore";
+import { readRunStore, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { estimateTokenCount, TokenGateway } from "../src/data/delivery-system/tokenGateway";
 
@@ -51,17 +53,14 @@ export async function handleControlPlaneRunRoute(request: IncomingMessage, respo
       return json(response, run);
     }
     if (match.kind === "incidents") return json(response, readIncidentStore(stateDir).incidents);
+    requireJsonContentType(request);
     const body = await readJsonBody(request);
     if (match.kind === "create") return json(response, orchestrator.prepareRun(draftInput(body)), 201);
     if (match.kind === "revision") {
       const revision = integer(body.revision, "invalid_run_revision");
       const input = draftInput(body);
       if (!routeAvailable(stateDir, input.provider, input.model)) throw new HttpError(409, "run_route_unavailable");
-      const draft = reviseRunDraft(stateDir, match.id, revision, input, new Date().toISOString());
-      const queue = readApprovalQueue(stateDir);
-      const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens });
-      writeApprovalQueue(stateDir, { ...queue, records: [...queue.records, approval] });
-      return json(response, readRunStore(stateDir).runs.find((run) => run.current.run_id === match.id), 201);
+      return json(response, reviseRunWithApproval(stateDir, match.id, revision, input), 201);
     }
     if (match.kind === "approve") return json(response, orchestrator.approveAndQueueRun(match.id, integer(body.revision, "invalid_run_revision"), nonEmpty(body.operator, "invalid_run_approval")));
     if (match.kind === "cancel") return json(response, orchestrator.cancelRun(match.id));
@@ -71,9 +70,33 @@ export async function handleControlPlaneRunRoute(request: IncomingMessage, respo
   } catch (error) {
     const known = knownHttpError(error);
     if (known !== null) return json(response, { error: known.code }, known.status);
-    const incident = recordAutopilotIncident(stateDir, { severity: "high", stage: "control_plane_http", summary: "Unexpected control plane route failure", correlation_ids: {}, impact: "The requested control plane operation did not complete", retry_count: 0, event_refs: [] });
-    return json(response, { error: "autopilot_internal_error", incident_id: incident.incident_id }, 500);
+    let incidentId: string = randomUUID();
+    try {
+      incidentId = recordAutopilotIncident(stateDir, { severity: "high", stage: "control_plane_http", summary: "Unexpected control plane route failure", correlation_ids: {}, impact: "The requested control plane operation did not complete", retry_count: 0, event_refs: [] }).incident_id;
+    } catch { /* the response must remain stable when incident persistence is unavailable */ }
+    return json(response, { error: "autopilot_internal_error", incident_id: incidentId }, 500);
   }
+}
+
+interface RevisionOperations {
+  readonly revise?: typeof reviseRunDraft;
+  readonly writeApprovals?: typeof writeApprovalQueue;
+}
+
+export function reviseRunWithApproval(stateDir: string, runId: string, expectedRevision: number, input: RunDraftInput, operations: RevisionOperations = {}): RunRecord {
+  const revise = operations.revise ?? reviseRunDraft;
+  const writeApprovals = operations.writeApprovals ?? writeApprovalQueue;
+  const before = readRunStore(stateDir).runs.find((run) => run.current.run_id === runId);
+  if (before === undefined) throw new Error("run_not_found");
+  let draft: RunDraft;
+  if (before.status === "draft" && before.current.revision === expectedRevision + 1 && sameDraftInput(before.current, input)) draft = before.current;
+  else draft = revise(stateDir, runId, expectedRevision, input, new Date().toISOString());
+  const queue = readApprovalQueue(stateDir);
+  if (!queue.records.some((record) => record.run_id === runId && record.revision === draft.revision)) {
+    const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens });
+    writeApprovals(stateDir, { ...queue, records: [...queue.records, approval] });
+  }
+  return readRunStore(stateDir).runs.find((run) => run.current.run_id === runId)!;
 }
 
 type Route = { readonly kind: "projects" | "runs" | "create" | "incidents" } | { readonly kind: "run" | "revision" | "approve" | "cancel" | "acknowledge" | "repair"; readonly id: string };
@@ -119,6 +142,11 @@ async function readJsonBody(request: IncomingMessage): Promise<Record<string, un
   } catch { throw new HttpError(400, "invalid_json_body"); }
 }
 
+function requireJsonContentType(request: IncomingMessage): void {
+  const mediaType = request.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") throw new HttpError(415, "unsupported_media_type");
+}
+
 function knownHttpError(error: unknown): HttpError | null {
   if (error instanceof HttpError) return error;
   const code = error instanceof Error ? error.message : "";
@@ -135,5 +163,8 @@ function isStringArray(value: unknown): value is string[] { return Array.isArray
 function routeAvailable(stateDir: string, provider: string, model: string | null): boolean {
   const snapshot = readProviderQuotaStore(stateDir).snapshots.find((candidate) => candidate.provider === provider);
   return snapshot !== undefined && snapshot.health !== "unavailable" && (model === null || snapshot.models.some((candidate) => candidate.model_id === model && candidate.available && candidate.health !== "unavailable"));
+}
+function sameDraftInput(draft: RunDraft, input: RunDraftInput): boolean {
+  return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts }, input);
 }
 function json(response: ServerResponse, value: unknown, status = 200): true { response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); response.end(JSON.stringify(value, null, 2)); return true; }
