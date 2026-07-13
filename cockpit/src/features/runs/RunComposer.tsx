@@ -14,6 +14,7 @@ export interface RunComposerProps {
 export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: RunComposerProps) {
   const enabledProjects = projects.filter((project) => project.enabled);
   const [projectId, setProjectId] = useState(enabledProjects[0]?.project_id ?? "");
+  const selectedProject = enabledProjects.find((project) => project.project_id === projectId);
   const [provider, setProvider] = useState(quotas[0]?.provider ?? "");
   const quota = quotas.find((candidate) => candidate.provider === provider);
   const routeFresh = quota?.freshness === "fresh" && models?.freshness === "fresh" && quota.health !== "unavailable";
@@ -36,13 +37,13 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
   const estimatedTokens = estimateTokens(prompt);
   const input: RunDraftInput = { project_id: projectId, prompt, provider: provider as RunProvider, model: selectedModel || null, estimated_tokens: estimatedTokens, requested_artifacts: visual ? ["text", "visual"] : ["text"] };
   const boundKey = JSON.stringify(input);
-  const routeKey = JSON.stringify({ provider, selectedModel, quota: quota && { freshness: quota.freshness, health: quota.health, models: quota.models }, catalog: models && { freshness: models.freshness, models: models.models } });
+  const routeKey = JSON.stringify({ project: selectedProject ?? null, provider, selectedModel, quota: quota && { freshness: quota.freshness, health: quota.health, models: quota.models }, catalog: models && { freshness: models.freshness, models: models.models } });
   const currentBoundKey = useRef(boundKey); currentBoundKey.current = boundKey;
   const currentRouteKey = useRef(routeKey); currentRouteKey.current = routeKey;
   const previousRouteKey = useRef(routeKey);
   const invalidate = () => { generation.current += 1; setPrepared(undefined); setMessage(""); };
   useEffect(() => { if (previousRouteKey.current !== routeKey) { previousRouteKey.current = routeKey; invalidate(); } }, [routeKey]);
-  const canPrepare = projectId !== "" && prompt.trim() !== "" && provider !== "" && routeFresh && selectedModel !== "" && !pendingPrepareKeys.has(boundKey);
+  const canPrepare = selectedProject !== undefined && prompt.trim() !== "" && provider !== "" && routeFresh && selectedModel !== "" && !pendingPrepareKeys.has(boundKey);
   const validPrepared = prepared?.boundKey === boundKey && prepared.routeKey === routeKey ? prepared.record : undefined;
 
   async function prepare() {
@@ -51,15 +52,17 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
     activePrepareKeys.current.add(boundKey); setPendingPrepareKeys(new Set(activePrepareKeys.current)); setMessage("Příprava běhu…");
     try {
       const result = await onPrepare(requestInput);
-      if (request === latestPrepare.current && requestGeneration === generation.current && requestRoute === currentRouteKey.current && boundKey === currentBoundKey.current && sameInput(result.current, requestInput)) { setPrepared({ record: result, boundKey, routeKey: requestRoute }); setMessage(`Revize ${result.current.revision} je připravena.`); }
-    } catch (error) { if (request === latestPrepare.current) setMessage(error instanceof Error ? error.message : "Příprava běhu selhala."); }
+      if (requestIsCurrent() && result.status !== "draft") { setMessage("Control Plane vrátil neplatný stav připraveného běhu."); return; }
+      if (requestIsCurrent() && sameInput(result.current, requestInput)) { setPrepared({ record: result, boundKey, routeKey: requestRoute }); setMessage(`Revize ${result.current.revision} je připravena.`); }
+    } catch (error) { if (requestIsCurrent()) setMessage(error instanceof Error ? error.message : "Příprava běhu selhala."); }
     finally { activePrepareKeys.current.delete(boundKey); setPendingPrepareKeys(new Set(activePrepareKeys.current)); }
+    function requestIsCurrent() { return request === latestPrepare.current && requestGeneration === generation.current && requestRoute === currentRouteKey.current && boundKey === currentBoundKey.current; }
   }
 
   async function approve() {
     if (validPrepared === undefined || approveActive.current) return;
     approveActive.current = true; setApprovePending(true); setMessage("Schvalování běhu…");
-    try { await onApprove(validPrepared.current.run_id, validPrepared.current.revision); setMessage("Běh byl schválen."); }
+    try { await onApprove(validPrepared.current.run_id, validPrepared.current.revision); setPrepared(undefined); generation.current += 1; setMessage("Běh byl schválen."); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Schválení běhu selhalo."); }
     finally { approveActive.current = false; setApprovePending(false); }
   }

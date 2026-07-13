@@ -114,4 +114,30 @@ describe("RunComposer", () => {
     await act(async () => button(host, "Připravit běh").click()); expect(button(host, "Schválit a spustit").disabled).toBe(true); expect(host.textContent).not.toContain("připravena ke schválení");
     act(() => root.unmount()); host.remove();
   });
+
+  it("invalidates and blocks preparation when the selected project is removed or disabled", async () => {
+    const { host, root, onPrepare, onApprove } = mount(); change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status"); await act(async () => button(host, "Připravit běh").click());
+    act(() => root.render(<RunComposer projects={[]} quotas={[quota]} models={models} onPrepare={onPrepare} onApprove={onApprove} />));
+    expect(button(host, "Připravit běh").disabled).toBe(true); expect(button(host, "Schválit a spustit").disabled).toBe(true);
+    act(() => root.render(<RunComposer projects={[{ ...projects[0]!, enabled: false }]} quotas={[quota]} models={models} onPrepare={onPrepare} onApprove={onApprove} />));
+    expect(button(host, "Připravit běh").disabled).toBe(true); act(() => root.unmount()); host.remove();
+  });
+
+  it("consumes a prepared revision after successful approval", async () => {
+    const { host, root, onApprove } = mount(); change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status"); await act(async () => button(host, "Připravit běh").click());
+    await act(async () => button(host, "Schválit a spustit").click()); expect(button(host, "Schválit a spustit").disabled).toBe(true);
+    act(() => button(host, "Schválit a spustit").click()); expect(onApprove).toHaveBeenCalledTimes(1); act(() => root.unmount()); host.remove();
+  });
+
+  it("does not let a stale rejection overwrite status after an edit", async () => {
+    const pending = deferred<RunRecord>(); const { host, root } = mount({ onPrepare: vi.fn(() => pending.promise) }); change(host.querySelector('[aria-label="Prompt"]')!, "First"); act(() => button(host, "Připravit běh").click());
+    change(host.querySelector('[aria-label="Prompt"]')!, "Second"); await act(async () => pending.reject(new Error("obsolete failure")));
+    expect(host.querySelector('[aria-live="polite"]')?.textContent).not.toContain("obsolete failure"); act(() => root.unmount()); host.remove();
+  });
+
+  it("rejects non-draft prepare responses with an accessible stable error", async () => {
+    const onPrepare = vi.fn(async (input) => ({ ...prepared, status: "queued" as const, current: { ...prepared.current, ...input } })); const { host, root } = mount({ onPrepare }); change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
+    await act(async () => button(host, "Připravit běh").click()); expect(button(host, "Schválit a spustit").disabled).toBe(true); expect(host.querySelector('[aria-live="polite"]')?.textContent).toContain("neplatný stav");
+    act(() => root.unmount()); host.remove();
+  });
 });

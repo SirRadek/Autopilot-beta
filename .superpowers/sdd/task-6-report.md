@@ -11,6 +11,8 @@
 - Review hardening binds prepared revisions to the exact draft and live route snapshot, rejects mismatched/stale/out-of-order responses, and keeps approval invalid after edits or provider-data refreshes.
 - Prepare and approve callbacks have synchronous duplicate guards, visible pending states, and an accessible `aria-live` status/error channel.
 - A route now requires fresh, usable provider quota plus an explicitly available model present in both the quota snapshot and live model catalog.
+- The selected project must remain present and enabled in the current registry props; its full registry snapshot participates in invalidation and pending-response guards.
+- Successful approval consumes the prepared revision, stale prepare rejections cannot replace current status, and non-draft prepare responses produce a stable accessible error.
 
 ## TDD evidence
 
@@ -25,7 +27,7 @@ GREEN/final verification:
 
 `npm --prefix cockpit test -- src/api/controlPlaneClient.test.ts src/features/runs/RunComposer.test.tsx && npm --prefix cockpit run build && npm run typecheck && git diff --check`
 
-- 2 test files passed; 16 tests passed.
+- 2 test files passed; 20 tests passed.
 - Vite production build completed successfully (39 modules transformed).
 - Root TypeScript typecheck completed successfully.
 - `git diff --check` completed without findings.
