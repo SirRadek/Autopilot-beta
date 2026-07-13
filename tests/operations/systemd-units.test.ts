@@ -67,23 +67,25 @@ describe("systemd unit writable boundaries", () => {
     expect(directives.get("ProtectSystem")).toEqual(["strict"]);
     expect(directives.get("ProtectHome")).toEqual(["read-only"]);
     expect(directives.get("PrivateUsers")).toEqual(["true"]);
-    expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot %h/projects"]);
+    expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects"]);
+    expect(directives.get("ExecStartPre")).toEqual(["+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool"]);
 
     const projectsRoot = environmentValue(directives, "AUTOPILOT_PROJECTS_DIR");
     expect(projectsRoot).toBe("%h/projects");
     expect(directives.get("ReadWritePaths")?.flatMap((value) => value.split(/\s+/))).toContain(projectsRoot);
   });
 
-  it("keeps maintenance backups inside its only writable managed-state path", () => {
+  it("keeps maintenance backups in managed state and grants only the external incident spool", () => {
     const directives = activeServiceDirectives(readSystemdFile("autopilot-state-maintenance.service"));
 
     expect(directives.get("ProtectSystem")).toEqual(["strict"]);
     expect(directives.get("ProtectHome")).toEqual(["read-only"]);
     expect(directives.get("PrivateUsers")).toEqual(["true"]);
-    expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot"]);
-    expect(directives.get("ExecStart")).toContain(
-      "/usr/bin/npm run ops:backup -- %h/.local/state/autopilot %h/.local/state/autopilot/backups"
-    );
+    expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool"]);
+    expect(directives.get("ExecStartPre")).toEqual(["+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool"]);
+    expect(directives.get("ExecStart")).toEqual([
+      "/usr/bin/npm run ops:maintenance -- %h/.local/state/autopilot %h/.local/state/autopilot/backups %h/.config/autopilot/control-plane.env --apply"
+    ]);
     expect(directives.get("ExecStart")?.join("\n")).not.toContain("autopilot-backups");
   });
 
@@ -106,7 +108,7 @@ describe("systemd unit writable boundaries", () => {
 
     expect(readme).toContain("AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects");
     expect(readme).not.toContain("Environment=AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects");
-    expect(readme).toContain("ReadWritePaths=\nReadWritePaths=%h/.local/state/autopilot /srv/autopilot-projects");
+    expect(readme).toContain("ReadWritePaths=\nReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool /srv/autopilot-projects");
     expect(readme).toMatch(/resolved `AUTOPILOT_PROJECTS_DIR`.*equal.*`ReadWritePaths`/is);
     expect(readme).toMatch(/D3 acceptance.*positive\/negative write proof/is);
   });

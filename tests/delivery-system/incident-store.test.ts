@@ -9,7 +9,10 @@ import {
   readIncidentStore,
   recordAutopilotIncident
 } from "../../src/data/delivery-system/incidentStore";
-import { recordOperationalIncident } from "../../src/data/delivery-system/operationalIncidents";
+import {
+  ingestOperationalIncidentSpool,
+  recordOperationalIncident
+} from "../../src/data/delivery-system/operationalIncidents";
 
 const incidentInput = (summary = "Authorization: Bearer secret-value") => ({
   severity: "high" as const,
@@ -66,6 +69,10 @@ describe("Autopilot incident store", () => {
     expect(JSON.stringify(incident)).not.toContain("injected-secret");
     expect(incident.correlation_ids).toEqual({ request_id: "request-locked" });
     rmSync(lockDir, { recursive: true, force: true });
+
+    expect(ingestOperationalIncidentSpool(stateDir)).toBe(1);
+    expect(readIncidentStore(stateDir).incidents.map((item) => item.incident_id)).toEqual([incident.incident_id]);
+    expect(readdirSync(spoolDir)).toEqual([]);
     rmSync(spoolDir, { recursive: true, force: true });
   }, 10_000);
   it("exports a redacted read-only packet and supports acknowledgement", () => {

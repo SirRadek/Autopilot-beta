@@ -19,9 +19,17 @@ related_agents:
   - backend_database
 related_files:
   - src/data/delivery-system/capabilities.ts
+  - src/data/delivery-system/operationalHardening.ts
+  - src/data/delivery-system/stateBackup.ts
+  - src/data/delivery-system/stateMaintenance.ts
+  - scripts/ops-backup.ts
+  - scripts/ops-maintenance.ts
+  - ops/systemd/autopilot-state-maintenance.service
+  - docs/operations/autopilot-recovery-runbook.md
   - docs/autopilot/product-brief-template.md
 required_checks:
   - backup_current_state
+  - validate_backup_before_rotation
   - identify_platform
   - crawl_current_site
   - scan_basic_security

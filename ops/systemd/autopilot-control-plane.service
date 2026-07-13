@@ -10,6 +10,7 @@ Environment=PATH=/usr/bin:/bin
 Environment=AUTOPILOT_STATE_DIR=/home/radek/.local/state/autopilot
 Environment=AUTOPILOT_PROJECTS_DIR=%h/projects
 EnvironmentFile=/home/radek/.config/autopilot/control-plane.env
+ExecStartPre=+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool
 ExecStart=/usr/bin/npm run control-plane:serve -- /home/radek/.local/state/autopilot 8787
 Restart=on-failure
 RestartSec=5
@@ -22,7 +23,7 @@ PrivateTmp=false
 PrivateUsers=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.local/state/autopilot %h/projects
+ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects
 RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true

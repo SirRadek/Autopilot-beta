@@ -14,11 +14,12 @@
 systemctl --user status autopilot-control-plane.service
 systemctl --user list-timers 'autopilot-*'
 npm run ops:health -- 8787
-npm run ops:maintenance -- ~/.local/state/autopilot ~/.config/autopilot/control-plane.env
+npm run ops:maintenance -- ~/.local/state/autopilot ~/.local/state/autopilot/backups ~/.config/autopilot/control-plane.env
 ```
 
-The maintenance command is a dry run unless `--apply-rotation` is supplied. Findings contain only
-file names and rule identifiers, never secret values.
+The maintenance command is a dry run unless `--apply` is supplied. Findings contain only bounded
+rule identifiers, never secret values. Apply holds one state lease across backup, validation,
+rotation, and retention pruning.
 
 Maintenance writes and validates the backup before rotation. Rotation retains only a bounded recent
 archive plus a bounded current JSONL file; older history remains in that pre-rotation backup. If a
@@ -27,8 +28,8 @@ state file exceeds the backup safety cap, maintenance stops instead of rotating 
 ## Create and validate a backup
 
 ```bash
-npm run ops:backup -- ~/.local/state/autopilot ~/.local/state/autopilot-backups
-npm run ops:restore -- ~/.local/state/autopilot-backups/FILE.apbackup.json /tmp/autopilot-restore-check
+npm run ops:backup -- ~/.local/state/autopilot ~/.local/state/autopilot/backups
+npm run ops:restore -- ~/.local/state/autopilot/backups/FILE.apbackup.json /tmp/autopilot-restore-check
 ```
 
 The second command validates schema, safe relative paths, sizes, and SHA-256 checksums. It writes
@@ -41,7 +42,7 @@ nothing in validation mode.
 3. Apply into staging:
 
    ```bash
-   npm run ops:restore -- ~/.local/state/autopilot-backups/FILE.apbackup.json ~/.local/state/autopilot-restore-staging --apply
+   npm run ops:restore -- ~/.local/state/autopilot/backups/FILE.apbackup.json ~/.local/state/autopilot-restore-staging --apply
    ```
 
 4. Inspect staged permissions and run read-only status commands against it.

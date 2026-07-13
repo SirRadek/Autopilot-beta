@@ -42,9 +42,10 @@ available. `ops/config/control-plane.env.example` intentionally contains neither
 
 The control plane defaults `AUTOPILOT_PROJECTS_DIR` to `%h/projects`. `ProtectHome=read-only`
 keeps the installation and the rest of the home directory read-only, while
-`ReadWritePaths=%h/.local/state/autopilot %h/projects` permits writes only to managed state and
-supervised projects. Maintenance backups stay inside managed state at
-`%h/.local/state/autopilot/backups`.
+`ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects`
+permits writes only to managed state, its lock-timeout incident spool, and supervised projects.
+The fixed `ExecStartPre` creates the private spool directory before the filesystem namespace is
+applied. Maintenance backups stay inside managed state at `%h/.local/state/autopilot/backups`.
 
 A custom projects root uses the environment file as its one authoritative assignment. Edit
 `~/.config/autopilot/control-plane.env` so it contains exactly one active custom-root assignment:
@@ -60,7 +61,7 @@ drop-in only clears and replaces the writable-path allowlist:
 # ~/.config/systemd/user/autopilot-control-plane.service.d/projects-root.conf
 [Service]
 ReadWritePaths=
-ReadWritePaths=%h/.local/state/autopilot /srv/autopilot-projects
+ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool /srv/autopilot-projects
 ```
 
 Review the resolved paths before reloading the unit. The resolved `AUTOPILOT_PROJECTS_DIR` must
@@ -93,9 +94,10 @@ Provider CLI quota commands are likewise explicit capabilities and are unavailab
 runtime injects their command configuration.
 
 `autopilot-control-plane-health.timer` checks the loopback `/health` endpoint every two minutes.
-`autopilot-state-maintenance.timer` first checks private permissions and scans bounded head/tail
-chunks for secret-like material. Only a clean preflight proceeds to an atomic bounded backup and
-bounded JSONL rotation. The service deliberately keeps the host `/tmp` visible because Codex,
+`autopilot-state-maintenance.timer` runs one locked transaction that checks private permissions,
+scans bounded head/tail chunks for secret-like material, creates and validates an atomic bounded
+backup, rotates bounded JSONL files, and only then prunes retained backups. The service deliberately
+keeps the host `/tmp` visible because Codex,
 Claude, and AGY `/status` or `/usage` probes communicate with their existing tmux sessions through
 the per-user tmux socket. Other hardening remains enabled; as a user service it starts without
 privileged Linux capabilities.
