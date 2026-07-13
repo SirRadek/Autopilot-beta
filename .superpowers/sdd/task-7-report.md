@@ -84,3 +84,20 @@ GREEN:
 ## Environment note
 
 The installed Node.js is 18.19.1 while Vite 7 recommends Node.js 20.19+ or 22.12+. The production build still completes successfully.
+
+## Review hardening
+
+- Removed the unsafe approved-input fallback. The inspector now uses only a revision whose number exactly equals `approved_revision`; missing or inconsistent history produces an explicit alert and never renders `current` as approved evidence.
+- Removed global observability from cockpit data. `useRunTimeline` requests only the selected run's exact `worker_run_id`, resets when no correlation exists, and uses generation plus `AbortController` guards so a late prior selection cannot overwrite the current timeline.
+- Added a 1,000-character artifact-preview display cap and an explicit per-artifact truncation marker.
+- Kept complete server-bounded repair-packet JSON in copy state while independently limiting the rendered preview to 8,000 characters. A near-64 KiB regression proves copied JSON remains complete and parseable.
+- Replaced document-global tab lookups and fixed IDs with component refs and `useId`, including two-shell and two-inspector regressions proving focus, headings, and ARIA relationships remain instance-scoped.
+
+Review RED covered all five findings. The focused review suite then passed 22/22 tests.
+
+Fresh review verification:
+
+- `npm --prefix cockpit test`: 13 files, 76 tests passed.
+- `npm --prefix cockpit run build`: passed, 42 modules transformed.
+- `npm run typecheck`: passed.
+- `git diff --check`: passed.

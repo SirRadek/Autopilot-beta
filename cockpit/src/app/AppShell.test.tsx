@@ -17,7 +17,7 @@ describe("AppShell", () => {
     act(() => { tabs[1].click(); });
     expect(changes).toEqual(["sessions"]);
     expect(tabs[1].getAttribute("aria-selected")).toBe("true");
-    expect(host.querySelector("#tab-panel-sessions")?.hasAttribute("hidden")).toBe(false);
+    expect(host.querySelector('[id$="-tab-panel-sessions"]')?.hasAttribute("hidden")).toBe(false);
     act(() => { tabs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
     expect(document.activeElement).toBe(tabs[2]);
     act(() => { tabs[2].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })); });
@@ -61,9 +61,9 @@ describe("AppShell", () => {
     const html = renderToStaticMarkup(<AppShell projectsPane={<p>A</p>} approvalPane={<p>B</p>} operationsPane={<p>C</p>} />);
     const tabs = [...html.matchAll(/role="tab"[^>]*>([^<]+)/g)].map((match) => match[1]);
     expect(tabs).toEqual(["Approval", "Sessions", "Providers", "Workers"]);
-    expect(html).toContain('aria-controls="tab-panel-approval"');
+    expect(html).toMatch(/aria-controls="[^"]+-tab-panel-approval"/);
     expect(html).toContain('role="tabpanel"');
-    expect(html).toContain('aria-labelledby="tab-approval"');
+    expect(html).toMatch(/aria-labelledby="[^"]+-tab-approval"/);
     expect(html).toContain('hidden=""');
   });
 
@@ -80,7 +80,14 @@ describe("AppShell", () => {
     const workspace = host.querySelector('[aria-label="Pracovní plocha běhu"]'); const inspector = host.querySelector('[aria-label="Inspektor běhu"]');
     expect(workspace).not.toBeNull(); expect(inspector).not.toBeNull(); expect(workspace?.compareDocumentPosition(inspector!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const tabs = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Inspektor běhu"] [role="tab"]')];
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Běh", "Chyby"]); expect(tabs[0]?.getAttribute("aria-controls")).toBe("inspector-panel"); expect(host.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("inspector-tab-run"); act(() => tabs[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))); expect(document.activeElement).toBe(tabs[1]); expect(host.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("inspector-tab-errors"); expect(host.textContent).toContain("autopilot_internal_error");
+    const panel = inspector?.querySelector('[role="tabpanel"]'); expect(tabs.map((tab) => tab.textContent)).toEqual(["Běh", "Chyby"]); expect(tabs[0]?.getAttribute("aria-controls")).toBe(panel?.id); expect(panel?.getAttribute("aria-labelledby")).toBe(tabs[0]?.id); act(() => tabs[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))); expect(document.activeElement).toBe(tabs[1]); expect(panel?.getAttribute("aria-labelledby")).toBe(tabs[1]?.id); expect(host.textContent).toContain("autopilot_internal_error");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("scopes tab ids and keyboard focus to each shell instance", () => {
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host); act(() => root.render(<><AppShell runWorkspace="A" runInspector="A" /><AppShell runWorkspace="B" runInspector="B" /></>));
+    const shells = [...host.querySelectorAll<HTMLElement>(".cockpit-shell")]; const firstIds = new Set([...shells[0]!.querySelectorAll("[id]")].map((node) => node.id)); const secondIds = [...shells[1]!.querySelectorAll("[id]")].map((node) => node.id); expect(secondIds.some((id) => firstIds.has(id))).toBe(false);
+    const secondTabs = [...shells[1]!.querySelectorAll<HTMLButtonElement>('.run-inspector-pane [role="tab"]')]; act(() => secondTabs[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))); expect(document.activeElement).toBe(secondTabs[1]);
     act(() => root.unmount()); host.remove();
   });
 });

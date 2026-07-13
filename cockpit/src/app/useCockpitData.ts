@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ControlPlaneClient } from "../api/controlPlaneClient";
 import type { ApprovalRecord, AutopilotIncident, ControlPlaneStatus, ObservabilityTimeline, ProjectEntry, ProviderHealth, ProviderModels, ProviderQuota, RunRecord, SessionRecord, WorkerRecord } from "../types/controlPlane";
 
-export type CockpitPane = "status" | "sessions" | "approvals" | "providers" | "workers" | "runs" | "incidents" | "timeline";
+export type CockpitPane = "status" | "sessions" | "approvals" | "providers" | "workers" | "runs" | "incidents";
 export type PaneError = { readonly message: string; readonly at: string };
-export type CockpitData = { readonly status?: ControlPlaneStatus; readonly sessions: readonly SessionRecord[]; readonly approvals: readonly ApprovalRecord[]; readonly quotas: readonly ProviderQuota[]; readonly workers: readonly WorkerRecord[]; readonly projects: readonly ProjectEntry[]; readonly runs: readonly RunRecord[]; readonly incidents: readonly AutopilotIncident[]; readonly timeline?: ObservabilityTimeline; readonly models?: ProviderModels; readonly health?: ProviderHealth };
+export type CockpitData = { readonly status?: ControlPlaneStatus; readonly sessions: readonly SessionRecord[]; readonly approvals: readonly ApprovalRecord[]; readonly quotas: readonly ProviderQuota[]; readonly workers: readonly WorkerRecord[]; readonly projects: readonly ProjectEntry[]; readonly runs: readonly RunRecord[]; readonly incidents: readonly AutopilotIncident[]; readonly models?: ProviderModels; readonly health?: ProviderHealth };
 export type CockpitDataState = CockpitData & { readonly loading: boolean; readonly refreshing: boolean; readonly errors: Partial<Record<CockpitPane, PaneError>>; readonly stale: Partial<Record<CockpitPane, boolean>>; readonly refreshedAt?: string; readonly refresh: () => Promise<void> };
 
 const EMPTY_DATA: CockpitData = { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] };
@@ -21,12 +21,25 @@ export async function loadCockpitData(client: ControlPlaneClient, previous: Cock
     ["workers", () => client.getWorkers(), (value) => { next.workers = value as readonly WorkerRecord[]; }],
     ["runs", () => Promise.all([client.getProjects(), client.getRuns()]), (value) => { const [projects, runs] = value as [readonly ProjectEntry[], readonly RunRecord[]]; next.projects = projects; next.runs = runs; }],
     ["incidents", () => client.getIncidents(), (value) => { next.incidents = value as readonly AutopilotIncident[]; }],
-    ["timeline", () => client.getObservabilityTimeline({ limit: 100 }), (value) => { next.timeline = value as ObservabilityTimeline; }],
   ];
   await Promise.all(requests.map(async ([pane, request, assign]) => { try { const value = await request(); if (!signal?.aborted) assign(value); } catch (error) { if (!signal?.aborted) errors[pane] = { message: messageFor(error), at: now }; } }));
   const providerResults = await Promise.allSettled([client.getProviderQuotas(), client.getProviderModels(), client.getProviderHealth()]);
   if (!signal?.aborted) { const [quotas, models, health] = providerResults; if (quotas.status === "fulfilled") next.quotas = quotas.value.providers; if (models.status === "fulfilled") next.models = models.value; if (health.status === "fulfilled") next.health = health.value; const failed = providerResults.filter((result) => result.status === "rejected"); if (failed.length) errors.providers = { message: failed.map((result) => messageFor(result.reason)).join("; ").slice(0, 300), at: now }; }
   return { data: next, errors };
+}
+
+export type RunTimelineState = { readonly data?: ObservabilityTimeline; readonly loading: boolean; readonly error?: PaneError };
+
+export function useRunTimeline(client: ControlPlaneClient, workerRunId: string | undefined): RunTimelineState {
+  const generation = useRef(0); const controller = useRef<AbortController>(); const [state, setState] = useState<RunTimelineState>({ loading: false });
+  useEffect(() => {
+    const current = ++generation.current; controller.current?.abort(); const nextController = new AbortController(); controller.current = nextController;
+    if (!workerRunId) { setState({ loading: false }); return () => nextController.abort(); }
+    setState({ loading: true });
+    void client.getObservabilityTimeline({ worker_run_id: workerRunId, limit: 100 }).then((data) => { if (!nextController.signal.aborted && current === generation.current) setState({ data, loading: false }); }).catch((error: unknown) => { if (!nextController.signal.aborted && current === generation.current) setState({ loading: false, error: { message: messageFor(error), at: new Date().toISOString() } }); });
+    return () => nextController.abort();
+  }, [client, workerRunId]);
+  return state;
 }
 
 export function useCockpitData(client: ControlPlaneClient, options: { readonly refreshMs?: number } = {}): CockpitDataState {

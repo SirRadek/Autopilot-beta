@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import type { ControlPlaneClient } from "../api/controlPlaneClient";
 import { loadCockpitData } from "./useCockpitData";
 import { useCockpitData } from "./useCockpitData";
+import { useRunTimeline } from "./useCockpitData";
 
 const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient => ({
   getAuthSession: vi.fn().mockResolvedValue({ authenticated: true }), login: vi.fn(), logout: vi.fn(),
@@ -56,3 +57,19 @@ describe("useCockpitData hook", () => {
     await act(async () => { root.unmount(); }); resolveStatus({ sessions: { total: 0, active: 0, closed: 0 }, approvals: { total: 0, pending: 0, approved: 0, rejected: 0 }, telemetry: { calls: 0, successful: 0, total_tokens: 0 } }); host.remove();
   });
 });
+
+describe("useRunTimeline", () => {
+  it("requests the exact worker correlation and ignores a stale prior selection", async () => {
+    let resolveFirst!: (value: never) => void; let resolveSecond!: (value: never) => void;
+    const source = client({ getObservabilityTimeline: vi.fn().mockImplementation((filters) => new Promise((resolve) => { if (filters.worker_run_id === "worker-1") resolveFirst = resolve; else resolveSecond = resolve; })) });
+    const first = { ...sourceTimeline(), summary: { ...sourceTimeline().summary, tokens: 11 } }; const second = { ...sourceTimeline(), summary: { ...sourceTimeline().summary, tokens: 22 } };
+    const host = document.createElement("div"); document.body.append(host); let timeline: ReturnType<typeof useRunTimeline>;
+    function Harness({ workerRunId }: { workerRunId?: string }) { timeline = useRunTimeline(source, workerRunId); return null; }
+    const root = createRoot(host); await act(async () => { root.render(React.createElement(Harness, { workerRunId: "worker-1" })); await Promise.resolve(); }); await act(async () => { root.render(React.createElement(Harness, { workerRunId: "worker-2" })); await Promise.resolve(); });
+    await act(async () => resolveSecond(second as never)); expect(timeline!.data?.summary.tokens).toBe(22); await act(async () => resolveFirst(first as never)); expect(timeline!.data?.summary.tokens).toBe(22);
+    expect(source.getObservabilityTimeline).toHaveBeenNthCalledWith(1, { worker_run_id: "worker-1", limit: 100 }); expect(source.getObservabilityTimeline).toHaveBeenNthCalledWith(2, { worker_run_id: "worker-2", limit: 100 });
+    act(() => root.unmount()); host.remove();
+  });
+});
+
+function sourceTimeline() { return { summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 0, max_lines_per_file: 0, max_events: 100, truncated: false } }; }
