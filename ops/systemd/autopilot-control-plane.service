@@ -5,12 +5,15 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=radek
+Group=radek
 WorkingDirectory=/home/radek/autopilot-beta
 Environment=PATH=/usr/bin:/bin
 Environment=AUTOPILOT_STATE_DIR=/home/radek/.local/state/autopilot
 Environment=AUTOPILOT_PROJECTS_DIR=%h/projects
 EnvironmentFile=/home/radek/.config/autopilot/control-plane.env
 ExecStartPre=+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool
+ExecStartPre=/usr/bin/npm run ops:boundary-check -- /home/radek/autopilot-beta ${AUTOPILOT_STATE_DIR} ${AUTOPILOT_PROJECTS_DIR}
 ExecStart=/usr/bin/npm run control-plane:serve -- /home/radek/.local/state/autopilot 8787
 Restart=on-failure
 RestartSec=5
@@ -31,4 +34,4 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

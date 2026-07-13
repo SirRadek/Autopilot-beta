@@ -13,7 +13,9 @@ test "$(command -v npm)" = /usr/bin/npm
 The Node command must report `v24.x`. User-local Node/npm shims are intentionally excluded from
 the unit `PATH`; upgrade the system runtime instead of changing the service back to a home path.
 
-Install on the VM as the `radek` user:
+Install on the VM for the `radek` runtime account. The units are managed by the privileged system
+manager so filesystem namespaces remain enforceable on Ubuntu 24.04 when AppArmor restricts
+unprivileged user namespaces; each process still drops to `User=radek` and `Group=radek`:
 
 ```bash
 mkdir -p ~/.config/autopilot ~/.local/state/autopilot/backups ~/projects
@@ -22,11 +24,12 @@ printf 'CONTROL_PLANE_TOKEN=%s\n' "$(openssl rand -hex 32)" > ~/.config/autopilo
 printf 'CONTROL_PLANE_SECURE_COOKIES=false\n' >> ~/.config/autopilot/control-plane.env
 printf 'CONTROL_PLANE_USAGE_PROBES=\n' >> ~/.config/autopilot/control-plane.env
 chmod 600 ~/.config/autopilot/control-plane.env
-mkdir -p ~/.config/systemd/user
-cp ops/systemd/*.service ops/systemd/*.timer ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now autopilot-control-plane.service
-systemctl --user enable --now autopilot-control-plane-health.timer autopilot-state-maintenance.timer
+systemctl --user disable --now autopilot-control-plane.service \
+  autopilot-control-plane-health.timer autopilot-state-maintenance.timer 2>/dev/null || true
+sudo cp ops/systemd/*.service ops/systemd/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now autopilot-control-plane.service
+sudo systemctl enable --now autopilot-control-plane-health.timer autopilot-state-maintenance.timer
 ```
 
 The service binds only to `127.0.0.1`. Keep the environment file outside the repository.
@@ -45,7 +48,9 @@ keeps the installation and the rest of the home directory read-only, while
 `ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects`
 permits writes only to managed state, its lock-timeout incident spool, and supervised projects.
 The fixed `ExecStartPre` creates the private spool directory before the filesystem namespace is
-applied. Maintenance backups stay inside managed state at `%h/.local/state/autopilot/backups`.
+applied. A second unprivileged `ExecStartPre` writes disposable markers to both managed roots and
+must fail to write into the installation; the service does not start if containment is ineffective.
+Maintenance backups stay inside managed state at `%h/.local/state/autopilot/backups`.
 
 A custom projects root uses the environment file as its one authoritative assignment. Edit
 `~/.config/autopilot/control-plane.env` so it contains exactly one active custom-root assignment:
@@ -58,7 +63,7 @@ Because `EnvironmentFile=` overrides the unit's default `Environment=` assignmen
 drop-in only clears and replaces the writable-path allowlist:
 
 ```ini
-# ~/.config/systemd/user/autopilot-control-plane.service.d/projects-root.conf
+# /etc/systemd/system/autopilot-control-plane.service.d/projects-root.conf
 [Service]
 ReadWritePaths=
 ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool /srv/autopilot-projects
@@ -89,7 +94,7 @@ that directory, and stops polling cleanly on `SIGTERM`/`SIGINT` before systemd t
 
 OpenRouter credentials are intentionally not included in this unit or repository. Without an
 injected `OPENROUTER_API_KEY`, its quota snapshot is reported as `unavailable`; provision the
-secret through the VM's user service environment/secret manager when API quota polling is wanted.
+secret through the VM's service environment/secret manager when API quota polling is wanted.
 Provider CLI quota commands are likewise explicit capabilities and are unavailable unless the
 runtime injects their command configuration.
 
@@ -99,8 +104,8 @@ scans bounded head/tail chunks for secret-like material, creates and validates a
 backup, rotates bounded JSONL files, and only then prunes retained backups. The service deliberately
 keeps the host `/tmp` visible because Codex,
 Claude, and AGY `/status` or `/usage` probes communicate with their existing tmux sessions through
-the per-user tmux socket. Other hardening remains enabled; as a user service it starts without
-privileged Linux capabilities.
+the per-user tmux socket. Other hardening remains enabled; service processes run as the
+unprivileged `radek` account without privileged Linux capabilities.
 
 ## Governed cockpit dry run
 
@@ -131,8 +136,8 @@ Only after the exact revision has passed and the operator has chosen to deploy i
 service be restarted:
 
 ```bash
-systemctl --user restart autopilot-control-plane.service
-systemctl --user is-active autopilot-control-plane.service
+sudo systemctl restart autopilot-control-plane.service
+sudo systemctl is-active autopilot-control-plane.service
 cd ~/autopilot-beta
 npm run ops:health -- 8787
 ```

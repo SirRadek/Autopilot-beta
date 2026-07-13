@@ -4,6 +4,8 @@ ConditionPathIsDirectory=%h/.local/state/autopilot
 
 [Service]
 Type=oneshot
+User=radek
+Group=radek
 WorkingDirectory=/home/radek/autopilot-beta
 Environment=PATH=/usr/bin:/bin
 ExecStartPre=+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool

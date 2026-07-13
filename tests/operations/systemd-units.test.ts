@@ -64,15 +64,35 @@ describe("systemd unit writable boundaries", () => {
   it("limits the control plane to managed state and the configured projects root", () => {
     const directives = activeServiceDirectives(readSystemdFile("autopilot-control-plane.service"));
 
+    expect(directives.get("User")).toEqual(["radek"]);
+    expect(directives.get("Group")).toEqual(["radek"]);
     expect(directives.get("ProtectSystem")).toEqual(["strict"]);
     expect(directives.get("ProtectHome")).toEqual(["read-only"]);
     expect(directives.get("PrivateUsers")).toEqual(["true"]);
     expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects"]);
-    expect(directives.get("ExecStartPre")).toEqual(["+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool"]);
+    expect(directives.get("ExecStartPre")).toEqual([
+      "+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool",
+      "/usr/bin/npm run ops:boundary-check -- /home/radek/autopilot-beta ${AUTOPILOT_STATE_DIR} ${AUTOPILOT_PROJECTS_DIR}"
+    ]);
 
     const projectsRoot = environmentValue(directives, "AUTOPILOT_PROJECTS_DIR");
     expect(projectsRoot).toBe("%h/projects");
     expect(directives.get("ReadWritePaths")?.flatMap((value) => value.split(/\s+/))).toContain(projectsRoot);
+  });
+
+  it("uses the privileged system manager and fails closed when containment is ineffective", () => {
+    const service = readSystemdFile("autopilot-control-plane.service");
+    const directives = activeServiceDirectives(service);
+    const readme = readSystemdFile("README.md");
+
+    expect(service).toContain("WantedBy=multi-user.target");
+    expect(directives.get("ExecStartPre")).toContain(
+      "/usr/bin/npm run ops:boundary-check -- /home/radek/autopilot-beta ${AUTOPILOT_STATE_DIR} ${AUTOPILOT_PROJECTS_DIR}"
+    );
+    expect(readme).toContain("/etc/systemd/system");
+    expect(readme).toContain("sudo systemctl enable --now autopilot-control-plane.service");
+    expect(readme).not.toContain("systemctl --user enable");
+    expect(readme).toContain("systemctl --user disable --now autopilot-control-plane.service");
   });
 
   it("keeps maintenance backups in managed state and grants only the external incident spool", () => {
@@ -89,7 +109,7 @@ describe("systemd unit writable boundaries", () => {
     expect(directives.get("ExecStart")?.join("\n")).not.toContain("autopilot-backups");
   });
 
-  it("gives every protected user service the namespace prerequisite", () => {
+  it("gives every protected system service the namespace prerequisite", () => {
     for (const name of [
       "autopilot-control-plane.service",
       "autopilot-control-plane-health.service",
@@ -97,6 +117,8 @@ describe("systemd unit writable boundaries", () => {
     ]) {
       const directives = activeServiceDirectives(readSystemdFile(name));
 
+      expect(directives.get("User"), name).toEqual(["radek"]);
+      expect(directives.get("Group"), name).toEqual(["radek"]);
       expect(directives.get("ProtectSystem"), name).toEqual(["strict"]);
       expect(directives.get("ProtectHome"), name).toEqual(["read-only"]);
       expect(directives.get("PrivateUsers"), name).toEqual(["true"]);

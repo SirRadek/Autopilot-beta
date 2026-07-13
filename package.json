@@ -49,6 +49,7 @@
     "ops:restore": "tsx scripts/ops-restore.ts",
     "ops:recovery-drill": "tsx scripts/ops-recovery-drill.ts",
     "ops:maintenance": "tsx scripts/ops-maintenance.ts",
+    "ops:boundary-check": "tsx scripts/ops-boundary-check.ts",
     "ops:health": "tsx scripts/ops-healthcheck.ts",
     "ops:ready": "tsx scripts/ops-readinesscheck.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",

@@ -125,6 +125,7 @@ export const capabilityModules = [
     requiredChecks: [
       "backup_current_state",
       "validate_backup_before_rotation",
+      "verify_runtime_write_boundary",
       "identify_platform",
       "crawl_current_site",
       "scan_basic_security"

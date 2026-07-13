@@ -11,8 +11,8 @@
 ## Routine checks
 
 ```bash
-systemctl --user status autopilot-control-plane.service
-systemctl --user list-timers 'autopilot-*'
+sudo systemctl status autopilot-control-plane.service
+sudo systemctl list-timers 'autopilot-*'
 npm run ops:health -- 8787
 npm run ops:maintenance -- ~/.local/state/autopilot ~/.local/state/autopilot/backups ~/.config/autopilot/control-plane.env
 ```
