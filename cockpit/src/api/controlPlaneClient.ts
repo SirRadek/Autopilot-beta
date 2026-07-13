@@ -1,4 +1,4 @@
-import type { ApprovalRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProviderHealth, ProviderModels, ProviderQuota, SessionRecord, WorkerRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectEntry, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftInput, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
 
 export class ControlPlaneApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "ControlPlaneApiError"; }
@@ -22,6 +22,16 @@ export interface ControlPlaneClient {
   getProviderModels(): Promise<ProviderModels>;
   getProviderHealth(): Promise<ProviderHealth>;
   decideApproval(id: string, decision: "approved" | "rejected", reason?: string): Promise<ApprovalRecord>;
+  getProjects(): Promise<readonly ProjectEntry[]>;
+  getRuns(status?: RunStatus): Promise<readonly RunRecord[]>;
+  getRun(id: string): Promise<RunRecord>;
+  prepareRun(input: RunDraftInput): Promise<RunRecord>;
+  reviseRun(id: string, revision: number, input: RunDraftInput): Promise<RunRecord>;
+  approveRun(id: string, revision: number, operator: string): Promise<RunRecord>;
+  cancelRun(id: string): Promise<RunRecord>;
+  getIncidents(): Promise<readonly AutopilotIncident[]>;
+  acknowledgeIncident(id: string, owner: string): Promise<AutopilotIncident>;
+  prepareRepairPacket(id: string, input: RepairPacketInput): Promise<AutopilotRepairPacket>;
 }
 
 export function createControlPlaneClient(options: ControlPlaneClientOptions = {}): ControlPlaneClient {
@@ -63,6 +73,18 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
     getProviderQuotas: () => request<{ readonly providers: readonly ProviderQuota[] }>("/providers/quotas"),
     getProviderModels: () => request<ProviderModels>("/providers/models"),
     getProviderHealth: () => request<ProviderHealth>("/providers/health"),
-    decideApproval: (id, decision, reason) => request<ApprovalRecord>(`/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, ...(reason === undefined ? {} : { reason }) }) })
+    decideApproval: (id, decision, reason) => request<ApprovalRecord>(`/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, ...(reason === undefined ? {} : { reason }) }) }),
+    getProjects: () => request<readonly ProjectEntry[]>("/projects"),
+    getRuns: (status) => request<readonly RunRecord[]>(`/runs${status === undefined ? "" : `?status=${encodeURIComponent(status)}`}`),
+    getRun: (id) => request<RunRecord>(`/runs/${encodeURIComponent(id)}`),
+    prepareRun: (input) => request<RunRecord>("/runs", jsonPost(input)),
+    reviseRun: (id, revision, input) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/revisions`, jsonPost({ ...input, revision })),
+    approveRun: (id, revision, operator) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/approve`, jsonPost({ revision, operator })),
+    cancelRun: (id) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/cancel`, jsonPost({})),
+    getIncidents: () => request<readonly AutopilotIncident[]>("/incidents"),
+    acknowledgeIncident: (id, owner) => request<AutopilotIncident>(`/incidents/${encodeURIComponent(id)}/acknowledge`, jsonPost({ owner })),
+    prepareRepairPacket: (id, input) => request<AutopilotRepairPacket>(`/incidents/${encodeURIComponent(id)}/repair-packet`, jsonPost(input))
   };
 }
+
+function jsonPost(body: unknown): RequestInit { return { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }; }
