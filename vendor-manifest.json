@@ -81,6 +81,7 @@
     "src/data/delivery-system/graphicAgent.ts",
     "src/data/delivery-system/incidentStore.ts",
     "src/data/delivery-system/localWorkers.ts",
+    "src/data/delivery-system/managedStateFile.ts",
     "src/data/delivery-system/modelSpend.ts",
     "src/data/delivery-system/observability.ts",
     "src/data/delivery-system/openRouterLedgerMigration.ts",

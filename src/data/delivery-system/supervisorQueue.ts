@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
+import { readManagedStateTextFile } from "./managedStateFile";
 
 export type SupervisorTaskStatus = "queued" | "running" | "blocked" | "completed" | "failed" | "cancelled";
 
@@ -258,10 +259,10 @@ export class SupervisorQueue {
 function bounded(value: string): string { return value.slice(0, 512); }
 
 function readSupervisorState(path: string, maxTasks: number): SupervisorState {
-  if (!existsSync(path)) return { schema_version: "v1", tasks: [] };
   try {
-    if (statSync(path).size > MAX_SUPERVISOR_STATE_BYTES) throw new Error("invalid_supervisor_state");
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    const file = readManagedStateTextFile(path, { maxBytes: MAX_SUPERVISOR_STATE_BYTES });
+    if (file.status === "missing") return { schema_version: "v1", tasks: [] };
+    const parsed: unknown = JSON.parse(file.text);
     if (!isSupervisorState(parsed, maxTasks)) throw new Error("invalid_supervisor_state");
     return parsed;
   } catch {

@@ -2,9 +2,11 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  rmSync,
   readFileSync,
   readdirSync,
   statSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
@@ -159,6 +161,22 @@ describe("buildReadiness", () => {
     });
   });
 
+  it.runIf(process.platform !== "win32")("rejects unsafe managed-state file types through each read-only validator", () => {
+    const cases = [
+      ["supervisor-queue.json", { schema_version: "v1", tasks: [] }],
+      ["token-gateway-state.json", { used: {}, reservations: {}, terminal: {} }],
+      ["provider-quota-snapshots.json", { schema_version: "v1", snapshots: [] }]
+    ] as const;
+    for (const [fileName, document] of cases) {
+      const options = fixture();
+      rmSync(join(options.stateDir, fileName), { force: true });
+      const target = join(options.stateDir, `${fileName}.target`);
+      writeFileSync(target, `${JSON.stringify(document)}\n`);
+      symlinkSync(target, join(options.stateDir, fileName), "file");
+      expect(buildReadiness(options).ready).toBe(false);
+    }
+  });
+
   it("rejects an enabled registry entry outside the configured project root", () => {
     const options = fixture();
     const outside = join(options.stateDir, "outside-project");
@@ -198,6 +216,12 @@ describe("buildReadiness", () => {
       components: { configuration: { status: "unavailable", error_code: "invalid_configuration" } }
     });
 
+    const nonNormalizedState = fixture();
+    expect(buildReadiness({
+      ...nonNormalizedState,
+      stateDir: `${nonNormalizedState.stateDir}/../state`
+    }).components.configuration).toEqual({ status: "unavailable", error_code: "invalid_configuration" });
+
     if (process.platform !== "win32") {
       const insecureState = fixture();
       chmodSync(insecureState.stateDir, 0o755);
@@ -206,7 +230,51 @@ describe("buildReadiness", () => {
         ready: false,
         components: { managed_state: { status: "unavailable", error_code: "state_unavailable" } }
       });
+
+      const readOnlyState = fixture();
+      chmodSync(readOnlyState.stateDir, 0o500);
+      expect(buildReadiness(readOnlyState).components.managed_state).toEqual({
+        status: "unavailable",
+        error_code: "state_unavailable"
+      });
+
+      const insecureProjectRoot = fixture();
+      chmodSync(insecureProjectRoot.projectRoot, 0o755);
+      expect(buildReadiness(insecureProjectRoot).components.configuration).toEqual({
+        status: "unavailable",
+        error_code: "invalid_configuration"
+      });
     }
+  });
+
+  it.runIf(process.platform !== "win32")("rejects symlinked state and project roots", () => {
+    const stateOptions = fixture();
+    const stateLink = `${stateOptions.stateDir}-link`;
+    symlinkSync(stateOptions.stateDir, stateLink, "dir");
+    expect(buildReadiness({ ...stateOptions, stateDir: stateLink }).components.managed_state).toEqual({
+      status: "unavailable",
+      error_code: "state_unavailable"
+    });
+
+    const projectOptions = fixture();
+    const projectLink = `${projectOptions.projectRoot}-link`;
+    symlinkSync(projectOptions.projectRoot, projectLink, "dir");
+    expect(buildReadiness({ ...projectOptions, projectRoot: projectLink }).components.configuration).toEqual({
+      status: "unavailable",
+      error_code: "invalid_configuration"
+    });
+  });
+
+  it.runIf(process.platform !== "win32")("classifies a dangling registry symlink as malformed, not missing", () => {
+    const options = fixture();
+    const path = projectRegistryPath(options.stateDir);
+    rmSync(path);
+    symlinkSync(join(options.stateDir, "missing-target.json"), path, "file");
+
+    expect(buildReadiness(options).components.project_registry).toEqual({
+      status: "unavailable",
+      error_code: "invalid_project_registry"
+    });
   });
 
   it("does not expose credentials, paths, exception text, or mutate persisted state", () => {

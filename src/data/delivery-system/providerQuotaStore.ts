@@ -1,13 +1,12 @@
 import {
   appendFileSync,
-  existsSync,
   mkdirSync,
-  readFileSync,
   renameSync,
   writeFileSync
 } from "node:fs";
 import { join } from "node:path";
 
+import { readManagedStateTextFile } from "./managedStateFile";
 import { normalizeQuotaWindow, type ProviderSnapshot, type ProviderErrorCode, type ProviderHealth, type ProviderQuotaSource } from "./providerQuota";
 
 export const PROVIDER_QUOTA_SNAPSHOTS_FILE = "provider-quota-snapshots.json";
@@ -31,6 +30,7 @@ export interface ProviderQuotaEvent {
 const MAX_PROVIDER_LENGTH = 100;
 const MAX_FIELD_LENGTH = 200;
 const MAX_CHANGED_FIELDS = 32;
+const MAX_PROVIDER_QUOTA_STORE_BYTES = 2 * 1024 * 1024;
 const SOURCES: readonly ProviderQuotaSource[] = ["cli", "api", "manual-fallback"];
 const HEALTH: readonly ProviderHealth[] = ["healthy", "degraded", "unavailable"];
 const ERRORS: readonly (ProviderErrorCode | null)[] = ["timeout", "missing_credential", "malformed_response", "provider_unavailable", "provider_error", null];
@@ -41,12 +41,11 @@ function stateDirectory(stateDir: string): void {
 
 export function readProviderQuotaStore(stateDir: string): ProviderQuotaStoreDocument {
   const path = join(stateDir, PROVIDER_QUOTA_SNAPSHOTS_FILE);
-  if (!existsSync(path)) {
-    return { schema_version: "v1", snapshots: [] };
-  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
+    const file = readManagedStateTextFile(path, { maxBytes: MAX_PROVIDER_QUOTA_STORE_BYTES });
+    if (file.status === "missing") return { schema_version: "v1", snapshots: [] };
+    parsed = JSON.parse(file.text);
   } catch {
     throw new Error("invalid_provider_quota_store");
   }

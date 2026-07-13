@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { readManagedStateTextFile } from "./managedStateFile";
 
 export interface TokenBudget {
   readonly max_tokens: number;
@@ -309,10 +311,10 @@ function bounded(value: string | null | undefined): string | null {
 }
 
 function readGatewayState(path: string): GatewayState {
-  if (!existsSync(path)) return { used: {}, reservations: {}, terminal: {} };
   try {
-    if (statSync(path).size > MAX_STATE_BYTES) throw new Error("invalid_token_gateway_state");
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    const file = readManagedStateTextFile(path, { maxBytes: MAX_STATE_BYTES });
+    if (file.status === "missing") return { used: {}, reservations: {}, terminal: {} };
+    const parsed: unknown = JSON.parse(file.text);
     if (!isGatewayState(parsed)) throw new Error("invalid_token_gateway_state");
     const terminal = Object.fromEntries(Object.entries(parsed.terminal).map(([id, value]) => [
       id,

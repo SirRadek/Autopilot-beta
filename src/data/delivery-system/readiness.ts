@@ -1,5 +1,5 @@
-import { accessSync, constants, existsSync, lstatSync, statSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { accessSync, constants, lstatSync, realpathSync } from "node:fs";
+import { isAbsolute, normalize } from "node:path";
 
 import {
   projectRegistryPath,
@@ -105,7 +105,7 @@ export function buildReadiness(options: BuildReadinessOptions): ReadinessReport 
 }
 
 function configurationReadiness(options: BuildReadinessOptions): ReadinessComponent {
-  if (!isNonEmpty(options.stateDir) || !isAbsolute(options.stateDir) ||
+  if (!isNonEmpty(options.stateDir) || !isAbsolute(options.stateDir) || normalize(options.stateDir) !== options.stateDir ||
     !isNonEmpty(options.projectRoot) || !isAbsolute(options.projectRoot) ||
     !isNonEmpty(options.authToken) ||
     (options.now !== undefined && !validTimestamp(options.now))) {
@@ -113,7 +113,7 @@ function configurationReadiness(options: BuildReadinessOptions): ReadinessCompon
   }
   try {
     resolveConfiguredProjectRoot({ AUTOPILOT_PROJECTS_DIR: options.projectRoot });
-    if (!statSync(options.projectRoot).isDirectory()) return unavailable("invalid_configuration");
+    if (!isPrivateAccessibleDirectory(options.projectRoot)) return unavailable("invalid_configuration");
   } catch {
     return unavailable("invalid_configuration");
   }
@@ -122,13 +122,7 @@ function configurationReadiness(options: BuildReadinessOptions): ReadinessCompon
 
 function managedStateReadiness(stateDir: string): ReadinessComponent {
   try {
-    const metadata = lstatSync(stateDir);
-    if (!metadata.isDirectory() || metadata.isSymbolicLink()) return unavailable("state_unavailable");
-    if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
-      return unavailable("state_unavailable");
-    }
-    accessSync(stateDir, constants.R_OK | constants.X_OK);
-    return READY;
+    return isPrivateAccessibleDirectory(stateDir) ? READY : unavailable("state_unavailable");
   } catch {
     return unavailable("state_unavailable");
   }
@@ -136,9 +130,14 @@ function managedStateReadiness(stateDir: string): ReadinessComponent {
 
 function projectRegistryReadiness(stateDir: string, projectRoot: string): ReadinessComponent {
   const path = projectRegistryPath(stateDir);
-  if (!existsSync(path)) return unavailable("project_registry_missing");
   try {
     if (!lstatSync(path).isFile()) return unavailable("invalid_project_registry");
+  } catch (error) {
+    return nodeErrorCode(error) === "ENOENT"
+      ? unavailable("project_registry_missing")
+      : unavailable("invalid_project_registry");
+  }
+  try {
     const registry = readProjectRegistry(stateDir);
     for (const project of registry.projects) {
       if (project.enabled) resolveEnabledProject(stateDir, project.project_id, { projectRoot });
@@ -146,9 +145,7 @@ function projectRegistryReadiness(stateDir: string, projectRoot: string): Readin
     if (!lstatSync(path).isFile()) return unavailable("invalid_project_registry");
     return READY;
   } catch {
-    return existsSync(path)
-      ? unavailable("invalid_project_registry")
-      : unavailable("project_registry_missing");
+    return unavailable("invalid_project_registry");
   }
 }
 
@@ -203,4 +200,18 @@ function validTimestamp(value: string | undefined): value is string {
   if (value === undefined || value.length > 64) return false;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+function isPrivateAccessibleDirectory(path: string): boolean {
+  const metadata = lstatSync(path);
+  if (!metadata.isDirectory() || metadata.isSymbolicLink() || realpathSync(path) !== path) return false;
+  if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) return false;
+  accessSync(path, constants.R_OK | constants.W_OK | constants.X_OK);
+  return true;
+}
+
+function nodeErrorCode(error: unknown): string {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : "";
 }
