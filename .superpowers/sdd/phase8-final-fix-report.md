@@ -31,29 +31,32 @@ dispatch cancellation, restart-safe persisted results, password/Bearer/API-key r
 prepare/approve rejection, prompt review/hard caps, production runtime terminal execution, and
 single reservation settlement.
 
-## Fresh verification
+## Fresh VM verification
 
-- Node: ephemeral isolated Node `v24.18.0`; no `.env` or live provider invocation.
+- VM: `autopilot-phase0` (`192.168.122.99`), isolated path
+  `/home/radek/autopilot-beta-phase8-final`, Node `v24.18.0`.
+- The tree was synced without `.git`, `node_modules`, `.env`, or `test-results`; dependencies were
+  installed with `npm ci` and `npm --prefix cockpit ci`.
 - `npm run typecheck`: passed.
 - Full backend: 85 files, 703 tests passed.
 - Full cockpit: 13 files, 78 tests passed.
 - Cockpit production build: passed, 42 modules transformed.
-- Browser QA clean rerun: 7 tests passed in 5.1 seconds. One immediately preceding all-in-one run
-  had a single stale-provider fixture timing miss (6/7); the isolated rerun passed all seven.
+- VM browser QA: 7 tests passed in 5.0 seconds, including prepare → approve → terminal evidence.
 - Deterministic production-loop smoke: passed with one approval, reservation, supervisor task,
   worker result, artifact, and exactly one `settled` terminal event.
-- Fresh smoke IDs: run `7496e7d2-024c-49a2-a778-f271c3600eae`, task
-  `run-task-f3ffc36c-6ffd-4cd0-a6c2-1dfe3441b93f`, reservation
-  `tgr-fdd1302a-bc78-4b6f-80e5-0038ba33fa8b`.
+- Fresh VM smoke IDs: run `616d3fc5-1285-4f38-8c39-6210ced58923`, task
+  `run-task-8a0380ba-ec44-49e9-b462-9d30b63ab026`, reservation
+  `tgr-fd92c179-a968-4786-aef1-593ca5d37a02`.
+- Smoke output explicitly reported `provider_invoked: false`; the isolated tree had no `.env`.
+- `npm run smoke:cockpit-run -- --live` was rejected with `live_execution_forbidden`, exit 1.
 - `git diff --check`: passed.
 
-## Environment concern
+## Isolation and concerns
 
-The existing VM at `192.168.122.99` was reachable, but this session had no accepted SSH key
-(`Permission denied (publickey)`), so the live checkout and VM state were not touched. The exact
-matrix was instead run in this isolated worktree with an ephemeral Node 24.18.0 runtime and a newly
-installed Playwright Chromium. Host Node 18 was also confirmed inadequate for the full backend and
-browser matrix; those host failures were environmental and the Node 24 matrix passed as recorded.
+The live checkout `/home/radek/autopilot-beta`, its service, and persistent state were never read,
+modified, or restarted during this verification. All VM writes were confined to the isolated
+feature path and temporary smoke/browser state. No provider credentials were present or loaded.
 
-No provider credentials were loaded, no live checkout was modified, and no live provider was
-invoked.
+One prior host-only all-in-one browser run had a transient stale-provider fixture timing miss; its
+immediate host rerun passed 7/7, and the authoritative isolated VM run also passed 7/7. No remaining
+implementation or verification concern is known.
