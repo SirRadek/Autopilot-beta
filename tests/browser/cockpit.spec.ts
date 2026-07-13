@@ -57,7 +57,7 @@ test("surfaces a provider stale/error state without breaking the shell", async (
   await page.route("**/providers/health", (route) => route.abort("failed"));
   await login(page);
   await expect(page.getByRole("heading", { name: "Hybrid Cockpit" })).toBeVisible();
-  await expect(page.getByLabel("Provider Budget").getByText("Unavailable").first()).toBeVisible();
+  await expect(page.getByLabel("Provider Budget").getByText("No provider data available.")).toBeVisible();
 });
 
 test("supports keyboard tab navigation on the responsive layout", async ({ page }) => {
@@ -86,7 +86,7 @@ test("keeps the cockpit usable at a narrow viewport", async ({ page }) => {
 test("prepares without a worker, approves, and inspects terminal evidence", async ({ page }) => {
   const now = "2026-07-13T10:00:00.000Z";
   let run: any;
-  const draft = { run_id: "browser-run-1", revision: 1, project_id: "browser-project", prompt: "Inspect the governed path", provider: "codex_cli", model: "browser-model", estimated_tokens: 25, requested_artifacts: ["text"], prompt_review_acknowledged: false, created_at: now };
+  const draft = { run_id: "browser-run-1", revision: 1, project_id: "browser-project", prompt: "Inspect the governed path", provider: "codex_cli", model: "browser-model", estimated_tokens: 89, requested_artifacts: ["text"], prompt_review_acknowledged: false, created_at: now };
   const record = (status: string) => ({ schema_version: "v1", current: draft, revisions: [draft], status, approved_revision: status === "draft" ? null : 1, approved_by: status === "draft" ? null : "cockpit-operator", approved_at: status === "draft" ? null : now, supervisor_task_id: status === "draft" ? null : "browser-task-1", worker_run_id: status === "completed" ? "browser-worker-1" : null, terminal_reason: null, token_reservation: status === "draft" ? null : { reservationId: "browser-reservation-1", reservedAt: now, totalTokens: 7, provider: "codex_cli", model: "browser-model", sessionId: "browser-run-1", handoffId: "run-handoff-browser-run-1-1", inputTokens: 7, outputTokens: 0 }, reservation_status: status === "draft" ? "none" : status === "completed" ? "settled" : "active", provider_result: status === "completed" ? { refused: false, reason: null, worker_run_id: "browser-worker-1", raw_output: "browser deterministic artifact" } : null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, artifacts: status === "completed" ? [{ artifact_id: "text-browser-worker-1", type: "text", preview: "browser deterministic artifact", created_at: now }] : [], updated_at: now });
   await page.route("**/*", async (route) => {
     const path = new URL(route.request().url()).pathname;

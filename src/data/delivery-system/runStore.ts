@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { resolveEnabledProject } from "./projectRegistry";
 import type { CliWorkerResult } from "./cliWorker";
-import { assertRunPromptPolicy } from "./runPromptPolicy";
+import { assertRunPromptPolicy, canonicalRunTokenBudget } from "./runPromptPolicy";
 
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
@@ -120,7 +120,7 @@ function validDraftInput(input: RunDraftInput): boolean {
   return typeof input.project_id === "string" && PROJECT_ID_PATTERN.test(input.project_id) &&
     typeof input.prompt === "string" && input.prompt.length <= MAX_PROMPT &&
     PROVIDERS.has(input.provider) && (input.model === null || validString(input.model, MAX_MODEL, true)) &&
-    typeof input.prompt_review_acknowledged === "boolean" && Number.isSafeInteger(input.estimated_tokens) && input.estimated_tokens >= 0 &&
+    typeof input.prompt_review_acknowledged === "boolean" && input.estimated_tokens === canonicalRunTokenBudget(input.prompt) &&
     Array.isArray(input.requested_artifacts) && input.requested_artifacts.length <= ARTIFACT_TYPES.size &&
     new Set(input.requested_artifacts).size === input.requested_artifacts.length &&
     input.requested_artifacts.every((type) => ARTIFACT_TYPES.has(type));
@@ -247,7 +247,9 @@ function find(stateDir: string, runId: string): RunRecord {
 export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt: string): RunDraft {
   resolveEnabledProject(stateDir, input.project_id);
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
-  const normalized = { ...input, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  const canonicalBudget = canonicalRunTokenBudget(input.prompt);
+  if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");
+  const normalized = { ...input, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
   if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
@@ -263,7 +265,9 @@ export function reviseRunDraft(stateDir: string, runId: string, revision: number
   if (record.revisions.length >= MAX_REVISIONS) throw new Error("run_revision_limit");
   resolveEnabledProject(stateDir, input.project_id);
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
-  const normalized = { ...input, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  const canonicalBudget = canonicalRunTokenBudget(input.prompt);
+  if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");
+  const normalized = { ...input, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
   if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: revision + 1, created_at: createdAt };
   replace(stateDir, { ...record, current: draft, revisions: [...record.revisions, draft], updated_at: createdAt });
@@ -296,7 +300,7 @@ export function appendRunArtifact(stateDir: string, runId: string, input: RunArt
 
 export function bindRunToSupervisor(stateDir: string, runId: string, taskId: string, reservation: RunReservation, updatedAt: string): RunRecord {
   const record = find(stateDir, runId);
-  if (record.status !== "approved" || record.supervisor_task_id !== null || !validString(taskId, MAX_ID) || !validReservation(reservation) || !validTimestamp(updatedAt)) throw new Error("invalid_run_binding");
+  if (record.status !== "approved" || record.supervisor_task_id !== null || !validString(taskId, MAX_ID) || !validReservation(reservation) || reservation.totalTokens !== record.current.estimated_tokens || !validTimestamp(updatedAt)) throw new Error("invalid_run_binding");
   return replace(stateDir, { ...record, supervisor_task_id: taskId, token_reservation: reservation, reservation_status: "active", updated_at: updatedAt });
 }
 

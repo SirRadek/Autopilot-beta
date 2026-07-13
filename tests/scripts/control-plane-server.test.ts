@@ -79,6 +79,14 @@ describe("control plane governed run API", () => {
     expect(await hardCap.json()).toEqual({ error: "run_prompt_token_cap_exceeded" });
   });
 
+  it("rejects zero and underestimated HTTP budgets and persists the canonical value", async () => {
+    const api = await governedApi();
+    expect(await (await api.call("POST", "/runs", { ...draft, estimated_tokens: 0 })).json()).toEqual({ error: "run_token_budget_underestimated" });
+    expect(await (await api.call("POST", "/runs", { ...draft, estimated_tokens: 77 })).json()).toEqual({ error: "run_token_budget_underestimated" });
+    const created = await (await api.call("POST", "/runs", { ...draft, estimated_tokens: 10_000 })).json() as { current: { estimated_tokens: number } };
+    expect(created.current.estimated_tokens).toBe(78);
+  });
+
   it("requires application/json for every mutation body", async () => {
     const api = await governedApi();
     const missing = await fetch(`${api.base}/runs`, { method: "POST", headers: { authorization: "Bearer secret" }, body: JSON.stringify(draft) });
@@ -135,7 +143,7 @@ describe("control plane governed run API", () => {
     const supervisor = new SupervisorQueue({ stateDir: api.stateDir });
     const gateway = new (await import("../../src/data/delivery-system/tokenGateway")).TokenGateway({ stateDir: api.stateDir });
     const first = (await import("../../src/data/delivery-system/runOrchestrator")).createRunOrchestrator({ stateDir: api.stateDir, tokenGateway: gateway, supervisor, dispatch: async () => new Promise(() => {}), isRouteAvailable: () => true });
-    const draft = first.prepareRun({ project_id: "autopilot-beta", prompt: "cancel after crash", provider: "codex_cli", model: "model-a", estimated_tokens: 10, requested_artifacts: ["text"] });
+    const draft = first.prepareRun({ project_id: "autopilot-beta", prompt: "cancel after crash", provider: "codex_cli", model: "model-a", estimated_tokens: 100, requested_artifacts: ["text"] });
     first.approveAndQueueRun(draft.current.run_id, 1, "owner");
     supervisor.claim(new Date().toISOString());
     const { requestRunCancellation, transitionRun } = await import("../../src/data/delivery-system/runStore");
@@ -153,7 +161,7 @@ describe("control plane governed run API", () => {
     let finish!: () => void;
     const runtime = createControlPlaneRuntime(stateDir, "secret", { scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
     const orchestrator = (runtime as any).orchestrator;
-    const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 10, requested_artifacts: ["text"] });
+    const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 100, requested_artifacts: ["text"] });
     orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
     await vi.waitFor(() => expect(typeof finish).toBe("function"));
     let stopped = false;
@@ -226,7 +234,7 @@ describe("control plane governed run API", () => {
   it("recovers exact committed revisions and missing approvals without rewriting history", async () => {
     const api = await governedApi();
     const created = await (await api.call("POST", "/runs", draft)).json() as { current: { run_id: string } };
-    const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 4 };
+    const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 100 };
     let revisionFault = true;
     expect(() => reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input, {
       revise: (...args) => {

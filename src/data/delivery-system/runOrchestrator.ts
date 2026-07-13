@@ -4,9 +4,9 @@ import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQ
 import { isRunRouteEligible } from "./runRouteEligibility";
 import { resolveEnabledProject } from "./projectRegistry";
 import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
-import { estimateTokenCount, type TokenReservation, type TokenReservationRequest, type TokenSettlement } from "./tokenGateway";
+import type { TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
 import { redactTelemetryText } from "./telemetryRedaction";
-import { assertRunPromptPolicy } from "./runPromptPolicy";
+import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens } from "./runPromptPolicy";
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { computePacketHash } from "../../governed-core/dispatch";
 import { buildAgentPacket, loadDecisionMeshFromRoot } from "../../lib/decision-mesh";
@@ -71,6 +71,7 @@ export function createRunOrchestrator(options: {
 
   function handoffFor(run: RunRecord): GovernedHandoff {
     assertRunPromptPolicy(run.current.prompt, run.current.prompt_review_acknowledged);
+    if (run.current.estimated_tokens !== canonicalRunTokenBudget(run.current.prompt)) throw new Error("run_token_budget_mismatch");
     const task = `Execute approved run ${run.current.run_id} revision ${run.current.revision}`;
     const agent = "worker";
     const packet = buildAgentPacket(loadDecisionMeshFromRoot(process.cwd()), { task, agent, token_budget: run.current.estimated_tokens });
@@ -124,14 +125,14 @@ export function createRunOrchestrator(options: {
     const index = queue.records.findIndex((item) => item.run_id === runId && item.revision === revision);
     if (index < 0) throw new Error("approval_not_found");
     const approval = queue.records[index]!;
-    if (approval.prompt_review_acknowledged !== before.current.prompt_review_acknowledged) throw new Error("run_revision_conflict");
+    if (approval.prompt_review_acknowledged !== before.current.prompt_review_acknowledged || approval.estimated_tokens !== before.current.estimated_tokens) throw new Error("run_revision_conflict");
     if (approval.status === "pending") {
       const decided = decideApproval(approval, "approved", now());
       writeApprovalQueue(options.stateDir, { ...queue, records: queue.records.map((item, candidate) => candidate === index ? decided : item) });
     } else if (approval.status !== "approved") throw new Error("approval_not_approved");
     const approved = approveRunRevision(options.stateDir, runId, revision, operator, now());
     const handoff = handoffFor(approved);
-    const inputTokens = Math.min(approved.current.estimated_tokens, estimateTokenCount(approved.current.prompt));
+    const inputTokens = conservativeRunPromptTokens(approved.current.prompt);
     let durable = record(runId);
     if (durable.queue_compensation_requested) durable = reconcileQueueCompensation(durable);
     if (durable.status === "approved" && durable.reservation_status === "released") {
@@ -201,17 +202,36 @@ export function createRunOrchestrator(options: {
     const failed = (result.exitCode ?? 0) !== 0 || result.errorReason != null || result.lockStatus === "failed";
     const cancelled = record(run.current.run_id).cancellation_requested;
     const task = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
+    const attemptInputTokens = conservativeRunPromptTokens(run.current.prompt);
+    const attemptOutputTokens = conservativeRunPromptTokens(result.rawOutput);
+    const cumulativeInputTokens = run.retry_input_tokens + attemptInputTokens;
+    const cumulativeOutputTokens = run.retry_output_tokens + attemptOutputTokens;
+    let retryQueued = false;
     if (cancelled) options.supervisor.cancel(taskId, "run_cancelled", now());
     else if (failed) {
       const outcome = options.supervisor.fail(taskId, result.errorReason ?? `worker_exit_${result.exitCode}`, now());
-      if (outcome.status === "queued") {
-        clearRunProviderResultForRetry(options.stateDir, run.current.run_id, estimateTokenCount(run.current.prompt), estimateTokenCount(result.rawOutput), now());
-        return null;
-      }
+      retryQueued = outcome.status === "queued";
     }
-    else if (task === undefined || task.status === "running") options.supervisor.complete(taskId, now());
+    if (cumulativeInputTokens + cumulativeOutputTokens > run.current.estimated_tokens) {
+      const latestTask = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
+      if (!cancelled && (retryQueued || !failed) && (latestTask === undefined || !["completed", "failed", "cancelled"].includes(latestTask.status ?? ""))) options.supervisor.cancel(taskId, "token_settlement_exceeds_reservation", now());
+      if (run.reservation_status === "active") {
+        options.tokenGateway.release(reservation);
+        run = markRunReservationTerminal(options.stateDir, run.current.run_id, "released", now());
+        options.afterPhase?.("reservation_terminal");
+      }
+      const finalized = finalizeRun(options.stateDir, run.current.run_id, "failed", "token_settlement_exceeds_reservation", now());
+      options.afterPhase?.("finalized");
+      options.tokenGateway.acknowledgeTerminal?.(reservation.reservationId);
+      return { ...finalized, result };
+    }
+    if (retryQueued) {
+      clearRunProviderResultForRetry(options.stateDir, run.current.run_id, attemptInputTokens, attemptOutputTokens, now());
+      return null;
+    }
+    if (!cancelled && !failed && (task === undefined || task.status === "running")) options.supervisor.complete(taskId, now());
     if (run.reservation_status === "active") {
-      options.tokenGateway.settle(reservation, { inputTokens: run.retry_input_tokens + estimateTokenCount(run.current.prompt), outputTokens: run.retry_output_tokens + estimateTokenCount(result.rawOutput) });
+      options.tokenGateway.settle(reservation, { inputTokens: cumulativeInputTokens, outputTokens: cumulativeOutputTokens });
       run = markRunReservationTerminal(options.stateDir, run.current.run_id, "settled", now());
       options.afterPhase?.("reservation_terminal");
     }

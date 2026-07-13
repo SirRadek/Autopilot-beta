@@ -90,9 +90,18 @@ describe("run store", () => {
 
   it("keeps prompt review acknowledgement immutable per revision", () => {
     const dir = stateDir();
-    const first = createRunDraft(dir, { ...input, prompt: "x".repeat(1_001), prompt_review_acknowledged: true }, "2026-07-12T10:00:00.000Z");
+    const first = createRunDraft(dir, { ...input, prompt: "x".repeat(1_001), estimated_tokens: 2_000, prompt_review_acknowledged: true }, "2026-07-12T10:00:00.000Z");
     reviseRunDraft(dir, first.run_id, 1, { ...input, prompt: "small", prompt_review_acknowledged: false }, "2026-07-12T10:01:00.000Z");
     expect(readRunStore(dir).runs[0]?.revisions.map((revision) => revision.prompt_review_acknowledged)).toEqual([true, false]);
+  });
+
+  it("rejects zero and underestimated budgets and persists only the canonical budget", () => {
+    const dir = stateDir();
+    expect(() => createRunDraft(dir, { ...input, prompt: "nonempty", estimated_tokens: 0 }, "2026-07-12T10:00:00.000Z")).toThrow("run_token_budget_underestimated");
+    expect(() => createRunDraft(dir, { ...input, prompt: "nonempty", estimated_tokens: 71 }, "2026-07-12T10:00:00.000Z")).toThrow("run_token_budget_underestimated");
+    const draft = createRunDraft(dir, { ...input, prompt: "nonempty", estimated_tokens: 10_000 }, "2026-07-12T10:00:00.000Z");
+    expect(draft.estimated_tokens).toBe(72);
+    expect(() => reviseRunDraft(dir, draft.run_id, 1, { ...input, prompt: "revised", estimated_tokens: 70 }, "2026-07-12T10:01:00.000Z")).toThrow("run_token_budget_underestimated");
   });
 
   it("persists artifacts across reloads", () => {

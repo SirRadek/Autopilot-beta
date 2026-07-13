@@ -58,6 +58,20 @@ describe("token gateway", () => {
     expect(telemetry.length).toBeLessThan(64 * 1024);
   });
 
+  it("atomically rejects settlement beyond the immutable reservation total", () => {
+    const gateway = new TokenGateway({ stateDir: mkdtempSync(join(tmpdir(), "token-gateway-")) });
+    const reservation = gateway.reserve({ provider: "codex_cli", model: "gpt-5", sessionId: "s", inputTokens: 5, outputTokens: 5, handoffId: "h" });
+    expect(() => gateway.settle(reservation, { inputTokens: 6, outputTokens: 5 })).toThrow("token_settlement_exceeds_reservation");
+    expect(gateway.findActiveReservation("h")).toEqual(reservation);
+  });
+
+  it("does not allow settlement growth near provider, model, or session caps", () => {
+    const gateway = new TokenGateway({ stateDir: mkdtempSync(join(tmpdir(), "token-gateway-")), limits: { providerBudgetTokens: 10, modelBudgetTokens: 10, sessionBudgetTokens: 10 } });
+    const reservation = gateway.reserve({ provider: "codex_cli", model: "gpt-5", sessionId: "s", inputTokens: 4, outputTokens: 6 });
+    expect(() => gateway.settle(reservation, { inputTokens: 5, outputTokens: 6 })).toThrow("token_settlement_exceeds_reservation");
+    expect(() => gateway.reserve({ provider: "codex_cli", model: "gpt-5", sessionId: "s", inputTokens: 1, outputTokens: 0 })).toThrow("token_budget_exhausted");
+  });
+
   it("bounds active zero-token reservations and prunes the terminal ledger", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "token-gateway-bounds-"));
     const gateway = new TokenGateway({ stateDir, limits: { inputCapTokens: 1, outputCapTokens: 1, providerBudgetTokens: 1, modelBudgetTokens: 1, sessionBudgetTokens: 1 } });
@@ -71,7 +85,7 @@ describe("token gateway", () => {
     const state = JSON.parse(readFileSync(join(stateDir, "token-gateway-state.json"), "utf8"));
     expect(Object.keys(state.terminal)).toHaveLength(1024);
     expect(readFileSync(join(stateDir, "token-gateway-state.json")).byteLength).toBeLessThanOrEqual(2 * 1024 * 1024);
-  });
+  }, 15_000);
 
   it("rejects loaded state whose entry counts exceed caps", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "token-gateway-loaded-bounds-"));

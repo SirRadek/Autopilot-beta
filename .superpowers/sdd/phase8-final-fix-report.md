@@ -101,3 +101,44 @@ Fresh isolated VM verification at `/home/radek/autopilot-beta-phase8-final` pass
 - `--live`: rejected with `live_execution_forbidden`, exit 1.
 
 The live VM checkout, service, persistent state, credentials, and providers were not touched.
+
+## Final token-gate review
+
+Client `estimated_tokens` is no longer an authority. The governed domain computes one canonical
+approved budget as conservative UTF-8 prompt bytes plus a fixed 64-token output allowance. A
+missing HTTP estimate uses that canonical value; an explicit zero or underestimate is rejected;
+an overestimate is ignored and only the canonical value is persisted. Creation, revision, loaded
+state, approval, handoff, and reservation binding all recheck the canonical value. The reservation
+input is the conservative prompt bound, output is exactly the bounded allowance, and reservation
+total must equal the immutable approved draft budget.
+
+`TokenGateway.settle` now validates without mutation that actual input plus output does not exceed
+the reservation total and rechecks provider, model, and session route caps. Cumulative retry usage
+shares the same immutable reservation; a retry that would exhaust it is cancelled, released, and
+terminalized with `token_settlement_exceeds_reservation` instead of obtaining unapproved growth.
+Cockpit types now expose worker `exitCode`, `errorReason`, and `lockStatus`, plus cumulative retry
+input/output token fields, with fixture coverage.
+
+Final TDD coverage includes direct-domain and HTTP zero/underestimate rejection, canonical
+persistence, reservation-total equality, atomic settlement overrun, provider/model/session near-cap
+behavior, cumulative retry exhaustion, and cockpit metadata/accounting types. The existing bounded
+token-ledger stress test received an explicit 15-second timeout because its 1,612 durable writes can
+exceed Vitest's 5-second default on the VM; it completed in 4.3 seconds on the final run.
+
+Fresh host Node 24 verification passed: typecheck; 85 backend files / 715 tests; 13 cockpit files /
+79 tests; build / 42 modules; browser QA 7/7; deterministic dry-run.
+
+Fresh isolated VM verification passed:
+
+- Node `v24.18.0`, isolated `/home/radek/autopilot-beta-phase8-final`, `.env` absent.
+- Backend: 85 files, 715 tests passed.
+- Cockpit: 13 files, 79 tests passed.
+- Build: 42 modules transformed.
+- Browser QA: 7/7 passed in 4.6 seconds.
+- Dry-run: `provider_invoked: false`, one reservation and one `settled` terminal event.
+- Run `2405e2d6-f33f-4e0f-bdcb-9885d38a96b9`; task
+  `run-task-69107a71-7a8e-4654-b972-fa39b6a2d01c`; reservation
+  `tgr-fbd02107-c6b6-4ce2-ba9d-d5a5f5519832`.
+- `--live`: rejected with `live_execution_forbidden`, exit 1.
+
+The live checkout, service, persistent state, credentials, and providers were not touched.

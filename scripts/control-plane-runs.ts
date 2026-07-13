@@ -9,8 +9,8 @@ import { isRunRouteEligible } from "../src/data/delivery-system/runRouteEligibil
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { readRunStore, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
-import { estimateTokenCount, TokenGateway } from "../src/data/delivery-system/tokenGateway";
-import { assertRunPromptPolicy } from "../src/data/delivery-system/runPromptPolicy";
+import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
+import { assertRunPromptPolicy, canonicalRunTokenBudget } from "../src/data/delivery-system/runPromptPolicy";
 import { dispatchHandoff } from "../src/governed-core/dispatch";
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -118,7 +118,7 @@ function matchRoute(method: string, path: string): Route | null {
 function draftInput(body: Record<string, unknown>): RunDraftInput {
   if (typeof body.project_id !== "string" || typeof body.prompt !== "string" || !PROVIDERS.has(body.provider as RunProvider) ||
       body.model !== null && typeof body.model !== "string" || !Array.isArray(body.requested_artifacts)) throw new HttpError(400, "invalid_run_draft");
-  const estimated = body.estimated_tokens === undefined ? estimateTokenCount(body.prompt) : body.estimated_tokens;
+  const estimated = body.estimated_tokens === undefined ? canonicalRunTokenBudget(body.prompt) : body.estimated_tokens;
   try { assertRunPromptPolicy(body.prompt, body.prompt_review_acknowledged === true); } catch (error) { throw new HttpError(400, error instanceof Error ? error.message : "invalid_run_draft"); }
   if (!Number.isSafeInteger(estimated)) throw new HttpError(400, "invalid_run_draft");
   return { project_id: body.project_id, prompt: body.prompt, provider: body.provider as RunProvider, model: body.model, estimated_tokens: estimated as number, requested_artifacts: body.requested_artifacts as RunDraftInput["requested_artifacts"], prompt_review_acknowledged: body.prompt_review_acknowledged === true };
@@ -156,7 +156,7 @@ function knownHttpError(error: unknown): HttpError | null {
   if (["project_not_found", "run_not_found", "incident_not_found", "approval_not_found"].includes(code)) return new HttpError(404, code);
   if (["run_revision_conflict", "run_route_unavailable", "invalid_run_cancellation", "approval_already_decided", "approval_not_approved", "token_input_cap_exceeded", "token_output_cap_exceeded", "token_budget_exhausted", "token_route_mismatch", "token_reservation_limit", "run_limit", "run_revision_limit"].includes(code)) return new HttpError(409, code);
   if (code === "repair_packet_too_large") return new HttpError(413, code);
-  if (["invalid_run_draft", "invalid_run_approval", "invalid_incident", "run_prompt_token_cap_exceeded", "run_prompt_review_required"].includes(code)) return new HttpError(400, code);
+  if (["invalid_run_draft", "invalid_run_approval", "invalid_incident", "run_prompt_token_cap_exceeded", "run_prompt_review_required", "run_token_budget_underestimated"].includes(code)) return new HttpError(400, code);
   return null;
 }
 
@@ -167,6 +167,6 @@ function routeAvailable(stateDir: string, provider: string, model: string | null
   return isRunRouteEligible(stateDir, provider, model, new Date().toISOString());
 }
 function sameDraftInput(draft: RunDraft, input: RunDraftInput): boolean {
-  return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, prompt_review_acknowledged: draft.prompt_review_acknowledged }, { ...input, prompt_review_acknowledged: input.prompt_review_acknowledged === true });
+  return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, prompt_review_acknowledged: draft.prompt_review_acknowledged }, { ...input, estimated_tokens: canonicalRunTokenBudget(input.prompt), prompt_review_acknowledged: input.prompt_review_acknowledged === true });
 }
 function json(response: ServerResponse, value: unknown, status = 200): true { response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); response.end(JSON.stringify(value, null, 2)); return true; }

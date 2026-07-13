@@ -24,6 +24,7 @@ export type TokenGatewayRefusalCode =
   | "token_budget_exhausted"
   | "token_reservation_missing"
   | "token_route_mismatch"
+  | "token_settlement_exceeds_reservation"
   | "token_reservation_limit";
 
 export class TokenGatewayError extends Error {
@@ -177,6 +178,11 @@ export class TokenGateway {
     const outputTokens = safeCount(usage.outputTokens);
     if (inputTokens > this.limits.inputCapTokens) throw new TokenGatewayError("token_input_cap_exceeded");
     if (outputTokens > this.limits.outputCapTokens) throw new TokenGatewayError("token_output_cap_exceeded");
+    const actualTotal = inputTokens + outputTokens;
+    if (actualTotal > active.totalTokens) throw new TokenGatewayError("token_settlement_exceeds_reservation");
+    const routes = [`provider:${active.provider}`, `model:${active.provider}:${active.model ?? "default"}`, `session:${active.sessionId ?? "unscoped"}`] as const;
+    const caps = [this.limits.providerBudgetTokens, this.limits.modelBudgetTokens, this.limits.sessionBudgetTokens] as const;
+    if (routes.some((key, index) => this.used(key) - active.totalTokens + actualTotal > caps[index]!)) throw new TokenGatewayError("token_budget_exhausted");
     const settled = { inputTokens, outputTokens, released: usage.released === true };
     this.addUsage(active, -(active.totalTokens));
     this.addUsage(active, inputTokens + outputTokens);

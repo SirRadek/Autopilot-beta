@@ -16,7 +16,7 @@ function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnT
   writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
   const reservation = { reservationId: "reservation-1", provider: "codex_cli", model: "gpt-5", sessionId: "run", inputTokens: 10, outputTokens: 90, totalTokens: 100, reservedAt: now };
   const tokenGateway = {
-    reserve: options.reserve ?? vi.fn((request) => ({ ...reservation, ...request })),
+    reserve: options.reserve ?? vi.fn((request) => ({ ...reservation, ...request, totalTokens: request.inputTokens + request.outputTokens })),
     release: vi.fn(),
     settle: vi.fn()
   };
@@ -62,7 +62,7 @@ describe("governed run orchestration", () => {
     const { orchestrator, input, stateDir } = setup();
     const prompt = "界".repeat(334);
     expect(() => orchestrator.prepareRun({ ...input, prompt })).toThrow("run_prompt_review_required");
-    const draft = orchestrator.prepareRun({ ...input, prompt, prompt_review_acknowledged: true });
+    const draft = orchestrator.prepareRun({ ...input, prompt, estimated_tokens: 2_000, prompt_review_acknowledged: true });
     expect(draft.current.prompt_review_acknowledged).toBe(true);
     expect(readRunStore(stateDir).runs[0]?.revisions[0]?.prompt_review_acknowledged).toBe(true);
   });
@@ -74,6 +74,7 @@ describe("governed run orchestration", () => {
     expect(tokenGateway.reserve).toHaveBeenCalledWith(expect.objectContaining({ provider: "codex_cli", model: "gpt-5", sessionId: draft.current.run_id }));
     expect(supervisor.enqueue).toHaveBeenCalledWith(expect.objectContaining({ taskId: queued.supervisor_task_id, requiresApproval: true, approvalGranted: true }));
     expect(queued.status).toBe("queued");
+    expect(queued.token_reservation?.totalTokens).toBe(queued.current.estimated_tokens);
   });
 
   it("rejects stale revisions before reserving", () => {
@@ -111,7 +112,7 @@ describe("governed run orchestration", () => {
   });
 
   it("fails a nonzero worker result while settling its actual usage", async () => {
-    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "password=hunter2 authorization: Bearer bearer-secret api_key=key-secret", exitCode: 7, errorReason: "provider_failed", lockStatus: "failed" as const, model: "gpt-5" }));
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "password=pw authorization: Bearer bt api_key=ak", exitCode: 7, errorReason: "provider_failed", lockStatus: "failed" as const, model: "gpt-5" }));
     const { orchestrator, input, tokenGateway, stateDir, supervisor } = setup({ dispatch });
     supervisor.fail.mockReturnValue({ status: "failed" });
     const draft = orchestrator.prepareRun(input);
@@ -119,9 +120,9 @@ describe("governed run orchestration", () => {
     const result = await orchestrator.runSupervisorOnce();
     expect(result?.status).toBe("failed");
     expect(tokenGateway.settle).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("hunter2");
-    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("bearer-secret");
-    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("key-secret");
+    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("password=pw");
+    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("Bearer bt");
+    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("api_key=ak");
     expect(readRunStore(stateDir).runs[0]?.provider_result).toMatchObject({ exit_code: 7, error_reason: "provider_failed" });
   });
 
@@ -140,7 +141,7 @@ describe("governed run orchestration", () => {
     await orchestrator.runSupervisorOnce();
     expect(dispatch).toHaveBeenCalledTimes(2);
     expect(dispatch.mock.calls[0]?.[0]).toEqual(dispatch.mock.calls[1]?.[0]);
-    expect(settle).toHaveBeenCalledWith(expect.anything(), { inputTokens: 4, outputTokens: 6 });
+    expect(settle).toHaveBeenCalledWith(expect.anything(), { inputTokens: 16, outputTokens: 20 });
     expect(readRunStore(stateDir).runs[0]?.reservation_status).toBe("settled");
   });
 
@@ -154,6 +155,18 @@ describe("governed run orchestration", () => {
     expect(await orchestrator.runSupervisorOnce()).toBeNull();
     expect((await orchestrator.runSupervisorOnce())?.status).toBe("failed");
     expect(dispatch).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops retries when cumulative actual usage exhausts the approved budget", async () => {
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-large", rawOutput: "x".repeat(300), exitCode: 1, errorReason: "retryable", lockStatus: "failed" as const, model: "gpt-5" }));
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    const orchestrator = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir, baseRetryDelayMs: 0, maxRetryDelayMs: 0 }), dispatch: dispatch as any, now: () => now, isRouteAvailable: () => true });
+    const draft = orchestrator.prepareRun({ project_id: "alpha", prompt: "x", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    expect((await orchestrator.runSupervisorOnce())?.status).toBe("failed");
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(readRunStore(stateDir).runs[0]).toMatchObject({ reservation_status: "released", terminal_reason: "token_settlement_exceeds_reservation" });
   });
 
   it("keeps a running cancellation durable until dispatch finishes", async () => {
@@ -376,7 +389,7 @@ describe("governed run orchestration", () => {
     first.approveAndQueueRun(draft.current.run_id, 1, "owner");
     await expect(first.runSupervisorOnce()).rejects.toThrow("after_terminal_mark");
     const second = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch, now: () => now, isRouteAvailable: () => true });
-    expect((await second.runSupervisorOnce())?.status).toBe("completed");
+    expect((await second.runSupervisorOnce())?.status).toBe("failed");
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(readRunStore(stateDir).runs[0]?.provider_result?.raw_output).toHaveLength(32_000);
   });
