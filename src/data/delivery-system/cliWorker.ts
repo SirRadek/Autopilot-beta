@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { HandoffId } from "./checkCompletionMatrix";
@@ -30,6 +30,7 @@ import {
   writePromptFile
 } from "./cliWorkerCapture";
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH, VENDOR_PROCESS_REGISTRY_PATH } from "./sessionState";
+import { appendStateFile, removeStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 import { ensureOpenRouterLedgersMigrated } from "./openRouterLedgerMigration";
 import type { RoutingModeId } from "./routingModes";
 import {
@@ -334,30 +335,27 @@ export function acquireWorkerLock(
   lock: WorkerLockRecord,
   stateDir: string
 ): "acquired_supervisor_spawn" | "already_locked" | "stale_replaced" {
-  mkdirSync(stateDir, { recursive: true });
-  const existing = readWorkerLock(stateDir);
-
-  if (existing) {
-    if (!isWorkerLockStale(existing)) {
-      return "already_locked";
+  return withStateMaintenanceLock(stateDir, () => {
+    const existing = readWorkerLock(stateDir);
+    if (existing) {
+      if (!isWorkerLockStale(existing)) {
+        return "already_locked";
+      }
+      writeStateFileAtomically(stateDir, lockFilePath(stateDir), JSON.stringify(lock, null, 2));
+      return "stale_replaced";
     }
-    writeFileSync(lockFilePath(stateDir), JSON.stringify(lock, null, 2), "utf8");
-    return "stale_replaced";
-  }
-
-  writeFileSync(lockFilePath(stateDir), JSON.stringify(lock, null, 2), "utf8");
-  return "acquired_supervisor_spawn";
+    writeStateFileAtomically(stateDir, lockFilePath(stateDir), JSON.stringify(lock, null, 2));
+    return "acquired_supervisor_spawn";
+  });
 }
 
 export function releaseWorkerLock(workerRunId: string, stateDir: string): void {
-  const existing = readWorkerLock(stateDir);
-  if (existing?.worker_run_id === workerRunId) {
-    try {
-      unlinkSync(lockFilePath(stateDir));
-    } catch {
-      // already gone
+  withStateMaintenanceLock(stateDir, () => {
+    const existing = readWorkerLock(stateDir);
+    if (existing?.worker_run_id === workerRunId) {
+      removeStateFile(stateDir, lockFilePath(stateDir));
     }
-  }
+  });
 }
 
 // ─── Worker run ID ────────────────────────────────────────────────────────────
@@ -889,8 +887,7 @@ function hasLaterVendorProcessExit(
 
 function appendBestEffort(path: string, record: unknown): void {
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
+    appendStateFile(dirname(path), path, `${JSON.stringify(record)}\n`);
   } catch {
     // registry writes are best-effort and must never affect vendor execution
   }
@@ -969,12 +966,12 @@ function errorText(err: unknown): string {
 
 function appendRegistryEntry(entry: Record<string, unknown>, stateDir: string): void {
   const path = join(stateDir, "agent-registry.jsonl");
-  appendFileSync(path, `${JSON.stringify(entry)}\n`, "utf8");
+  appendStateFile(stateDir, path, `${JSON.stringify(entry)}\n`);
 }
 
 function writeResponseFile(content: string, runId: string, stateDir: string): string {
   const path = join(stateDir, `${runId}-output.txt`);
-  writeFileSync(path, content, "utf8");
+  writeStateFileAtomically(stateDir, path, content);
   return path;
 }
 
@@ -1055,8 +1052,7 @@ function safeTelemetryTokenCount(value: number): number {
 }
 
 function writeCliCallTelemetryRecord(record: CliCallTelemetryRecord, stateDir: string): void {
-  mkdirSync(stateDir, { recursive: true });
-  appendFileSync(stateFilePath(stateDir, CLI_CALL_TELEMETRY_PATH), `${JSON.stringify(record)}\n`, "utf8");
+  appendStateFile(stateDir, stateFilePath(stateDir, CLI_CALL_TELEMETRY_PATH), `${JSON.stringify(record)}\n`);
 }
 
 function emitSupervisorAlert(

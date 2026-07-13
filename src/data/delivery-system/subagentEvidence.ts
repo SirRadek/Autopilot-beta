@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { HandoffId } from "./checkCompletionMatrix";
@@ -7,6 +7,7 @@ import {
   AGENT_REGISTRY_PATH,
   SUBAGENT_EVIDENCE_PATH
 } from "./sessionState";
+import { appendStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export type AgentRegistryEventType = "subagent_start" | "subagent_stop";
 
@@ -91,7 +92,7 @@ function stateFilePath(stateDir: string | undefined, path: string): string {
   return join(stateDir ?? DEFAULT_SESSION_STATE_DIRECTORY, fileName(path));
 }
 
-function trimJsonlIfNeeded(path: string): void {
+function trimJsonlIfNeeded(stateDir: string, path: string): void {
   if (!existsSync(path)) {
     return;
   }
@@ -102,15 +103,15 @@ function trimJsonlIfNeeded(path: string): void {
     return;
   }
 
-  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(temporaryPath, `${lines.slice(-MAX_JSONL_ENTRIES).join("\n")}\n`, "utf8");
-  renameSync(temporaryPath, path);
+  writeStateFileAtomically(stateDir, path, `${lines.slice(-MAX_JSONL_ENTRIES).join("\n")}\n`);
 }
 
 function appendJsonl(path: string, record: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
-  trimJsonlIfNeeded(path);
+  const stateDir = dirname(path);
+  withStateMaintenanceLock(stateDir, () => {
+    appendStateFile(stateDir, path, `${JSON.stringify(record)}\n`);
+    trimJsonlIfNeeded(stateDir, path);
+  });
 }
 
 function readJsonl<T>(path: string): T[] {

@@ -1,11 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   createInitialSessionState,
   SESSION_STATE_PATH,
   type SessionStateManifest
 } from "./sessionState";
+import { writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export type AlertSeverity = "info" | "warning" | "blocker";
 
@@ -108,7 +109,6 @@ export function resolveAlert(alert: SupervisorAlert): SupervisorAlert {
 
 export function writePendingSupervisorAlert(alert: SupervisorAlert, stateDir: string): void {
   const path = stateFilePath(stateDir, SESSION_STATE_PATH);
-  mkdirSync(dirname(path), { recursive: true });
 
   const state = readSessionStateForAlerts(path);
   const nextState: SessionStateManifest = {
@@ -117,7 +117,7 @@ export function writePendingSupervisorAlert(alert: SupervisorAlert, stateDir: st
     pendingAlerts: [...state.pendingAlerts, alert]
   };
 
-  writeFileSync(path, `${JSON.stringify(nextState, null, 2)}\n`, "utf8");
+  writeStateFileAtomically(stateDir, path, `${JSON.stringify(nextState, null, 2)}\n`);
 }
 
 function readSessionStateForAlerts(path: string): SessionStateManifest {

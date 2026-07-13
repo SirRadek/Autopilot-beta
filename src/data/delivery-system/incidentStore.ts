@@ -1,8 +1,9 @@
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import { redactTelemetryText } from "./telemetryRedaction";
+import { writeStateFileAtomically } from "./stateMaintenanceLock";
 
 const INCIDENT_STORE_FILE = "autopilot-incidents.json";
 const MAX_INCIDENTS = 256;
@@ -150,18 +151,10 @@ export function prepareRepairPacket(stateDir: string, incidentId: string, input:
 }
 
 function writeIncidentStore(stateDir: string, document: IncidentStoreDocument): void {
-  mkdirSync(stateDir, { recursive: true });
   const path = join(stateDir, INCIDENT_STORE_FILE);
-  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
   const serialized = `${JSON.stringify(document, null, 2)}\n`;
   if (Buffer.byteLength(serialized, "utf8") > MAX_STORE_BYTES) throw new Error("invalid_incident_store");
-  try {
-    writeFileSync(temporary, serialized, { encoding: "utf8", mode: 0o600 });
-    renameSync(temporary, path);
-  } catch (error) {
-    if (existsSync(temporary)) unlinkSync(temporary);
-    throw error;
-  }
+  writeStateFileAtomically(stateDir, path, serialized);
 }
 
 function validateDocument(value: unknown): asserts value is IncidentStoreDocument {

@@ -1,16 +1,22 @@
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
+  constants,
+  existsSync,
+  fchmodSync,
+  fstatSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  renameSync,
   rmdirSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
 import { hostname } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const LOCK_DIRECTORY_NAME = ".state-maintenance.lock";
 const OWNER_FILE_NAME = "owner.json";
@@ -123,6 +129,76 @@ export function withStateMaintenanceLock<T>(
   } finally {
     lease.release();
   }
+}
+
+export function writeStateFileAtomically(
+  stateDirectory: string,
+  path: string,
+  content: string | Buffer
+): void {
+  assertStatePath(stateDirectory, path);
+  withStateMaintenanceLock(stateDirectory, () => {
+    const parent = dirname(path);
+    mkdirSync(parent, { recursive: true, mode: 0o700 });
+    const temporaryPath = join(parent, `.${basename(path)}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`);
+    let descriptor: number | null = null;
+    try {
+      descriptor = openSync(temporaryPath, "wx", 0o600);
+      fchmodSync(descriptor, 0o600);
+      writeFileSync(descriptor, content);
+      fsyncSync(descriptor);
+      closeSync(descriptor);
+      descriptor = null;
+      renameSync(temporaryPath, path);
+      fsyncDirectory(parent);
+    } catch (error) {
+      if (descriptor !== null) closeSync(descriptor);
+      tryUnlink(temporaryPath);
+      throw error;
+    }
+  });
+}
+
+export function appendStateFile(stateDirectory: string, path: string, content: string | Buffer): void {
+  assertStatePath(stateDirectory, path);
+  withStateMaintenanceLock(stateDirectory, () => {
+    const parent = dirname(path);
+    mkdirSync(parent, { recursive: true, mode: 0o700 });
+    const created = !existsSync(path);
+    const before = created ? null : lstatSync(path);
+    if (before !== null && (!before.isFile() || before.isSymbolicLink())) {
+      throw new StateMaintenanceLockError("state_lock_invalid");
+    }
+    const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+    const descriptor = openSync(path, constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | noFollow, 0o600);
+    try {
+      const opened = fstatSync(descriptor);
+      const active = lstatSync(path);
+      if (!opened.isFile() || !active.isFile() || active.isSymbolicLink()
+        || opened.dev !== active.dev || opened.ino !== active.ino
+        || (before !== null && (before.dev !== opened.dev || before.ino !== opened.ino))) {
+        throw new StateMaintenanceLockError("state_lock_invalid");
+      }
+      fchmodSync(descriptor, 0o600);
+      writeFileSync(descriptor, content);
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
+    if (created) fsyncDirectory(parent);
+  });
+}
+
+export function removeStateFile(stateDirectory: string, path: string): void {
+  assertStatePath(stateDirectory, path);
+  withStateMaintenanceLock(stateDirectory, () => {
+    try {
+      unlinkSync(path);
+      fsyncDirectory(dirname(path));
+    } catch (error) {
+      if (!isFileSystemError(error, "ENOENT")) throw error;
+    }
+  });
 }
 
 function leaseFor(state: LocalLeaseState): StateMaintenanceLease {
@@ -249,6 +325,23 @@ function tryUnlink(path: string): void {
     unlinkSync(path);
   } catch {
     // Best effort only; unexpected state must remain visible.
+  }
+}
+
+function assertStatePath(stateDirectory: string, path: string): void {
+  const fromState = relative(resolve(stateDirectory), resolve(path));
+  if (fromState === "" || fromState === ".." || fromState.startsWith(`..${sep}`) || isAbsolute(fromState)) {
+    throw new StateMaintenanceLockError("state_lock_invalid");
+  }
+}
+
+function fsyncDirectory(path: string): void {
+  if (process.platform === "win32") return;
+  const descriptor = openSync(path, "r");
+  try {
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
   }
 }
 

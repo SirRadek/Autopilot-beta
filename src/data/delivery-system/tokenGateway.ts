@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { readManagedStateTextFile } from "./managedStateFile";
+import { appendStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export interface TokenBudget {
   readonly max_tokens: number;
@@ -119,6 +120,7 @@ export function validateTokenGatewayState(stateDir: string): void {
  * silently switch providers while a task is in flight.
  */
 export class TokenGateway {
+  private readonly stateDir: string;
   private readonly statePath: string;
   private readonly telemetryPath: string;
   private readonly limits: TokenGatewayLimits;
@@ -127,6 +129,7 @@ export class TokenGateway {
   constructor(options: { readonly stateDir?: string; readonly limits?: Partial<TokenGatewayLimits> } = {}) {
     const stateDir = options.stateDir ?? ".autopilot-state";
     mkdirSync(stateDir, { recursive: true });
+    this.stateDir = stateDir;
     this.statePath = join(stateDir, STATE_FILE);
     this.telemetryPath = join(stateDir, TELEMETRY_FILE);
     this.limits = { ...DEFAULT_TOKEN_GATEWAY_LIMITS, ...(options.limits ?? {}) };
@@ -250,7 +253,7 @@ export class TokenGateway {
   private persist(): void {
     const serialized = JSON.stringify(this.state);
     if (Buffer.byteLength(serialized) > MAX_STATE_BYTES) throw new Error("token_gateway_state_limit");
-    writeFileSync(this.statePath, serialized, { mode: 0o600 });
+    writeStateFileAtomically(this.stateDir, this.statePath, serialized);
   }
 
   private pruneTerminal(): void {
@@ -274,9 +277,13 @@ export class TokenGateway {
       reason: input.reason
     };
     try {
-      const lines = existsSync(this.telemetryPath) ? readFileSync(this.telemetryPath, "utf8").trim().split("\n").filter(Boolean) : [];
-      lines.push(JSON.stringify(record));
-      writeFileSync(this.telemetryPath, `${lines.slice(-MAX_TELEMETRY_LINES).join("\n")}\n`, { mode: 0o600 });
+      withStateMaintenanceLock(this.stateDir, () => {
+        appendStateFile(this.stateDir, this.telemetryPath, `${JSON.stringify(record)}\n`);
+        const lines = readFileSync(this.telemetryPath, "utf8").trim().split("\n").filter(Boolean);
+        if (lines.length > MAX_TELEMETRY_LINES) {
+          writeStateFileAtomically(this.stateDir, this.telemetryPath, `${lines.slice(-MAX_TELEMETRY_LINES).join("\n")}\n`);
+        }
+      });
     } catch { /* telemetry is best effort and must never bypass the gate */ }
   }
 }

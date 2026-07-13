@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { appendStateFile } from "../src/data/delivery-system/stateMaintenanceLock";
 
 const stateDir = process.argv[2];
 const confirmed = process.argv.includes("--confirm");
@@ -12,5 +13,5 @@ const records = readFileSync(path, "utf8").split(/\r?\n/).filter(Boolean).flatMa
 const exited = new Set(records.filter((record) => record.event === "exited").map((record) => record.pid));
 const orphaned = [...new Set(records.filter((record) => record.event === "spawned" && !exited.has(record.pid)).map((record) => record.pid))].filter((pid) => { try { process.kill(pid, 0); return true; } catch { return false; } });
 const killed = confirmed ? orphaned.filter((pid) => { try { process.kill(pid); return true; } catch { return false; } }) : [];
-if (confirmed) appendFileSync(join(stateDir, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action: "worker_orphan_cleanup", orphaned, killed })}\n`, "utf8");
+if (confirmed) appendStateFile(stateDir, join(stateDir, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action: "worker_orphan_cleanup", orphaned, killed })}\n`);
 process.stdout.write(`${JSON.stringify({ orphaned_pids: orphaned, killed, confirmation_required: orphaned.length > 0 && !confirmed })}\n`);

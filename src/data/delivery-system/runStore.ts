@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { resolveEnabledProject, type ProjectRegistryOptions } from "./projectRegistry";
 import type { CliWorkerResult } from "./cliWorker";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens, RUN_OUTPUT_TOKEN_ALLOWANCE, RUN_OUTPUT_TOKEN_ALLOWANCE_MAX } from "./runPromptPolicy";
+import { writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
@@ -224,16 +225,9 @@ export function readRunStore(stateDir: string): RunStoreDocument {
 function write(stateDir: string, document: RunStoreDocument): void {
   validate(document);
   const path = join(stateDir, FILE);
-  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
   const serialized = `${JSON.stringify(document, null, 2)}\n`;
   if (Buffer.byteLength(serialized, "utf8") > MAX_STORE_BYTES) throw new Error("invalid_run_store");
-  try {
-    writeFileSync(temporary, serialized, "utf8");
-    renameSync(temporary, path);
-  } catch (error) {
-    if (existsSync(temporary)) unlinkSync(temporary);
-    throw error;
-  }
+  writeStateFileAtomically(stateDir, path, serialized);
 }
 
 function replace(stateDir: string, record: RunRecord): RunRecord {

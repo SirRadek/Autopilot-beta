@@ -10,13 +10,13 @@ import {
   openSync,
   readSync,
   realpathSync,
-  renameSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
 
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
+import { withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export interface ProjectEntry {
   readonly schema_version: "v1";
@@ -179,31 +179,33 @@ export function initializeProjectRegistry(
   const projectRootCreated = ensurePrivateDirectory(projectRoot);
 
   const path = projectRegistryPath(stateDir);
-  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
   let registryCreated = false;
-  try {
-    const file = openSync(temporaryPath, "wx", 0o600);
+  withStateMaintenanceLock(stateDir, () => {
+    const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
     try {
-      writeFileSync(file, `${JSON.stringify(EMPTY_PROJECT_REGISTRY, null, 2)}\n`, "utf8");
-      fsyncSync(file);
-    } finally {
-      closeSync(file);
-    }
-    try {
-      linkSync(temporaryPath, path);
-      registryCreated = true;
-    } catch (error) {
-      if (nodeErrorCode(error) !== "EEXIST") throw error;
-    }
-  } catch {
-    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
-  } finally {
-    try {
-      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+      const file = openSync(temporaryPath, "wx", 0o600);
+      try {
+        writeFileSync(file, `${JSON.stringify(EMPTY_PROJECT_REGISTRY, null, 2)}\n`, "utf8");
+        fsyncSync(file);
+      } finally {
+        closeSync(file);
+      }
+      try {
+        linkSync(temporaryPath, path);
+        registryCreated = true;
+      } catch (error) {
+        if (nodeErrorCode(error) !== "EEXIST") throw error;
+      }
     } catch {
       throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+    } finally {
+      try {
+        if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+      } catch {
+        throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+      }
     }
-  }
+  });
 
   if (!registryCreated) readProjectRegistry(stateDir);
 
@@ -219,24 +221,13 @@ export function initializeProjectRegistry(
 export function writeProjectRegistry(stateDir: string, document: ProjectRegistryDocument): void {
   validateProjectRegistry(document);
   const path = projectRegistryPath(stateDir);
-  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
   const serialized = `${JSON.stringify(document, null, 2)}\n`;
   if (Buffer.byteLength(serialized, "utf8") > MAX_REGISTRY_BYTES) {
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
   try {
-    const file = openSync(temporaryPath, "wx", 0o600);
-    try {
-      writeFileSync(file, serialized, "utf8");
-      fsyncSync(file);
-    } finally {
-      closeSync(file);
-    }
-    renameSync(temporaryPath, path);
+    writeStateFileAtomically(stateDir, path, serialized);
   } catch {
-    try {
-      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
-    } catch { /* cleanup must not expose filesystem details */ }
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
   }
 }

@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export interface SessionQueueItem {
   readonly prompt_id: string;
@@ -131,7 +133,7 @@ export function readSessionRegistry(stateDir: string): SessionRegistryDocument {
 
 export function writeSessionRegistry(stateDir: string, document: SessionRegistryDocument): void {
   const path = join(stateDir, SESSION_REGISTRY_FILE);
-  writeFileSync(path, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+  writeStateFileAtomically(stateDir, path, `${JSON.stringify(document, null, 2)}\n`);
 }
 
 export function sessionRegistryPath(stateDir: string): string {

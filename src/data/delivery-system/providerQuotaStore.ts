@@ -1,13 +1,8 @@
-import {
-  appendFileSync,
-  mkdirSync,
-  renameSync,
-  writeFileSync
-} from "node:fs";
 import { join } from "node:path";
 
 import { readManagedStateTextFile } from "./managedStateFile";
 import { normalizeQuotaWindow, type ProviderSnapshot, type ProviderErrorCode, type ProviderHealth, type ProviderQuotaSource } from "./providerQuota";
+import { appendStateFile, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export const PROVIDER_QUOTA_SNAPSHOTS_FILE = "provider-quota-snapshots.json";
 export const PROVIDER_QUOTA_EVENTS_FILE = "provider-quota-events.jsonl";
@@ -34,10 +29,6 @@ const MAX_PROVIDER_QUOTA_STORE_BYTES = 2 * 1024 * 1024;
 const SOURCES: readonly ProviderQuotaSource[] = ["cli", "api", "manual-fallback"];
 const HEALTH: readonly ProviderHealth[] = ["healthy", "degraded", "unavailable"];
 const ERRORS: readonly (ProviderErrorCode | null)[] = ["timeout", "missing_credential", "malformed_response", "provider_unavailable", "provider_error", null];
-
-function stateDirectory(stateDir: string): void {
-  mkdirSync(stateDir, { recursive: true });
-}
 
 export function readProviderQuotaStore(stateDir: string): ProviderQuotaStoreDocument {
   const path = join(stateDir, PROVIDER_QUOTA_SNAPSHOTS_FILE);
@@ -76,11 +67,8 @@ export function writeProviderQuotaStore(stateDir: string, document: ProviderQuot
   if (Buffer.byteLength(serialized, "utf8") > MAX_PROVIDER_QUOTA_STORE_BYTES) {
     throw new Error("provider_quota_store_limit");
   }
-  stateDirectory(stateDir);
   const path = join(stateDir, PROVIDER_QUOTA_SNAPSHOTS_FILE);
-  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(temporaryPath, serialized, "utf8");
-  renameSync(temporaryPath, path);
+  writeStateFileAtomically(stateDir, path, serialized);
 }
 
 /** Validates persisted data and strips unknown or credential-bearing fields. */
@@ -113,7 +101,6 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
 }
 
 export function appendProviderQuotaEvent(stateDir: string, event: ProviderQuotaEvent): void {
-  stateDirectory(stateDir);
   const bounded = {
     provider: event.provider.slice(0, MAX_PROVIDER_LENGTH),
     observed_at: event.observed_at.slice(0, MAX_FIELD_LENGTH),
@@ -121,5 +108,5 @@ export function appendProviderQuotaEvent(stateDir: string, event: ProviderQuotaE
     changed_fields: [...new Set(event.changed_fields.map((field) => field.slice(0, MAX_FIELD_LENGTH)))].slice(0, MAX_CHANGED_FIELDS),
     error_code: event.error_code
   };
-  appendFileSync(join(stateDir, PROVIDER_QUOTA_EVENTS_FILE), `${JSON.stringify(bounded)}\n`, "utf8");
+  appendStateFile(stateDir, join(stateDir, PROVIDER_QUOTA_EVENTS_FILE), `${JSON.stringify(bounded)}\n`);
 }

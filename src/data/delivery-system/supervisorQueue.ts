@@ -1,8 +1,8 @@
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { readManagedStateTextFile } from "./managedStateFile";
+import { writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export type SupervisorTaskStatus = "queued" | "running" | "blocked" | "completed" | "failed" | "cancelled";
 
@@ -82,6 +82,7 @@ export function validateSupervisorState(
 /** Durable, bounded lifecycle state for governed handoffs. Dispatch remains in governed-core. */
 export class SupervisorQueue {
   private readonly path: string;
+  private readonly stateDir: string;
   private readonly maxTasks: number;
   private readonly maxPromptChars: number;
   private readonly baseRetryDelayMs: number;
@@ -89,6 +90,7 @@ export class SupervisorQueue {
   private state: SupervisorState;
 
   constructor(options: SupervisorQueueOptions) {
+    this.stateDir = options.stateDir;
     this.path = join(options.stateDir, options.fileName ?? DEFAULT_FILE_NAME);
     this.maxTasks = options.maxTasks ?? DEFAULT_MAX_TASKS;
     this.maxPromptChars = options.maxPromptChars ?? DEFAULT_MAX_PROMPT_CHARS;
@@ -276,10 +278,7 @@ export class SupervisorQueue {
     }
     const persisted: unknown = JSON.parse(serialized);
     if (!isSupervisorState(persisted, this.maxTasks, this.maxPromptChars)) throw new Error("invalid_supervisor_state");
-    mkdirSync(dirname(this.path), { recursive: true });
-    const temporary = `${this.path}.${process.pid}.tmp`;
-    writeFileSync(temporary, serialized, "utf8");
-    renameSync(temporary, this.path);
+    writeStateFileAtomically(this.stateDir, this.path, serialized);
     this.state = persisted;
   }
 }

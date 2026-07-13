@@ -1,8 +1,9 @@
-import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
+import { appendStateFile } from "../src/data/delivery-system/stateMaintenanceLock";
 import { promisify } from "node:util";
 
 import { decideApproval, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
@@ -295,7 +296,7 @@ function readBoundedText(path: string, maxBytes = 16 * 1024): string {
 
 function redactWorkerOutput(value: string): string { return value.replace(/\b(?:sk|or|ghp|github_pat|xoxb)-[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]").replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]"); }
 
-function audit(directory: string, action: string, details: Record<string, unknown>): void { appendFileSync(join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action, ...details })}\n`, "utf8"); }
+function audit(directory: string, action: string, details: Record<string, unknown>): void { appendStateFile(directory, join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action, ...details })}\n`); }
 
 export function createControlPlaneRuntime(
   stateDir: string,
@@ -393,7 +394,7 @@ async function decideApprovalHttp(request: IncomingMessage, response: ServerResp
         ? decideApproval(record, decision, new Date().toISOString(), typeof body.reason === "string" ? body.reason : undefined)
         : record);
       writeApprovalQueue(directory, { ...document, records });
-      appendFileSync(join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action: decision, approval_id: approvalId })}\n`, "utf8");
+      appendStateFile(directory, join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action: decision, approval_id: approvalId })}\n`);
       returnJson(response, records.find((record) => record.approval_id === approvalId));
     }
   }

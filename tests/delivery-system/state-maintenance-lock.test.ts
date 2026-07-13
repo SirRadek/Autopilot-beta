@@ -6,7 +6,10 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,8 +17,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   StateMaintenanceLockError,
   acquireStateMaintenanceLock,
+  appendStateFile,
+  writeStateFileAtomically,
   withStateMaintenanceLock
 } from "../../src/data/delivery-system/stateMaintenanceLock.js";
+import { readSessionRegistry, writeSessionRegistry } from "../../src/data/delivery-system/sessionRegistry.js";
 
 const temporaryDirectories: string[] = [];
 const childProcesses: ChildProcess[] = [];
@@ -152,6 +158,68 @@ describe("state maintenance lock", () => {
       token: "child-owner",
       pid: child.pid
     });
+  });
+
+  it("atomically replaces JSON state and leaves no temporary file", () => {
+    const stateDir = makeStateDirectory();
+    writeSessionRegistry(stateDir, { schema_version: "v1", sessions: [] });
+
+    expect(readSessionRegistry(stateDir)).toEqual({ schema_version: "v1", sessions: [] });
+    expect(readdirSync(stateDir).filter((name) => name.includes(".tmp-"))).toEqual([]);
+  });
+
+  it("provides lock-coordinated atomic replacement and append primitives", () => {
+    const stateDir = makeStateDirectory();
+    const jsonPath = join(stateDir, "state.json");
+    const logPath = join(stateDir, "events.jsonl");
+
+    writeStateFileAtomically(stateDir, jsonPath, "{\"version\":1}\n");
+    appendStateFile(stateDir, logPath, "{\"event\":1}\n");
+    appendStateFile(stateDir, logPath, "{\"event\":2}\n");
+
+    expect(readFileSync(jsonPath, "utf8")).toBe("{\"version\":1}\n");
+    expect(readFileSync(logPath, "utf8")).toBe("{\"event\":1}\n{\"event\":2}\n");
+    if (process.platform !== "win32") {
+      expect(statSync(jsonPath).mode & 0o777).toBe(0o600);
+      expect(statSync(logPath).mode & 0o777).toBe(0o600);
+    }
+    expect(readdirSync(stateDir).filter((name) => name.includes(".tmp-"))).toEqual([]);
+  });
+
+  it.runIf(process.platform !== "win32")("refuses to append through a symbolic link", () => {
+    const stateDir = makeStateDirectory();
+    const outside = join(makeStateDirectory(), "outside.jsonl");
+    writeFileSync(outside, "sentinel\n");
+    const linked = join(stateDir, "events.jsonl");
+    symlinkSync(outside, linked);
+
+    expect(() => appendStateFile(stateDir, linked, "injected\n")).toThrow("state_lock_invalid");
+    expect(readFileSync(outside, "utf8")).toBe("sentinel\n");
+  });
+
+  it("keeps every persistent state writer on the shared maintenance primitive", () => {
+    const root = join(import.meta.dirname, "..", "..");
+    const sources = [
+      "src/data/delivery-system/approvalQueue.ts",
+      "src/data/delivery-system/sessionRegistry.ts",
+      "src/data/delivery-system/projectRegistry.ts",
+      "src/data/delivery-system/providerQuotaStore.ts",
+      "src/data/delivery-system/supervisorQueue.ts",
+      "src/data/delivery-system/tokenGateway.ts",
+      "src/data/delivery-system/runStore.ts",
+      "src/data/delivery-system/incidentStore.ts",
+      "src/data/delivery-system/subagentEvidence.ts",
+      "src/data/delivery-system/supervisorAlerts.ts",
+      "src/data/delivery-system/cliWorker.ts",
+      "src/data/delivery-system/cliWorkerCapture.ts",
+      "scripts/control-plane-server.ts",
+      "scripts/worker-cancel.ts",
+      "scripts/worker-cleanup.ts"
+    ];
+
+    expect(sources.filter((source) =>
+      !readFileSync(join(root, source), "utf8").includes("stateMaintenanceLock")
+    )).toEqual([]);
   });
 });
 

@@ -1,6 +1,5 @@
 import { execSync, spawnSync } from "node:child_process";
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -14,6 +13,7 @@ import { basename, dirname, join } from "node:path";
 import { platform } from "node:process";
 
 import { contextWidthSpecs } from "./tokenEfficiency";
+import { appendStateFile } from "./stateMaintenanceLock";
 
 // ─── ANSI stripping ───────────────────────────────────────────────────────────
 
@@ -607,15 +607,14 @@ export function incrementOpenRouterAttemptBudget(input: {
   const now = input.now ?? new Date();
   const recordedAt = now.toISOString();
   const counterPath = openRouterAttemptCounterPathForStateDir(input.stateDir);
-  mkdirSync(dirname(counterPath), { recursive: true });
-  appendFileSync(counterPath, `${JSON.stringify({
+  appendStateFile(input.stateDir, counterPath, `${JSON.stringify({
     schema_version: "v1",
     recorded_at: recordedAt,
     provider: "openrouter",
     openrouter_mode: input.openrouterMode,
     model: input.model,
     task_packet_ref: input.taskPacketRef
-  })}\n`, "utf8");
+  })}\n`);
 
   const counts = countOpenRouterAttempts(counterPath, recordedAt);
   if (
@@ -1372,14 +1371,13 @@ function appendOpenRouterSpendLedgerBestEffort(input: {
   readonly costUsd: number;
 }): void {
   try {
-    mkdirSync(dirname(input.spendLedgerPath), { recursive: true });
-    appendFileSync(input.spendLedgerPath, `${JSON.stringify({
+    appendStateFile(dirname(input.spendLedgerPath), input.spendLedgerPath, `${JSON.stringify({
       schema_version: "v1",
       recorded_at: input.recordedAt,
       model: input.model,
       openrouter_mode: input.openrouterMode,
       cost_usd: input.costUsd
-    })}\n`, "utf8");
+    })}\n`);
   } catch {
     // Ledgering is best-effort; the zero-cost assertion remains the hard guard.
   }
