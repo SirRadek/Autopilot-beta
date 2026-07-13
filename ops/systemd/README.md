@@ -3,8 +3,8 @@
 Install on the VM as the `radek` user:
 
 ```bash
-mkdir -p ~/.config/autopilot ~/.local/state/autopilot
-chmod 700 ~/.config/autopilot ~/.local/state/autopilot
+mkdir -p ~/.config/autopilot ~/.local/state/autopilot/backups ~/projects
+chmod 700 ~/.config/autopilot ~/.local/state/autopilot ~/.local/state/autopilot/backups ~/projects
 printf 'CONTROL_PLANE_TOKEN=%s\n' "$(openssl rand -hex 32)" > ~/.config/autopilot/control-plane.env
 printf 'CONTROL_PLANE_SECURE_COOKIES=true\n' >> ~/.config/autopilot/control-plane.env
 chmod 600 ~/.config/autopilot/control-plane.env
@@ -16,6 +16,26 @@ systemctl --user enable --now autopilot-control-plane-health.timer autopilot-sta
 ```
 
 The service binds only to `127.0.0.1`. Keep the environment file outside the repository.
+
+The control plane defaults `AUTOPILOT_PROJECTS_DIR` to `%h/projects`. `ProtectHome=read-only`
+keeps the installation and the rest of the home directory read-only, while
+`ReadWritePaths=%h/.local/state/autopilot %h/projects` permits writes only to managed state and
+supervised projects. Maintenance backups stay inside managed state at
+`%h/.local/state/autopilot/backups`.
+
+A custom projects root requires a reviewed drop-in that changes the environment and clears and
+replaces the writable-path allowlist. For example:
+
+```ini
+# ~/.config/systemd/user/autopilot-control-plane.service.d/projects-root.conf
+[Service]
+Environment=AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects
+ReadWritePaths=
+ReadWritePaths=%h/.local/state/autopilot /srv/autopilot-projects
+```
+
+Review the resolved paths before reloading the unit. The custom root must contain only supervised
+project checkouts; do not add the Autopilot installation directory to `ReadWritePaths`.
 
 The service starts the provider-quota scheduler with the same persistent state directory and
 session registry. It polls only providers with active sessions, persists snapshots/events in
