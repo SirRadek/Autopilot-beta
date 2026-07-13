@@ -107,6 +107,10 @@ const MAX_TERMINAL_RESERVATIONS = 1024;
 const MAX_STATE_BYTES = 2 * 1024 * 1024;
 const MAX_USAGE_KEYS = MAX_ACTIVE_RESERVATIONS * 3;
 
+export function validateTokenGatewayState(stateDir: string): void {
+  readGatewayState(join(stateDir, STATE_FILE));
+}
+
 /**
  * The single pre-dispatch token gate. Reservations are bound to one provider,
  * model and session and must be settled with the same route; callers cannot
@@ -238,15 +242,7 @@ export class TokenGateway {
   }
 
   private loadState(): GatewayState {
-    if (!existsSync(this.statePath)) return { used: {}, reservations: {}, terminal: {} };
-    if (statSync(this.statePath).size > MAX_STATE_BYTES) throw new Error("invalid_token_gateway_state");
-    let parsed: Partial<GatewayState>;
-    try { parsed = JSON.parse(readFileSync(this.statePath, "utf8")) as Partial<GatewayState>; }
-    catch { throw new Error("invalid_token_gateway_state"); }
-    if (typeof parsed.used !== "object" || parsed.used === null || typeof parsed.reservations !== "object" || parsed.reservations === null || typeof parsed.terminal !== "object" || parsed.terminal === null ||
-      Object.keys(parsed.used).length > MAX_USAGE_KEYS || Object.keys(parsed.reservations).length > MAX_ACTIVE_RESERVATIONS || Object.keys(parsed.terminal).length > MAX_TERMINAL_RESERVATIONS) throw new Error("invalid_token_gateway_state");
-    const terminal = Object.fromEntries(Object.entries(parsed.terminal).map(([id, value]) => [id, { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }]));
-    return { used: parsed.used, reservations: parsed.reservations, terminal };
+    return readGatewayState(this.statePath);
   }
 
   private persist(): void {
@@ -310,4 +306,62 @@ function bounded(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const clean = value.replace(/[\r\n\t]/g, " ").slice(0, MAX_FIELD_LENGTH);
   return clean.length > 0 ? clean : null;
+}
+
+function readGatewayState(path: string): GatewayState {
+  if (!existsSync(path)) return { used: {}, reservations: {}, terminal: {} };
+  try {
+    if (statSync(path).size > MAX_STATE_BYTES) throw new Error("invalid_token_gateway_state");
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (!isGatewayState(parsed)) throw new Error("invalid_token_gateway_state");
+    const terminal = Object.fromEntries(Object.entries(parsed.terminal).map(([id, value]) => [
+      id,
+      { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }
+    ]));
+    return { used: parsed.used, reservations: parsed.reservations, terminal };
+  } catch {
+    throw new Error("invalid_token_gateway_state");
+  }
+}
+
+function isGatewayState(value: unknown): value is GatewayState {
+  if (!isRecord(value) || !isRecord(value.used) || !isRecord(value.reservations) || !isRecord(value.terminal) ||
+    Object.keys(value.used).length > MAX_USAGE_KEYS ||
+    Object.keys(value.reservations).length > MAX_ACTIVE_RESERVATIONS ||
+    Object.keys(value.terminal).length > MAX_TERMINAL_RESERVATIONS) {
+    return false;
+  }
+  return Object.values(value.used).every(isNonNegativeNumber) &&
+    Object.entries(value.reservations).every(([id, reservation]) => isReservation(id, reservation)) &&
+    Object.values(value.terminal).every(isTerminalReservation);
+}
+
+function isReservation(id: string, value: unknown): value is TokenReservation {
+  return isRecord(value) && value.reservationId === id &&
+    typeof value.provider === "string" &&
+    (value.model === null || typeof value.model === "string") &&
+    (value.sessionId === null || typeof value.sessionId === "string") &&
+    (value.handoffId === undefined || typeof value.handoffId === "string") &&
+    typeof value.reservedAt === "string" &&
+    isNonNegativeNumber(value.inputTokens) &&
+    isNonNegativeNumber(value.outputTokens) &&
+    isNonNegativeNumber(value.totalTokens) &&
+    value.totalTokens === value.inputTokens + value.outputTokens;
+}
+
+function isTerminalReservation(value: unknown): value is GatewayState["terminal"][string] {
+  return isRecord(value) && (value.event === "settled" || value.event === "released") &&
+    isRecord(value.settlement) &&
+    isNonNegativeNumber(value.settlement.inputTokens) &&
+    isNonNegativeNumber(value.settlement.outputTokens) &&
+    (value.settlement.released === undefined || typeof value.settlement.released === "boolean") &&
+    (value.completedAt === undefined || typeof value.completedAt === "string");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }

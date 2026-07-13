@@ -25,9 +25,11 @@ related_files:
   - src/data/delivery-system/openRouterLedgerMigration.ts
   - src/data/delivery-system/sessionState.ts
   - src/data/delivery-system/projectRegistry.ts
+  - src/data/delivery-system/readiness.ts
   - src/data/delivery-system/runStore.ts
   - src/data/delivery-system/runOrchestrator.ts
   - src/data/delivery-system/supervisorQueue.ts
+  - src/data/delivery-system/tokenGateway.ts
   - model-output-evals/
   - docs/autopilot/agent-handoff-packet-template.md
 required_checks:

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
@@ -63,6 +63,17 @@ const DEFAULT_MAX_TASKS = 256;
 const DEFAULT_MAX_PROMPT_CHARS = 32_000;
 const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 const MAX_ATTEMPTS = 8;
+const MAX_SUPERVISOR_STATE_BYTES = 4 * 1024 * 1024;
+
+export function validateSupervisorState(
+  stateDir: string,
+  options: Pick<SupervisorQueueOptions, "fileName" | "maxTasks"> = {}
+): void {
+  readSupervisorState(
+    join(stateDir, options.fileName ?? DEFAULT_FILE_NAME),
+    options.maxTasks ?? DEFAULT_MAX_TASKS
+  );
+}
 
 /** Durable, bounded lifecycle state for governed handoffs. Dispatch remains in governed-core. */
 export class SupervisorQueue {
@@ -233,12 +244,7 @@ export class SupervisorQueue {
   private require(taskId: string): SupervisorTask { const task = this.state.tasks.find((candidate) => candidate.task_id === taskId); if (!task) throw new Error("task_not_found"); return task; }
 
   private load(): SupervisorState {
-    try {
-      if (!existsSync(this.path)) return { schema_version: "v1", tasks: [] };
-      const parsed = JSON.parse(readFileSync(this.path, "utf8")) as SupervisorState;
-      if (parsed.schema_version !== "v1" || !Array.isArray(parsed.tasks) || parsed.tasks.length > this.maxTasks) throw new Error("invalid_supervisor_state");
-      return { schema_version: "v1", tasks: parsed.tasks };
-    } catch (error) { if (error instanceof SyntaxError) throw new Error("invalid_supervisor_state"); throw error; }
+    return readSupervisorState(this.path, this.maxTasks);
   }
 
   private persist(): void {
@@ -250,3 +256,52 @@ export class SupervisorQueue {
 }
 
 function bounded(value: string): string { return value.slice(0, 512); }
+
+function readSupervisorState(path: string, maxTasks: number): SupervisorState {
+  if (!existsSync(path)) return { schema_version: "v1", tasks: [] };
+  try {
+    if (statSync(path).size > MAX_SUPERVISOR_STATE_BYTES) throw new Error("invalid_supervisor_state");
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (!isSupervisorState(parsed, maxTasks)) throw new Error("invalid_supervisor_state");
+    return parsed;
+  } catch {
+    throw new Error("invalid_supervisor_state");
+  }
+}
+
+function isSupervisorState(value: unknown, maxTasks: number): value is SupervisorState {
+  if (!isRecord(value) || value.schema_version !== "v1" || !Array.isArray(value.tasks) || value.tasks.length > maxTasks) {
+    return false;
+  }
+  return value.tasks.every((task) => {
+    if (!isRecord(task) || task.schema_version !== "v1" || !isRecord(task.handoff) || !isRecord(task.handoff_ref)) {
+      return false;
+    }
+    return typeof task.task_id === "string" &&
+      (task.session_id === null || typeof task.session_id === "string") &&
+      typeof task.handoff.prompt === "string" &&
+      typeof task.handoff_ref.handoff_id === "string" &&
+      typeof task.handoff_ref.packet_hash === "string" &&
+      (task.handoff_ref.task_packet_ref === null || typeof task.handoff_ref.task_packet_ref === "string") &&
+      ["queued", "running", "blocked", "completed", "failed", "cancelled"].includes(String(task.status)) &&
+      isNonNegativeInteger(task.attempt) && isPositiveInteger(task.max_attempts) && isPositiveInteger(task.timeout_ms) &&
+      [task.queued_at, task.updated_at, task.next_attempt_at].every((date) => typeof date === "string") &&
+      (task.run_started_at === null || typeof task.run_started_at === "string") &&
+      (task.blocked_reason === null || typeof task.blocked_reason === "string") &&
+      (task.last_error === null || typeof task.last_error === "string") &&
+      Array.isArray(task.dependency_ids) && task.dependency_ids.every((id) => typeof id === "string") &&
+      typeof task.requires_approval === "boolean" && typeof task.approval_granted === "boolean";
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}

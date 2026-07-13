@@ -63,6 +63,10 @@ const MAX_CWD_LENGTH = 1_024;
 const MAX_REGISTRY_BYTES = 128 * 1_024;
 const EMPTY_PROJECT_REGISTRY: ProjectRegistryDocument = { schema_version: "v1", projects: [] };
 
+export function projectRegistryPath(stateDir: string): string {
+  return join(stateDir, PROJECT_REGISTRY_FILE);
+}
+
 function validateProjectRegistry(document: unknown): asserts document is ProjectRegistryDocument {
   if (typeof document !== "object" || document === null) {
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
@@ -100,7 +104,7 @@ function validateProjectRegistry(document: unknown): asserts document is Project
 }
 
 export function readProjectRegistry(stateDir: string): ProjectRegistryDocument {
-  const path = join(stateDir, PROJECT_REGISTRY_FILE);
+  const path = projectRegistryPath(stateDir);
   let file: number;
   try {
     const posixSafetyFlags = process.platform === "win32" ? 0 : constants.O_NOFOLLOW | constants.O_NONBLOCK;
@@ -174,7 +178,7 @@ export function initializeProjectRegistry(
   const stateDirCreated = ensurePrivateDirectory(stateDir);
   const projectRootCreated = ensurePrivateDirectory(projectRoot);
 
-  const path = join(stateDir, PROJECT_REGISTRY_FILE);
+  const path = projectRegistryPath(stateDir);
   const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
   let registryCreated = false;
   try {
@@ -214,7 +218,7 @@ export function initializeProjectRegistry(
 
 export function writeProjectRegistry(stateDir: string, document: ProjectRegistryDocument): void {
   validateProjectRegistry(document);
-  const path = join(stateDir, PROJECT_REGISTRY_FILE);
+  const path = projectRegistryPath(stateDir);
   const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
   const serialized = `${JSON.stringify(document, null, 2)}\n`;
   if (Buffer.byteLength(serialized, "utf8") > MAX_REGISTRY_BYTES) {

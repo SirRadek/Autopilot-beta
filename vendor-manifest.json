@@ -93,6 +93,7 @@
     "src/data/delivery-system/providerQuotaScheduler.ts",
     "src/data/delivery-system/providerQuotaStore.ts",
     "src/data/delivery-system/providerUsageProbe.ts",
+    "src/data/delivery-system/readiness.ts",
     "src/data/delivery-system/routingGuards.ts",
     "src/data/delivery-system/runOrchestrator.ts",
     "src/data/delivery-system/runPromptPolicy.ts",
