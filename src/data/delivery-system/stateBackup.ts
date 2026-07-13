@@ -163,6 +163,7 @@ export function validateStateBackup(path: string): BackupValidation {
     }
     seen.add(value.path);
     const content = Buffer.from(value.data, "base64");
+    if (content.toString("base64") !== value.data) errors.push(`invalid_base64:${value.path}`);
     totalBytes += content.length;
     const entry = manifest.get(value.path);
     if (entry === undefined) errors.push(`manifest_missing:${value.path}`);

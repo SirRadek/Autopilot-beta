@@ -46,6 +46,7 @@
     "quota:agy": "tsx scripts/agy-quota.ts",
     "ops:backup": "tsx scripts/ops-backup.ts",
     "ops:restore": "tsx scripts/ops-restore.ts",
+    "ops:recovery-drill": "tsx scripts/ops-recovery-drill.ts",
     "ops:maintenance": "tsx scripts/ops-maintenance.ts",
     "ops:health": "tsx scripts/ops-healthcheck.ts",
     "ops:ready": "tsx scripts/ops-readinesscheck.ts",

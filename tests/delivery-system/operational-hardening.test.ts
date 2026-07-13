@@ -1,4 +1,4 @@
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
@@ -76,6 +76,90 @@ describe("operational hardening", () => {
 
     expect(result).toEqual({ applied: false, file_count: 1, total_bytes: 4 });
     expect(() => statSync(target)).toThrow();
+  });
+
+  it("refuses symlink and non-empty restore targets without touching their contents", () => {
+    const root = fixture();
+    const state = join(root, "state");
+    const live = join(root, "live");
+    const symlinkTarget = join(root, "restore-link");
+    mkdirSync(state);
+    mkdirSync(live);
+    writeFileSync(join(state, "sessions.json"), "backup");
+    const sentinel = join(live, "sentinel.txt");
+    writeFileSync(sentinel, "live-bytes");
+    symlinkSync(live, symlinkTarget, "dir");
+    const backup = createStateBackup(state, join(root, "backups"));
+
+    expect(() => restoreStateBackup(backup.path, symlinkTarget, { apply: true })).toThrow("unsafe_restore_target");
+    expect(() => restoreStateBackup(backup.path, live, { apply: true })).toThrow("restore_target_not_empty");
+    expect(readFileSync(sentinel, "utf8")).toBe("live-bytes");
+  });
+
+  it("cleans sibling staging when materialization fails before publication", () => {
+    const root = fixture();
+    const state = join(root, "state");
+    const backups = join(root, "backups");
+    const target = join(root, "restore");
+    mkdirSync(state);
+    writeFileSync(join(state, "first.json"), "first");
+    writeFileSync(join(state, "second.json"), "second");
+    const backup = createStateBackup(state, backups);
+    const archive = JSON.parse(readFileSync(backup.path, "utf8"));
+    const impossible = "x".repeat(300);
+    archive.manifest[1].path = impossible;
+    archive.files[1].path = impossible;
+    writeFileSync(backup.path, JSON.stringify(archive));
+
+    expect(() => restoreStateBackup(backup.path, target, { apply: true })).toThrow();
+    expect(existsSync(target)).toBe(false);
+    expect(readdirSync(root).filter((name) => name.startsWith(".restore-staging-"))).toEqual([]);
+  });
+
+  it("rejects non-canonical base64 even when decoded bytes match the manifest", () => {
+    const root = fixture();
+    const state = join(root, "state");
+    mkdirSync(state);
+    writeFileSync(join(state, "sessions.json"), "safe");
+    const backup = createStateBackup(state, join(root, "backups"));
+    const archive = JSON.parse(readFileSync(backup.path, "utf8"));
+    archive.files[0].data = `${archive.files[0].data}====`;
+    writeFileSync(backup.path, JSON.stringify(archive));
+
+    expect(validateStateBackup(backup.path)).toMatchObject({ valid: false });
+  });
+
+  it("publishes a complete restore with private directory and file permissions", () => {
+    const root = fixture();
+    const state = join(root, "state");
+    const target = join(root, "restore");
+    mkdirSync(state);
+    mkdirSync(target);
+    writeFileSync(join(state, "sessions.json"), "safe");
+    const backup = createStateBackup(state, join(root, "backups"));
+
+    const result = restoreStateBackup(backup.path, target, { apply: true });
+
+    expect(result).toEqual({ applied: true, file_count: 1, total_bytes: 4 });
+    expect(readFileSync(join(target, "sessions.json"), "utf8")).toBe("safe");
+    expect(statSync(target).mode & 0o777).toBe(0o700);
+    expect(statSync(join(target, "sessions.json")).mode & 0o777).toBe(0o600);
+    expect(readdirSync(root).filter((name) => name.startsWith(".restore-staging-"))).toEqual([]);
+  });
+
+  it("rejects duplicate archive paths", () => {
+    const root = fixture();
+    const state = join(root, "state");
+    mkdirSync(state);
+    writeFileSync(join(state, "first.json"), "same");
+    writeFileSync(join(state, "second.json"), "same");
+    const backup = createStateBackup(state, join(root, "backups"));
+    const archive = JSON.parse(readFileSync(backup.path, "utf8"));
+    archive.manifest[1].path = archive.manifest[0].path;
+    archive.files[1].path = archive.files[0].path;
+    writeFileSync(backup.path, JSON.stringify(archive));
+
+    expect(validateStateBackup(backup.path)).toMatchObject({ valid: false });
   });
 
   it("rotates complete JSONL records and enforces archive count", () => {

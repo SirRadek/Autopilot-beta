@@ -22,8 +22,10 @@ related_files:
   - src/data/delivery-system/operationalHardening.ts
   - src/data/delivery-system/stateBackup.ts
   - src/data/delivery-system/stateMaintenance.ts
+  - src/data/delivery-system/stateRecovery.ts
   - scripts/ops-backup.ts
   - scripts/ops-maintenance.ts
+  - scripts/ops-recovery-drill.ts
   - ops/systemd/autopilot-state-maintenance.service
   - docs/operations/autopilot-recovery-runbook.md
   - docs/autopilot/product-brief-template.md

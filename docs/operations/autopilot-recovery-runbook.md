@@ -37,6 +37,16 @@ nothing in validation mode.
 
 ## Recovery drill or real recovery
 
+Run the isolated automated drill first. It accepts only an archive path, restores into an owned
+temporary directory, performs supervisor restart reconciliation and pure readiness validation,
+and removes the restored copy before returning:
+
+```bash
+npm run ops:recovery-drill -- ~/.local/state/autopilot/backups/FILE.apbackup.json
+```
+
+For a real recovery:
+
 1. Validate the selected backup using the command above.
 2. Choose a new empty staging directory; do not select the live state directory.
 3. Apply into staging:

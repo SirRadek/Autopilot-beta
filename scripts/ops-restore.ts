@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { restoreStateBackup } from "../src/data/delivery-system/operationalHardening";
+import { restoreStateBackup } from "../src/data/delivery-system/stateRecovery";
 
 const arguments_ = process.argv.slice(2);
 const apply = arguments_.includes("--apply");
