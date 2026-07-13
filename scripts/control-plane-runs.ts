@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { createApprovalRecord, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { acknowledgeIncident, prepareRepairPacket, readIncidentStore, recordAutopilotIncident } from "../src/data/delivery-system/incidentStore";
-import { readProjectRegistry } from "../src/data/delivery-system/projectRegistry";
+import { readProjectRegistry, resolveEnabledProject } from "../src/data/delivery-system/projectRegistry";
 import { isRunRouteEligible } from "../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { readRunStore, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
@@ -30,7 +30,7 @@ class HttpError extends Error {
   constructor(readonly status: number, readonly code: string) { super(code); }
 }
 
-export async function handleControlPlaneRunRoute(request: IncomingMessage, response: ServerResponse, stateDir: string, suppliedOrchestrator?: ReturnType<typeof createRunOrchestrator>): Promise<boolean> {
+export async function handleControlPlaneRunRoute(request: IncomingMessage, response: ServerResponse, stateDir: string, suppliedOrchestrator?: ReturnType<typeof createRunOrchestrator>, projectRoot?: string): Promise<boolean> {
   const method = request.method ?? "";
   const path = new URL(request.url ?? "/", "http://control-plane.local").pathname;
   const match = matchRoute(method, path);
@@ -38,6 +38,7 @@ export async function handleControlPlaneRunRoute(request: IncomingMessage, respo
   try {
     const orchestrator = suppliedOrchestrator ?? createRunOrchestrator({
       stateDir,
+      ...(projectRoot === undefined ? {} : { projectRoot }),
       tokenGateway: new TokenGateway({ stateDir }),
       supervisor: new SupervisorQueue({ stateDir }),
       dispatch: (handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" })
@@ -62,7 +63,7 @@ export async function handleControlPlaneRunRoute(request: IncomingMessage, respo
       const revision = integer(body.revision, "invalid_run_revision");
       const input = draftInput(body);
       if (!routeAvailable(stateDir, input.provider, input.model)) throw new HttpError(409, "run_route_unavailable");
-      return json(response, reviseRunWithApproval(stateDir, match.id, revision, input), 201);
+      return json(response, reviseRunWithApproval(stateDir, match.id, revision, input, { ...(projectRoot === undefined ? {} : { projectRoot }) }), 201);
     }
     if (match.kind === "approve") return json(response, orchestrator.approveAndQueueRun(match.id, integer(body.revision, "invalid_run_revision"), nonEmpty(body.operator, "invalid_run_approval")));
     if (match.kind === "cancel") return json(response, orchestrator.cancelRun(match.id));
@@ -83,16 +84,18 @@ export async function handleControlPlaneRunRoute(request: IncomingMessage, respo
 interface RevisionOperations {
   readonly revise?: typeof reviseRunDraft;
   readonly writeApprovals?: typeof writeApprovalQueue;
+  readonly projectRoot?: string;
 }
 
 export function reviseRunWithApproval(stateDir: string, runId: string, expectedRevision: number, input: RunDraftInput, operations: RevisionOperations = {}): RunRecord {
   const revise = operations.revise ?? reviseRunDraft;
   const writeApprovals = operations.writeApprovals ?? writeApprovalQueue;
+  resolveEnabledProject(stateDir, input.project_id, operations.projectRoot === undefined ? {} : { projectRoot: operations.projectRoot });
   const before = readRunStore(stateDir).runs.find((run) => run.current.run_id === runId);
   if (before === undefined) throw new Error("run_not_found");
   let draft: RunDraft;
   if (before.status === "draft" && before.current.revision === expectedRevision + 1 && sameDraftInput(before.current, input)) draft = before.current;
-  else draft = revise(stateDir, runId, expectedRevision, input, new Date().toISOString());
+  else draft = revise(stateDir, runId, expectedRevision, input, new Date().toISOString(), operations.projectRoot === undefined ? {} : { projectRoot: operations.projectRoot });
   const queue = readApprovalQueue(stateDir);
   if (!queue.records.some((record) => record.run_id === runId && record.revision === draft.revision)) {
     const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, inputTokenBound: draft.input_token_bound, outputTokenAllowance: draft.output_token_allowance, promptReviewAcknowledged: draft.prompt_review_acknowledged });

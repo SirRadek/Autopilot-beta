@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -11,9 +11,9 @@ import { TokenGateway } from "../../src/data/delivery-system/tokenGateway";
 
 const now = "2026-07-13T10:00:00.000Z";
 
-function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnType<typeof vi.fn>; enqueue?: ReturnType<typeof vi.fn> } = {}) {
+function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnType<typeof vi.fn>; enqueue?: ReturnType<typeof vi.fn>; projectRoot?: string; projectCwd?: string } = {}) {
   const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-"));
-  writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+  writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: options.projectCwd ?? "/work/alpha", enabled: true }] });
   const reservation = { reservationId: "reservation-1", provider: "codex_cli", model: "gpt-5", sessionId: "run", inputTokens: 10, outputTokens: 90, totalTokens: 100, reservedAt: now };
   const tokenGateway = {
     reserve: options.reserve ?? vi.fn((request) => ({ ...reservation, ...request, totalTokens: request.inputTokens + request.outputTokens })),
@@ -36,13 +36,56 @@ function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnT
     supervisor: supervisor as unknown as OrchestratorOptions["supervisor"],
     dispatch: dispatch as unknown as OrchestratorOptions["dispatch"],
     now: () => now,
-    isRouteAvailable: () => true
+    isRouteAvailable: () => true,
+    ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot })
   });
   const input = { project_id: "alpha", prompt: "build it", provider: "codex_cli" as const, model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text", "visual"] as const };
   return { stateDir, tokenGateway, supervisor, dispatch, orchestrator, input };
 }
 
 describe("governed run orchestration", () => {
+  it("rechecks a queued symlink and dispatches only its latest canonical in-root target", async () => {
+    const fixture = mkdtempSync(join(tmpdir(), "run-orchestrator-root-"));
+    const projectRoot = join(fixture, "projects");
+    const firstTarget = join(projectRoot, "first");
+    const secondTarget = join(projectRoot, "second");
+    const projectLink = join(projectRoot, "active");
+    mkdirSync(firstTarget, { recursive: true });
+    mkdirSync(secondTarget);
+    symlinkSync(firstTarget, projectLink, "dir");
+    const context = setup({ projectRoot, projectCwd: projectLink });
+    const draft = context.orchestrator.prepareRun(context.input);
+    context.orchestrator.approveAndQueueRun(draft.current.run_id, draft.current.revision, "owner");
+    unlinkSync(projectLink);
+    symlinkSync(secondTarget, projectLink, "dir");
+
+    await context.orchestrator.runSupervisorOnce();
+
+    expect(context.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: realpathSync(secondTarget) }),
+      context.stateDir
+    );
+  });
+
+  it("refuses a queued symlink that escapes the root before dispatch", async () => {
+    const fixture = mkdtempSync(join(tmpdir(), "run-orchestrator-root-"));
+    const projectRoot = join(fixture, "projects");
+    const firstTarget = join(projectRoot, "first");
+    const outside = join(fixture, "outside");
+    const projectLink = join(projectRoot, "active");
+    mkdirSync(firstTarget, { recursive: true });
+    mkdirSync(outside);
+    symlinkSync(firstTarget, projectLink, "dir");
+    const context = setup({ projectRoot, projectCwd: projectLink });
+    const draft = context.orchestrator.prepareRun(context.input);
+    context.orchestrator.approveAndQueueRun(draft.current.run_id, draft.current.revision, "owner");
+    unlinkSync(projectLink);
+    symlinkSync(outside, projectLink, "dir");
+
+    await expect(context.orchestrator.runSupervisorOnce()).rejects.toThrow("project_path_outside_root");
+    expect(context.dispatch).not.toHaveBeenCalled();
+  });
+
   it("does not reserve or enqueue before approval", () => {
     const { orchestrator, input, tokenGateway, supervisor } = setup();
     const run = orchestrator.prepareRun(input);

@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, normalize } from "node:path";
+import { existsSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, normalize, relative, sep } from "node:path";
 
 export interface ProjectEntry {
   readonly schema_version: "v1";
@@ -12,6 +12,10 @@ export interface ProjectEntry {
 export interface ProjectRegistryDocument {
   readonly schema_version: "v1";
   readonly projects: readonly ProjectEntry[];
+}
+
+export interface ProjectRegistryOptions {
+  readonly projectRoot?: string;
 }
 
 const PROJECT_REGISTRY_FILE = "projects.json";
@@ -90,12 +94,25 @@ export function writeProjectRegistry(stateDir: string, document: ProjectRegistry
   }
 }
 
-export function resolveEnabledProject(stateDir: string, projectId: string): ProjectEntry {
+export function resolveEnabledProject(
+  stateDir: string,
+  projectId: string,
+  options: ProjectRegistryOptions = {}
+): ProjectEntry {
   const project = readProjectRegistry(stateDir).projects.find(
     (entry) => entry.project_id === projectId && entry.enabled
   );
   if (project === undefined) {
     throw new Error("project_not_found");
   }
-  return project;
+  if (options.projectRoot === undefined) {
+    return project;
+  }
+  const realRoot = realpathSync(options.projectRoot);
+  const realCwd = realpathSync(project.cwd);
+  const pathFromRoot = relative(realRoot, realCwd);
+  if (pathFromRoot === "" || pathFromRoot === ".." || pathFromRoot.startsWith(`..${sep}`) || isAbsolute(pathFromRoot)) {
+    throw new Error("project_path_outside_root");
+  }
+  return { ...project, cwd: realCwd };
 }

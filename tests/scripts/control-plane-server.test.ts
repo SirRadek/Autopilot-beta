@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,7 @@ import { recordAutopilotIncident } from "../../src/data/delivery-system/incident
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
-import { readRunStore, reviseRunDraft } from "../../src/data/delivery-system/runStore";
+import { createRunDraft, readRunStore, reviseRunDraft } from "../../src/data/delivery-system/runStore";
 import type { ProviderQuotaStoreDocument } from "../../src/data/delivery-system/providerQuotaStore";
 
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
@@ -52,6 +52,59 @@ async function governedApi() {
 
 describe("control plane governed run API", () => {
   const draft = { project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: null, requested_artifacts: ["text"] };
+
+  it("threads the configured project root through revision operations", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-revision-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(stateDir, "outside");
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true }] });
+    const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 20_000 };
+    const created = createRunDraft(stateDir, input, "2026-07-13T10:00:00.000Z", { projectRoot });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+
+    expect(() => reviseRunWithApproval(stateDir, created.run_id, created.revision, input, { projectRoot }))
+      .toThrow("project_path_outside_root");
+  });
+
+  it("rechecks the project root while recovering an already committed revision", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-revision-recovery-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(stateDir, "outside");
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true }] });
+    const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 20_000 };
+    const created = createRunDraft(stateDir, input, "2026-07-13T10:00:00.000Z", { projectRoot });
+    reviseRunWithApproval(stateDir, created.run_id, created.revision, input, { projectRoot });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+
+    expect(() => reviseRunWithApproval(stateDir, created.run_id, created.revision, input, { projectRoot }))
+      .toThrow("project_path_outside_root");
+  });
+
+  it("threads the configured project root into the runtime orchestrator", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const outside = join(stateDir, "outside");
+    mkdirSync(projectRoot);
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 60_000
+    });
+    try {
+      expect(() => runtime.orchestrator.prepareRun({ ...draft, provider: "codex_cli", requested_artifacts: ["text"], estimated_tokens: 20_000 }))
+        .toThrow("project_path_outside_root");
+    } finally {
+      await runtime.stop();
+    }
+  });
 
   it("prepares but does not execute a run", async () => {
     const api = await governedApi();
@@ -124,9 +177,12 @@ describe("control plane governed run API", () => {
 
   it("runs the production supervisor loop to a terminal result", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-"));
-    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+    const projectRoot = join(stateDir, "projects");
+    const projectCwd = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectCwd, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-    const runtime = createControlPlaneRuntime(stateDir, "secret", { scheduler: { start() {}, stop() {} }, dispatch: async (handoff) => ({ refused: false, workerRunId: "runtime-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "runtime terminal", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }), supervisorPollMs: 5 });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", { projectRoot, scheduler: { start() {}, stop() {} }, dispatch: async (handoff) => ({ refused: false, workerRunId: "runtime-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "runtime terminal", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }), supervisorPollMs: 5 });
     servers.push(runtime.server);
     await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
     const address = runtime.server.address();
@@ -156,10 +212,13 @@ describe("control plane governed run API", () => {
 
   it("drains an in-flight supervisor poll before stop resolves", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-drain-"));
-    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+    const projectRoot = join(stateDir, "projects");
+    const projectCwd = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectCwd, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
     let finish!: () => void;
-    const runtime = createControlPlaneRuntime(stateDir, "secret", { scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", { projectRoot, scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
     const orchestrator = (runtime as any).orchestrator;
     const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");

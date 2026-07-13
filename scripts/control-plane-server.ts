@@ -16,6 +16,7 @@ import { handleControlPlaneRunRoute } from "./control-plane-runs";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
+import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
 import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
 
 const execFileAsync = promisify(execFile);
@@ -33,6 +34,7 @@ export interface ControlPlaneRuntime {
 }
 
 export interface ControlPlaneRuntimeOptions {
+  readonly projectRoot?: string;
   readonly scheduler?: ControlPlaneScheduler;
   readonly commandRunner?: ProviderCommandRunner;
   /** Explicit provider CLI capabilities; omitted providers remain unavailable. */
@@ -59,6 +61,7 @@ export interface ControlPlaneServerOptions {
   /** Add Secure to browser cookies; disabled by default for loopback HTTP development. */
   readonly secureCookies?: boolean;
   readonly runOrchestrator?: ReturnType<typeof createRunOrchestrator>;
+  readonly projectRoot?: string;
 }
 
 export function createControlPlaneServer(stateDir: string, authToken: string | undefined, options: ControlPlaneServerOptions = {}) {
@@ -93,7 +96,7 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     }
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
-    else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator)) return;
+    else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot)) return;
     else returnJson(response, { error: "not_found" }, 404);
   });
 }
@@ -256,6 +259,7 @@ export function createControlPlaneRuntime(
   authToken: string | undefined,
   options: ControlPlaneRuntimeOptions = {}
 ): ControlPlaneRuntime {
+  const projectRoot = options.projectRoot ?? resolveConfiguredProjectRoot();
   const scheduler = options.scheduler ?? createProviderQuotaScheduler({
     sessions: () => readSessionRegistry(stateDir).sessions,
     adapters: createProviderQuotaAdapters({
@@ -268,11 +272,12 @@ export function createControlPlaneRuntime(
   supervisor.recover();
   const orchestrator = createRunOrchestrator({
     stateDir,
+    projectRoot,
     tokenGateway: new TokenGateway({ stateDir }),
     supervisor,
     dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
   });
-  const server = createControlPlaneServer(stateDir, authToken, { ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }), runOrchestrator: orchestrator });
+  const server = createControlPlaneServer(stateDir, authToken, { ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }), runOrchestrator: orchestrator, projectRoot });
   scheduler.start();
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;

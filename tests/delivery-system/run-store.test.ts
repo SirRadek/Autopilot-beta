@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -41,6 +41,25 @@ afterEach(() => {
 });
 
 describe("run store", () => {
+  it("enforces the configured project root for drafts and revisions", () => {
+    const dir = stateDir();
+    const projectRoot = join(dir, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(dir, "outside");
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(dir, { schema_version: "v1", projects: [{
+      schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true
+    }] });
+    const draft = createRunDraft(dir, input, "2026-07-12T10:00:00.000Z", { projectRoot });
+    writeProjectRegistry(dir, { schema_version: "v1", projects: [{
+      schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true
+    }] });
+
+    expect(() => reviseRunDraft(dir, draft.run_id, draft.revision, input, "2026-07-12T10:01:00.000Z", { projectRoot }))
+      .toThrow("project_path_outside_root");
+  });
+
   it("approves one immutable revision and rejects a superseded revision", () => {
     const dir = stateDir();
     const first = createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");

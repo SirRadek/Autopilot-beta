@@ -3,7 +3,7 @@ import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSy
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
-import { resolveEnabledProject } from "./projectRegistry";
+import { resolveEnabledProject, type ProjectRegistryOptions } from "./projectRegistry";
 import type { CliWorkerResult } from "./cliWorker";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens, RUN_OUTPUT_TOKEN_ALLOWANCE, RUN_OUTPUT_TOKEN_ALLOWANCE_MAX } from "./runPromptPolicy";
 
@@ -248,8 +248,8 @@ function find(stateDir: string, runId: string): RunRecord {
   return record;
 }
 
-export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt: string): RunDraft {
-  resolveEnabledProject(stateDir, input.project_id);
+export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt: string, registryOptions: ProjectRegistryOptions = {}): RunDraft {
+  resolveEnabledProject(stateDir, input.project_id, registryOptions);
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
   const canonicalBudget = canonicalRunTokenBudget(input.prompt);
   if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");
@@ -263,11 +263,11 @@ export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt
   return draft;
 }
 
-export function reviseRunDraft(stateDir: string, runId: string, revision: number, input: RunDraftInput, createdAt: string): RunDraft {
+export function reviseRunDraft(stateDir: string, runId: string, revision: number, input: RunDraftInput, createdAt: string, registryOptions: ProjectRegistryOptions = {}): RunDraft {
   const record = find(stateDir, runId);
   if (record.status !== "draft" || record.current.revision !== revision) throw new Error("run_revision_conflict");
   if (record.revisions.length >= MAX_REVISIONS) throw new Error("run_revision_limit");
-  resolveEnabledProject(stateDir, input.project_id);
+  resolveEnabledProject(stateDir, input.project_id, registryOptions);
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
   const canonicalBudget = canonicalRunTokenBudget(input.prompt);
   if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");

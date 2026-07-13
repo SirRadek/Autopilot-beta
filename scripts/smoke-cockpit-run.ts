@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { createControlPlaneRuntime } from "./control-plane-server";
 import { readApprovalQueue } from "../src/data/delivery-system/approvalQueue";
@@ -44,6 +44,7 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
   const token = "cockpit-smoke-local-token";
   let dispatchOutput: DispatchResult | undefined;
   const runtime = createControlPlaneRuntime(stateDir, token, {
+    projectRoot: dirname(realpathSync(process.cwd())),
     scheduler: { start() {}, stop() {} },
     supervisorPollMs: 5,
     dispatch: async (handoff) => {

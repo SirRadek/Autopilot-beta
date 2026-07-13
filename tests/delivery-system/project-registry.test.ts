@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,6 +24,48 @@ afterEach(() => {
 });
 
 describe("project registry", () => {
+  it("returns a canonical project path strictly inside the configured root", () => {
+    const stateDir = createStateDir();
+    const projectRoot = join(stateDir, "projects");
+    const inside = join(projectRoot, "inside");
+    mkdirSync(inside, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{
+      schema_version: "v1", project_id: "inside", name: "Inside", cwd: inside, enabled: true
+    }] });
+
+    expect(resolveEnabledProject(stateDir, "inside", { projectRoot }).cwd).toBe(realpathSync(inside));
+  });
+
+  it("rejects the configured root itself and projects outside it", () => {
+    const stateDir = createStateDir();
+    const projectRoot = join(stateDir, "projects");
+    const outside = join(stateDir, "outside");
+    mkdirSync(projectRoot);
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [
+      { schema_version: "v1", project_id: "root", name: "Root", cwd: projectRoot, enabled: true },
+      { schema_version: "v1", project_id: "outside", name: "Outside", cwd: outside, enabled: true }
+    ] });
+
+    expect(() => resolveEnabledProject(stateDir, "root", { projectRoot })).toThrow("project_path_outside_root");
+    expect(() => resolveEnabledProject(stateDir, "outside", { projectRoot })).toThrow("project_path_outside_root");
+  });
+
+  it("rejects a registered symlink that escapes the configured root", () => {
+    const stateDir = createStateDir();
+    const projectRoot = join(stateDir, "projects");
+    const outside = join(stateDir, "outside");
+    const escapedLink = join(projectRoot, "escaped-link");
+    mkdirSync(projectRoot);
+    mkdirSync(outside);
+    symlinkSync(outside, escapedLink, "dir");
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{
+      schema_version: "v1", project_id: "escaped-link", name: "Escaped link", cwd: escapedLink, enabled: true
+    }] });
+
+    expect(() => resolveEnabledProject(stateDir, "escaped-link", { projectRoot })).toThrow("project_path_outside_root");
+  });
+
   it("resolves only an enabled registered project", () => {
     const stateDir = createStateDir();
     const project = {

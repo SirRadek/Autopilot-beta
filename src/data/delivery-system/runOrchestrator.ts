@@ -39,6 +39,7 @@ export interface QueuedRun extends RunRecord { readonly supervisor_task_id: stri
 
 export function createRunOrchestrator(options: {
   readonly stateDir: string;
+  readonly projectRoot?: string;
   readonly tokenGateway: Gateway;
   readonly supervisor: Supervisor;
   readonly dispatch: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
@@ -48,6 +49,7 @@ export function createRunOrchestrator(options: {
   readonly supervisorMaxAttempts?: number;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
+  const registryOptions = options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot };
   function record(runId: string): RunRecord {
     const value = readRunStore(options.stateDir).runs.find((run) => run.current.run_id === runId);
     if (value === undefined) throw new Error("run_not_found");
@@ -60,9 +62,9 @@ export function createRunOrchestrator(options: {
   }
 
   function prepareRun(input: RunDraftInput): RunRecord {
-    resolveEnabledProject(options.stateDir, input.project_id);
+    resolveEnabledProject(options.stateDir, input.project_id, registryOptions);
     if (!routeAvailable(input.provider, input.model)) throw new Error("run_route_unavailable");
-    const draft = createRunDraft(options.stateDir, input, now());
+    const draft = createRunDraft(options.stateDir, input, now(), registryOptions);
     const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, inputTokenBound: draft.input_token_bound, outputTokenAllowance: draft.output_token_allowance, promptReviewAcknowledged: draft.prompt_review_acknowledged, now: now() });
     const queue = readApprovalQueue(options.stateDir);
     writeApprovalQueue(options.stateDir, { ...queue, records: [...queue.records, approval] });
@@ -81,7 +83,7 @@ export function createRunOrchestrator(options: {
       vendor: run.current.provider,
       ...(run.current.model === null ? {} : { model: run.current.model }),
       prompt: run.current.prompt,
-      cwd: resolveEnabledProject(options.stateDir, run.current.project_id).cwd,
+      cwd: resolveEnabledProject(options.stateDir, run.current.project_id, registryOptions).cwd,
       parentSessionHash: run.current.run_id,
       parentTurnHash: String(run.current.revision),
       task,
@@ -281,7 +283,8 @@ export function createRunOrchestrator(options: {
     if (run.status === "queued") run = transitionRun(options.stateDir, run.current.run_id, "running", now());
     let result: DispatchResult;
     try {
-      result = await options.dispatch(task.handoff, options.stateDir);
+      const cwd = resolveEnabledProject(options.stateDir, run.current.project_id, registryOptions).cwd;
+      result = await options.dispatch({ ...task.handoff, cwd }, options.stateDir);
     } catch (error) {
       run = recordRunDispatchFailure(options.stateDir, run.current.run_id, error instanceof Error ? error.message.slice(0, 32_000) : "dispatch_failed", now());
       let failed: { readonly status?: string };
