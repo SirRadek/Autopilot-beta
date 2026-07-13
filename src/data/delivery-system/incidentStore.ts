@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import { redactTelemetryText } from "./telemetryRedaction";
-import { writeStateFileAtomically } from "./stateMaintenanceLock";
+import { withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 const INCIDENT_STORE_FILE = "autopilot-incidents.json";
 const MAX_INCIDENTS = 256;
@@ -106,40 +106,44 @@ export function recordAutopilotIncident(
   input: AutopilotIncidentInput,
   identity?: AutopilotIncidentIdentity
 ): AutopilotIncident {
-  const document = readIncidentStore(stateDir);
-  const incident: AutopilotIncident = {
-    incident_id: requireIncidentId(identity?.incidentId ?? randomUUID()),
-    recorded_at: requireRecordedAt(identity?.recordedAt ?? new Date().toISOString()),
-    status: "open",
-    acknowledged_at: null,
-    acknowledged_by: null,
-    severity: requireSeverity(input.severity),
-    stage: boundedText(input.stage, MAX_ID_CHARS),
-    summary: boundedText(input.summary, MAX_SUMMARY_CHARS),
-    correlation_ids: boundedCorrelationIds(input.correlation_ids),
-    impact: boundedText(input.impact, MAX_TEXT_CHARS),
-    retry_count: boundedRetryCount(input.retry_count),
-    event_refs: boundedTextList(input.event_refs, MAX_EVENT_REFS, MAX_ID_CHARS)
-  };
-  writeIncidentStore(stateDir, { schema_version: "v1", incidents: [...document.incidents, incident].slice(-MAX_INCIDENTS) });
-  return incident;
+  return withStateMaintenanceLock(stateDir, () => {
+    const document = readIncidentStore(stateDir);
+    const incident: AutopilotIncident = {
+      incident_id: requireIncidentId(identity?.incidentId ?? randomUUID()),
+      recorded_at: requireRecordedAt(identity?.recordedAt ?? new Date().toISOString()),
+      status: "open",
+      acknowledged_at: null,
+      acknowledged_by: null,
+      severity: requireSeverity(input.severity),
+      stage: boundedText(input.stage, MAX_ID_CHARS),
+      summary: boundedText(input.summary, MAX_SUMMARY_CHARS),
+      correlation_ids: boundedCorrelationIds(input.correlation_ids),
+      impact: boundedText(input.impact, MAX_TEXT_CHARS),
+      retry_count: boundedRetryCount(input.retry_count),
+      event_refs: boundedTextList(input.event_refs, MAX_EVENT_REFS, MAX_ID_CHARS)
+    };
+    writeIncidentStore(stateDir, { schema_version: "v1", incidents: [...document.incidents, incident].slice(-MAX_INCIDENTS) });
+    return incident;
+  });
 }
 
 export function acknowledgeIncident(stateDir: string, incidentId: string, owner: string): AutopilotIncident {
-  const document = readIncidentStore(stateDir);
-  const index = document.incidents.findIndex((incident) => incident.incident_id === incidentId);
-  if (index < 0) throw new Error("incident_not_found");
-  const current = document.incidents[index] as AutopilotIncident;
-  const acknowledged: AutopilotIncident = {
-    ...current,
-    status: "acknowledged",
-    acknowledged_at: current.acknowledged_at ?? new Date().toISOString(),
-    acknowledged_by: current.acknowledged_by ?? boundedText(owner, MAX_ID_CHARS)
-  };
-  const incidents = [...document.incidents];
-  incidents[index] = acknowledged;
-  writeIncidentStore(stateDir, { schema_version: "v1", incidents });
-  return acknowledged;
+  return withStateMaintenanceLock(stateDir, () => {
+    const document = readIncidentStore(stateDir);
+    const index = document.incidents.findIndex((incident) => incident.incident_id === incidentId);
+    if (index < 0) throw new Error("incident_not_found");
+    const current = document.incidents[index] as AutopilotIncident;
+    const acknowledged: AutopilotIncident = {
+      ...current,
+      status: "acknowledged",
+      acknowledged_at: current.acknowledged_at ?? new Date().toISOString(),
+      acknowledged_by: current.acknowledged_by ?? boundedText(owner, MAX_ID_CHARS)
+    };
+    const incidents = [...document.incidents];
+    incidents[index] = acknowledged;
+    writeIncidentStore(stateDir, { schema_version: "v1", incidents });
+    return acknowledged;
+  });
 }
 
 export function prepareRepairPacket(stateDir: string, incidentId: string, input: RepairPacketInput): AutopilotRepairPacket {

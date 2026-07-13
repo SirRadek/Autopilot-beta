@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import {
   existsSync,
@@ -74,6 +74,25 @@ describe("state maintenance lock", () => {
       token: lease.token
     });
     lease.release();
+  });
+
+  it("removes the reclaim marker when owner bytes change during reclamation", () => {
+    const stateDir = makeStateDirectory();
+    const ownerPath = seedOwner(stateDir, { pid: 2_147_483_647, hostname: hostname() });
+    const lockPath = dirname(ownerPath);
+    vi.spyOn(process, "kill").mockImplementation(() => {
+      writeFileSync(ownerPath, JSON.stringify(validOwner({
+        token: "replacement-owner",
+        pid: process.pid,
+        acquired_at: new Date().toISOString()
+      })));
+      throw Object.assign(new Error("dead"), { code: "ESRCH" });
+    });
+
+    expect(() => acquireStateMaintenanceLock(stateDir, { timeoutMs: 10, retryIntervalMs: 2 }))
+      .toThrow("state_lock_timeout");
+    expect(existsSync(join(lockPath, ".reclaim"))).toBe(false);
+    expect(JSON.parse(readFileSync(ownerPath, "utf8"))).toMatchObject({ token: "replacement-owner" });
   });
 
   it.each([

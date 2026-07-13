@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,6 +14,7 @@ import {
   ingestOperationalIncidentSpool,
   recordOperationalIncident
 } from "../../src/data/delivery-system/operationalIncidents";
+import { acquireStateMaintenanceLock } from "../../src/data/delivery-system/stateMaintenanceLock";
 
 const incidentInput = (summary = "Authorization: Bearer secret-value") => ({
   severity: "high" as const,
@@ -40,6 +42,32 @@ describe("Autopilot incident store", () => {
       correlation_ids: { request_id: "request-1" }
     });
   });
+
+  it("does not lose concurrent incident read-modify-write updates", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "incident-concurrent-"));
+    const lease = acquireStateMaintenanceLock(stateDir);
+    const childCode = [
+      "import { recordAutopilotIncident } from './src/data/delivery-system/incidentStore.ts';",
+      "const [stateDir, summary] = process.argv.slice(1);",
+      "recordAutopilotIncident(stateDir, { severity: 'high', stage: 'concurrent', summary, correlation_ids: {}, impact: 'test', retry_count: 0, event_refs: [] });"
+    ].join("\n");
+    const children = ["first", "second"].map((summary) => spawn(process.execPath, [
+      "--import", "tsx",
+      "--input-type=module",
+      "--eval", childCode,
+      stateDir,
+      summary
+    ], { cwd: process.cwd(), stdio: "ignore" }));
+
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    lease.release();
+    await Promise.all(children.map((child) => new Promise<void>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`child_exit:${code}`)));
+    })));
+
+    expect(readIncidentStore(stateDir).incidents.map((incident) => incident.summary).sort()).toEqual(["first", "second"]);
+  }, 15_000);
 
   it("spools a fixed unique incident outside protected state when the lock times out", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "operational-incident-lock-"));

@@ -246,7 +246,10 @@ function reclaimDeadOwner(lockPath: string): void {
   closeSync(descriptor);
 
   try {
-    if (readBoundedOwner(lockPath) !== ownerBytes) return;
+    if (readBoundedOwner(lockPath) !== ownerBytes) {
+      tryUnlink(reclaimPath);
+      return;
+    }
     unlinkSync(join(lockPath, OWNER_FILE_NAME));
     unlinkSync(reclaimPath);
     rmdirSync(lockPath);

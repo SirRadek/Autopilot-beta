@@ -1,5 +1,5 @@
 {
-  "src/data/delivery-system/capabilities.ts": "0a9409fa75d85f3c444832264c1a17c3df2706d8",
+  "src/data/delivery-system/capabilities.ts": "a2be8d0fea9d50dac14022bdf94469c5b2a3aa32",
   "src/data/delivery-system/modelPolicy.ts": "c795d51c3a08690cd76fe1c5f9232c7695d84c87",
   "src/data/delivery-system/routingModes.ts": "bf08ed41d1009984f7ac374c86663fee99253916",
   "src/data/delivery-system/runtimePaths.ts": "fabe232ce0da0026dcb7e807f929cb4d28ccab46",
@@ -64,7 +64,7 @@
   "src/data/delivery-system/openRouterLedgerMigration.ts": "92522130ccac465c732bae2373640f179c7a1ab2",
   "src/data/delivery-system/operationalIncidents.ts": "2e6352156365cf209227510dca7343e19041b911",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
-  "src/data/delivery-system/stateMaintenanceLock.ts": "1d718a245f9f45f5233da1d014707a5a5a7a80d6",
+  "src/data/delivery-system/stateMaintenanceLock.ts": "bbf2e0dab921eb39a7c99614616ac2b835c78db4",
   "src/data/delivery-system/projectRegistry.ts": "d93acd5dcb1f09c73397be4bda6af6034831a59e",
   "src/data/delivery-system/providerQuotaStore.ts": "de493d7cece05d67b380360027d4b9d69898c0c9",
   "src/data/delivery-system/readiness.ts": "64128f7356ab69acf48e2d727966267058df0255",
