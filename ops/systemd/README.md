@@ -23,19 +23,32 @@ keeps the installation and the rest of the home directory read-only, while
 supervised projects. Maintenance backups stay inside managed state at
 `%h/.local/state/autopilot/backups`.
 
-A custom projects root requires a reviewed drop-in that changes the environment and clears and
-replaces the writable-path allowlist. For example:
+A custom projects root uses the environment file as its one authoritative assignment. Edit
+`~/.config/autopilot/control-plane.env` so it contains exactly one active custom-root assignment:
+
+```dotenv
+AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects
+```
+
+Because `EnvironmentFile=` overrides the unit's default `Environment=` assignment, the reviewed
+drop-in only clears and replaces the writable-path allowlist:
 
 ```ini
 # ~/.config/systemd/user/autopilot-control-plane.service.d/projects-root.conf
 [Service]
-Environment=AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects
 ReadWritePaths=
 ReadWritePaths=%h/.local/state/autopilot /srv/autopilot-projects
 ```
 
-Review the resolved paths before reloading the unit. The custom root must contain only supervised
+Review the resolved paths before reloading the unit. The resolved `AUTOPILOT_PROJECTS_DIR` must
+equal the custom projects path in `ReadWritePaths`. The custom root must contain only supervised
 project checkouts; do not add the Autopilot installation directory to `ReadWritePaths`.
+
+D3 acceptance requires target-VM positive/negative write proof after the reviewed units are
+installed: a write beneath `/srv/autopilot-projects/fixture` must succeed, while writes to the
+Autopilot installation and an unlisted home-directory path must fail. R5 does not perform that
+proof because it would require installing and restarting the user units; static verification is
+not a substitute for the target-VM namespace test.
 
 The service starts the provider-quota scheduler with the same persistent state directory and
 session registry. It polls only providers with active sessions, persists snapshots/events in

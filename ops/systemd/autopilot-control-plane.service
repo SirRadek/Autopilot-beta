@@ -19,6 +19,7 @@ UMask=0077
 NoNewPrivileges=true
 # tmux usage probes communicate through /tmp/tmux-$UID; a private /tmp would hide that socket.
 PrivateTmp=false
+PrivateUsers=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=%h/.local/state/autopilot %h/projects

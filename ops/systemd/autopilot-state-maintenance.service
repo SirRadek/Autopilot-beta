@@ -12,6 +12,7 @@ ExecStart=/home/radek/.local/bin/npm run ops:maintenance -- %h/.local/state/auto
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateUsers=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=%h/.local/state/autopilot

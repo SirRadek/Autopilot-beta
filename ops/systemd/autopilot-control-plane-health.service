@@ -9,6 +9,7 @@ Environment=PATH=/home/radek/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/radek/.local/bin/npm run ops:health -- 8787
 UMask=0077
 NoNewPrivileges=true
+PrivateUsers=true
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=true
