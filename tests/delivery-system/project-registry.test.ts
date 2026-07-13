@@ -91,6 +91,15 @@ describe("project registry", () => {
     expect(() => readProjectRegistry(stateDir)).toThrow("invalid_project_registry");
   });
 
+  it("converts unexpected registry write failures to a fixed internal error", () => {
+    const stateDir = createStateDir();
+    const notDirectory = join(stateDir, "not-a-directory");
+    writeFileSync(notDirectory, "occupied");
+
+    expect(() => writeProjectRegistry(notDirectory, { schema_version: "v1", projects: [] }))
+      .toThrow("project_registry_io_error");
+  });
+
   it("resolves only an enabled registered project", () => {
     const stateDir = createStateDir();
     const project = {

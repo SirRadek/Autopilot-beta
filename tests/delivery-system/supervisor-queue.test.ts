@@ -25,6 +25,16 @@ function queue() {
 }
 
 describe("SupervisorQueue", () => {
+  it("inspects the exact next claimable task without consuming an attempt", () => {
+    const q = queue();
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
+    q.enqueue({ taskId: "b", handoff: handoff("hp-b"), now: "2026-07-12T00:00:00.000Z" });
+
+    expect(q.peekClaimable("2026-07-12T00:00:01.000Z")).toMatchObject({ task_id: "a", status: "queued", attempt: 0 });
+    expect(q.snapshot()[0]).toMatchObject({ task_id: "a", status: "queued", attempt: 0 });
+    expect(q.claim("2026-07-12T00:00:01.000Z")).toMatchObject({ task_id: "a", status: "running", attempt: 1 });
+  });
+
   it("enqueues and claims deterministically", () => {
     const q = queue();
     q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });

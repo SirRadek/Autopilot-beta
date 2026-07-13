@@ -148,6 +148,32 @@ describe("control plane governed run API", () => {
     }
   });
 
+  it("reports unexpected project registry I/O as an internal incident without leaking paths", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-registry-io-secret-"));
+    mkdirSync(join(stateDir, "projects.json"));
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: "Bearer secret" } });
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({ error: "autopilot_internal_error", incident_id: expect.any(String) });
+    expect(JSON.stringify(body)).not.toContain(stateDir);
+    expect(JSON.stringify(body)).not.toContain("EISDIR");
+    expect(JSON.stringify(body)).not.toContain("secret");
+    const incidents = readIncidentStore(stateDir).incidents;
+    expect(incidents).toEqual([
+      expect.objectContaining({ severity: "high", stage: "control_plane_http", summary: "Unexpected control plane route failure" })
+    ]);
+    expect(JSON.stringify(incidents)).not.toContain(stateDir);
+    expect(JSON.stringify(incidents)).not.toContain("EISDIR");
+    expect(JSON.stringify(incidents)).not.toContain("secret");
+  });
+
   it("prepares but does not execute a run", async () => {
     const api = await governedApi();
     const response = await api.call("POST", "/runs", draft);

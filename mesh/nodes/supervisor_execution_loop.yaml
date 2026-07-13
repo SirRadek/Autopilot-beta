@@ -25,6 +25,7 @@ related_files:
   - src/data/delivery-system/projectRegistry.ts
   - src/data/delivery-system/runStore.ts
   - src/data/delivery-system/runOrchestrator.ts
+  - src/data/delivery-system/supervisorQueue.ts
   - model-output-evals/
   - docs/autopilot/agent-handoff-packet-template.md
 required_checks:

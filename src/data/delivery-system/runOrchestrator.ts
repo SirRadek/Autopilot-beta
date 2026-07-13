@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
 import { isRunRouteEligible } from "./runRouteEligibility";
-import { resolveEnabledProject } from "./projectRegistry";
+import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
 import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import type { TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
 import { redactTelemetryText } from "./telemetryRedaction";
@@ -29,6 +29,7 @@ interface SupervisorTaskView {
 interface Supervisor {
   enqueue(input: { readonly taskId: string; readonly handoff: GovernedHandoff; readonly sessionId: string; readonly requiresApproval: true; readonly approvalGranted: true; readonly now: string; readonly maxAttempts?: number }): unknown;
   claim(now: string): SupervisorTaskView | null;
+  peekClaimable?(now: string): SupervisorTaskView | null;
   complete(taskId: string, now?: string): unknown;
   fail(taskId: string, reason: string, now?: string): { readonly status?: string };
   cancel(taskId: string, reason?: string, now?: string): unknown;
@@ -274,7 +275,24 @@ export function createRunOrchestrator(options: {
       if (task?.status === "failed") { finishDispatchFailure(failure); return null; }
       if (task?.status === "queued") { clearRunDispatchFailure(options.stateDir, failure.current.run_id, now()); }
     }
-    const task = taskForPendingResult() ?? options.supervisor.claim(now());
+    let task = taskForPendingResult();
+    if (task === null) {
+      const claimAt = now();
+      const claimable = options.supervisor.peekClaimable?.(claimAt);
+      if (claimable === null) return null;
+      if (claimable !== undefined) {
+        const claimableTaskId = claimable.task_id ?? claimable.taskId;
+        if (claimableTaskId === undefined) throw new Error("invalid_supervisor_task");
+        const claimableRun = bindingForTask(claimableTaskId);
+        try {
+          resolveEnabledProject(options.stateDir, claimableRun.current.project_id, registryOptions);
+        } catch (error) {
+          if (isProjectConfigurationError(error)) return null;
+          throw error;
+        }
+      }
+      task = options.supervisor.claim(claimAt);
+    }
     if (task === null) return null;
     const taskId = task.task_id ?? task.taskId;
     if (taskId === undefined) throw new Error("invalid_supervisor_task");

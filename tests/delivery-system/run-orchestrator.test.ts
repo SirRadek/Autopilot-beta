@@ -48,6 +48,38 @@ function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnT
 }
 
 describe("governed run orchestration", () => {
+  it("leaves the next unsafe recovered task queued until its project is corrected", async () => {
+    const fixture = mkdtempSync(join(tmpdir(), "run-orchestrator-recovered-root-"));
+    const stateDir = join(fixture, "state");
+    const projectRoot = join(fixture, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(fixture, "outside");
+    mkdirSync(stateDir);
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: outside, enabled: true }] });
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-recovered", handoffId: "handoff" as never, vendor: "codex_cli" as const, model: "gpt-5", exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn" as const, workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true as const }));
+    const first = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch, now: () => now, isRouteAvailable: () => true });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "recover safely", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
+    first.approveAndQueueRun(draft.current.run_id, draft.current.revision, "owner");
+    const supervisor = new SupervisorQueue({ stateDir });
+    const restarted = createRunOrchestrator({ stateDir, projectRoot, tokenGateway: new TokenGateway({ stateDir }), supervisor, dispatch, now: () => now, isRouteAvailable: () => true });
+    const runBefore = readRunStore(stateDir).runs[0];
+    const taskBefore = supervisor.snapshot()[0];
+
+    expect(await restarted.runSupervisorOnce()).toBeNull();
+    expect(readRunStore(stateDir).runs[0]).toEqual(runBefore);
+    expect(supervisor.snapshot()[0]).toEqual(taskBefore);
+    expect(runBefore).toMatchObject({ status: "queued", reservation_status: "active" });
+    expect(taskBefore).toMatchObject({ status: "queued", attempt: 0 });
+    expect(new TokenGateway({ stateDir }).snapshot().activeReservations).toBe(1);
+    expect(dispatch).not.toHaveBeenCalled();
+
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: inside, enabled: true }] });
+    expect((await restarted.runSupervisorOnce())?.status).toBe("completed");
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
   it("rechecks a queued symlink and dispatches only its latest canonical in-root target", async () => {
     const fixture = mkdtempSync(join(tmpdir(), "run-orchestrator-root-"));
     const projectRoot = join(fixture, "projects");

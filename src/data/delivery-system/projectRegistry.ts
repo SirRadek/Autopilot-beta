@@ -23,7 +23,8 @@ export const PROJECT_REGISTRY_ERROR_CODES = {
   PROJECT_NOT_FOUND: "project_not_found",
   PROJECT_PATH_MISSING: "project_path_missing",
   PROJECT_PATH_OUTSIDE_ROOT: "project_path_outside_root",
-  INVALID_PROJECT_ROOT: "invalid_project_root"
+  INVALID_PROJECT_ROOT: "invalid_project_root",
+  IO_ERROR: "project_registry_io_error"
 } as const;
 
 export type ProjectRegistryErrorCode = typeof PROJECT_REGISTRY_ERROR_CODES[keyof typeof PROJECT_REGISTRY_ERROR_CODES];
@@ -73,17 +74,28 @@ function validateProjectRegistry(document: unknown): asserts document is Project
 
 export function readProjectRegistry(stateDir: string): ProjectRegistryDocument {
   const path = join(stateDir, PROJECT_REGISTRY_FILE);
-  if (!existsSync(path)) {
-    return { schema_version: "v1", projects: [] };
+  let size: number;
+  try {
+    size = statSync(path).size;
+  } catch (error) {
+    if (nodeErrorCode(error) === "ENOENT") return { schema_version: "v1", projects: [] };
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+  }
+  if (size > MAX_REGISTRY_BYTES) {
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+  }
+  let serialized: string;
+  try {
+    serialized = readFileSync(path, "utf8");
+  } catch {
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
   }
   let document: unknown;
   try {
-    if (statSync(path).size > MAX_REGISTRY_BYTES) {
-      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
-    }
-    document = JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+    document = JSON.parse(serialized);
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
   }
   validateProjectRegistry(document);
   return document;
@@ -101,10 +113,10 @@ export function writeProjectRegistry(stateDir: string, document: ProjectRegistry
     writeFileSync(temporaryPath, serialized, "utf8");
     renameSync(temporaryPath, path);
   } catch {
-    if (existsSync(temporaryPath)) {
-      unlinkSync(temporaryPath);
-    }
-    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+    try {
+      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    } catch { /* cleanup must not expose filesystem details */ }
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
   }
 }
 
@@ -137,7 +149,23 @@ export function resolveEnabledProject(
 function canonicalPath(path: string, errorCode: ProjectRegistryErrorCode): string {
   try {
     return realpathSync(path);
-  } catch {
-    throw new Error(errorCode);
+  } catch (error) {
+    if (["ENOENT", "ENOTDIR"].includes(nodeErrorCode(error))) throw new Error(errorCode);
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
   }
+}
+
+export function isProjectConfigurationError(error: unknown): boolean {
+  const code = error instanceof Error ? error.message : "";
+  return ([
+    PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY,
+    PROJECT_REGISTRY_ERROR_CODES.PROJECT_NOT_FOUND,
+    PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_MISSING,
+    PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_OUTSIDE_ROOT,
+    PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT
+  ] as readonly string[]).includes(code);
+}
+
+function nodeErrorCode(error: unknown): string {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : "";
 }

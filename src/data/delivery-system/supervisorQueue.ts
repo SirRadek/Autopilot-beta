@@ -127,11 +127,15 @@ export class SupervisorQueue {
   }
 
   claim(now = new Date().toISOString()): SupervisorTask | null {
-    this.reconcile(now);
-    const at = Date.parse(now);
-    const candidate = this.state.tasks.find((task) => task.status === "queued" && Date.parse(task.next_attempt_at) <= at && this.dependenciesComplete(task));
+    const candidate = this.peekClaimable(now);
     if (!candidate) return null;
     return this.replace({ ...candidate, status: "running", attempt: candidate.attempt + 1, run_started_at: now, updated_at: now, last_error: null });
+  }
+
+  peekClaimable(now = new Date().toISOString()): SupervisorTask | null {
+    this.reconcile(now);
+    const at = Date.parse(now);
+    return this.state.tasks.find((task) => task.status === "queued" && Date.parse(task.next_attempt_at) <= at && this.dependenciesComplete(task)) ?? null;
   }
 
   complete(taskId: string, now = new Date().toISOString()): SupervisorTask {
