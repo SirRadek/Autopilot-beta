@@ -9,14 +9,18 @@ const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient
   getAuthSession: vi.fn().mockResolvedValue({ authenticated: true }), login: vi.fn(), logout: vi.fn(),
   getStatus: vi.fn().mockResolvedValue({ sessions: { total: 1, active: 1, closed: 0 }, approvals: { total: 0, pending: 0, approved: 0, rejected: 0 }, telemetry: { calls: 2, successful: 2, total_tokens: 10 } }),
   getSessions: vi.fn().mockResolvedValue([]), getApprovals: vi.fn().mockResolvedValue([]), getWorkers: vi.fn().mockResolvedValue([]),
+  getProjects: vi.fn().mockResolvedValue([]), getRuns: vi.fn().mockResolvedValue([]), getRun: vi.fn(), prepareRun: vi.fn(), reviseRun: vi.fn(), approveRun: vi.fn(), cancelRun: vi.fn(),
+  getIncidents: vi.fn().mockResolvedValue([]), acknowledgeIncident: vi.fn(), prepareRepairPacket: vi.fn(),
+  getObservabilitySummary: vi.fn().mockResolvedValue({ events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }), getObservabilityTimeline: vi.fn().mockResolvedValue({ summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 0, max_lines_per_file: 0, max_events: 100, truncated: false } }),
+  createSession: vi.fn(), mutateSession: vi.fn(),
   getProviderQuotas: vi.fn().mockResolvedValue({ providers: [] }), getProviderModels: vi.fn().mockResolvedValue({ freshness: "fresh", fetched_at: null, next_poll_at: null, models: [] }), getProviderHealth: vi.fn().mockResolvedValue({ providers: [] }),
   decideApproval: vi.fn(), ...overrides,
 });
 
 describe("useCockpitData loader", () => {
-  it("loads all panes independently", async () => { const result = await loadCockpitData(client(), { sessions: [], approvals: [], quotas: [], workers: [] }); expect(result.errors).toEqual({}); expect(result.data.status?.telemetry.total_tokens).toBe(10); });
-  it("preserves the last safe pane snapshot on failure", async () => { const previous = { sessions: [{ session_id: "s1" } as never], approvals: [], quotas: [], workers: [] }; const result = await loadCockpitData(client({ getSessions: vi.fn().mockRejectedValue(new Error("offline")) }), previous); expect(result.data.sessions).toBe(previous.sessions); expect(result.errors.sessions?.message).toBe("offline"); });
-  it("refreshes a recovered pane without discarding other data", async () => { const result = await loadCockpitData(client({ getSessions: vi.fn().mockResolvedValue([{ session_id: "s2" }]) }), { sessions: [], approvals: [], quotas: [], workers: [] }); expect(result.data.sessions[0]?.session_id).toBe("s2"); });
+  it("loads all panes independently", async () => { const result = await loadCockpitData(client(), { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }); expect(result.errors).toEqual({}); expect(result.data.status?.telemetry.total_tokens).toBe(10); });
+  it("preserves the last safe pane snapshot on failure", async () => { const previous = { sessions: [{ session_id: "s1" } as never], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }; const result = await loadCockpitData(client({ getSessions: vi.fn().mockRejectedValue(new Error("offline")) }), previous); expect(result.data.sessions).toBe(previous.sessions); expect(result.errors.sessions?.message).toBe("offline"); });
+  it("refreshes a recovered pane without discarding other data", async () => { const result = await loadCockpitData(client({ getSessions: vi.fn().mockResolvedValue([{ session_id: "s2" }]) }), { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }); expect(result.data.sessions[0]?.session_id).toBe("s2"); });
 });
 
 describe("useCockpitData hook", () => {
@@ -38,7 +42,7 @@ describe("useCockpitData hook", () => {
 
   it("keeps successful provider sources when one source fails", async () => {
     const source = client({ getProviderModels: vi.fn().mockRejectedValue(new Error("models offline")), getProviderQuotas: vi.fn().mockResolvedValue({ providers: [{ provider: "codex", source: "cli", fetched_at: "now", observed_at: "now", five_hour: { limit: 1, used: 0, remaining: 1, resets_at: null }, weekly: { limit: 2, used: 0, remaining: 2, resets_at: null }, api_spend: null, currency: null, models: [], health: "ok", error_code: null, freshness: "fresh", next_poll_at: null }] }) });
-    const result = await loadCockpitData(source, { sessions: [], approvals: [], quotas: [] });
+    const result = await loadCockpitData(source, { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] });
     expect(result.data.quotas).toHaveLength(1); expect(result.data.models).toBeUndefined(); expect(result.errors.providers?.message).toContain("models offline");
   });
 

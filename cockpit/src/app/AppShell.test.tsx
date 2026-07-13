@@ -73,4 +73,14 @@ describe("AppShell", () => {
     expect(html).toContain("Providers slot");
     expect(html).toContain("Workers slot");
   });
+
+  it("renders the run workspace before its inspector and supports inspector keyboard tabs", () => {
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => { root.render(<AppShell runWorkspace={<p>Composer</p>} runInspector={<p>Evidence</p>} incidentPane={<p>autopilot_internal_error</p>} />); });
+    const workspace = host.querySelector('[aria-label="Pracovní plocha běhu"]'); const inspector = host.querySelector('[aria-label="Inspektor běhu"]');
+    expect(workspace).not.toBeNull(); expect(inspector).not.toBeNull(); expect(workspace?.compareDocumentPosition(inspector!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const tabs = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="Inspektor běhu"] [role="tab"]')];
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Běh", "Chyby"]); expect(tabs[0]?.getAttribute("aria-controls")).toBe("inspector-panel"); expect(host.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("inspector-tab-run"); act(() => tabs[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))); expect(document.activeElement).toBe(tabs[1]); expect(host.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("inspector-tab-errors"); expect(host.textContent).toContain("autopilot_internal_error");
+    act(() => root.unmount()); host.remove();
+  });
 });

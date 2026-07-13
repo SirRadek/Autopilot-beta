@@ -16,6 +16,9 @@ export type AppShellProps = {
   operationsPane?: ReactNode;
   providersPane?: ReactNode;
   workersPane?: ReactNode;
+  runWorkspace?: ReactNode;
+  runInspector?: ReactNode;
+  incidentPane?: ReactNode;
   onTabChange?: (tab: CockpitTab) => void;
 };
 
@@ -26,8 +29,10 @@ const tabs: Array<{ id: CockpitTab; label: string }> = [
   { id: "workers", label: "Workers" },
 ];
 
-export function AppShell({ selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, onTabChange }: AppShellProps) {
+export function AppShell({ selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, runWorkspace, runInspector, incidentPane, onTabChange }: AppShellProps) {
   const [activeTab, setActiveTab] = useState<CockpitTab>("approval");
+  const [inspectorTab, setInspectorTab] = useState<"run" | "errors">("run");
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const selectTab = (tab: CockpitTab) => { setActiveTab(tab); onTabChange?.(tab); };
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -38,6 +43,7 @@ export function AppShell({ selectedProject, selectedSession, projectsPane, sessi
     selectTab(next.id);
     document.querySelector<HTMLButtonElement>(`[data-cockpit-tab="${next.id}"]`)?.focus();
   };
+  const handleInspectorKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => { if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return; event.preventDefault(); const next = event.key === "Home" ? "run" : event.key === "End" ? "errors" : inspectorTab === "run" ? "errors" : "run"; setInspectorTab(next); document.querySelector<HTMLButtonElement>(`[data-inspector-tab="${next}"]`)?.focus(); };
   return (
     <div className="cockpit-shell">
       <header className="cockpit-header">
@@ -50,6 +56,10 @@ export function AppShell({ selectedProject, selectedSession, projectsPane, sessi
           {selectedSession ? <><span aria-hidden="true">/</span><span>{selectedSession.name}</span><StatusBadge status={selectedSession.status} /></> : null}
         </div>
       </header>
+      {runWorkspace !== undefined || runInspector !== undefined || incidentPane !== undefined ? <div className={`run-control-room${inspectorOpen ? "" : " inspector-collapsed"}`}>
+        <section className="run-workspace" role="region" aria-label="Pracovní plocha běhu">{runWorkspace}</section>
+        <aside className="run-inspector-pane" aria-label="Inspektor běhu"><button className="inspector-toggle" type="button" aria-expanded={inspectorOpen} aria-controls="inspector-content" onClick={() => setInspectorOpen((open) => !open)}>{inspectorOpen ? "Skrýt inspektor" : "Zobrazit inspektor"}</button>{inspectorOpen ? <div id="inspector-content"><div className="inspector-tabs" role="tablist" aria-label="Části inspektoru"><button id="inspector-tab-run" data-inspector-tab="run" type="button" role="tab" aria-controls="inspector-panel" aria-selected={inspectorTab === "run"} tabIndex={inspectorTab === "run" ? 0 : -1} onClick={() => setInspectorTab("run")} onKeyDown={handleInspectorKeyDown}>Běh</button><button id="inspector-tab-errors" data-inspector-tab="errors" type="button" role="tab" aria-controls="inspector-panel" aria-selected={inspectorTab === "errors"} tabIndex={inspectorTab === "errors" ? 0 : -1} onClick={() => setInspectorTab("errors")} onKeyDown={handleInspectorKeyDown}>Chyby</button></div><div id="inspector-panel" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>{inspectorTab === "run" ? runInspector : incidentPane}</div></div> : null}</aside>
+      </div> : null}
       <nav className="cockpit-tabs" aria-label="Cockpit sections" role="tablist">
         {tabs.map((tab, index) => <button key={tab.id} id={`tab-${tab.id}`} data-cockpit-tab={tab.id} type="button" role="tab" aria-controls={`tab-panel-${tab.id}`} aria-selected={activeTab === tab.id} tabIndex={activeTab === tab.id ? 0 : -1} onClick={() => selectTab(tab.id)} onKeyDown={(event) => handleTabKeyDown(event, index)}>{tab.label}</button>)}
       </nav>
