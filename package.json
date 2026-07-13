@@ -47,6 +47,7 @@
     "ops:restore": "tsx scripts/ops-restore.ts",
     "ops:maintenance": "tsx scripts/ops-maintenance.ts",
     "ops:health": "tsx scripts/ops-healthcheck.ts",
+    "ops:ready": "tsx scripts/ops-readinesscheck.ts",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "baseline:waiver-check": "node scripts/check-baseline-waivers.mjs",

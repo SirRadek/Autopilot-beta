@@ -14,6 +14,7 @@ import { createProviderQuotaScheduler } from "../src/data/delivery-system/provid
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
+import { buildReadiness, type ReadinessReport } from "../src/data/delivery-system/readiness";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
 import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
@@ -41,6 +42,7 @@ export interface ControlPlaneRuntimeOptions {
   readonly providerCommands?: Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>>;
   /** Add Secure to browser cookies when the public cockpit is served over TLS. */
   readonly secureCookies?: boolean;
+  readonly openRouterConfigured?: boolean;
   readonly dispatch?: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
   readonly supervisorPollMs?: number;
   readonly shutdownDrainMs?: number;
@@ -62,6 +64,7 @@ export interface ControlPlaneServerOptions {
   readonly secureCookies?: boolean;
   readonly runOrchestrator?: ReturnType<typeof createRunOrchestrator>;
   readonly projectRoot?: string;
+  readonly readiness?: () => ReadinessReport;
 }
 
 export function createControlPlaneServer(stateDir: string, authToken: string | undefined, options: ControlPlaneServerOptions = {}) {
@@ -69,6 +72,7 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
   const sessionTtlMs = 8 * 60 * 60 * 1000;
   return createServer(async (request, response) => {
   if (request.method === "GET" && request.url === "/health") returnJson(response, { ok: true });
+  else if (request.method === "GET" && request.url === "/ready") return readinessHttp(response, options.readiness);
   else if (request.method === "POST" && request.url === "/auth/login") await loginBrowser(request, response, authToken, browserSessions, sessionTtlMs, options.secureCookies === true);
   else if (request.method === "POST" && request.url === "/auth/logout") {
     if (cookieValue(request.headers.cookie, "autopilot_session") !== null && !isBearerAuthenticated(request, authToken) && !isSameOriginMutation(request)) returnJson(response, { error: "csrf_origin_required" }, 403);
@@ -99,6 +103,36 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot)) return;
     else returnJson(response, { error: "not_found" }, 404);
   });
+}
+
+function readinessHttp(response: ServerResponse, readiness: (() => ReadinessReport) | undefined): void {
+  try {
+    const report = readiness?.() ?? failedReadinessReport();
+    returnJson(response, report, report.ready ? 200 : 503);
+  } catch {
+    returnJson(response, failedReadinessReport(), 503);
+  }
+}
+
+function failedReadinessReport(): ReadinessReport {
+  return {
+    ready: false,
+    status: "unavailable",
+    checked_at: new Date().toISOString(),
+    components: {
+      configuration: { status: "unavailable", error_code: "invalid_configuration" },
+      managed_state: { status: "unavailable", error_code: "state_unavailable" },
+      project_registry: { status: "unavailable", error_code: "invalid_project_registry" },
+      supervisor: { status: "unavailable", error_code: "invalid_supervisor_state" },
+      token_gateway: { status: "unavailable", error_code: "invalid_token_gateway_state" },
+      providers: {
+        codex_cli: { status: "unavailable", error_code: "not_observed" },
+        claude_cli: { status: "unavailable", error_code: "not_observed" },
+        agy_cli: { status: "unavailable", error_code: "not_observed" },
+        openrouter_api: { status: "unavailable", error_code: "not_observed" }
+      }
+    }
+  };
 }
 
 function observabilityTimeline(stateDir: string, requestUrl: string) {
@@ -260,11 +294,12 @@ export function createControlPlaneRuntime(
   options: ControlPlaneRuntimeOptions = {}
 ): ControlPlaneRuntime {
   const projectRoot = options.projectRoot ?? resolveConfiguredProjectRoot();
+  const providerCommands = options.providerCommands ?? {};
   const scheduler = options.scheduler ?? createProviderQuotaScheduler({
     sessions: () => readSessionRegistry(stateDir).sessions,
     adapters: createProviderQuotaAdapters({
       runCommand: options.commandRunner ?? runProviderCommand,
-      ...(options.providerCommands === undefined ? {} : { commands: options.providerCommands })
+      commands: providerCommands
     }),
     store: { stateDir }
   });
@@ -277,7 +312,18 @@ export function createControlPlaneRuntime(
     supervisor,
     dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
   });
-  const server = createControlPlaneServer(stateDir, authToken, { ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }), runOrchestrator: orchestrator, projectRoot });
+  const server = createControlPlaneServer(stateDir, authToken, {
+    ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }),
+    runOrchestrator: orchestrator,
+    projectRoot,
+    readiness: () => buildReadiness({
+      stateDir,
+      projectRoot,
+      authToken,
+      providerCommands,
+      openRouterConfigured: options.openRouterConfigured ?? Boolean(process.env.OPENROUTER_API_KEY?.trim())
+    })
+  });
   scheduler.start();
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;

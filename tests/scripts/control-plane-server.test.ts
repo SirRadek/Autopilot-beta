@@ -12,6 +12,7 @@ import { writeProviderQuotaStore } from "../../src/data/delivery-system/provider
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
 import { createRunDraft, readRunStore, reviseRunDraft } from "../../src/data/delivery-system/runStore";
 import type { ProviderQuotaStoreDocument } from "../../src/data/delivery-system/providerQuotaStore";
+import type { ReadinessReport } from "../../src/data/delivery-system/readiness";
 
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
@@ -24,6 +25,85 @@ async function request(path: string, token?: string) {
   if (address === null || typeof address === "string") throw new Error("missing address");
   return fetch(`http://127.0.0.1:${address.port}${path}`, token ? { headers: { authorization: `Bearer ${token}` } } : {});
 }
+
+const readinessReport = (ready: boolean): ReadinessReport => ({
+  ready,
+  status: ready ? "ready" : "unavailable",
+  checked_at: "2026-07-13T12:00:00.000Z",
+  components: {
+    configuration: { status: ready ? "ready" : "unavailable", error_code: ready ? null : "invalid_configuration" },
+    managed_state: { status: "ready", error_code: null },
+    project_registry: { status: "ready", error_code: null },
+    supervisor: { status: "ready", error_code: null },
+    token_gateway: { status: "ready", error_code: null },
+    providers: {
+      codex_cli: { status: "degraded", error_code: "not_observed" },
+      claude_cli: { status: "degraded", error_code: "not_observed" },
+      agy_cli: { status: "degraded", error_code: "not_observed" },
+      openrouter_api: { status: "degraded", error_code: "not_observed" }
+    }
+  }
+});
+
+describe("control plane liveness and readiness", () => {
+  async function publicGet(path: string, readiness: () => ReadinessReport) {
+    const server = createControlPlaneServer(mkdtempSync(join(tmpdir(), "control-plane-ready-")), "secret-value", { readiness });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`);
+    return { status: response.status, body: await response.json() as unknown };
+  }
+
+  it("keeps health public and independent of readiness", async () => {
+    expect(await publicGet("/health", () => { throw new Error("secret-value"); }))
+      .toEqual({ status: 200, body: { ok: true } });
+  });
+
+  it("serves healthy and unavailable readiness without authentication", async () => {
+    expect(await publicGet("/ready", () => readinessReport(true)))
+      .toEqual({ status: 200, body: readinessReport(true) });
+    expect(await publicGet("/ready", () => readinessReport(false)))
+      .toEqual({ status: 503, body: readinessReport(false) });
+  });
+
+  it("maps readiness exceptions to a fixed redacted 503 report", async () => {
+    const result = await publicGet("/ready", () => { throw new Error("secret-value:/private/path"); });
+
+    expect(result.status).toBe(503);
+    expect(result.body).toMatchObject({ ready: false, status: "unavailable" });
+    expect(JSON.stringify(result.body)).not.toContain("secret-value");
+    expect(JSON.stringify(result.body)).not.toContain("/private/path");
+  });
+
+  it("wires the pure readiness builder into the production runtime", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-ready-"));
+    const projectRoot = join(stateDir, "projects");
+    mkdirSync(projectRoot, { mode: 0o700 });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      providerCommands: {},
+      openRouterConfigured: false,
+      supervisorPollMs: 60_000
+    });
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = runtime.server.address();
+      if (address === null || typeof address === "string") throw new Error("missing address");
+      const response = await fetch(`http://127.0.0.1:${address.port}/ready`);
+      const body = await response.json() as ReadinessReport;
+
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ ready: true, status: "degraded" });
+      expect(body.components.configuration).toEqual({ status: "ready", error_code: null });
+    } finally {
+      await runtime.stop();
+    }
+  });
+});
 
 const snapshot = (provider: string, fetchedAt: string) => ({
   provider, source: "api" as const, fetched_at: fetchedAt, observed_at: fetchedAt,
