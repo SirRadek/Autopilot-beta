@@ -10,6 +10,7 @@ import {
 } from "../../src/data/delivery-system/cliWorker";
 import {
   captureOpenRouterResponse,
+  OPENROUTER_ATTEMPT_COUNTER_FILE,
   OPENROUTER_CHAT_COMPLETIONS_ENDPOINT,
   OPENROUTER_FREE_MINUTE_ATTEMPT_LIMIT,
   openRouterAttemptCounterPathForStateDir,
@@ -181,6 +182,8 @@ describe("OpenRouter Stage 1 worker lane", () => {
       day: 1,
       minute: 1
     });
+    expect(existsSync(join(stateDir, OPENROUTER_ATTEMPT_COUNTER_FILE))).toBe(true);
+    expect(existsSync(join(parentDir, OPENROUTER_ATTEMPT_COUNTER_FILE))).toBe(false);
   });
 
   it("runs an explicitly supervisor-selected laguna substitute under qwen3_code_draft", async () => {

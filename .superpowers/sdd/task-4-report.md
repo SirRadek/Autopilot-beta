@@ -1,55 +1,64 @@
-# Phase 8 Task 4 report
+# Task 4 Report: Managed OpenRouter Ledger Migration
 
-## Status
+Status: complete
 
-Complete. Added bounded, redaction-first Autopilot incident persistence and read-only manual repair packets. The repair API returns data only: it has no process execution, callbacks, queue integration, or dispatch capability.
+## Commit
 
-## TDD evidence
+- `fix: keep OpenRouter ledgers in managed state` (the commit containing this report)
 
-- RED: `npm test -- tests/delivery-system/incident-store.test.ts` failed because `incidentStore` did not exist.
-- RED: multibyte packet and loaded-secret tests failed against the initial implementation, proving byte-bound and redaction-at-rest validation coverage.
-- RED: the observability pre-redaction bound regression test failed until the shared helper call preserved the original slice-before-redact behavior.
-- GREEN: `npm test -- tests/delivery-system/incident-store.test.ts tests/delivery-system/observability.test.ts` passed 10 tests in 2 files.
+## Delivered
 
-## Implementation
+- Active OpenRouter attempt and spend paths now resolve directly under `stateDir`.
+- `ensureOpenRouterLedgersMigrated(stateDir)` validates legacy files from exactly `dirname(stateDir)` and managed files before publishing either missing destination.
+- Migration enforces 4 MiB and 20,000 non-empty-record bounds per ledger.
+- Every non-empty record must be valid ledger-specific v1 JSONL.
+- Symlinks, non-regular files, concurrent source changes, malformed records, conflicting bytes, and unsafe publication fail closed.
+- Publication uses an exclusive same-directory `0600` temporary file, file and directory fsync, byte-count plus SHA-256 verification, and an atomic hard link that cannot replace an existing destination.
+- Legacy source files are retained indefinitely.
+- Partial migration is retry-safe, including a destination created concurrently with matching bytes.
+- `runCliWorker()` invokes migration before OpenRouter spend checks, attempt accounting, or provider fetch.
+- Observability, project architecture, work-log evidence, project Decision Mesh routing, the mesh related-file snapshot, and vendor provenance were updated.
 
-- Added incident lifecycle functions: `recordAutopilotIncident`, `acknowledgeIncident`, `prepareRepairPacket`, and `readIncidentStore`.
-- Enforced 256 incidents, 2,000-character summary/text bounds, 32 correlation IDs, 32 event references, 20 reproduction/verification entries, a 2 MiB store read/write cap, and a 64 KiB serialized repair-packet cap.
-- Redacted all caller-provided persisted strings before atomic writes and rejected malformed, oversized, unknown-field, duplicate-ID, inconsistent-lifecycle, or unredacted loaded state.
-- Extracted `redactTelemetryText` and retained existing observability output behavior.
-- Repair packets declare `external_autopilot_repair` and `manual`; they are not persisted or dispatched.
+## TDD Evidence
 
-## Verification
+Red:
 
-- `npm test -- tests/delivery-system/incident-store.test.ts tests/delivery-system/observability.test.ts` — pass, 10/10 tests.
-- `npm run typecheck` — pass.
-- `git diff --check` — pass.
+- `npm test -- tests/delivery-system/openrouter-ledger-migration.test.ts tests/delivery-system/openrouter-stage1.test.ts tests/delivery-system/openrouter-spend-cap.test.ts`
+- Result: failed because `../../src/data/delivery-system/openRouterLedgerMigration` did not exist; the 24 pre-existing tests passed.
 
-## Governance and concerns
+Green and final verification under Node 24 (`PATH=/home/radek/.npm/_npx/387698761821791d/node_modules/node/bin:$PATH`):
 
-This implements the already-approved incident/repair boundary and does not change Decision Mesh architecture, so no mesh node update is required. Decision Mesh MCP tools were unavailable in this session; the task brief, repository governance, focused tests, and local typecheck were used as authority. No known implementation concerns remain.
+- `npm test -- tests/delivery-system/openrouter-ledger-migration.test.ts tests/delivery-system/openrouter-stage0.test.ts tests/delivery-system/openrouter-stage1.test.ts tests/delivery-system/openrouter-spend-cap.test.ts`
+  - PASS: 4 files, 43 tests.
+- `npm test -- tests/decision-mesh/query.test.ts tests/delivery-system/observability.test.ts`
+  - PASS: 2 files, 38 tests.
+- `npm run typecheck`
+  - PASS: TypeScript no-emit check exited 0.
+- `npm run beta:vendor-manifest`
+  - PASS: regenerated 125 entries at base `599785fb710c`.
+- `npm run beta:vendor-check`
+  - PASS: 79 pristine and 46 intentional patched vendored files.
+- `npm run mesh:snapshot:regen`
+  - PASS: regenerated 60 related-file hint hashes after adding root-mesh coverage for the new sensitive source file.
+- `npm run mesh:gate:ci`
+  - PASS: 99 verified, 0 stale, 0 unsnapshotted, and 0 new dead pointers.
+- `git diff --cached --check`
+  - PASS: no whitespace errors.
 
-## Review follow-up
+No live OpenRouter or other provider API call was made. Provider behavior was exercised only through injected Vitest fetch mocks.
 
-- Expanded shared telemetry redaction to cover password/passwd assignments, API keys, access and refresh tokens, client secrets, cookie and set-cookie headers, AWS access IDs and credential assignments, private-key blocks and inline assignments, GitHub tokens, Slack tokens, and existing provider token prefixes.
-- Applied the shared policy to every caller-controlled persisted incident field and every exported repair-packet field. Loaded-state validation now rejects each governed secret class when it appears unredacted.
-- Replaced path-based stat-then-read with one open descriptor, bounded allocation/read, before/after descriptor size checks, and rejection of overflow, shrink, or growth.
-- Added RED/GREEN coverage spanning summary, impact, correlation IDs, event references, expected/actual state, reproduction steps, verification commands, multivalue cookies, private-key material, loaded secrets, and oversized state.
-- Follow-up verification: incident and observability suites pass 12/12 tests; typecheck and `git diff --check` pass.
+## Self-Review
 
-## Second review follow-up
+- Checked every frozen decision against implementation and tests: managed and exact legacy paths, both per-file bounds, strict v1 records, unsafe-file rejection, conflict rejection, no overwrite, fsync/hash/byte checks, source retention, partial retry, and pre-provider ordering are covered.
+- Confirmed migration validates all existing inputs before first publication, preventing a malformed second ledger from creating a new partial migration.
+- Confirmed the source read itself is capped at 4 MiB plus one byte, including concurrent growth, rather than relying only on an initial file-size check.
+- Confirmed final destinations are never replaced: atomic link returns `EEXIST`, after which matching content is accepted and conflicting content fails.
+- Confirmed temporary files are created and published in the managed destination directory so atomic same-filesystem publication is guaranteed.
+- Confirmed the implementation remains within the plan's review-size ceiling (677 inserted lines across implementation, tests, and governance; 304-line migration module).
+- No self-approval is claimed; independent review remains the parent/governance agent's responsibility.
 
-- Split redaction policies: incident persistence/repair export uses the strong governed-secret policy, while observability calls an explicit legacy wrapper after its original 200-character pre-slice, preserving output compatibility.
-- Strong incident redaction now handles quoted JSON key/value secrets, quoted Cookie and Set-Cookie values, and every PEM `BEGIN` marker through the remaining bounded field even when the block is truncated or unterminated.
-- Loaded incidents now require redacted RFC 4122-style IDs and canonical millisecond UTC timestamps; generated UUIDs and ISO timestamps satisfy the same validators.
-- The single-descriptor reader allocates and requests only the `fstat`-approved size, never `MAX + 1`, reads no more than 2 MiB, and rejects short reads or descriptor size changes.
-- Added adversarial persistence, export, load-validation, identity/timestamp, and legacy observability compatibility tests.
-- Second follow-up verification: incident and observability suites pass 15/15 tests; typecheck and `git diff --check` pass.
+## Concerns
 
-## Third review follow-up
-
-- Loaded non-null `acknowledged_at` values now require the same canonical millisecond UTC shape and strong redaction check as `recorded_at`; repair export rejects an invalid loaded acknowledgement timestamp before returning a packet.
-- Strong structured redaction now recognizes quoted JSON `authorization` keys and consumes JSON string values with escaped quotes/backslashes as a unit, preventing secret suffix leakage.
-- Re-audited all string surfaces: incident IDs use UUID structure plus redaction validation; recorded and acknowledged timestamps use canonical ISO structure plus redaction validation; stage, summary, impact, acknowledgement owner, correlation keys/values, and event references require redacted bounded strings; repair expected/actual/steps/commands are redacted and bounded before export. Fixed schema/intent/execution/status/severity strings are closed enums or literals.
-- Added RED/GREEN input, persisted-load, and repair-export adversarial tests for JSON authorization, escape sequences, suffix leakage, and password-shaped acknowledgement timestamps.
-- Third follow-up verification: incident and observability suites pass 17/17 tests; typecheck and `git diff --check` pass.
+- The atomic publication strategy intentionally depends on hard-link support in the managed state filesystem. This is appropriate for the frozen Ubuntu runtime and guarantees no overwrite; a future non-POSIX runtime would need an equivalent atomic no-replace primitive.
+- Legacy archival remains deliberately out of scope. Operators must keep legacy files until a separately approved archival procedure exists.
+- The repository-wide test suite was not run; this task ran the exact focused, adjacent observability/mesh, typecheck, vendor, mesh, and diff gates required by the Task 4 brief.

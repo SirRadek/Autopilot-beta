@@ -30,6 +30,7 @@ import {
   writePromptFile
 } from "./cliWorkerCapture";
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH, VENDOR_PROCESS_REGISTRY_PATH } from "./sessionState";
+import { ensureOpenRouterLedgersMigrated } from "./openRouterLedgerMigration";
 import type { RoutingModeId } from "./routingModes";
 import {
   writeCorrelationEntry,
@@ -601,6 +602,7 @@ export async function runCliWorker(
         throw new Error("openrouter_api internal error: missing resolved config");
       }
 
+      ensureOpenRouterLedgersMigrated(stateDir);
       const spendLedgerPath = openRouterSpendLedgerPathForStateDir(stateDir);
       const result = await captureOpenRouterResponse(input.prompt, {
         openrouterMode: openRouterConfig.openrouterMode,

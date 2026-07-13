@@ -549,11 +549,11 @@ export function assertOpenRouterPromptIsSendable(prompt: string): void {
 }
 
 export function openRouterAttemptCounterPathForStateDir(stateDir: string): string {
-  return join(dirname(stateDir), OPENROUTER_ATTEMPT_COUNTER_FILE);
+  return join(stateDir, OPENROUTER_ATTEMPT_COUNTER_FILE);
 }
 
 export function openRouterSpendLedgerPathForStateDir(stateDir: string): string {
-  return join(dirname(stateDir), OPENROUTER_SPEND_LEDGER_FILE);
+  return join(stateDir, OPENROUTER_SPEND_LEDGER_FILE);
 }
 
 export function sumOpenRouterSpendForDay(ledgerText: string, dayPrefix: string): number {

@@ -29,3 +29,18 @@ edges:
     relation: audits
     weight: 0.78
     why: "Model-routing issues require model choice, cost, redaction, and verification evidence."
+  - from: managed_provider_ledger_boundary
+    to: worker_boundary
+    relation: constrains
+    weight: 0.92
+    why: "Provider workers must complete managed-ledger migration before attempt accounting or provider calls."
+  - from: managed_provider_ledger_boundary
+    to: delivery_observability_boundary
+    relation: supplies_evidence
+    weight: 0.84
+    why: "Managed spend ledgers supply bounded provider-cost evidence to delivery observability."
+  - from: governance_pipeline
+    to: managed_provider_ledger_boundary
+    relation: enforces
+    weight: 0.9
+    why: "Governance blocks delivery when provider ledger migration loses evidence, exceeds bounds, or overwrites conflicts."

@@ -427,6 +427,21 @@ describe("Decision Mesh queries", () => {
     expect(packet.stop_conditions).toContain("missing_server_validation");
   });
 
+  it("routes managed provider ledger migration through the project persistence boundary", () => {
+    const projectMesh = loadProjectDecisionMeshFromRoot(process.cwd(), "multi-agent-autonomous-delivery-system");
+    const packet = buildProjectMeshPacket(projectMesh, {
+      project_slug: "multi-agent-autonomous-delivery-system",
+      task: "Migrate OpenRouter spend and attempt ledgers into managed state before provider calls",
+      agent: "backend_database",
+      max_nodes: 4
+    });
+
+    expect(packet.relevant_nodes).toContain("managed_provider_ledger_boundary");
+    expect(packet.rules.map((rule) => rule.id)).toContain("MAS-LEDGER-001");
+    expect(packet.required_checks).toContain("atomic_no_overwrite_publication");
+    expect(packet.stop_conditions).toContain("conflicting_ledger_overwritten");
+  });
+
   it("keeps Radeq runtime diagnostics inside the Radeq project mesh", () => {
     const projectMesh = loadProjectDecisionMeshFromRoot(process.cwd(), "radeq");
     const packet = buildProjectMeshPacket(projectMesh, {
