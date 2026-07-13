@@ -18,6 +18,16 @@ export interface ProjectRegistryOptions {
   readonly projectRoot?: string;
 }
 
+export const PROJECT_REGISTRY_ERROR_CODES = {
+  INVALID_REGISTRY: "invalid_project_registry",
+  PROJECT_NOT_FOUND: "project_not_found",
+  PROJECT_PATH_MISSING: "project_path_missing",
+  PROJECT_PATH_OUTSIDE_ROOT: "project_path_outside_root",
+  INVALID_PROJECT_ROOT: "invalid_project_root"
+} as const;
+
+export type ProjectRegistryErrorCode = typeof PROJECT_REGISTRY_ERROR_CODES[keyof typeof PROJECT_REGISTRY_ERROR_CODES];
+
 const PROJECT_REGISTRY_FILE = "projects.json";
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const MAX_PROJECTS = 64;
@@ -27,20 +37,20 @@ const MAX_REGISTRY_BYTES = 128 * 1_024;
 
 function validateProjectRegistry(document: unknown): asserts document is ProjectRegistryDocument {
   if (typeof document !== "object" || document === null) {
-    throw new Error("invalid_project_registry");
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
 
   const candidate = document as Partial<ProjectRegistryDocument>;
   if (candidate.schema_version !== "v1" ||
       !Array.isArray(candidate.projects) ||
       candidate.projects.length > MAX_PROJECTS) {
-    throw new Error("invalid_project_registry");
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
 
   const projectIds = new Set<string>();
   for (const entry of candidate.projects) {
     if (typeof entry !== "object" || entry === null) {
-      throw new Error("invalid_project_registry");
+      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
     }
 
     const project = entry as Partial<ProjectEntry>;
@@ -55,7 +65,7 @@ function validateProjectRegistry(document: unknown): asserts document is Project
         !isAbsolute(project.cwd) ||
         normalize(project.cwd) !== project.cwd ||
         typeof project.enabled !== "boolean") {
-      throw new Error("invalid_project_registry");
+      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
     }
     projectIds.add(project.project_id);
   }
@@ -66,11 +76,15 @@ export function readProjectRegistry(stateDir: string): ProjectRegistryDocument {
   if (!existsSync(path)) {
     return { schema_version: "v1", projects: [] };
   }
-  if (statSync(path).size > MAX_REGISTRY_BYTES) {
-    throw new Error("invalid_project_registry");
+  let document: unknown;
+  try {
+    if (statSync(path).size > MAX_REGISTRY_BYTES) {
+      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+    }
+    document = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
-
-  const document: unknown = JSON.parse(readFileSync(path, "utf8"));
   validateProjectRegistry(document);
   return document;
 }
@@ -81,16 +95,16 @@ export function writeProjectRegistry(stateDir: string, document: ProjectRegistry
   const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
   const serialized = `${JSON.stringify(document, null, 2)}\n`;
   if (Buffer.byteLength(serialized, "utf8") > MAX_REGISTRY_BYTES) {
-    throw new Error("invalid_project_registry");
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
   try {
     writeFileSync(temporaryPath, serialized, "utf8");
     renameSync(temporaryPath, path);
-  } catch (error) {
+  } catch {
     if (existsSync(temporaryPath)) {
       unlinkSync(temporaryPath);
     }
-    throw error;
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
 }
 
@@ -103,16 +117,27 @@ export function resolveEnabledProject(
     (entry) => entry.project_id === projectId && entry.enabled
   );
   if (project === undefined) {
-    throw new Error("project_not_found");
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.PROJECT_NOT_FOUND);
   }
   if (options.projectRoot === undefined) {
     return project;
   }
-  const realRoot = realpathSync(options.projectRoot);
-  const realCwd = realpathSync(project.cwd);
+  if (!isAbsolute(options.projectRoot) || normalize(options.projectRoot) !== options.projectRoot) {
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT);
+  }
+  const realRoot = canonicalPath(options.projectRoot, PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT);
+  const realCwd = canonicalPath(project.cwd, PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_MISSING);
   const pathFromRoot = relative(realRoot, realCwd);
   if (pathFromRoot === "" || pathFromRoot === ".." || pathFromRoot.startsWith(`..${sep}`) || isAbsolute(pathFromRoot)) {
-    throw new Error("project_path_outside_root");
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_OUTSIDE_ROOT);
   }
   return { ...project, cwd: realCwd };
+}
+
+function canonicalPath(path: string, errorCode: ProjectRegistryErrorCode): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    throw new Error(errorCode);
+  }
 }

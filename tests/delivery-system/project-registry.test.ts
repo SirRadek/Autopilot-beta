@@ -11,6 +11,10 @@ import {
 
 const stateDirs: string[] = [];
 
+function linkDirectory(target: string, path: string): void {
+  symlinkSync(target, path, process.platform === "win32" ? "junction" : "dir");
+}
+
 function createStateDir(): string {
   const stateDir = mkdtempSync(join(tmpdir(), "project-registry-"));
   stateDirs.push(stateDir);
@@ -58,12 +62,33 @@ describe("project registry", () => {
     const escapedLink = join(projectRoot, "escaped-link");
     mkdirSync(projectRoot);
     mkdirSync(outside);
-    symlinkSync(outside, escapedLink, "dir");
+    linkDirectory(outside, escapedLink);
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{
       schema_version: "v1", project_id: "escaped-link", name: "Escaped link", cwd: escapedLink, enabled: true
     }] });
 
     expect(() => resolveEnabledProject(stateDir, "escaped-link", { projectRoot })).toThrow("project_path_outside_root");
+  });
+
+  it("reports bounded errors for missing project and configured root paths", () => {
+    const stateDir = createStateDir();
+    const projectRoot = join(stateDir, "projects");
+    const missingProject = join(projectRoot, "missing");
+    mkdirSync(projectRoot);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{
+      schema_version: "v1", project_id: "missing", name: "Missing", cwd: missingProject, enabled: true
+    }] });
+
+    expect(() => resolveEnabledProject(stateDir, "missing", { projectRoot })).toThrow("project_path_missing");
+    expect(() => resolveEnabledProject(stateDir, "missing", { projectRoot: join(stateDir, "missing-root") }))
+      .toThrow("invalid_project_root");
+  });
+
+  it("converts malformed persisted JSON to a stable registry error", () => {
+    const stateDir = createStateDir();
+    writeFileSync(join(stateDir, "projects.json"), "not json");
+
+    expect(() => readProjectRegistry(stateDir)).toThrow("invalid_project_registry");
   });
 
   it("resolves only an enabled registered project", () => {

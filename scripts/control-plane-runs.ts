@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { createApprovalRecord, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { acknowledgeIncident, prepareRepairPacket, readIncidentStore, recordAutopilotIncident } from "../src/data/delivery-system/incidentStore";
-import { readProjectRegistry, resolveEnabledProject } from "../src/data/delivery-system/projectRegistry";
+import { PROJECT_REGISTRY_ERROR_CODES, readProjectRegistry, resolveEnabledProject } from "../src/data/delivery-system/projectRegistry";
 import { isRunRouteEligible } from "../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { readRunStore, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
@@ -157,6 +157,7 @@ function knownHttpError(error: unknown): HttpError | null {
   if (error instanceof HttpError) return error;
   const code = error instanceof Error ? error.message : "";
   if (["project_not_found", "run_not_found", "incident_not_found", "approval_not_found"].includes(code)) return new HttpError(404, code);
+  if (([PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY, PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_MISSING, PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_OUTSIDE_ROOT, PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT] as readonly string[]).includes(code)) return new HttpError(409, code);
   if (["run_revision_conflict", "run_route_unavailable", "invalid_run_cancellation", "approval_already_decided", "approval_not_approved", "token_input_cap_exceeded", "token_output_cap_exceeded", "token_budget_exhausted", "token_route_mismatch", "token_reservation_limit", "run_limit", "run_revision_limit"].includes(code)) return new HttpError(409, code);
   if (code === "repair_packet_too_large") return new HttpError(413, code);
   if (["invalid_run_draft", "invalid_run_approval", "invalid_incident", "run_prompt_token_cap_exceeded", "run_prompt_review_required", "run_token_budget_underestimated"].includes(code)) return new HttpError(400, code);

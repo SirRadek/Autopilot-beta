@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
 import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment } from "../../scripts/control-plane-server";
 import { readApprovalQueue, writeApprovalQueue } from "../../src/data/delivery-system/approvalQueue";
-import { recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
+import { readIncidentStore, recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
@@ -101,6 +101,48 @@ describe("control plane governed run API", () => {
     try {
       expect(() => runtime.orchestrator.prepareRun({ ...draft, provider: "codex_cli", requested_artifacts: ["text"], estimated_tokens: 20_000 }))
         .toThrow("project_path_outside_root");
+    } finally {
+      await runtime.stop();
+    }
+  });
+
+  it("rejects an out-of-root HTTP revision without mutating revisions or approvals", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-http-revision-root-"));
+    const projectRoot = join(stateDir, "projects");
+    const inside = join(projectRoot, "inside");
+    const outside = join(stateDir, "outside");
+    mkdirSync(inside, { recursive: true });
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true }] });
+    writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 60_000
+    });
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = runtime.server.address();
+      if (address === null || typeof address === "string") throw new Error("missing address");
+      const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, {
+        method: "POST",
+        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const createdResponse = await call("/runs", draft);
+      expect(createdResponse.status).toBe(201);
+      const created = await createdResponse.json() as { current: { run_id: string } };
+      const runsBefore = readRunStore(stateDir);
+      const approvalsBefore = readApprovalQueue(stateDir);
+      writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+
+      const response = await call(`/runs/${created.current.run_id}/revisions`, { ...draft, prompt: "revised", revision: 1 });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: "project_path_outside_root" });
+      expect(readRunStore(stateDir)).toEqual(runsBefore);
+      expect(readApprovalQueue(stateDir)).toEqual(approvalsBefore);
+      expect(readIncidentStore(stateDir).incidents).toEqual([]);
     } finally {
       await runtime.stop();
     }

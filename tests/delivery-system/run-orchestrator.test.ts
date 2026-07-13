@@ -11,6 +11,10 @@ import { TokenGateway } from "../../src/data/delivery-system/tokenGateway";
 
 const now = "2026-07-13T10:00:00.000Z";
 
+function linkDirectory(target: string, path: string): void {
+  symlinkSync(target, path, process.platform === "win32" ? "junction" : "dir");
+}
+
 function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnType<typeof vi.fn>; enqueue?: ReturnType<typeof vi.fn>; projectRoot?: string; projectCwd?: string } = {}) {
   const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-"));
   writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: options.projectCwd ?? "/work/alpha", enabled: true }] });
@@ -52,12 +56,12 @@ describe("governed run orchestration", () => {
     const projectLink = join(projectRoot, "active");
     mkdirSync(firstTarget, { recursive: true });
     mkdirSync(secondTarget);
-    symlinkSync(firstTarget, projectLink, "dir");
+    linkDirectory(firstTarget, projectLink);
     const context = setup({ projectRoot, projectCwd: projectLink });
     const draft = context.orchestrator.prepareRun(context.input);
     context.orchestrator.approveAndQueueRun(draft.current.run_id, draft.current.revision, "owner");
     unlinkSync(projectLink);
-    symlinkSync(secondTarget, projectLink, "dir");
+    linkDirectory(secondTarget, projectLink);
 
     await context.orchestrator.runSupervisorOnce();
 
@@ -75,12 +79,12 @@ describe("governed run orchestration", () => {
     const projectLink = join(projectRoot, "active");
     mkdirSync(firstTarget, { recursive: true });
     mkdirSync(outside);
-    symlinkSync(firstTarget, projectLink, "dir");
+    linkDirectory(firstTarget, projectLink);
     const context = setup({ projectRoot, projectCwd: projectLink });
     const draft = context.orchestrator.prepareRun(context.input);
     context.orchestrator.approveAndQueueRun(draft.current.run_id, draft.current.revision, "owner");
     unlinkSync(projectLink);
-    symlinkSync(outside, projectLink, "dir");
+    linkDirectory(outside, projectLink);
 
     await expect(context.orchestrator.runSupervisorOnce()).rejects.toThrow("project_path_outside_root");
     expect(context.dispatch).not.toHaveBeenCalled();

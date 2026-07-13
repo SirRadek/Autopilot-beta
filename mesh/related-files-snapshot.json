@@ -9,7 +9,7 @@
   "src/lib/decision-mesh/types.ts": "4b42bd54588452805bd0212a1e16eb241362aabf",
   "mcp/server.ts": "49914885599dae1669c8e74272d377edcd7ef936",
   "AGENTS.md": "f6f3c959ee35f5999dbfcdf3f07bcd3e0a0cedf7",
-  "mesh/nodes": "tree:82fc262c20bafc7a310b6d7c04faa9fb87038a010c51d80ed3f81cf32e77620e",
+  "mesh/nodes": "tree:7e2e6f4cddc887a2c6c55dd5664893eb933dbf27bd7b67a8008589a959754f41",
   "mesh/rules.yaml": "b20792700c3da2a35eb082361e2b9e941cfc0ccf",
   "mesh/edges.yaml": "0761193d1699ee0fc92ed271252f401f66273b24",
   ".codex/hooks.json": "dd37d1633446888857a3693eecbbd640e45cba8c",
@@ -52,6 +52,9 @@
   "src/data/delivery-system/cliWorker.ts": "ea989f25303c7fad3040ff5697f6237f19b95ea2",
   "src/data/delivery-system/cliWorkerCapture.ts": "fda84e79807b80078251f5309a5fcc606e8178b0",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
+  "src/data/delivery-system/projectRegistry.ts": "21f0ec327845155580e9fb34e606d82b670abffb",
+  "src/data/delivery-system/runStore.ts": "17a245384406d884b994d3d26f54fa51cb54236f",
+  "src/data/delivery-system/runOrchestrator.ts": "356388b27287dde5b2b533322addb13c09352444",
   "model-output-evals/": "tree:16c32a21cbaf4b39e18380506f54bb1eab85e02092fdc31b32573099b9a326f8",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
 }
