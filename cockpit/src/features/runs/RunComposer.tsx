@@ -48,7 +48,7 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
   const previousRouteKey = useRef(routeKey);
   const invalidate = () => { generation.current += 1; setPrepared(undefined); setMessage(""); };
   useEffect(() => { if (previousRouteKey.current !== routeKey) { previousRouteKey.current = routeKey; invalidate(); } }, [routeKey]);
-  const canPrepare = selectedProject !== undefined && prompt.trim() !== "" && estimatedTokens < 8_000 && (estimatedTokens <= 1_000 || promptReviewAcknowledged) && provider !== "" && routeFresh && selectedModel !== "" && !pendingPrepareKeys.has(boundKey);
+  const canPrepare = selectedProject !== undefined && prompt.trim() !== "" && estimatedTokens < 9_000 && (estimatedTokens <= 1_000 || promptReviewAcknowledged) && provider !== "" && routeFresh && selectedModel !== "" && !pendingPrepareKeys.has(boundKey);
   const validPrepared = prepared?.boundKey === boundKey && prepared.routeKey === routeKey ? prepared.record : undefined;
 
   async function prepare() {
@@ -79,7 +79,7 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
     {!routeFresh ? <p role="alert">Data poskytovatele nejsou aktuální. Příprava běhu je zakázána.</p> : null}
     <label>Prompt<textarea aria-label="Prompt" value={prompt} onChange={(event) => { setPrompt(event.target.value); invalidate(); }} /></label>
     {estimatedTokens > 1_000 ? <label><input type="checkbox" aria-label="Potvrdit ruční kontrolu promptu" checked={promptReviewAcknowledged} onChange={(event) => { setPromptReviewAcknowledged(event.target.checked); invalidate(); }} /> Potvrzuji ruční kontrolu promptu nad 1 000 tokenů</label> : null}
-    {estimatedTokens >= 8_000 ? <p role="alert">Prompt překračuje pevný limit modelového kontextu.</p> : null}
+    {estimatedTokens >= 9_000 ? <p role="alert">Prompt překračuje pevný limit modelového kontextu.</p> : null}
     <label><input type="checkbox" aria-label="Vizuální výstup" checked={visual} onChange={(event) => { setVisual(event.target.checked); invalidate(); }} /> Vizuální výstup</label>
     <p>Odhad tokenů: {estimatedTokens.toLocaleString()}</p>
     {quota ? <dl><dt>5 hodin</dt><dd>{formatQuotaWindow(quota.five_hour)}</dd><dt>Týden</dt><dd>{formatQuotaWindow(quota.weekly)}</dd><dt>Útrata API</dt><dd>{quota.api_spend === null ? "Nedostupná" : `${quota.api_spend.toLocaleString()} ${quota.currency ?? ""}`.trim()}</dd></dl> : null}
@@ -90,5 +90,5 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
   </section>;
 }
 
-function estimateTokens(prompt: string): number { return prompt.trim() === "" ? 0 : Math.ceil(prompt.length / 4); }
-function sameInput(draft: RunRecord["current"], input: RunDraftInput): boolean { const { prompt_review_acknowledged: _acknowledged, ...persistedInput } = input; return JSON.stringify({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts }) === JSON.stringify(persistedInput); }
+function estimateTokens(prompt: string): number { return prompt.trim() === "" ? 0 : new TextEncoder().encode(prompt).length; }
+function sameInput(draft: RunRecord["current"], input: RunDraftInput): boolean { return JSON.stringify({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, prompt_review_acknowledged: draft.prompt_review_acknowledged === true }) === JSON.stringify({ ...input, prompt_review_acknowledged: input.prompt_review_acknowledged === true }); }

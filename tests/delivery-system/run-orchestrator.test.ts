@@ -51,6 +51,22 @@ describe("governed run orchestration", () => {
     expect(supervisor.enqueue).not.toHaveBeenCalled();
   });
 
+  it("rejects Unicode prompts that exceed the conservative handoff bound outside HTTP", () => {
+    const { orchestrator, input } = setup();
+    for (const prompt of ["界".repeat(3_001), "😀".repeat(2_251), "e\u0301".repeat(4_501)]) {
+      expect(() => orchestrator.prepareRun({ ...input, prompt, prompt_review_acknowledged: true })).toThrow("run_prompt_token_cap_exceeded");
+    }
+  });
+
+  it("persists review acknowledgement immutably and requires it above the review bound", () => {
+    const { orchestrator, input, stateDir } = setup();
+    const prompt = "界".repeat(334);
+    expect(() => orchestrator.prepareRun({ ...input, prompt })).toThrow("run_prompt_review_required");
+    const draft = orchestrator.prepareRun({ ...input, prompt, prompt_review_acknowledged: true });
+    expect(draft.current.prompt_review_acknowledged).toBe(true);
+    expect(readRunStore(stateDir).runs[0]?.revisions[0]?.prompt_review_acknowledged).toBe(true);
+  });
+
   it("binds approval, reservation and handoff to the same route", () => {
     const { orchestrator, input, tokenGateway, supervisor } = setup();
     const draft = orchestrator.prepareRun(input);
@@ -96,7 +112,8 @@ describe("governed run orchestration", () => {
 
   it("fails a nonzero worker result while settling its actual usage", async () => {
     const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "password=hunter2 authorization: Bearer bearer-secret api_key=key-secret", exitCode: 7, errorReason: "provider_failed", lockStatus: "failed" as const, model: "gpt-5" }));
-    const { orchestrator, input, tokenGateway, stateDir } = setup({ dispatch });
+    const { orchestrator, input, tokenGateway, stateDir, supervisor } = setup({ dispatch });
+    supervisor.fail.mockReturnValue({ status: "failed" });
     const draft = orchestrator.prepareRun(input);
     orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
     const result = await orchestrator.runSupervisorOnce();
@@ -106,6 +123,37 @@ describe("governed run orchestration", () => {
     expect(JSON.stringify(readRunStore(stateDir))).not.toContain("bearer-secret");
     expect(JSON.stringify(readRunStore(stateDir))).not.toContain("key-secret");
     expect(readRunStore(stateDir).runs[0]?.provider_result).toMatchObject({ exit_code: 7, error_reason: "provider_failed" });
+  });
+
+  it("retries a failed worker result on the same route before succeeding", async () => {
+    const dispatch = vi.fn()
+      .mockResolvedValueOnce({ refused: false, workerRunId: "worker-failed", rawOutput: "failed output", exitCode: 1, errorReason: "retryable", lockStatus: "acquired_supervisor_spawn", model: "gpt-5" })
+      .mockResolvedValueOnce({ refused: false, workerRunId: "worker-ok", rawOutput: "success", exitCode: 0, errorReason: null, lockStatus: "acquired_supervisor_spawn", model: "gpt-5" });
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    const tokenGateway = new TokenGateway({ stateDir });
+    const settle = vi.spyOn(tokenGateway, "settle");
+    const orchestrator = createRunOrchestrator({ stateDir, tokenGateway, supervisor: new SupervisorQueue({ stateDir, baseRetryDelayMs: 0, maxRetryDelayMs: 0 }), dispatch: dispatch as any, now: () => now, isRouteAvailable: () => true });
+    const draft = orchestrator.prepareRun({ project_id: "alpha", prompt: "build it", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    expect(await orchestrator.runSupervisorOnce()).toBeNull();
+    await orchestrator.runSupervisorOnce();
+    expect(dispatch).toHaveBeenCalledTimes(2);
+    expect(dispatch.mock.calls[0]?.[0]).toEqual(dispatch.mock.calls[1]?.[0]);
+    expect(settle).toHaveBeenCalledWith(expect.anything(), { inputTokens: 4, outputTokens: 6 });
+    expect(readRunStore(stateDir).runs[0]?.reservation_status).toBe("settled");
+  });
+
+  it("terminalizes worker failure only after retry exhaustion", async () => {
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "failed", exitCode: 1, errorReason: "failed", lockStatus: "failed" as const, model: "gpt-5" }));
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
+    const orchestrator = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir, baseRetryDelayMs: 0, maxRetryDelayMs: 0 }), dispatch: dispatch as any, now: () => now, isRouteAvailable: () => true, supervisorMaxAttempts: 2 });
+    const draft = orchestrator.prepareRun({ project_id: "alpha", prompt: "fail", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, requested_artifacts: ["text"] });
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    expect(await orchestrator.runSupervisorOnce()).toBeNull();
+    expect((await orchestrator.runSupervisorOnce())?.status).toBe("failed");
+    expect(dispatch).toHaveBeenCalledTimes(2);
   });
 
   it("keeps a running cancellation durable until dispatch finishes", async () => {

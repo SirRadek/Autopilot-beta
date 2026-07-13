@@ -103,7 +103,7 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
       correlation_ids: { run_id: runId, session_id: reservation.sessionId!, handoff_id: reservation.handoffId!, worker_run_id: result.worker_run_id!, supervisor_task_id: task.task_id, reservation_id: reservation.reservationId }
     };
   } finally {
-    runtime.stop();
+    await runtime.stop();
     rmSync(stateDir, { recursive: true, force: true });
   }
 }

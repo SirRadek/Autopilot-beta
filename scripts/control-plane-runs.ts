@@ -10,6 +10,7 @@ import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrat
 import { readRunStore, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { estimateTokenCount, TokenGateway } from "../src/data/delivery-system/tokenGateway";
+import { assertRunPromptPolicy } from "../src/data/delivery-system/runPromptPolicy";
 import { dispatchHandoff } from "../src/governed-core/dispatch";
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -94,7 +95,7 @@ export function reviseRunWithApproval(stateDir: string, runId: string, expectedR
   else draft = revise(stateDir, runId, expectedRevision, input, new Date().toISOString());
   const queue = readApprovalQueue(stateDir);
   if (!queue.records.some((record) => record.run_id === runId && record.revision === draft.revision)) {
-    const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens });
+    const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, promptReviewAcknowledged: draft.prompt_review_acknowledged });
     writeApprovals(stateDir, { ...queue, records: [...queue.records, approval] });
   }
   return readRunStore(stateDir).runs.find((run) => run.current.run_id === runId)!;
@@ -118,9 +119,9 @@ function draftInput(body: Record<string, unknown>): RunDraftInput {
   if (typeof body.project_id !== "string" || typeof body.prompt !== "string" || !PROVIDERS.has(body.provider as RunProvider) ||
       body.model !== null && typeof body.model !== "string" || !Array.isArray(body.requested_artifacts)) throw new HttpError(400, "invalid_run_draft");
   const estimated = body.estimated_tokens === undefined ? estimateTokenCount(body.prompt) : body.estimated_tokens;
-  const conservativeEstimate = estimateTokenCount(body.prompt);
-  if (!Number.isSafeInteger(estimated) || conservativeEstimate >= 8_000 || conservativeEstimate > 1_000 && body.prompt_review_acknowledged !== true) throw new HttpError(400, conservativeEstimate >= 8_000 ? "run_prompt_token_cap_exceeded" : conservativeEstimate > 1_000 ? "run_prompt_review_required" : "invalid_run_draft");
-  return { project_id: body.project_id, prompt: body.prompt, provider: body.provider as RunProvider, model: body.model, estimated_tokens: estimated as number, requested_artifacts: body.requested_artifacts as RunDraftInput["requested_artifacts"] };
+  try { assertRunPromptPolicy(body.prompt, body.prompt_review_acknowledged === true); } catch (error) { throw new HttpError(400, error instanceof Error ? error.message : "invalid_run_draft"); }
+  if (!Number.isSafeInteger(estimated)) throw new HttpError(400, "invalid_run_draft");
+  return { project_id: body.project_id, prompt: body.prompt, provider: body.provider as RunProvider, model: body.model, estimated_tokens: estimated as number, requested_artifacts: body.requested_artifacts as RunDraftInput["requested_artifacts"], prompt_review_acknowledged: body.prompt_review_acknowledged === true };
 }
 
 function repairInput(body: Record<string, unknown>) {
@@ -166,6 +167,6 @@ function routeAvailable(stateDir: string, provider: string, model: string | null
   return isRunRouteEligible(stateDir, provider, model, new Date().toISOString());
 }
 function sameDraftInput(draft: RunDraft, input: RunDraftInput): boolean {
-  return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts }, input);
+  return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, prompt_review_acknowledged: draft.prompt_review_acknowledged }, { ...input, prompt_review_acknowledged: input.prompt_review_acknowledged === true });
 }
 function json(response: ServerResponse, value: unknown, status = 200): true { response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); response.end(JSON.stringify(value, null, 2)); return true; }

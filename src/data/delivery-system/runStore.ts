@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { resolveEnabledProject } from "./projectRegistry";
 import type { CliWorkerResult } from "./cliWorker";
+import { assertRunPromptPolicy } from "./runPromptPolicy";
 
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
@@ -19,10 +20,11 @@ export interface RunDraft {
   readonly model: string | null;
   readonly estimated_tokens: number;
   readonly requested_artifacts: readonly RunArtifactType[];
+  readonly prompt_review_acknowledged: boolean;
   readonly created_at: string;
 }
 
-export type RunDraftInput = Omit<RunDraft, "run_id" | "revision" | "created_at">;
+export type RunDraftInput = Omit<RunDraft, "run_id" | "revision" | "created_at" | "prompt_review_acknowledged"> & { readonly prompt_review_acknowledged?: boolean };
 
 export interface RunArtifact {
   readonly artifact_id: string;
@@ -72,6 +74,8 @@ export interface RunRecord {
   readonly cancellation_requested: boolean;
   readonly queue_compensation_requested: boolean;
   readonly dispatch_failure: string | null;
+  readonly retry_input_tokens: number;
+  readonly retry_output_tokens: number;
   readonly artifacts: readonly RunArtifact[];
   readonly updated_at: string;
 }
@@ -112,10 +116,11 @@ function validTimestamp(value: unknown): value is string {
 }
 
 function validDraftInput(input: RunDraftInput): boolean {
+  try { assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true); } catch { return false; }
   return typeof input.project_id === "string" && PROJECT_ID_PATTERN.test(input.project_id) &&
     typeof input.prompt === "string" && input.prompt.length <= MAX_PROMPT &&
     PROVIDERS.has(input.provider) && (input.model === null || validString(input.model, MAX_MODEL, true)) &&
-    Number.isSafeInteger(input.estimated_tokens) && input.estimated_tokens >= 0 &&
+    typeof input.prompt_review_acknowledged === "boolean" && Number.isSafeInteger(input.estimated_tokens) && input.estimated_tokens >= 0 &&
     Array.isArray(input.requested_artifacts) && input.requested_artifacts.length <= ARTIFACT_TYPES.size &&
     new Set(input.requested_artifacts).size === input.requested_artifacts.length &&
     input.requested_artifacts.every((type) => ARTIFACT_TYPES.has(type));
@@ -179,6 +184,7 @@ function validate(document: unknown): asserts document is RunStoreDocument {
       typeof value.cancellation_requested !== "boolean" ||
       typeof value.queue_compensation_requested !== "boolean" ||
       !validNullableString(value.dispatch_failure, MAX_TERMINAL_REASON) ||
+      !Number.isSafeInteger(value.retry_input_tokens) || value.retry_input_tokens < 0 || !Number.isSafeInteger(value.retry_output_tokens) || value.retry_output_tokens < 0 ||
       !value.artifacts.every((artifact) => validString(artifact.artifact_id, MAX_ID) && !artifactIds.has(artifact.artifact_id) &&
         artifactIds.add(artifact.artifact_id) && ARTIFACT_TYPES.has(artifact.type) && typeof artifact.preview === "string" &&
         artifact.preview.length <= MAX_PREVIEW && validTimestamp(artifact.created_at))) {
@@ -199,8 +205,13 @@ export function readRunStore(stateDir: string): RunStoreDocument {
     throw new Error("invalid_run_store");
   }
   if (typeof document === "object" && document !== null && Array.isArray((document as { runs?: unknown }).runs)) {
-    document = { ...(document as object), runs: (document as { runs: unknown[] }).runs.map((run) =>
-      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, ...run, ...((run as RunRecord).provider_result === null || (run as RunRecord).provider_result === undefined ? {} : { provider_result: { exit_code: null, error_reason: null, lock_status: null, ...(run as RunRecord).provider_result } }) } : run) };
+    document = { ...(document as object), runs: (document as { runs: unknown[] }).runs.map((run) => {
+      if (typeof run !== "object" || run === null) return run;
+      const record = run as RunRecord;
+      const revisions = Array.isArray(record.revisions) ? record.revisions.map((revision) => ({ prompt_review_acknowledged: false, ...(revision as unknown as Record<string, unknown>) })) : record.revisions;
+      const current = record.current === undefined ? record.current : { prompt_review_acknowledged: false, ...(record.current as unknown as Record<string, unknown>) };
+      return { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, ...(record as unknown as Record<string, unknown>), current, revisions, ...(record.provider_result === null || record.provider_result === undefined ? {} : { provider_result: { exit_code: null, error_reason: null, lock_status: null, ...(record.provider_result as unknown as Record<string, unknown>) } }) };
+    }) };
   }
   validate(document);
   return document;
@@ -235,11 +246,13 @@ function find(stateDir: string, runId: string): RunRecord {
 
 export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt: string): RunDraft {
   resolveEnabledProject(stateDir, input.project_id);
-  if (!validDraftInput(input) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
+  assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
+  const normalized = { ...input, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
-  const draft: RunDraft = { ...input, requested_artifacts: [...input.requested_artifacts], run_id: randomUUID(), revision: 1, created_at: createdAt };
-  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, artifacts: [], updated_at: createdAt };
+  const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: randomUUID(), revision: 1, created_at: createdAt };
+  const record: RunRecord = { schema_version: "v1", current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: createdAt };
   write(stateDir, { ...document, runs: [...document.runs, record] });
   return draft;
 }
@@ -249,8 +262,10 @@ export function reviseRunDraft(stateDir: string, runId: string, revision: number
   if (record.status !== "draft" || record.current.revision !== revision) throw new Error("run_revision_conflict");
   if (record.revisions.length >= MAX_REVISIONS) throw new Error("run_revision_limit");
   resolveEnabledProject(stateDir, input.project_id);
-  if (!validDraftInput(input) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
-  const draft: RunDraft = { ...input, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: revision + 1, created_at: createdAt };
+  assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
+  const normalized = { ...input, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
+  const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: revision + 1, created_at: createdAt };
   replace(stateDir, { ...record, current: draft, revisions: [...record.revisions, draft], updated_at: createdAt });
   return draft;
 }
@@ -296,6 +311,12 @@ export function recordRunProviderResult(stateDir: string, runId: string, result:
   if (!["queued", "running"].includes(record.status) || !validProviderResult(result) || !validTimestamp(updatedAt)) throw new Error("invalid_run_provider_result");
   if (record.provider_result !== null) return record;
   return replace(stateDir, { ...record, provider_result: result, worker_run_id: result.worker_run_id, updated_at: updatedAt });
+}
+
+export function clearRunProviderResultForRetry(stateDir: string, runId: string, inputTokens: number, outputTokens: number, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  if (record.provider_result === null || !Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(outputTokens) || outputTokens < 0 || !validTimestamp(updatedAt)) throw new Error("invalid_run_provider_result");
+  return replace(stateDir, { ...record, provider_result: null, worker_run_id: null, retry_input_tokens: record.retry_input_tokens + inputTokens, retry_output_tokens: record.retry_output_tokens + outputTokens, updated_at: updatedAt });
 }
 
 export function markRunReservationTerminal(stateDir: string, runId: string, status: "settled" | "released", updatedAt: string): RunRecord {

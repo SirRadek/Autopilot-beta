@@ -60,3 +60,44 @@ feature path and temporary smoke/browser state. No provider credentials were pre
 One prior host-only all-in-one browser run had a transient stale-provider fixture timing miss; its
 immediate host rerun passed 7/7, and the authoritative isolated VM run also passed 7/7. No remaining
 implementation or verification concern is known.
+
+## Second final-review integration
+
+The follow-up review replaced the unsafe character/4 estimate with a tokenizer-independent UTF-8
+byte upper bound. Text tokenizers with byte fallback cannot emit more input tokens than encoded
+bytes, so the domain rejects prompts at 9,000 bytes and guarantees fewer than 10,000 model-visible
+prompt tokens for ASCII, CJK, emoji, combining sequences, and mixed Unicode. The policy is enforced
+in run creation, revision creation, loaded-store validation, and immediately before handoff. The
+1,000-byte manual-review acknowledgement is persisted on every immutable `RunDraft`, copied into
+its approval record, and checked again when approval is bound.
+
+Runtime startup now calls `SupervisorQueue.recover()` before polling. Cancellation distinguishes a
+currently running in-memory task from a recovered persisted orphan: active work drains and settles,
+while a recovered queued/failed task cancels and terminalizes instead of looping. Worker-returned
+failures now honor `SupervisorQueue.fail()`: a queued retry clears the transient provider result,
+keeps the reservation active, persists accumulated attempt usage, and dispatches the exact same
+handoff again; only exhaustion settles cumulative usage and finalizes failed. Runtime shutdown is
+asynchronous, tracks the active poll, drains it up to a bounded deadline, and only then closes the
+server.
+
+Second-wave TDD regressions cover CJK, emoji, combining Unicode, direct non-HTTP bypass, immutable
+acknowledgement across revisions, recovered running cancellation, failure-then-success with two
+dispatches on one route, retry exhaustion, cumulative settlement, and in-flight shutdown drain.
+
+Fresh host Node 24 verification passed: typecheck; 85 backend files / 710 tests; 13 cockpit files /
+78 tests; production build / 42 modules; browser QA 7/7; and deterministic dry-run.
+
+Fresh isolated VM verification at `/home/radek/autopilot-beta-phase8-final` passed the same matrix:
+
+- Node `v24.18.0`, `.env` absent.
+- Backend: 85 files, 710 tests passed.
+- Cockpit: 13 files, 78 tests passed.
+- Build: 42 modules transformed.
+- Browser QA: 7/7 passed in 4.7 seconds.
+- Dry-run: `provider_invoked: false`, one reservation and one `settled` terminal event.
+- Run `bf48c7b6-dc1e-457e-acb6-51ebbfff0d78`; task
+  `run-task-d76473fa-b23f-495f-8eb5-5a0ac16ff108`; reservation
+  `tgr-744f8b4f-28b9-494b-9d4a-280bd86a7a17`.
+- `--live`: rejected with `live_execution_forbidden`, exit 1.
+
+The live VM checkout, service, persistent state, credentials, and providers were not touched.

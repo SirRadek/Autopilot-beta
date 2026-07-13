@@ -130,6 +130,41 @@ describe("control plane governed run API", () => {
     runtime.stop();
   });
 
+  it("recovers an orphan running cancellation on runtime restart", async () => {
+    const api = await governedApi();
+    const supervisor = new SupervisorQueue({ stateDir: api.stateDir });
+    const gateway = new (await import("../../src/data/delivery-system/tokenGateway")).TokenGateway({ stateDir: api.stateDir });
+    const first = (await import("../../src/data/delivery-system/runOrchestrator")).createRunOrchestrator({ stateDir: api.stateDir, tokenGateway: gateway, supervisor, dispatch: async () => new Promise(() => {}), isRouteAvailable: () => true });
+    const draft = first.prepareRun({ project_id: "autopilot-beta", prompt: "cancel after crash", provider: "codex_cli", model: "model-a", estimated_tokens: 10, requested_artifacts: ["text"] });
+    first.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    supervisor.claim(new Date().toISOString());
+    const { requestRunCancellation, transitionRun } = await import("../../src/data/delivery-system/runStore");
+    transitionRun(api.stateDir, draft.current.run_id, "running", new Date().toISOString());
+    requestRunCancellation(api.stateDir, draft.current.run_id, new Date().toISOString());
+    const runtime = createControlPlaneRuntime(api.stateDir, "secret", { scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, dispatch: async () => { throw new Error("must_not_dispatch_cancelled_orphan"); } });
+    await vi.waitFor(() => expect(readRunStore(api.stateDir).runs.find((run) => run.current.run_id === draft.current.run_id)?.status).toBe("cancelled"));
+    await runtime.stop();
+  });
+
+  it("drains an in-flight supervisor poll before stop resolves", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-drain-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+    writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    let finish!: () => void;
+    const runtime = createControlPlaneRuntime(stateDir, "secret", { scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
+    const orchestrator = (runtime as any).orchestrator;
+    const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 10, requested_artifacts: ["text"] });
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    await vi.waitFor(() => expect(typeof finish).toBe("function"));
+    let stopped = false;
+    const stopping = runtime.stop().then(() => { stopped = true; });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    finish();
+    await stopping;
+    expect(readRunStore(stateDir).runs[0]?.status).toBe("completed");
+  });
+
   it("keeps authentication and cookie CSRF protection on mutations", async () => {
     const api = await governedApi();
     expect((await fetch(`${api.base}/projects`)).status).toBe(401);

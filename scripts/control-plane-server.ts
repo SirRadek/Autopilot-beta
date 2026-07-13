@@ -28,7 +28,8 @@ export interface ControlPlaneScheduler {
 export interface ControlPlaneRuntime {
   readonly server: ReturnType<typeof createControlPlaneServer>;
   readonly scheduler: ControlPlaneScheduler;
-  readonly stop: () => void;
+  readonly orchestrator: ReturnType<typeof createRunOrchestrator>;
+  readonly stop: () => Promise<void>;
 }
 
 export interface ControlPlaneRuntimeOptions {
@@ -40,6 +41,7 @@ export interface ControlPlaneRuntimeOptions {
   readonly secureCookies?: boolean;
   readonly dispatch?: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
   readonly supervisorPollMs?: number;
+  readonly shutdownDrainMs?: number;
 }
 
 export function providerUsageCommandsFromEnvironment(
@@ -262,30 +264,36 @@ export function createControlPlaneRuntime(
     }),
     store: { stateDir }
   });
+  const supervisor = new SupervisorQueue({ stateDir });
+  supervisor.recover();
   const orchestrator = createRunOrchestrator({
     stateDir,
     tokenGateway: new TokenGateway({ stateDir }),
-    supervisor: new SupervisorQueue({ stateDir }),
+    supervisor,
     dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
   });
   const server = createControlPlaneServer(stateDir, authToken, { ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }), runOrchestrator: orchestrator });
   scheduler.start();
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let activePoll: Promise<void> | null = null;
   const poll = async () => {
     if (stopped) return;
     try { await orchestrator.runSupervisorOnce(); } catch (error) { process.stderr.write(`control-plane supervisor: ${error instanceof Error ? error.message : "dispatch_failed"}\n`); }
-    if (!stopped) timer = setTimeout(poll, options.supervisorPollMs ?? 250);
+    if (!stopped) timer = setTimeout(startPoll, options.supervisorPollMs ?? 250);
   };
-  void poll();
-  const stop = () => {
+  const startPoll = () => { activePoll = poll().finally(() => { activePoll = null; }); };
+  startPoll();
+  const stop = async () => {
     if (stopped) return;
     stopped = true;
     if (timer !== undefined) clearTimeout(timer);
     scheduler.stop();
-    server.close();
+    const drain = activePoll;
+    if (drain !== null) await Promise.race([drain, new Promise<void>((resolve) => setTimeout(resolve, options.shutdownDrainMs ?? 5_000))]);
+    if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
   };
-  return { server, scheduler, stop };
+  return { server, scheduler, orchestrator, stop };
 }
 
 async function runProviderCommand(input: { readonly command: string; readonly args: readonly string[]; readonly signal: AbortSignal }): Promise<{ readonly stdout: string; readonly stderr?: string; readonly exitCode?: number | null }> {
@@ -306,7 +314,7 @@ if (process.argv[1]?.endsWith("control-plane-server.ts")) {
   if (!stateDir || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("usage: control-plane-server STATE_DIR [PORT]");
   const providerCommands = providerUsageCommandsFromEnvironment(process.env);
   const runtime = createControlPlaneRuntime(stateDir, authToken, { secureCookies, providerCommands });
-  const shutdown = () => runtime.stop();
+  const shutdown = () => { void runtime.stop(); };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
   runtime.server.listen(port, "127.0.0.1", () => process.stdout.write(`control-plane listening on http://127.0.0.1:${port}\n`));

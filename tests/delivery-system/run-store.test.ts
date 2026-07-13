@@ -80,12 +80,19 @@ describe("run store", () => {
 
   it("bounds prompts, revisions, and artifact previews", () => {
     const dir = stateDir();
-    expect(() => createRunDraft(dir, { ...input, prompt: "x".repeat(32_001) }, "2026-07-12T10:00:00.000Z")).toThrow("invalid_run_draft");
+    expect(() => createRunDraft(dir, { ...input, prompt: "x".repeat(32_001) }, "2026-07-12T10:00:00.000Z")).toThrow("run_prompt_token_cap_exceeded");
     const draft = createRunDraft(dir, input, "2026-07-12T10:00:00.000Z");
     expect(() => appendRunArtifact(dir, draft.run_id, { artifact_id: "a", type: "text", preview: "x".repeat(32_001) }, "2026-07-12T10:01:00.000Z")).toThrow("invalid_run_artifact");
     let current = draft;
     for (let revision = 2; revision <= 20; revision += 1) current = reviseRunDraft(dir, current.run_id, current.revision, { ...input, prompt: `revision ${revision}` }, `2026-07-12T10:${String(revision).padStart(2, "0")}:00.000Z`);
     expect(() => reviseRunDraft(dir, current.run_id, current.revision, input, "2026-07-12T11:00:00.000Z")).toThrow("run_revision_limit");
+  });
+
+  it("keeps prompt review acknowledgement immutable per revision", () => {
+    const dir = stateDir();
+    const first = createRunDraft(dir, { ...input, prompt: "x".repeat(1_001), prompt_review_acknowledged: true }, "2026-07-12T10:00:00.000Z");
+    reviseRunDraft(dir, first.run_id, 1, { ...input, prompt: "small", prompt_review_acknowledged: false }, "2026-07-12T10:01:00.000Z");
+    expect(readRunStore(dir).runs[0]?.revisions.map((revision) => revision.prompt_review_acknowledged)).toEqual([true, false]);
   });
 
   it("persists artifacts across reloads", () => {
