@@ -1,6 +1,8 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { redactTelemetryText } from "./telemetryRedaction";
+
 const SOURCES = [
   ["dispatch-decisions.jsonl", "dispatch"],
   ["cli-call-telemetry.jsonl", "cli_call"],
@@ -65,12 +67,9 @@ interface WasteSignal {
 }
 
 const safeString = (value: unknown): string | null => typeof value === "string" && value.length > 0
-  ? redact(value.slice(0, 200))
+  ? redactTelemetryText(value.slice(0, 200), 200)
   : null;
 const safeNumber = (value: unknown): number => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
-const redact = (value: string): string => value
-  .replace(/\b(?:sk|or|ghp|github_pat|xoxb)-[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]")
-  .replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]");
 
 export function buildObservability(stateDir: string, options: ObservabilityOptions = {}): ObservabilityResult {
   const maxBytes = boundedInteger(options.max_bytes_per_file, 256 * 1024, 1_024, 1024 * 1024);

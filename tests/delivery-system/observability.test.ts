@@ -59,4 +59,12 @@ describe("bounded observability", () => {
     writeJsonl(parentDir, "openrouter-api-spend.jsonl", [{ recorded_at: "2026-07-12T10:00:00Z", model: "m", cost_usd: 0.5 }]);
     expect(buildObservability(stateDir).summary.openrouter_cost_usd).toBe(0.5);
   });
+
+  it("preserves the existing pre-redaction observability field bound", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "observability-redaction-bound-"));
+    const detail = `Authorization: Bearer ${"s".repeat(40)} ${"x".repeat(200)}`;
+    writeJsonl(stateDir, "dispatch-decisions.jsonl", [{ refusal_reason: detail }]);
+
+    expect(buildObservability(stateDir).timeline[0]?.detail).toBe(`Authorization: Bearer [REDACTED] ${"x".repeat(137)}`);
+  });
 });
