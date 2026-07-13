@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createProviderQuotaScheduler,
@@ -169,6 +169,42 @@ describe("provider quota scheduler", () => {
     await flush();
     expect(store.document.snapshots[0]?.error_code).toBe("provider_unavailable");
     expect(store.events).toHaveLength(1);
+  });
+
+  it("reports only the first provider failure until a success resets the transition", async () => {
+    const clock = new FakeClock();
+    const store = persistence();
+    const onPollFailure = vi.fn();
+    let attempt = 0;
+    const scheduler = createProviderQuotaScheduler({
+      sessions: [session("codex_cli")],
+      adapters: {
+        codex_cli: {
+          provider: "codex_cli",
+          fetchSnapshot: async ({ now }) => {
+            attempt += 1;
+            if (attempt === 3) return snapshot("codex_cli", now);
+            throw new Error("provider_unavailable injected-secret");
+          }
+        }
+      },
+      clock,
+      store,
+      onPollFailure
+    });
+
+    scheduler.start();
+    await flush();
+    await clock.advance(60_000);
+    await clock.advance(120_000);
+
+    expect(onPollFailure).toHaveBeenCalledTimes(1);
+
+    await clock.advance(300_000);
+
+    expect(onPollFailure).toHaveBeenCalledTimes(2);
+    expect(onPollFailure).toHaveBeenCalledWith({ provider: "codex_cli", error_code: "provider_unavailable" });
+    expect(JSON.stringify(onPollFailure.mock.calls)).not.toContain("injected-secret");
   });
 
   it("times out a hung adapter and records a bounded timeout", async () => {

@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,6 +9,7 @@ import {
   readIncidentStore,
   recordAutopilotIncident
 } from "../../src/data/delivery-system/incidentStore";
+import { recordOperationalIncident } from "../../src/data/delivery-system/operationalIncidents";
 
 const incidentInput = (summary = "Authorization: Bearer secret-value") => ({
   severity: "high" as const,
@@ -21,6 +22,52 @@ const incidentInput = (summary = "Authorization: Bearer secret-value") => ({
 });
 
 describe("Autopilot incident store", () => {
+  it("records only fixed operational stage, summary, and impact codes", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "operational-incident-"));
+
+    const incident = recordOperationalIncident(stateDir, {
+      stage: "control_plane_workers",
+      correlation_ids: { request_id: "request-1" }
+    });
+
+    expect(incident).toMatchObject({
+      stage: "control_plane_workers",
+      summary: "operational_failure:control_plane_workers",
+      impact: "operation_incomplete:control_plane_workers",
+      correlation_ids: { request_id: "request-1" }
+    });
+  });
+
+  it("spools a fixed unique incident outside protected state when the lock times out", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "operational-incident-lock-"));
+    const lockDir = join(stateDir, ".state-maintenance.lock");
+    mkdirSync(lockDir, { mode: 0o700 });
+    writeFileSync(join(lockDir, "owner.json"), `${JSON.stringify({
+      version: 1,
+      token: "active-owner",
+      pid: process.pid,
+      hostname: hostname(),
+      acquired_at: new Date().toISOString()
+    })}\n`);
+
+    const incident = recordOperationalIncident(stateDir, {
+      stage: "state_maintenance",
+      correlation_ids: {
+        request_id: "request-locked",
+        unexpected: "password=injected-secret"
+      }
+    });
+    const spoolDir = join(dirname(stateDir), `.${basename(stateDir)}-incident-spool`);
+    const spoolFiles = readdirSync(spoolDir);
+
+    expect(readIncidentStore(stateDir).incidents).toEqual([]);
+    expect(spoolFiles).toEqual([`${incident.incident_id}.json`]);
+    expect(JSON.parse(readFileSync(join(spoolDir, spoolFiles[0]!), "utf8"))).toEqual(incident);
+    expect(JSON.stringify(incident)).not.toContain("injected-secret");
+    expect(incident.correlation_ids).toEqual({ request_id: "request-locked" });
+    rmSync(lockDir, { recursive: true, force: true });
+    rmSync(spoolDir, { recursive: true, force: true });
+  }, 10_000);
   it("exports a redacted read-only packet and supports acknowledgement", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "incident-store-"));
     const incident = recordAutopilotIncident(stateDir, incidentInput());

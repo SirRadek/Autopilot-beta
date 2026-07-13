@@ -3,7 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { isDeepStrictEqual } from "node:util";
 
 import { createApprovalRecord, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
-import { acknowledgeIncident, prepareRepairPacket, readIncidentStore, recordAutopilotIncident } from "../src/data/delivery-system/incidentStore";
+import { acknowledgeIncident, prepareRepairPacket, readIncidentStore } from "../src/data/delivery-system/incidentStore";
+import { recordOperationalIncident } from "../src/data/delivery-system/operationalIncidents";
 import { isProjectConfigurationError, readProjectRegistry, resolveEnabledProject } from "../src/data/delivery-system/projectRegistry";
 import { isRunRouteEligible } from "../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
@@ -30,7 +31,14 @@ class HttpError extends Error {
   constructor(readonly status: number, readonly code: string) { super(code); }
 }
 
-export async function handleControlPlaneRunRoute(request: IncomingMessage, response: ServerResponse, stateDir: string, suppliedOrchestrator?: ReturnType<typeof createRunOrchestrator>, projectRoot?: string): Promise<boolean> {
+export async function handleControlPlaneRunRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  stateDir: string,
+  suppliedOrchestrator?: ReturnType<typeof createRunOrchestrator>,
+  projectRoot?: string,
+  requestId = randomUUID()
+): Promise<boolean> {
   const method = request.method ?? "";
   const path = new URL(request.url ?? "/", "http://control-plane.local").pathname;
   const match = matchRoute(method, path);
@@ -75,9 +83,12 @@ export async function handleControlPlaneRunRoute(request: IncomingMessage, respo
     if (known !== null) return json(response, { error: known.code }, known.status);
     let incidentId: string = randomUUID();
     try {
-      incidentId = recordAutopilotIncident(stateDir, { severity: "high", stage: "control_plane_http", summary: "Unexpected control plane route failure", correlation_ids: {}, impact: "The requested control plane operation did not complete", retry_count: 0, event_refs: [] }).incident_id;
+      incidentId = recordOperationalIncident(stateDir, {
+        stage: "control_plane_runs",
+        correlation_ids: { request_id: requestId }
+      }).incident_id;
     } catch { /* the response must remain stable when incident persistence is unavailable */ }
-    return json(response, { error: "autopilot_internal_error", incident_id: incidentId }, 500);
+    return json(response, { error: "autopilot_internal_error", incident_id: incidentId, request_id: requestId }, 500);
   }
 }
 

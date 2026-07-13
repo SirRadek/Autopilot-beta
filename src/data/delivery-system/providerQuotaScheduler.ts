@@ -1,5 +1,11 @@
 import { isSessionOwnerExpired, type SessionRegistryRecord } from "./sessionRegistry";
-import { normalizeProviderError, normalizeQuotaWindow, type ProviderQuotaAdapter, type ProviderSnapshot } from "./providerQuota";
+import {
+  normalizeProviderError,
+  normalizeQuotaWindow,
+  type ProviderErrorCode,
+  type ProviderQuotaAdapter,
+  type ProviderSnapshot
+} from "./providerQuota";
 import {
   appendProviderQuotaEvent,
   readProviderQuotaStore,
@@ -26,6 +32,7 @@ export interface ProviderQuotaSchedulerOptions {
   readonly clock?: ProviderQuotaClock;
   readonly store: ProviderQuotaPersistence | { readonly stateDir: string };
   readonly pollTimeoutMs?: number;
+  readonly onPollFailure?: (failure: { readonly provider: string; readonly error_code: ProviderErrorCode }) => void;
 }
 
 const SUCCESS_INTERVAL_MS = 5 * 60 * 1000;
@@ -45,6 +52,7 @@ export class ProviderQuotaScheduler {
   private readonly clock: ProviderQuotaClock;
   private readonly store: ProviderQuotaPersistence;
   private readonly pollTimeoutMs: number;
+  private readonly onPollFailure: ProviderQuotaSchedulerOptions["onPollFailure"];
   private readonly timers = new Map<string, unknown>();
   private readonly inFlight = new Map<string, AbortController>();
   private readonly failures = new Map<string, number>();
@@ -57,6 +65,7 @@ export class ProviderQuotaScheduler {
     this.adapters = options.adapters;
     this.clock = options.clock ?? systemClock;
     this.pollTimeoutMs = options.pollTimeoutMs ?? 30_000;
+    this.onPollFailure = options.onPollFailure;
     const store = options.store;
     this.store = "stateDir" in store
       ? {
@@ -143,8 +152,7 @@ export class ProviderQuotaScheduler {
       this.persist(provider, snapshot);
       const failed = snapshot.health === "unavailable" || snapshot.error_code !== null;
       if (failed) {
-        const failureCount = (this.failures.get(provider) ?? 0) + 1;
-        this.failures.set(provider, failureCount);
+        const failureCount = this.noteFailure(provider, snapshot.error_code ?? "provider_error");
         this.schedule(provider, Math.min(INITIAL_BACKOFF_MS * 2 ** (failureCount - 1), MAX_BACKOFF_MS));
       } else {
         this.failures.delete(provider);
@@ -167,14 +175,26 @@ export class ProviderQuotaScheduler {
           error_code: errorCode
         };
         this.persist(provider, failedSnapshot);
-        const failureCount = (this.failures.get(provider) ?? 0) + 1;
-        this.failures.set(provider, failureCount);
+        const failureCount = this.noteFailure(provider, errorCode);
         this.schedule(provider, Math.min(INITIAL_BACKOFF_MS * 2 ** (failureCount - 1), MAX_BACKOFF_MS));
       }
     } finally {
       if (timeoutHandle !== undefined) this.clock.clearTimeout(timeoutHandle);
       this.inFlight.delete(provider);
     }
+  }
+
+  private noteFailure(provider: string, errorCode: ProviderErrorCode): number {
+    const failureCount = (this.failures.get(provider) ?? 0) + 1;
+    this.failures.set(provider, failureCount);
+    if (failureCount === 1) {
+      try {
+        this.onPollFailure?.({ provider, error_code: errorCode });
+      } catch {
+        // Incident reporting must never interrupt quota scheduling.
+      }
+    }
+    return failureCount;
   }
 
   private schedule(provider: string, delayMs: number): void {

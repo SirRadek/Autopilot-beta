@@ -376,6 +376,29 @@ describe("control plane governed run API", () => {
     runtime.stop();
   });
 
+  it("records only the transition into a repeated supervisor-loop failure", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-supervisor-failure-"));
+    const projectRoot = join(stateDir, "projects");
+    mkdirSync(projectRoot, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 5
+    });
+
+    writeFileSync(join(stateDir, "runs.json"), "not-json injected-secret");
+    await vi.waitFor(() => {
+      expect(readIncidentStore(stateDir).incidents.filter((incident) => incident.stage === "supervisor_loop")).toHaveLength(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const incidents = readIncidentStore(stateDir).incidents.filter((incident) => incident.stage === "supervisor_loop");
+    expect(incidents).toHaveLength(1);
+    expect(JSON.stringify(incidents)).not.toContain("injected-secret");
+    await runtime.stop();
+  });
+
   it("recovers an orphan running cancellation on runtime restart", async () => {
     const api = await governedApi();
     const supervisor = new SupervisorQueue({ stateDir: api.stateDir });
@@ -468,7 +491,8 @@ describe("control plane governed run API", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       error: "autopilot_internal_error",
-      incident_id: expect.stringMatching(/^[0-9a-f-]{36}$/i)
+      incident_id: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      request_id: expect.stringMatching(/^[0-9a-f-]{36}$/i)
     });
   });
 
@@ -507,6 +531,30 @@ describe("control plane governed run API", () => {
 });
 
 describe("control plane provider endpoints", () => {
+  it.each([
+    ["status", "/status", (stateDir: string) => writeFileSync(join(stateDir, "session-registry.json"), "not-json injected-secret")],
+    ["sessions", "/sessions", (stateDir: string) => writeFileSync(join(stateDir, "session-registry.json"), "not-json injected-secret")],
+    ["workers", "/workers", (stateDir: string) => mkdirSync(join(stateDir, "agent-registry.jsonl"))],
+    ["providers", "/providers/quotas", (stateDir: string) => writeFileSync(join(stateDir, "provider-quota-snapshots.json"), "not-json injected-secret")],
+    ["observability", "/observability/summary", (stateDir: string) => mkdirSync(join(stateDir, "cli-call-telemetry.jsonl"))],
+    ["approvals", "/approvals", (stateDir: string) => writeFileSync(join(stateDir, "approval-queue.json"), "not-json injected-secret")]
+  ])("records a bounded incident when the %s route fails", async (_name, path, injectFailure) => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-route-failure-"));
+    injectFailure(stateDir);
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { headers: { authorization: "Bearer secret" } });
+    const body = await response.json() as { error: string; incident_id: string; request_id: string };
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({ error: "autopilot_internal_error", incident_id: expect.any(String), request_id: expect.any(String) });
+    expect(JSON.stringify(body)).not.toContain("injected-secret");
+    expect(readIncidentStore(stateDir).incidents.some((incident) => incident.incident_id === body.incident_id)).toBe(true);
+  });
   it("serves authenticated bounded observability summary and filtered timeline", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-observability-"));
     writeFileSync(join(stateDir, "cli-call-telemetry.jsonl"), [

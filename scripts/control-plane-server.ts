@@ -1,10 +1,14 @@
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { appendStateFile } from "../src/data/delivery-system/stateMaintenanceLock";
 import { sanitizeWorkerOutput } from "../src/data/delivery-system/workerOutputPolicy";
+import {
+  recordOperationalIncident,
+  type OperationalIncidentStage
+} from "../src/data/delivery-system/operationalIncidents";
 import { promisify } from "node:util";
 
 import { decideApproval, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
@@ -82,6 +86,8 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
   const browserSessions = new Map<string, number>();
   const sessionTtlMs = 8 * 60 * 60 * 1000;
   return createServer(async (request, response) => {
+  const requestId = randomUUID();
+  try {
   if (request.method === "GET" && request.url === "/health") returnJson(response, { ok: true });
   else if (request.method === "GET" && request.url === "/ready") return readinessHttp(response, options.readiness);
   else if (request.method === "POST" && request.url === "/auth/login") await loginBrowser(request, response, authToken, browserSessions, sessionTtlMs, options.secureCookies === true);
@@ -111,9 +117,41 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     }
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
-    else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot)) return;
+    else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else returnJson(response, { error: "not_found" }, 404);
+  } catch {
+    if (response.writableEnded) return;
+    if (response.headersSent) {
+      response.end();
+      return;
+    }
+    const incidentId = recordRouteIncidentBestEffort(stateDir, operationalStageForRequest(request), requestId);
+    returnJson(response, { error: "autopilot_internal_error", incident_id: incidentId, request_id: requestId }, 500);
+  }
   });
+}
+
+function operationalStageForRequest(request: IncomingMessage): OperationalIncidentStage {
+  const path = new URL(request.url ?? "/", "http://control-plane.local").pathname;
+  if (path === "/workers") return "control_plane_workers";
+  if (path.startsWith("/sessions")) return "control_plane_sessions";
+  if (path.startsWith("/providers")) return "control_plane_providers";
+  if (path.startsWith("/observability")) return "control_plane_observability";
+  if (path.startsWith("/approvals")) return "control_plane_approvals";
+  if (path.startsWith("/runs") || path.startsWith("/projects") || path.startsWith("/incidents")) return "control_plane_runs";
+  return "control_plane_status";
+}
+
+function recordRouteIncidentBestEffort(
+  stateDir: string,
+  stage: OperationalIncidentStage,
+  requestId: string
+): string {
+  try {
+    return recordOperationalIncident(stateDir, { stage, correlation_ids: { request_id: requestId } }).incident_id;
+  } catch {
+    return randomUUID();
+  }
 }
 
 function readinessHttp(response: ServerResponse, readiness: (() => ReadinessReport) | undefined): void {
@@ -310,7 +348,17 @@ export function createControlPlaneRuntime(
       runCommand: options.commandRunner ?? runProviderCommand,
       commands: providerCommands
     }),
-    store: { stateDir }
+    store: { stateDir },
+    onPollFailure: ({ provider }) => {
+      try {
+        recordOperationalIncident(stateDir, {
+          stage: "provider_poll",
+          correlation_ids: { provider }
+        });
+      } catch {
+        // Provider polling must remain available when incident persistence is unavailable.
+      }
+    }
   });
   const supervisor = new SupervisorQueue({ stateDir });
   supervisor.recover();
@@ -337,9 +385,22 @@ export function createControlPlaneRuntime(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let activePoll: Promise<void> | null = null;
+  let supervisorFailureActive = false;
   const poll = async () => {
     if (stopped) return;
-    try { await orchestrator.runSupervisorOnce(); } catch (error) { process.stderr.write(`control-plane supervisor: ${error instanceof Error ? error.message : "dispatch_failed"}\n`); }
+    try {
+      await orchestrator.runSupervisorOnce();
+      supervisorFailureActive = false;
+    } catch {
+      if (!supervisorFailureActive) {
+        supervisorFailureActive = true;
+        try {
+          recordOperationalIncident(stateDir, { stage: "supervisor_loop" });
+        } catch {
+          // The supervisor retry loop must survive unavailable incident persistence.
+        }
+      }
+    }
     if (!stopped) timer = setTimeout(startPoll, options.supervisorPollMs ?? 250);
   };
   const startPoll = () => { activePoll = poll().finally(() => { activePoll = null; }); };

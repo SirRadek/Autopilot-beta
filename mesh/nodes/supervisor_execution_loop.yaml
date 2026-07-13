@@ -24,6 +24,7 @@ related_files:
   - src/data/delivery-system/cliWorkerCapture.ts
   - src/data/delivery-system/managedStateFile.ts
   - src/data/delivery-system/openRouterLedgerMigration.ts
+  - src/data/delivery-system/operationalIncidents.ts
   - src/data/delivery-system/sessionState.ts
   - src/data/delivery-system/stateMaintenanceLock.ts
   - src/data/delivery-system/projectRegistry.ts

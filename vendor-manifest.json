@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 126,
+  "file_count": 127,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -752,6 +752,11 @@
       "source_path": "src/data/delivery-system/openrouterSubstitutes.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "bd5a8aad8ade52c584db95f57620ef01efc33489693aa5c113b156ba3792e72c"
+    },
+    {
+      "source_path": "src/data/delivery-system/operationalIncidents.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "3bf1c2b549e85c1da6f157d03f13e027f1228f81fcd6f2cd764aa3c6094e3bf3"
     },
     {
       "source_path": "src/data/delivery-system/routingModes.ts",

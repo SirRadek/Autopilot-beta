@@ -32,6 +32,7 @@ import {
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH, VENDOR_PROCESS_REGISTRY_PATH } from "./sessionState";
 import { appendStateFile, removeStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
+import { recordOperationalIncident } from "./operationalIncidents";
 import { ensureOpenRouterLedgersMigrated } from "./openRouterLedgerMigration";
 import type { RoutingModeId } from "./routingModes";
 import {
@@ -684,6 +685,24 @@ export async function runCliWorker(
     ? captureErrorText
     : classification.errorReason;
   errorReason = sanitizeWorkerError(errorReason);
+
+  if (
+    classification.outcome !== "success"
+    || rawOutput === "[REDACTION_FAILED]"
+    || errorReason === "[REDACTION_FAILED]"
+  ) {
+    try {
+      recordOperationalIncident(stateDir, {
+        stage: "worker_output",
+        correlation_ids: {
+          worker_run_id: workerRunId,
+          handoff_id: input.handoffId
+        }
+      });
+    } catch {
+      // Incident persistence must never replace the governed worker result.
+    }
+  }
 
   const stoppedAt = new Date().toISOString();
 

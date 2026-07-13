@@ -45,6 +45,11 @@ export interface IncidentStoreDocument {
   readonly incidents: readonly AutopilotIncident[];
 }
 
+export interface AutopilotIncidentIdentity {
+  readonly incidentId: string;
+  readonly recordedAt: string;
+}
+
 export interface RepairPacketInput {
   readonly expected: string;
   readonly actual: string;
@@ -96,11 +101,15 @@ export function readIncidentStore(stateDir: string): IncidentStoreDocument {
   return parsed;
 }
 
-export function recordAutopilotIncident(stateDir: string, input: AutopilotIncidentInput): AutopilotIncident {
+export function recordAutopilotIncident(
+  stateDir: string,
+  input: AutopilotIncidentInput,
+  identity?: AutopilotIncidentIdentity
+): AutopilotIncident {
   const document = readIncidentStore(stateDir);
   const incident: AutopilotIncident = {
-    incident_id: randomUUID(),
-    recorded_at: new Date().toISOString(),
+    incident_id: requireIncidentId(identity?.incidentId ?? randomUUID()),
+    recorded_at: requireRecordedAt(identity?.recordedAt ?? new Date().toISOString()),
     status: "open",
     acknowledged_at: null,
     acknowledged_by: null,
@@ -229,6 +238,16 @@ function isIsoTimestamp(value: string): boolean {
 
 function requireSeverity(value: IncidentSeverity): IncidentSeverity {
   if (!["low", "medium", "high", "critical"].includes(value)) throw new Error("invalid_incident");
+  return value;
+}
+
+function requireIncidentId(value: string): string {
+  if (!INCIDENT_ID_PATTERN.test(value)) throw new Error("invalid_incident");
+  return value;
+}
+
+function requireRecordedAt(value: string): string {
+  if (!isIsoTimestamp(value)) throw new Error("invalid_incident");
   return value;
 }
 

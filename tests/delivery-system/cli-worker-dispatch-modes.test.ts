@@ -31,6 +31,7 @@ import {
   type CodexDispatchMode
 } from "../../src/data/delivery-system/cliWorker";
 import { buildCodexBashCommand } from "../../src/data/delivery-system/cliWorkerCapture";
+import { readIncidentStore } from "../../src/data/delivery-system/incidentStore";
 
 function baseInput(overrides: Partial<CliWorkerInput> = {}): CliWorkerInput {
   return {
@@ -179,5 +180,33 @@ describe("CLI worker Codex dispatch modes", () => {
     expect(result.workerOutputPath).not.toBe(rawCapture);
     expect(readFileSync(result.workerOutputPath!, "utf8")).toBe(result.rawOutput);
     expect(existsSync(rawCapture)).toBe(false);
+  });
+
+  it("records a fixed worker-output incident for a failed worker", async () => {
+    captureCodexResponseMock.mockResolvedValueOnce({
+      exitCode: 1,
+      outputFilePath: join(stateDir, "missing-raw-capture.json"),
+      rawFileContent: "password=injected-secret",
+      parsedJson: null as unknown as { ok: boolean },
+      durationMs: 25,
+      errorOutput: "provider failure injected-secret",
+      timedOut: false,
+      attempts: 1
+    });
+
+    const result = await runCliWorker(baseInput(), stateDir);
+    const incidents = readIncidentStore(stateDir).incidents;
+
+    expect(result.exitCode).toBe(1);
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]).toMatchObject({
+      stage: "worker_output",
+      summary: "operational_failure:worker_output",
+      correlation_ids: {
+        worker_run_id: result.workerRunId,
+        handoff_id: "hp-dispatch-mode"
+      }
+    });
+    expect(JSON.stringify(incidents)).not.toContain("injected-secret");
   });
 });
