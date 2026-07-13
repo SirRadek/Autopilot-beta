@@ -10,6 +10,7 @@
     "prepare": "node scripts/git-hooks/install.mjs",
     "hooks:install": "node scripts/git-hooks/install.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "docs:links": "tsx scripts/check-documentation-links.ts",
     "mesh:generate": "tsx scripts/generate-decision-mesh.ts",
     "promptlib:validate": "tsx scripts/validate-prompt-library.ts",
     "pdos:validate": "tsx product-design-os/scripts/validate-product-design-os.ts",
