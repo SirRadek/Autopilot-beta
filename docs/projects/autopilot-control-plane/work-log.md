@@ -3096,3 +3096,9 @@ Verification:
 - Focused registry and CLI tests passed.
 - CLI temporary-state smoke produced an empty registry with `0700` directories and a `0600` registry file.
 - Typecheck, vendor provenance, mesh ratchet, and diff checks passed.
+
+### R3 atomic publication review remediation
+
+The initialization publisher now fsyncs a private same-directory temporary file and atomically hard-links it into place with create-if-absent semantics. A contending registry can never be overwritten: `EEXIST` routes through full validation, valid winner bytes remain unchanged, and malformed winner bytes remain unchanged while initialization fails closed.
+
+Additional coverage proves valid and malformed contention outcomes, independently formatted populated-registry preservation, portable malformed-file assertions, repeated CLI idempotence, and isolated default-project-root resolution. This strengthens the existing persistence invariant without changing architecture or project-mesh topology; the `supervisor_execution_loop` snapshot was refreshed after review.

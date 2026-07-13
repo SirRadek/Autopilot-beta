@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import {
   chmodSync,
   mkdirSync,
@@ -10,6 +11,7 @@ import {
   symlinkSync,
   writeFileSync
 } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -70,6 +72,19 @@ describe("project registry", () => {
     expect(readdirSync(stateDir)).toEqual(["projects.json"]);
   });
 
+  it("reports which directory creation actually won when roots coincide", () => {
+    const root = createStateDir();
+    const sharedRoot = join(root, "shared");
+
+    expect(initializeProjectRegistry(sharedRoot, { projectRoot: sharedRoot })).toEqual({
+      state_dir: sharedRoot,
+      project_root: sharedRoot,
+      state_dir_created: true,
+      project_root_created: false,
+      registry_created: true
+    });
+  });
+
   it.runIf(process.platform !== "win32")("uses private permissions for newly created registry paths", () => {
     const root = createStateDir();
     const stateDir = join(root, "state");
@@ -89,11 +104,80 @@ describe("project registry", () => {
     mkdirSync(stateDir);
     const registryPath = join(stateDir, "projects.json");
     writeFileSync(registryPath, "malformed\n");
-    chmodSync(registryPath, 0o640);
+    if (process.platform !== "win32") chmodSync(registryPath, 0o640);
 
     expect(() => initializeProjectRegistry(stateDir, { projectRoot })).toThrow("invalid_project_registry");
     expect(readFileSync(registryPath, "utf8")).toBe("malformed\n");
-    expect(statSync(registryPath).mode & 0o777).toBe(0o640);
+    if (process.platform !== "win32") expect(statSync(registryPath).mode & 0o777).toBe(0o640);
+  });
+
+  it("preserves an independently formatted populated valid registry", () => {
+    const root = createStateDir();
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "projects");
+    mkdirSync(stateDir);
+    const registryPath = join(stateDir, "projects.json");
+    const bytes = `${JSON.stringify({
+      schema_version: "v1",
+      projects: [{
+        schema_version: "v1",
+        project_id: "existing",
+        name: "Existing",
+        cwd: join(projectRoot, "existing"),
+        enabled: false
+      }]
+    })}\n\n`;
+    writeFileSync(registryPath, bytes);
+
+    const result = initializeProjectRegistry(stateDir, { projectRoot });
+
+    expect(result.registry_created).toBe(false);
+    expect(readFileSync(registryPath, "utf8")).toBe(bytes);
+  });
+
+  it("preserves a valid registry published while initialization is contending", () => {
+    const root = createStateDir();
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "projects");
+    const registryPath = join(stateDir, "projects.json");
+    const bytes = `${JSON.stringify({
+      schema_version: "v1",
+      projects: [{
+        schema_version: "v1",
+        project_id: "winner",
+        name: "Winning Registry",
+        cwd: join(projectRoot, "winner"),
+        enabled: true
+      }]
+    })}\n\n`;
+
+    const result = withRegistryPublishContention(registryPath, bytes, () =>
+      initializeProjectRegistry(stateDir, { projectRoot })
+    );
+
+    expect(result).toEqual({
+      state_dir: stateDir,
+      project_root: projectRoot,
+      state_dir_created: true,
+      project_root_created: true,
+      registry_created: false
+    });
+    expect(readFileSync(registryPath, "utf8")).toBe(bytes);
+    expect(readdirSync(stateDir)).toEqual(["projects.json"]);
+  });
+
+  it("refuses a malformed registry published while initialization is contending", () => {
+    const root = createStateDir();
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "projects");
+    const registryPath = join(stateDir, "projects.json");
+    const bytes = "malformed contender\n";
+
+    expect(() => withRegistryPublishContention(registryPath, bytes, () =>
+      initializeProjectRegistry(stateDir, { projectRoot })
+    )).toThrow("invalid_project_registry");
+    expect(readFileSync(registryPath, "utf8")).toBe(bytes);
+    expect(readdirSync(stateDir)).toEqual(["projects.json"]);
   });
 
   it("returns a canonical project path strictly inside the configured root", () => {
@@ -272,3 +356,18 @@ describe("project registry", () => {
       .toThrow("invalid_project_registry");
   });
 });
+
+function withRegistryPublishContention<T>(registryPath: string, bytes: string, action: () => T): T {
+  const linkSync = fs.linkSync;
+  fs.linkSync = (existingPath, newPath) => {
+    writeFileSync(registryPath, bytes, { flag: "wx" });
+    linkSync(existingPath, newPath);
+  };
+  syncBuiltinESMExports();
+  try {
+    return action();
+  } finally {
+    fs.linkSync = linkSync;
+    syncBuiltinESMExports();
+  }
+}
