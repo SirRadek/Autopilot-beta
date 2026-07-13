@@ -122,7 +122,7 @@ describe("token gateway", () => {
     expect(Object.keys(state.terminal)).toHaveLength(1024);
     expect(readFileSync(join(stateDir, "token-gateway-state.json")).byteLength).toBeLessThanOrEqual(2 * 1024 * 1024);
   // Durable state now fsyncs each transition; this is a bounds test, not a latency benchmark.
-  }, 60_000);
+  }, 120_000);
 
   it("rejects loaded state whose entry counts exceed caps", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "token-gateway-loaded-bounds-"));
