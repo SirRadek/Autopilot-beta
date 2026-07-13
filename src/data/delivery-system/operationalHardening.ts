@@ -16,6 +16,8 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
+export * from "./stateMaintenanceLock.js";
+
 const BACKUP_VERSION = 1;
 const DEFAULT_MAX_FILE_BYTES = 4 * 1024 * 1024;
 const DEFAULT_MAX_TOTAL_BYTES = 32 * 1024 * 1024;
