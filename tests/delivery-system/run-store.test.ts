@@ -7,13 +7,31 @@ import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegi
 import {
   appendRunArtifact,
   approveRunRevision,
-  createRunDraft,
+  createRunDraft as createRunDraftImplementation,
   readRunStore,
-  reviseRunDraft,
+  reviseRunDraft as reviseRunDraftImplementation,
   transitionRun
 } from "../../src/data/delivery-system/runStore";
 
 const stateDirs: string[] = [];
+const fixtureProjectRoot = mkdtempSync(join(tmpdir(), "run-store-projects-"));
+const fixtureProjectCwd = join(fixtureProjectRoot, "autopilot-beta");
+mkdirSync(fixtureProjectCwd);
+const fixtureRegistryOptions = { projectRoot: fixtureProjectRoot };
+const createRunDraft: typeof createRunDraftImplementation = (
+  stateDir,
+  draftInput,
+  createdAt,
+  registryOptions = fixtureRegistryOptions
+) => createRunDraftImplementation(stateDir, draftInput, createdAt, registryOptions);
+const reviseRunDraft: typeof reviseRunDraftImplementation = (
+  stateDir,
+  runId,
+  revision,
+  draftInput,
+  createdAt,
+  registryOptions = fixtureRegistryOptions
+) => reviseRunDraftImplementation(stateDir, runId, revision, draftInput, createdAt, registryOptions);
 const input = {
   project_id: "autopilot-beta",
   prompt: "Build the governed run",
@@ -26,7 +44,7 @@ const input = {
 function stateDir(): string {
   const path = mkdtempSync(join(tmpdir(), "run-store-"));
   stateDirs.push(path);
-  writeProjectRegistry(path, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: "/srv/autopilot-beta", enabled: true }] });
+  writeProjectRegistry(path, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: fixtureProjectCwd, enabled: true }] });
   return path;
 }
 

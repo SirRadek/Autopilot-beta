@@ -1,14 +1,16 @@
 import {
   closeSync,
+  constants,
   existsSync,
+  fstatSync,
   fsyncSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   openSync,
-  readFileSync,
+  readSync,
   realpathSync,
   renameSync,
-  statSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
@@ -47,6 +49,7 @@ export const PROJECT_REGISTRY_ERROR_CODES = {
   PROJECT_PATH_MISSING: "project_path_missing",
   PROJECT_PATH_OUTSIDE_ROOT: "project_path_outside_root",
   INVALID_PROJECT_ROOT: "invalid_project_root",
+  INSECURE_PERMISSIONS: "insecure_project_registry_permissions",
   IO_ERROR: "project_registry_io_error"
 } as const;
 
@@ -98,21 +101,57 @@ function validateProjectRegistry(document: unknown): asserts document is Project
 
 export function readProjectRegistry(stateDir: string): ProjectRegistryDocument {
   const path = join(stateDir, PROJECT_REGISTRY_FILE);
-  let size: number;
+  let file: number;
   try {
-    size = statSync(path).size;
+    const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+    file = openSync(path, constants.O_RDONLY | noFollow);
   } catch (error) {
     if (nodeErrorCode(error) === "ENOENT") return { schema_version: "v1", projects: [] };
+    if (nodeErrorCode(error) === "ELOOP") throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
   }
-  if (size > MAX_REGISTRY_BYTES) {
+
+  let bytes: Buffer;
+  try {
+    const before = fstatSync(file, { bigint: true });
+    if (!before.isFile() || before.size > BigInt(MAX_REGISTRY_BYTES)) {
+      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+    }
+    const buffer = Buffer.alloc(MAX_REGISTRY_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = readSync(file, buffer, length, buffer.length - length, null);
+      if (read === 0) break;
+      length += read;
+    }
+    const after = fstatSync(file, { bigint: true });
+    const activePath = lstatSync(path, { bigint: true });
+    if (length > MAX_REGISTRY_BYTES ||
+        !sameRegistryMetadata(before, after) ||
+        !activePath.isFile() ||
+        activePath.dev !== after.dev ||
+        activePath.ino !== after.ino) {
+      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+    }
+    bytes = buffer.subarray(0, length);
+  } catch (error) {
+    if (error instanceof Error && error.message === PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY) throw error;
+    if (["ENOENT", "ELOOP"].includes(nodeErrorCode(error))) {
+      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
+    }
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+  } finally {
+    closeSync(file);
+  }
+
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
   let serialized: string;
   try {
-    serialized = readFileSync(path, "utf8");
+    serialized = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
   let document: unknown;
   try {
@@ -132,14 +171,8 @@ export function initializeProjectRegistry(
   const projectRoot = options.projectRoot === undefined
     ? resolveConfiguredProjectRoot()
     : resolveConfiguredProjectRoot({ AUTOPILOT_PROJECTS_DIR: options.projectRoot });
-  let stateDirCreated: boolean;
-  let projectRootCreated: boolean;
-  try {
-    stateDirCreated = mkdirSync(stateDir, { recursive: true, mode: 0o700 }) !== undefined;
-    projectRootCreated = mkdirSync(projectRoot, { recursive: true, mode: 0o700 }) !== undefined;
-  } catch {
-    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
-  }
+  const stateDirCreated = ensurePrivateDirectory(stateDir);
+  const projectRootCreated = ensurePrivateDirectory(projectRoot);
 
   const path = join(stateDir, PROJECT_REGISTRY_FILE);
   const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
@@ -188,7 +221,13 @@ export function writeProjectRegistry(stateDir: string, document: ProjectRegistry
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);
   }
   try {
-    writeFileSync(temporaryPath, serialized, "utf8");
+    const file = openSync(temporaryPath, "wx", 0o600);
+    try {
+      writeFileSync(file, serialized, "utf8");
+      fsyncSync(file);
+    } finally {
+      closeSync(file);
+    }
     renameSync(temporaryPath, path);
   } catch {
     try {
@@ -209,19 +248,43 @@ export function resolveEnabledProject(
   if (project === undefined) {
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.PROJECT_NOT_FOUND);
   }
-  if (options.projectRoot === undefined) {
-    return project;
-  }
-  if (!isAbsolute(options.projectRoot) || normalize(options.projectRoot) !== options.projectRoot) {
-    throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT);
-  }
-  const realRoot = canonicalPath(options.projectRoot, PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT);
+  const projectRoot = options.projectRoot === undefined
+    ? resolveConfiguredProjectRoot()
+    : resolveConfiguredProjectRoot({ AUTOPILOT_PROJECTS_DIR: options.projectRoot });
+  const realRoot = canonicalPath(projectRoot, PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT);
   const realCwd = canonicalPath(project.cwd, PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_MISSING);
   const pathFromRoot = relative(realRoot, realCwd);
   if (pathFromRoot === "" || pathFromRoot === ".." || pathFromRoot.startsWith(`..${sep}`) || isAbsolute(pathFromRoot)) {
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_OUTSIDE_ROOT);
   }
   return { ...project, cwd: realCwd };
+}
+
+function sameRegistryMetadata(
+  left: ReturnType<typeof fstatSync>,
+  right: ReturnType<typeof fstatSync>
+): boolean {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
+function ensurePrivateDirectory(path: string): boolean {
+  let created: boolean;
+  try {
+    created = mkdirSync(path, { recursive: true, mode: 0o700 }) !== undefined;
+    const metadata = lstatSync(path);
+    if (!metadata.isDirectory()) throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+    if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
+      throw new Error(PROJECT_REGISTRY_ERROR_CODES.INSECURE_PERMISSIONS);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === PROJECT_REGISTRY_ERROR_CODES.INSECURE_PERMISSIONS) throw error;
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+  }
+  return created;
 }
 
 function canonicalPath(path: string, errorCode: ProjectRegistryErrorCode): string {
@@ -240,7 +303,8 @@ export function isProjectConfigurationError(error: unknown): boolean {
     PROJECT_REGISTRY_ERROR_CODES.PROJECT_NOT_FOUND,
     PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_MISSING,
     PROJECT_REGISTRY_ERROR_CODES.PROJECT_PATH_OUTSIDE_ROOT,
-    PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT
+    PROJECT_REGISTRY_ERROR_CODES.INVALID_PROJECT_ROOT,
+    PROJECT_REGISTRY_ERROR_CODES.INSECURE_PERMISSIONS
   ] as readonly string[]).includes(code);
 }
 

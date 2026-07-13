@@ -16,7 +16,7 @@ describe("project registry init CLI", () => {
     roots.push(root);
     const stateDir = join(root, "state");
     const projectRoot = join(root, "projects");
-    mkdirSync(join(projectRoot, "existing-project"), { recursive: true });
+    mkdirSync(join(projectRoot, "existing-project"), { recursive: true, mode: 0o700 });
 
     const result = spawnSync(
       process.execPath,

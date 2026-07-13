@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
 import { isRunRouteEligible } from "./runRouteEligibility";
 import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
+import { resolveConfiguredProjectRoot } from "./runtimePaths";
 import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import type { TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
 import { redactTelemetryText } from "./telemetryRedaction";
@@ -50,7 +51,7 @@ export function createRunOrchestrator(options: {
   readonly supervisorMaxAttempts?: number;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
-  const registryOptions = options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot };
+  const registryOptions = { projectRoot: options.projectRoot ?? resolveConfiguredProjectRoot() };
   function record(runId: string): RunRecord {
     const value = readRunStore(options.stateDir).runs.find((run) => run.current.run_id === runId);
     if (value === undefined) throw new Error("run_not_found");

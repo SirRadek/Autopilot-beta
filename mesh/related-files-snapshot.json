@@ -53,9 +53,9 @@
   "src/data/delivery-system/cliWorkerCapture.ts": "d9cf90fe91e5393c0ecf93937aba9e21f47d1247",
   "src/data/delivery-system/openRouterLedgerMigration.ts": "92522130ccac465c732bae2373640f179c7a1ab2",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
-  "src/data/delivery-system/projectRegistry.ts": "bc6b247d1002bb0622b3b5fd0608048873a58776",
+  "src/data/delivery-system/projectRegistry.ts": "e77781fd59e0d776b069aac0efa343f47c43f125",
   "src/data/delivery-system/runStore.ts": "17a245384406d884b994d3d26f54fa51cb54236f",
-  "src/data/delivery-system/runOrchestrator.ts": "6ca21dc797604d0c190bb33223d47aa08df4af17",
+  "src/data/delivery-system/runOrchestrator.ts": "c3f48d3f9162d0bba9929f735717e522b46eb957",
   "src/data/delivery-system/supervisorQueue.ts": "5560eca14ea0945fb0698a19dee8bd88725d63e9",
   "model-output-evals/": "tree:16c32a21cbaf4b39e18380506f54bb1eab85e02092fdc31b32573099b9a326f8",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"

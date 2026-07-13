@@ -34,9 +34,12 @@ const snapshot = (provider: string, fetchedAt: string) => ({
 
 async function governedApi() {
   const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runs-"));
-  writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+  const projectRoot = join(stateDir, "projects");
+  const projectCwd = join(projectRoot, "autopilot-beta");
+  mkdirSync(projectCwd, { recursive: true });
+  writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
   writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-  const server = createControlPlaneServer(stateDir, "secret");
+  const server = createControlPlaneServer(stateDir, "secret", { projectRoot });
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -47,11 +50,44 @@ async function governedApi() {
     headers: { authorization: "Bearer secret", ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) })
   });
-  return { stateDir, base, call };
+  return { stateDir, projectRoot, base, call };
 }
 
 describe("control plane governed run API", () => {
   const draft = { project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: null, requested_artifacts: ["text"] };
+
+  it("rejects an out-of-root HTTP run through the server fallback", async () => {
+    const root = mkdtempSync(join(tmpdir(), "control-plane-default-root-"));
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "projects");
+    const outside = join(root, "outside");
+    mkdirSync(stateDir);
+    mkdirSync(projectRoot);
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
+    writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    const previous = process.env.AUTOPILOT_PROJECTS_DIR;
+    process.env.AUTOPILOT_PROJECTS_DIR = projectRoot;
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("missing address");
+      const response = await fetch(`http://127.0.0.1:${address.port}/runs`, {
+        method: "POST",
+        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        body: JSON.stringify(draft)
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: "project_path_outside_root" });
+      expect(readRunStore(stateDir).runs).toEqual([]);
+    } finally {
+      if (previous === undefined) delete process.env.AUTOPILOT_PROJECTS_DIR;
+      else process.env.AUTOPILOT_PROJECTS_DIR = previous;
+    }
+  });
 
   it("threads the configured project root through revision operations", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-revision-root-"));
@@ -148,7 +184,7 @@ describe("control plane governed run API", () => {
     }
   });
 
-  it("reports unexpected project registry I/O as an internal incident without leaking paths", async () => {
+  it("reports a non-regular project registry as invalid configuration without leaking paths", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-registry-io-secret-"));
     mkdirSync(join(stateDir, "projects.json"));
     const server = createControlPlaneServer(stateDir, "secret");
@@ -160,15 +196,13 @@ describe("control plane governed run API", () => {
     const response = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: "Bearer secret" } });
     const body = await response.json() as Record<string, unknown>;
 
-    expect(response.status).toBe(500);
-    expect(body).toMatchObject({ error: "autopilot_internal_error", incident_id: expect.any(String) });
+    expect(response.status).toBe(409);
+    expect(body).toEqual({ error: "invalid_project_registry" });
     expect(JSON.stringify(body)).not.toContain(stateDir);
     expect(JSON.stringify(body)).not.toContain("EISDIR");
     expect(JSON.stringify(body)).not.toContain("secret");
     const incidents = readIncidentStore(stateDir).incidents;
-    expect(incidents).toEqual([
-      expect.objectContaining({ severity: "high", stage: "control_plane_http", summary: "Unexpected control plane route failure" })
-    ]);
+    expect(incidents).toEqual([]);
     expect(JSON.stringify(incidents)).not.toContain(stateDir);
     expect(JSON.stringify(incidents)).not.toContain("EISDIR");
     expect(JSON.stringify(incidents)).not.toContain("secret");
@@ -266,7 +300,7 @@ describe("control plane governed run API", () => {
     const api = await governedApi();
     const supervisor = new SupervisorQueue({ stateDir: api.stateDir });
     const gateway = new (await import("../../src/data/delivery-system/tokenGateway")).TokenGateway({ stateDir: api.stateDir });
-    const first = (await import("../../src/data/delivery-system/runOrchestrator")).createRunOrchestrator({ stateDir: api.stateDir, tokenGateway: gateway, supervisor, dispatch: async () => new Promise(() => {}), isRouteAvailable: () => true });
+    const first = (await import("../../src/data/delivery-system/runOrchestrator")).createRunOrchestrator({ stateDir: api.stateDir, projectRoot: api.projectRoot, tokenGateway: gateway, supervisor, dispatch: async () => new Promise(() => {}), isRouteAvailable: () => true });
     const draft = first.prepareRun({ project_id: "autopilot-beta", prompt: "cancel after crash", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     first.approveAndQueueRun(draft.current.run_id, 1, "owner");
     supervisor.claim(new Date().toISOString());
@@ -364,13 +398,14 @@ describe("control plane governed run API", () => {
     const input = { ...draft, provider: "codex_cli" as const, requested_artifacts: ["text"] as const, estimated_tokens: 20_000 };
     let revisionFault = true;
     expect(() => reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input, {
+      projectRoot: api.projectRoot,
       revise: (...args) => {
         const revised = reviseRunDraft(...args);
         if (revisionFault) { revisionFault = false; throw new Error("commit_then_throw"); }
         return revised;
       }
     })).toThrow("commit_then_throw");
-    const recovered = reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input);
+    const recovered = reviseRunWithApproval(api.stateDir, created.current.run_id, 1, input, { projectRoot: api.projectRoot });
     expect(recovered.current.revision).toBe(2);
     expect(recovered.revisions).toHaveLength(2);
     expect(readApprovalQueue(api.stateDir).records.filter((record) => record.run_id === created.current.run_id && record.revision === 2)).toHaveLength(1);
@@ -378,12 +413,13 @@ describe("control plane governed run API", () => {
     const next = { ...input, prompt: "third revision" };
     let approvalFault = true;
     expect(() => reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next, {
+      projectRoot: api.projectRoot,
       writeApprovals: (...args) => {
         writeApprovalQueue(...args);
         if (approvalFault) { approvalFault = false; throw new Error("approval_commit_then_throw"); }
       }
     })).toThrow("approval_commit_then_throw");
-    const restarted = reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next);
+    const restarted = reviseRunWithApproval(api.stateDir, created.current.run_id, 2, next, { projectRoot: api.projectRoot });
     expect(restarted.current.revision).toBe(3);
     expect(readRunStore(api.stateDir).runs[0]?.revisions).toHaveLength(3);
     expect(readApprovalQueue(api.stateDir).records.filter((record) => record.run_id === created.current.run_id && record.revision === 3)).toHaveLength(1);

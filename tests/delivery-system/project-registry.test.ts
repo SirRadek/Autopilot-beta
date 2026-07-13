@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import {
+  appendFileSync,
   chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -46,7 +48,7 @@ describe("project registry", () => {
     const root = createStateDir();
     const stateDir = join(root, "state");
     const projectRoot = join(root, "projects");
-    mkdirSync(join(projectRoot, "existing-project"), { recursive: true });
+    mkdirSync(join(projectRoot, "existing-project"), { recursive: true, mode: 0o700 });
 
     const first = initializeProjectRegistry(stateDir, { projectRoot });
     const registryPath = join(stateDir, "projects.json");
@@ -97,11 +99,32 @@ describe("project registry", () => {
     expect(statSync(join(stateDir, "projects.json")).mode & 0o777).toBe(0o600);
   });
 
+  it.runIf(process.platform !== "win32")("rejects existing managed directories with public permissions", () => {
+    const root = createStateDir();
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "projects");
+    mkdirSync(stateDir, { mode: 0o755 });
+    mkdirSync(projectRoot, { mode: 0o755 });
+
+    expect(() => initializeProjectRegistry(stateDir, { projectRoot })).toThrow("insecure_project_registry_permissions");
+  });
+
+  it.runIf(process.platform !== "win32")("publishes replacement registries with mode 0600", () => {
+    const stateDir = createStateDir();
+    const registryPath = join(stateDir, "projects.json");
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+    chmodSync(registryPath, 0o644);
+
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+
+    expect(statSync(registryPath).mode & 0o777).toBe(0o600);
+  });
+
   it("validates and never replaces a malformed existing registry", () => {
     const root = createStateDir();
     const stateDir = join(root, "state");
     const projectRoot = join(root, "projects");
-    mkdirSync(stateDir);
+    mkdirSync(stateDir, { mode: 0o700 });
     const registryPath = join(stateDir, "projects.json");
     writeFileSync(registryPath, "malformed\n");
     if (process.platform !== "win32") chmodSync(registryPath, 0o640);
@@ -115,7 +138,7 @@ describe("project registry", () => {
     const root = createStateDir();
     const stateDir = join(root, "state");
     const projectRoot = join(root, "projects");
-    mkdirSync(stateDir);
+    mkdirSync(stateDir, { mode: 0o700 });
     const registryPath = join(stateDir, "projects.json");
     const bytes = `${JSON.stringify({
       schema_version: "v1",
@@ -254,18 +277,42 @@ describe("project registry", () => {
 
   it("resolves only an enabled registered project", () => {
     const stateDir = createStateDir();
+    const projectRoot = join(stateDir, "projects");
+    const projectPath = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectPath, { recursive: true });
     const project = {
       schema_version: "v1" as const,
       project_id: "autopilot-beta",
       name: "Autopilot Beta",
-      cwd: "/home/radek/autopilot-beta",
+      cwd: projectPath,
       enabled: true
     };
 
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [project] });
 
-    expect(resolveEnabledProject(stateDir, "autopilot-beta")).toEqual(project);
+    expect(resolveEnabledProject(stateDir, "autopilot-beta", { projectRoot })).toEqual(project);
     expect(() => resolveEnabledProject(stateDir, "/tmp/escape")).toThrow("project_not_found");
+  });
+
+  it("enforces the configured project root when resolver options are omitted", () => {
+    const root = createStateDir();
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "projects");
+    const outside = join(root, "outside");
+    mkdirSync(stateDir);
+    mkdirSync(projectRoot);
+    mkdirSync(outside);
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{
+      schema_version: "v1", project_id: "outside", name: "Outside", cwd: outside, enabled: true
+    }] });
+    const previous = process.env.AUTOPILOT_PROJECTS_DIR;
+    process.env.AUTOPILOT_PROJECTS_DIR = projectRoot;
+    try {
+      expect(() => resolveEnabledProject(stateDir, "outside")).toThrow("project_path_outside_root");
+    } finally {
+      if (previous === undefined) delete process.env.AUTOPILOT_PROJECTS_DIR;
+      else process.env.AUTOPILOT_PROJECTS_DIR = previous;
+    }
   });
 
   it("rejects invalid, duplicate, and oversized registries", () => {
@@ -342,6 +389,55 @@ describe("project registry", () => {
     expect(() => readProjectRegistry(stateDir)).toThrow("invalid_project_registry");
   });
 
+  it.runIf(process.platform !== "win32")("rejects a symlink registry without following it", () => {
+    const root = createStateDir();
+    const target = join(root, "target.json");
+    writeFileSync(target, JSON.stringify({ schema_version: "v1", projects: [] }));
+    symlinkSync(target, join(root, "projects.json"), "file");
+    expect(() => readProjectRegistry(root)).toThrow("invalid_project_registry");
+  });
+
+  it("rejects a non-regular registry file without blocking", () => {
+    const nonregular = createStateDir();
+    mkdirSync(join(nonregular, "projects.json"));
+    expect(() => readProjectRegistry(nonregular)).toThrow("invalid_project_registry");
+  });
+
+  it("rejects BOM-prefixed and invalid UTF-8 registry bytes", () => {
+    const stateDir = createStateDir();
+    const registryPath = join(stateDir, "projects.json");
+    writeFileSync(registryPath, Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(JSON.stringify({ schema_version: "v1", projects: [] }))
+    ]));
+    expect(() => readProjectRegistry(stateDir)).toThrow("invalid_project_registry");
+
+    writeFileSync(registryPath, Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xff, 0x7d]));
+    expect(() => readProjectRegistry(stateDir)).toThrow("invalid_project_registry");
+  });
+
+  it("rejects a registry that grows while its descriptor is being read", () => {
+    const stateDir = createStateDir();
+    const registryPath = join(stateDir, "projects.json");
+    writeFileSync(registryPath, JSON.stringify({ schema_version: "v1", projects: [] }));
+
+    expect(() => withRegistryReadContention(() => appendFileSync(registryPath, " "), () =>
+      readProjectRegistry(stateDir)
+    )).toThrow("invalid_project_registry");
+  });
+
+  it.runIf(process.platform !== "win32")("rejects a registry path replaced while its descriptor is being read", () => {
+    const stateDir = createStateDir();
+    const registryPath = join(stateDir, "projects.json");
+    const replacementPath = join(stateDir, "replacement.json");
+    writeFileSync(registryPath, JSON.stringify({ schema_version: "v1", projects: [] }));
+    writeFileSync(replacementPath, JSON.stringify({ schema_version: "v1", projects: [] }));
+
+    expect(() => withRegistryReadContention(() => renameSync(replacementPath, registryPath), () =>
+      readProjectRegistry(stateDir)
+    )).toThrow("invalid_project_registry");
+  });
+
   it("rejects a registry whose serialized representation exceeds the byte limit", () => {
     const stateDir = createStateDir();
     const projects = Array.from({ length: 64 }, (_, index) => ({
@@ -368,6 +464,25 @@ function withRegistryPublishContention<T>(registryPath: string, bytes: string, a
     return action();
   } finally {
     fs.linkSync = linkSync;
+    syncBuiltinESMExports();
+  }
+}
+
+function withRegistryReadContention<T>(contend: () => void, action: () => T): T {
+  const readSync = fs.readSync;
+  let contended = false;
+  fs.readSync = ((fd: number, buffer: NodeJS.ArrayBufferView, offset: number, length: number, position: number | bigint | null) => {
+    if (!contended) {
+      contended = true;
+      contend();
+    }
+    return readSync(fd, buffer, offset, length, position);
+  }) as typeof fs.readSync;
+  syncBuiltinESMExports();
+  try {
+    return action();
+  } finally {
+    fs.readSync = readSync;
     syncBuiltinESMExports();
   }
 }
