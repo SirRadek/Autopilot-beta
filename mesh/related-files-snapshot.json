@@ -52,7 +52,7 @@
   "src/data/delivery-system/cliWorker.ts": "ea989f25303c7fad3040ff5697f6237f19b95ea2",
   "src/data/delivery-system/cliWorkerCapture.ts": "fda84e79807b80078251f5309a5fcc606e8178b0",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
-  "src/data/delivery-system/projectRegistry.ts": "2da1148aa000b535d2ae05fcc9b9f7e93ceb84c3",
+  "src/data/delivery-system/projectRegistry.ts": "44629b7c46e4a142d730dd8ce019cf6e9a161ceb",
   "src/data/delivery-system/runStore.ts": "17a245384406d884b994d3d26f54fa51cb54236f",
   "src/data/delivery-system/runOrchestrator.ts": "6ca21dc797604d0c190bb33223d47aa08df4af17",
   "src/data/delivery-system/supervisorQueue.ts": "5560eca14ea0945fb0698a19dee8bd88725d63e9",

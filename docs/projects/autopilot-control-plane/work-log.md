@@ -3069,3 +3069,30 @@ Verification:
   - `vitest run`
   - `astro build`
   - `playwright test`
+
+## 2026-07-13 Idempotent Project Registry Bootstrap
+
+Date: 2026-07-13
+Request or trigger: release-baseline runtime-path task 3 required a safe, repeatable operator bootstrap for the project registry.
+Mode: WRITE_ALLOWED for the bounded registry initializer, CLI, tests, package script, provenance check, and mesh ratchet refresh. No project discovery, registration, remote mutation, or live-state mutation was added.
+
+Files changed:
+
+- `src/data/delivery-system/projectRegistry.ts`
+- `scripts/project-registry-init.ts`
+- `package.json`
+- `tests/delivery-system/project-registry.test.ts`
+- `tests/scripts/project-registry-init.test.ts`
+- `mesh/related-files-snapshot.json`
+
+Architecture and project-mesh impact:
+
+- No architecture boundary changed. The bootstrap creates only an empty schema-v1 registry and never discovers or registers project directories.
+- Existing `supervisor_execution_loop` governance already covers `projectRegistry.ts`; its guidance remains accurate, so no mesh node or rule change was needed.
+- The related-files snapshot was refreshed after reviewing that existing coverage.
+
+Verification:
+
+- Focused registry and CLI tests passed.
+- CLI temporary-state smoke produced an empty registry with `0700` directories and a `0600` registry file.
+- Typecheck, vendor provenance, mesh ratchet, and diff checks passed.

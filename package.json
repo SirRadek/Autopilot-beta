@@ -36,6 +36,7 @@
     "approval:dispatch": "tsx scripts/approval-dispatch.ts",
     "control-plane:status": "tsx scripts/control-plane-status.ts",
     "control-plane:serve": "tsx scripts/control-plane-server.ts",
+    "projects:init": "tsx scripts/project-registry-init.ts",
     "session:manager": "tsx scripts/session-manager.ts",
     "worker:status": "tsx scripts/worker-status.ts",
     "worker:cancel": "tsx scripts/worker-cancel.ts",

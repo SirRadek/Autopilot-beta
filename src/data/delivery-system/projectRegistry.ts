@@ -1,5 +1,16 @@
-import { existsSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync
+} from "node:fs";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
+
+import { resolveConfiguredProjectRoot } from "./runtimePaths";
 
 export interface ProjectEntry {
   readonly schema_version: "v1";
@@ -16,6 +27,14 @@ export interface ProjectRegistryDocument {
 
 export interface ProjectRegistryOptions {
   readonly projectRoot?: string;
+}
+
+export interface ProjectRegistryInitialization {
+  readonly state_dir: string;
+  readonly project_root: string;
+  readonly state_dir_created: boolean;
+  readonly project_root_created: boolean;
+  readonly registry_created: boolean;
 }
 
 export const PROJECT_REGISTRY_ERROR_CODES = {
@@ -35,6 +54,7 @@ const MAX_PROJECTS = 64;
 const MAX_PROJECT_NAME_LENGTH = 160;
 const MAX_CWD_LENGTH = 1_024;
 const MAX_REGISTRY_BYTES = 128 * 1_024;
+const EMPTY_PROJECT_REGISTRY: ProjectRegistryDocument = { schema_version: "v1", projects: [] };
 
 function validateProjectRegistry(document: unknown): asserts document is ProjectRegistryDocument {
   if (typeof document !== "object" || document === null) {
@@ -99,6 +119,58 @@ export function readProjectRegistry(stateDir: string): ProjectRegistryDocument {
   }
   validateProjectRegistry(document);
   return document;
+}
+
+export function initializeProjectRegistry(
+  stateDir: string,
+  options: ProjectRegistryOptions = {}
+): ProjectRegistryInitialization {
+  const projectRoot = options.projectRoot === undefined
+    ? resolveConfiguredProjectRoot()
+    : resolveConfiguredProjectRoot({ AUTOPILOT_PROJECTS_DIR: options.projectRoot });
+  const stateDirCreated = !existsSync(stateDir);
+  const projectRootCreated = !existsSync(projectRoot);
+  try {
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    mkdirSync(projectRoot, { recursive: true, mode: 0o700 });
+  } catch {
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+  }
+
+  const path = join(stateDir, PROJECT_REGISTRY_FILE);
+  if (existsSync(path)) {
+    readProjectRegistry(stateDir);
+    return {
+      state_dir: stateDir,
+      project_root: projectRoot,
+      state_dir_created: stateDirCreated,
+      project_root_created: projectRootCreated,
+      registry_created: false
+    };
+  }
+
+  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    writeFileSync(temporaryPath, `${JSON.stringify(EMPTY_PROJECT_REGISTRY, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600
+    });
+    renameSync(temporaryPath, path);
+  } catch {
+    try {
+      if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    } catch { /* cleanup must not expose filesystem details */ }
+    throw new Error(PROJECT_REGISTRY_ERROR_CODES.IO_ERROR);
+  }
+
+  return {
+    state_dir: stateDir,
+    project_root: projectRoot,
+    state_dir_created: stateDirCreated,
+    project_root_created: projectRootCreated,
+    registry_created: true
+  };
 }
 
 export function writeProjectRegistry(stateDir: string, document: ProjectRegistryDocument): void {
