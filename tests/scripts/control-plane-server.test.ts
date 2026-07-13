@@ -638,7 +638,7 @@ describe("control plane provider endpoints", () => {
   it("bounds worker output and ignores unsafe worker ids", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     writeFileSync(join(stateDir, "agent-registry.jsonl"), `${JSON.stringify({ event: "subagent_start", agent_id: "../outside", agent_type: "codex", started_at: new Date().toISOString() })}\n${JSON.stringify({ event: "subagent_start", agent_id: "safe-worker", agent_type: "codex", started_at: new Date().toISOString() })}\n`);
-    writeFileSync(join(stateDir, "safe-worker-output.txt"), "x".repeat(50_000));
+    writeFileSync(join(stateDir, "safe-worker-output.txt"), `${"x".repeat(50_000)}\npassword=worker-secret cookie: session-secret`);
     const server = createControlPlaneServer(stateDir, "secret");
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -647,7 +647,10 @@ describe("control plane provider endpoints", () => {
     const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: "Bearer secret" } });
     const workers = await response.json() as Array<{ worker_run_id: string; output: string }>;
     expect(workers.find((worker) => worker.worker_run_id === "../outside")?.output).toBe("");
-    expect(workers.find((worker) => worker.worker_run_id === "safe-worker")?.output.length).toBeLessThanOrEqual(16 * 1024);
+    const safeOutput = workers.find((worker) => worker.worker_run_id === "safe-worker")?.output ?? "";
+    expect(safeOutput.length).toBeLessThanOrEqual(16 * 1024);
+    expect(safeOutput).not.toContain("worker-secret");
+    expect(safeOutput).not.toContain("session-secret");
   });
 
   it("requires bearer auth", async () => {

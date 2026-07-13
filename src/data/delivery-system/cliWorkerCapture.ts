@@ -1012,66 +1012,77 @@ export async function captureCodexResponse(
   let rawFileContent = "";
   let parsedJson: unknown = null;
   let attempts = 0;
+  const outputFiles: string[] = [];
+  let completed = false;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    attempts = attempt;
-    outputFile = join(outputDir, `codex-${Date.now()}-${attempt}.json`);
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      attempts = attempt;
+      outputFile = join(outputDir, `codex-${Date.now()}-${attempt}.json`);
+      outputFiles.push(outputFile);
 
-    if (bashPath) {
-      // Windows: Git Bash for reliable stdin redirection. Dispatch sandbox + never-approve
-      // are forced and every caller value is shq-escaped (see buildCodexBashCommand).
-      const bashCmd = buildCodexBashCommand(codexPath, opts, outputFile, promptFile);
-      result = spawnSync(bashPath, ["-c", bashCmd], {
-        encoding: "utf8",
-        cwd: opts.cwd ?? process.cwd(),
-        timeout: opts.timeoutMs ?? 120000,
-        env: buildVendorEnv()
-      });
-    } else {
-      // POSIX: direct spawnSync with stdin input (dispatch sandbox + never-approve forced)
-      result = spawnSync("codex", [
-        "exec",
-        ...buildCodexConfigArgs(opts.codexMode),
-        ...schemaArgs, "-o", outputFile,
-        ...(opts.model ? ["-m", opts.model] : []),
-        ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
-      ], {
-        input: prompt,
-        encoding: "utf8",
-        cwd: opts.cwd ?? process.cwd(),
-        timeout: opts.timeoutMs ?? 120000,
-        env: buildVendorEnv()
-      });
-    }
-
-    rawFileContent = "";
-    parsedJson = null;
-    try {
-      rawFileContent = readFileSync(outputFile, "utf8").trim();
-      if (rawFileContent) {
-        parsedJson = JSON.parse(rawFileContent);
+      if (bashPath) {
+        // Windows: Git Bash for reliable stdin redirection. Dispatch sandbox + never-approve
+        // are forced and every caller value is shq-escaped (see buildCodexBashCommand).
+        const bashCmd = buildCodexBashCommand(codexPath, opts, outputFile, promptFile);
+        result = spawnSync(bashPath, ["-c", bashCmd], {
+          encoding: "utf8",
+          cwd: opts.cwd ?? process.cwd(),
+          timeout: opts.timeoutMs ?? 120000,
+          env: buildVendorEnv()
+        });
+      } else {
+        // POSIX: direct spawnSync with stdin input (dispatch sandbox + never-approve forced)
+        result = spawnSync("codex", [
+          "exec",
+          ...buildCodexConfigArgs(opts.codexMode),
+          ...schemaArgs, "-o", outputFile,
+          ...(opts.model ? ["-m", opts.model] : []),
+          ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
+        ], {
+          input: prompt,
+          encoding: "utf8",
+          cwd: opts.cwd ?? process.cwd(),
+          timeout: opts.timeoutMs ?? 120000,
+          env: buildVendorEnv()
+        });
       }
-    } catch {
-      // file absent or not valid JSON — caller checks exitCode
+
+      rawFileContent = "";
+      parsedJson = null;
+      try {
+        rawFileContent = readFileSync(outputFile, "utf8").trim();
+        if (rawFileContent) {
+          parsedJson = JSON.parse(rawFileContent);
+        }
+      } catch {
+        // file absent or not valid JSON — caller checks exitCode
+      }
+
+      const timedOut = isSpawnTimeout(result.error);
+      const emptyOutput = rawFileContent.length === 0;
+      if (!shouldRetryCodex({ emptyOutput, timedOut, attempt, maxAttempts })) break;
     }
 
-    const timedOut = isSpawnTimeout(result.error);
-    const emptyOutput = rawFileContent.length === 0;
-    if (!shouldRetryCodex({ emptyOutput, timedOut, attempt, maxAttempts })) break;
+    const durationMs = Date.now() - startedAt;
+    completed = true;
+
+    return {
+      exitCode: result.status ?? 1,
+      outputFilePath: outputFile,
+      rawFileContent,
+      parsedJson,
+      durationMs,
+      errorOutput: collectSpawnErrorOutput(result),
+      timedOut: isSpawnTimeout(result.error),
+      attempts
+    };
+  } finally {
+    unlinkCaptureFileBestEffort(promptFile);
+    for (const path of outputFiles) {
+      if (!completed || path !== outputFile) unlinkCaptureFileBestEffort(path);
+    }
   }
-
-  const durationMs = Date.now() - startedAt;
-
-  return {
-    exitCode: result.status ?? 1,
-    outputFilePath: outputFile,
-    rawFileContent,
-    parsedJson,
-    durationMs,
-    errorOutput: collectSpawnErrorOutput(result),
-    timedOut: isSpawnTimeout(result.error),
-    attempts
-  };
 }
 
 export async function captureOpenRouterResponse(
@@ -1194,6 +1205,14 @@ export async function captureOpenRouterResponse(
     ...(providerUsage ? { providerUsage } : {}),
     ...(attemptCounts ? { attemptCounts } : {})
   };
+}
+
+function unlinkCaptureFileBestEffort(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    // Capture cleanup is best effort and must not mask the governed result.
+  }
 }
 
 function defaultOpenRouterFetch(

@@ -6,8 +6,8 @@ import { isProjectConfigurationError, resolveEnabledProject } from "./projectReg
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
 import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import type { TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
-import { redactTelemetryText } from "./telemetryRedaction";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens } from "./runPromptPolicy";
+import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { computePacketHash } from "../../governed-core/dispatch";
 import { buildAgentPacket, loadDecisionMeshFromRoot } from "../../lib/decision-mesh";
@@ -178,7 +178,7 @@ export function createRunOrchestrator(options: {
   function persistResult(run: RunRecord, result: DispatchResult): RunRecord {
     return recordRunProviderResult(options.stateDir, run.current.run_id, result.refused
       ? { refused: true, reason: result.reason, worker_run_id: null, raw_output: "", exit_code: null, error_reason: null, lock_status: null }
-      : { refused: false, reason: null, worker_run_id: result.workerRunId, raw_output: redactTelemetryText(result.rawOutput, 32_000), exit_code: result.exitCode ?? 0, error_reason: result.errorReason == null ? null : redactTelemetryText(result.errorReason, 32_000), lock_status: result.lockStatus ?? "acquired_supervisor_spawn" }, now());
+      : { refused: false, reason: null, worker_run_id: result.workerRunId, raw_output: sanitizeWorkerOutput(result.rawOutput), exit_code: result.exitCode ?? 0, error_reason: sanitizeWorkerError(result.errorReason), lock_status: result.lockStatus ?? "acquired_supervisor_spawn" }, now());
   }
 
   function reconstructedResult(run: RunRecord): DispatchResult {
@@ -240,7 +240,7 @@ export function createRunOrchestrator(options: {
     }
     const latest = record(run.current.run_id);
     if (!latest.artifacts.some((artifact) => artifact.artifact_id === `text-${result.workerRunId}`)) {
-      appendRunArtifact(options.stateDir, run.current.run_id, { artifact_id: `text-${result.workerRunId}`, type: "text", preview: redactTelemetryText(result.rawOutput, 32_000) }, now());
+      appendRunArtifact(options.stateDir, run.current.run_id, { artifact_id: `text-${result.workerRunId}`, type: "text", preview: sanitizeWorkerOutput(result.rawOutput) }, now());
       options.afterPhase?.("artifact");
     }
     const finalized = cancelled
@@ -301,11 +301,12 @@ export function createRunOrchestrator(options: {
     let result: DispatchResult;
     try {
       const cwd = resolveEnabledProject(options.stateDir, run.current.project_id, registryOptions).cwd;
-      result = await options.dispatch({ ...task.handoff, cwd }, options.stateDir);
+      result = sanitizeDispatchResult(await options.dispatch({ ...task.handoff, cwd }, options.stateDir));
     } catch (error) {
-      run = recordRunDispatchFailure(options.stateDir, run.current.run_id, error instanceof Error ? error.message.slice(0, 32_000) : "dispatch_failed", now());
+      const dispatchError = sanitizeWorkerError(error instanceof Error ? error.message : "dispatch_failed") ?? "dispatch_failed";
+      run = recordRunDispatchFailure(options.stateDir, run.current.run_id, dispatchError, now());
       let failed: { readonly status?: string };
-      try { failed = options.supervisor.fail(taskId, error instanceof Error ? error.message : "dispatch_failed", now()); }
+      try { failed = options.supervisor.fail(taskId, dispatchError, now()); }
       catch (failError) {
         const persisted = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
         if (persisted?.status !== "failed") throw failError;
@@ -316,7 +317,7 @@ export function createRunOrchestrator(options: {
       } else {
         clearRunDispatchFailure(options.stateDir, run.current.run_id, now());
       }
-      throw error;
+      throw new Error(dispatchError);
     }
     run = persistResult(run, result);
     return finishProviderResult(taskId, run, result);
@@ -350,4 +351,22 @@ export function createRunOrchestrator(options: {
   }
 
   return { prepareRun, approveAndQueueRun, runSupervisorOnce, cancelRun };
+}
+
+function sanitizeDispatchResult(result: DispatchResult): DispatchResult {
+  if (result.refused) return result;
+  let parsedJson: unknown = null;
+  if (result.parsedJson !== null && result.parsedJson !== undefined) {
+    try {
+      parsedJson = parseSanitizedWorkerJson(JSON.stringify(result.parsedJson));
+    } catch {
+      parsedJson = null;
+    }
+  }
+  return {
+    ...result,
+    rawOutput: sanitizeWorkerOutput(result.rawOutput),
+    parsedJson,
+    errorReason: sanitizeWorkerError(result.errorReason ?? null)
+  };
 }

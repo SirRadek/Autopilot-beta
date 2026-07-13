@@ -241,7 +241,7 @@ describe("governed run orchestration", () => {
   });
 
   it("fails a nonzero worker result while settling its actual usage", async () => {
-    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "password=pw authorization: Bearer bt api_key=ak", exitCode: 7, errorReason: "provider_failed", lockStatus: "failed" as const, model: "gpt-5" }));
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "password=pw authorization: Bearer bt api_key=ak cookie=session-secret", parsedJson: { password: "parsed-secret" }, exitCode: 7, errorReason: "provider_failed password=error-secret", lockStatus: "failed" as const, model: "gpt-5" }));
     const { orchestrator, input, tokenGateway, stateDir, supervisor } = setup({ dispatch });
     supervisor.fail.mockReturnValue({ status: "failed" });
     const draft = orchestrator.prepareRun(input);
@@ -252,7 +252,10 @@ describe("governed run orchestration", () => {
     expect(JSON.stringify(readRunStore(stateDir))).not.toContain("password=pw");
     expect(JSON.stringify(readRunStore(stateDir))).not.toContain("Bearer bt");
     expect(JSON.stringify(readRunStore(stateDir))).not.toContain("api_key=ak");
-    expect(readRunStore(stateDir).runs[0]?.provider_result).toMatchObject({ exit_code: 7, error_reason: "provider_failed" });
+    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("session-secret");
+    expect(JSON.stringify(result?.result)).not.toContain("parsed-secret");
+    expect(JSON.stringify(result?.result)).not.toContain("error-secret");
+    expect(readRunStore(stateDir).runs[0]?.provider_result).toMatchObject({ exit_code: 7 });
   });
 
   it("retries a failed worker result on the same route before succeeding", async () => {

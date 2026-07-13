@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { appendStateFile } from "../src/data/delivery-system/stateMaintenanceLock";
+import { sanitizeWorkerOutput } from "../src/data/delivery-system/workerOutputPolicy";
 import { promisify } from "node:util";
 
 import { decideApproval, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
@@ -288,13 +289,11 @@ function readBoundedText(path: string, maxBytes = 16 * 1024): string {
     const start = Math.max(0, size - maxBytes);
     const buffer = Buffer.alloc(Number(size - start));
     readSync(fd, buffer, 0, buffer.length, start);
-    return redactWorkerOutput(buffer.toString("utf8"));
+    return sanitizeWorkerOutput(buffer.toString("utf8"), maxBytes);
   } finally {
     closeSync(fd);
   }
 }
-
-function redactWorkerOutput(value: string): string { return value.replace(/\b(?:sk|or|ghp|github_pat|xoxb)-[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]").replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]"); }
 
 function audit(directory: string, action: string, details: Record<string, unknown>): void { appendStateFile(directory, join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action, ...details })}\n`); }
 

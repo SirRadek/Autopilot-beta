@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { existsSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   alertTriggersForCliWorkerOutcome,
@@ -403,6 +406,10 @@ describe("CLI worker exec containment", () => {
   });
 
   it("retries codex once when the first output file is empty and the second has JSON", async () => {
+    const captureDirectory = join(tmpdir(), "autopilot-codex-captures");
+    const promptFilesBefore = new Set(existsSync(captureDirectory)
+      ? readdirSync(captureDirectory).filter((name) => name.startsWith("prompt-"))
+      : []);
     const spawnSyncMock = vi.fn()
       .mockReturnValueOnce({ status: 1, stderr: "", stdout: "", error: undefined })
       .mockReturnValueOnce({ status: 0, stderr: "", stdout: "", error: undefined });
@@ -426,6 +433,10 @@ describe("CLI worker exec containment", () => {
       expect(readFileSyncMock).toHaveBeenCalledTimes(2);
       expect(result.attempts).toBe(2);
       expect(result.parsedJson).toEqual({ ok: true });
+      const promptFilesAfter = existsSync(captureDirectory)
+        ? readdirSync(captureDirectory).filter((name) => name.startsWith("prompt-") && !promptFilesBefore.has(name))
+        : [];
+      expect(promptFilesAfter).toEqual([]);
     } finally {
       vi.doUnmock("node:child_process");
       vi.doUnmock("node:fs");

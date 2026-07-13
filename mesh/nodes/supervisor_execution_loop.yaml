@@ -33,6 +33,7 @@ related_files:
   - src/data/delivery-system/runOrchestrator.ts
   - src/data/delivery-system/supervisorQueue.ts
   - src/data/delivery-system/tokenGateway.ts
+  - src/data/delivery-system/workerOutputPolicy.ts
   - model-output-evals/
   - docs/autopilot/agent-handoff-packet-template.md
 required_checks:

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { HandoffId } from "./checkCompletionMatrix";
@@ -31,6 +31,7 @@ import {
 } from "./cliWorkerCapture";
 import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH, VENDOR_PROCESS_REGISTRY_PATH } from "./sessionState";
 import { appendStateFile, removeStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
+import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
 import { ensureOpenRouterLedgersMigrated } from "./openRouterLedgerMigration";
 import type { RoutingModeId } from "./routingModes";
 import {
@@ -559,6 +560,7 @@ export async function runCliWorker(
   let openRouterAttemptCounts: OpenRouterAttemptCounts | undefined;
   let missing: CliWorkerResult["missing"] | undefined;
   let providerUsage: CliWorkerProviderUsage | undefined;
+  let rawCapturePath: string | null = null;
 
   try {
     if (input.vendor === "claude_cli") {
@@ -572,7 +574,6 @@ export async function runCliWorker(
       durationSeconds = result.durationMs / 1000;
       captureErrorText = result.errorOutput;
       captureTimedOut = result.timedOut;
-      workerOutputPath = writeResponseFile(result.rawOutput, workerRunId, stateDir);
     } else if (input.vendor === "agy_cli") {
       const result = await captureAgyResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
@@ -593,8 +594,6 @@ export async function runCliWorker(
       durationSeconds = result.durationMs / 1000;
       attemptCount = 1;
 
-      // Persist the clean output to a file as the worker_output artifact
-      workerOutputPath = writeResponseFile(result.cleanOutput, workerRunId, stateDir);
     } else if (input.vendor === "openrouter_api") {
       if (openRouterConfig === null) {
         throw new Error("openrouter_api internal error: missing resolved config");
@@ -638,9 +637,6 @@ export async function runCliWorker(
       providerUsage = result.providerUsage;
       missing = result.missing;
 
-      if (!result.missing) {
-        workerOutputPath = writeResponseFile(result.rawOutput, workerRunId, stateDir);
-      }
     } else {
       const result = await captureCodexResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
@@ -657,12 +653,23 @@ export async function runCliWorker(
       parsedJson = result.parsedJson;
       durationSeconds = result.durationMs / 1000;
       attemptCount = result.attempts;
-      workerOutputPath = result.outputFilePath;
+      rawCapturePath = result.outputFilePath;
       captureErrorText = result.errorOutput;
       captureTimedOut = result.timedOut;
     }
   } catch (err) {
     captureErrorText = sanitizeCaptureErrorText(err, input.vendor);
+  }
+
+  rawOutput = sanitizeWorkerOutput(rawOutput);
+  parsedJson = sanitizeParsedWorkerJson(parsedJson);
+  captureErrorText = sanitizeWorkerError(captureErrorText);
+  try {
+    if (rawOutput.length > 0 && missing === undefined) {
+      workerOutputPath = writeResponseFile(rawOutput, workerRunId, stateDir);
+    }
+  } finally {
+    if (rawCapturePath !== null) unlinkBestEffort(rawCapturePath);
   }
 
   const classification = classifyCliWorkerOutcome({
@@ -676,6 +683,7 @@ export async function runCliWorker(
   errorReason = input.vendor === "openrouter_api" && captureErrorText
     ? captureErrorText
     : classification.errorReason;
+  errorReason = sanitizeWorkerError(errorReason);
 
   const stoppedAt = new Date().toISOString();
 
@@ -953,7 +961,24 @@ function sanitizeCaptureErrorText(err: unknown, vendor: CliVendor): string {
     ? openRouterErrorReason(err) ?? errorText(err)
     : errorText(err);
 
-  return vendor === "openrouter_api" ? redactOpenRouterApiKey(raw) : raw;
+  return sanitizeWorkerError(vendor === "openrouter_api" ? redactOpenRouterApiKey(raw) : raw) ?? "worker_capture_failed";
+}
+
+function sanitizeParsedWorkerJson(value: unknown): unknown | null {
+  if (value === null) return null;
+  try {
+    return parseSanitizedWorkerJson(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
+
+function unlinkBestEffort(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    // Governed ingestion must not fail because a temporary capture is already gone.
+  }
 }
 
 function errorText(err: unknown): string {
