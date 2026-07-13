@@ -71,6 +71,10 @@ export interface ToolInventoryRouteResult {
   readonly notes: readonly string[];
 }
 
+export interface GovernedToolRouteResult extends ToolInventoryRouteResult {
+  readonly skillManifests: readonly SkillManifest[];
+}
+
 export const toolInventorySnapshot = {
   observedAt: "2026-06-11",
   evidence: [
@@ -333,6 +337,23 @@ export function selectToolInventoryForTask(input: ToolInventoryRouteInput): Tool
   };
 }
 
+export function selectGovernedToolsForTask(
+  input: ToolInventoryRouteInput,
+  manifests: readonly SkillManifest[]
+): GovernedToolRouteResult {
+  return {
+    ...selectToolInventoryForTask(input),
+    skillManifests: selectSkillManifestsForTask(input.task, manifests)
+  };
+}
+
+export function selectGovernedToolsForTaskFromCatalog(
+  input: ToolInventoryRouteInput,
+  catalogPaths: readonly string[]
+): GovernedToolRouteResult {
+  return selectGovernedToolsForTask(input, loadGovernedSkillCatalog(catalogPaths));
+}
+
 function itemMatchesTask(item: ToolInventoryItem, normalizedTask: string): boolean {
   const haystack = normalize([item.id, item.title, ...item.useFor].join(" "));
   return haystack.split(" ").some((term) => term.length > 3 && normalizedTask.includes(term));
@@ -355,3 +376,4 @@ function normalize(value: string): string {
 function unique<T extends string>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
+import { loadGovernedSkillCatalog, selectSkillManifestsForTask, type SkillManifest } from "./skillRegistry";

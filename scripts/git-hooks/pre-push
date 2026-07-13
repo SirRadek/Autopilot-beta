@@ -67,6 +67,7 @@ if [ "$saw_update" -eq 0 ]; then
   exit 0
 fi
 
+autopilot_run_npm "checking vendor provenance" run beta:vendor-check
 autopilot_run_npm "running TypeScript typecheck" run typecheck
 autopilot_run_npm "running test suite" run test
 autopilot_run_npm "running PDOS fit safety lint" run pdos:fit-safety-lint -- --no-pages

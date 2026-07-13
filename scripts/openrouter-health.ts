@@ -12,6 +12,7 @@ import {
 
 const OPENROUTER_ENDPOINTS_BASE_URL = "https://openrouter.ai/api/v1/models";
 const DEFAULT_TIMEOUT_MS = 10_000;
+const MAX_HEALTH_RESPONSE_BYTES = 64 * 1024;
 
 export interface EndpointEvaluation {
   readonly provider: string;
@@ -165,6 +166,7 @@ export async function probeOpenRouterModelHealth(input: {
   readonly modelId: string;
   readonly fetchImpl?: OpenRouterHealthFetch;
   readonly timeoutMs?: number;
+  readonly signal?: AbortSignal;
 }): Promise<ModelProbeReport> {
   const fetchImpl =
     input.fetchImpl ?? (typeof globalThis.fetch === "function" ? (globalThis.fetch as OpenRouterHealthFetch) : null);
@@ -175,6 +177,8 @@ export async function probeOpenRouterModelHealth(input: {
 
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const onAbort = () => controller.abort();
+  input.signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
     const response = await fetchImpl(openRouterEndpointsUrl(input.modelId), {
@@ -186,7 +190,8 @@ export async function probeOpenRouterModelHealth(input: {
       },
       signal: controller.signal
     });
-    const responseText = await response.text();
+    const responseText = await readBoundedResponseText(response, MAX_HEALTH_RESPONSE_BYTES);
+    if (responseText === null) return unknownModel(input.modelId, "response_too_large");
 
     if (!response.ok) {
       return unknownModel(input.modelId, `http_${response.status}`);
@@ -207,13 +212,45 @@ export async function probeOpenRouterModelHealth(input: {
     return unknownModel(input.modelId, error instanceof Error ? error.name || "fetch_error" : "fetch_error");
   } finally {
     clearTimeout(timeoutHandle);
+    input.signal?.removeEventListener("abort", onAbort);
   }
+}
+
+async function readBoundedResponseText(response: { readonly body?: ReadableStream<Uint8Array> | null; text(): Promise<string> }, maxBytes: number): Promise<string | null> {
+  if (response.body === undefined || response.body === null) {
+    // Injected test doubles may expose only text(); enforce the same byte cap
+    // immediately after the read and never pass an oversized value to JSON.parse.
+    const text = await response.text();
+    return text.length <= maxBytes ? text : null;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      total += result.value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(result.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(bytes);
 }
 
 export async function buildOpenRouterHealthReport(input: {
   readonly fetchImpl?: OpenRouterHealthFetch;
   readonly timeoutMs?: number;
   readonly now?: Date;
+  readonly signal?: AbortSignal;
 } = {}): Promise<OpenRouterHealthReport> {
   const models = await Promise.all(
     buildOpenRouterHealthProbeList().map((modelId) =>
@@ -221,6 +258,7 @@ export async function buildOpenRouterHealthReport(input: {
         modelId,
         ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
         ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {})
+        ,...(input.signal ? { signal: input.signal } : {})
       })
     )
   );

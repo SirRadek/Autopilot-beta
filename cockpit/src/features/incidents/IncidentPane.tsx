@@ -1,0 +1,14 @@
+import React, { useState } from "react";
+import type { AutopilotIncident, AutopilotRepairPacket } from "../../types/controlPlane";
+
+const MAX_INCIDENTS = 64;
+const MAX_PACKET_DISPLAY_CHARS = 8_000;
+
+export type IncidentPaneProps = { readonly incidents: readonly AutopilotIncident[]; readonly onAcknowledge: (incidentId: string) => Promise<unknown>; readonly onPrepareRepairPacket: (incidentId: string) => Promise<AutopilotRepairPacket> };
+
+export function IncidentPane({ incidents, onAcknowledge, onPrepareRepairPacket }: IncidentPaneProps) {
+  const [packet, setPacket] = useState<string>(); const [message, setMessage] = useState(""); const [pending, setPending] = useState<string>();
+  const run = async (id: string, action: "acknowledge" | "packet") => { if (pending) return; setPending(`${action}:${id}`); setMessage(""); try { if (action === "acknowledge") { await onAcknowledge(id); setMessage("Incident byl potvrzen."); } else { const value = await onPrepareRepairPacket(id); const json = JSON.stringify(value, null, 2); setPacket(json); setMessage(json.length > MAX_PACKET_DISPLAY_CHARS ? "Balíček byl pouze pro zobrazení zkrácen; kopie zůstává úplná." : "Balíček je připraven pro ruční použití."); } } catch (error) { setMessage(error instanceof Error ? error.message.slice(0, 300) : "Akce incidentu selhala."); } finally { setPending(undefined); } };
+  const copyPacket = async () => { if (!packet) return; await navigator.clipboard?.writeText(packet); setMessage("Balíček byl zkopírován pro ruční použití."); };
+  return <div className="incident-pane"><p className="manual-only">Pouze pro ruční použití v externí opravné relaci. Tato obrazovka nic nespouští.</p><ul>{incidents.slice(0, MAX_INCIDENTS).map((incident) => <li key={incident.incident_id}><header><strong>{incident.summary}</strong><span>{incident.severity}</span></header><p>{incident.stage} · {incident.impact}</p><small>{incident.incident_id} · {incident.retry_count} opakování</small><div className="incident-actions">{incident.status === "open" ? <button type="button" disabled={pending !== undefined} onClick={() => void run(incident.incident_id, "acknowledge")}>Potvrdit incident</button> : <span>Potvrzeno: {incident.acknowledged_by}</span>}<button type="button" disabled={pending !== undefined} onClick={() => void run(incident.incident_id, "packet")}>Připravit balíček pro opravu</button></div></li>)}</ul>{incidents.length > MAX_INCIDENTS ? <p className="truncation-marker">Seznam incidentů byl zkrácen.</p> : null}<p aria-live="polite">{message}</p>{packet ? <section aria-label="Ruční balíček pro opravu"><button type="button" onClick={() => void copyPacket()}>Kopírovat balíček</button><pre>{packet.slice(0, MAX_PACKET_DISPLAY_CHARS)}{packet.length > MAX_PACKET_DISPLAY_CHARS ? "\n…" : ""}</pre></section> : null}</div>;
+}

@@ -51,6 +51,25 @@ describe("governed-core IPC handleRequest", () => {
     }
   });
 
+  it("accepts openrouter_api as a governed vendor before provenance validation", async () => {
+    const response = await handleRequest({
+      id: 6,
+      op: "dispatch",
+      handoff: {
+        ...baseHandoff("0".repeat(64)),
+        vendor: "openrouter_api"
+      },
+      stateDir: refusalStateDir
+    });
+
+    expect(response.ok).toBe(true);
+    const dispatchResponse = response as DispatchIpcResponse;
+    expect(dispatchResponse.result.refused).toBe(true);
+    if (dispatchResponse.result.refused) {
+      expect(dispatchResponse.result.reason).toBe("packet_provenance_mismatch");
+    }
+  });
+
   it("returns an error response for unknown operations", async () => {
     const response = await handleRequest({ id: 4, op: "unknown" });
 

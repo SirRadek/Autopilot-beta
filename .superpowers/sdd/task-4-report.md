@@ -1,0 +1,55 @@
+# Phase 8 Task 4 report
+
+## Status
+
+Complete. Added bounded, redaction-first Autopilot incident persistence and read-only manual repair packets. The repair API returns data only: it has no process execution, callbacks, queue integration, or dispatch capability.
+
+## TDD evidence
+
+- RED: `npm test -- tests/delivery-system/incident-store.test.ts` failed because `incidentStore` did not exist.
+- RED: multibyte packet and loaded-secret tests failed against the initial implementation, proving byte-bound and redaction-at-rest validation coverage.
+- RED: the observability pre-redaction bound regression test failed until the shared helper call preserved the original slice-before-redact behavior.
+- GREEN: `npm test -- tests/delivery-system/incident-store.test.ts tests/delivery-system/observability.test.ts` passed 10 tests in 2 files.
+
+## Implementation
+
+- Added incident lifecycle functions: `recordAutopilotIncident`, `acknowledgeIncident`, `prepareRepairPacket`, and `readIncidentStore`.
+- Enforced 256 incidents, 2,000-character summary/text bounds, 32 correlation IDs, 32 event references, 20 reproduction/verification entries, a 2 MiB store read/write cap, and a 64 KiB serialized repair-packet cap.
+- Redacted all caller-provided persisted strings before atomic writes and rejected malformed, oversized, unknown-field, duplicate-ID, inconsistent-lifecycle, or unredacted loaded state.
+- Extracted `redactTelemetryText` and retained existing observability output behavior.
+- Repair packets declare `external_autopilot_repair` and `manual`; they are not persisted or dispatched.
+
+## Verification
+
+- `npm test -- tests/delivery-system/incident-store.test.ts tests/delivery-system/observability.test.ts` — pass, 10/10 tests.
+- `npm run typecheck` — pass.
+- `git diff --check` — pass.
+
+## Governance and concerns
+
+This implements the already-approved incident/repair boundary and does not change Decision Mesh architecture, so no mesh node update is required. Decision Mesh MCP tools were unavailable in this session; the task brief, repository governance, focused tests, and local typecheck were used as authority. No known implementation concerns remain.
+
+## Review follow-up
+
+- Expanded shared telemetry redaction to cover password/passwd assignments, API keys, access and refresh tokens, client secrets, cookie and set-cookie headers, AWS access IDs and credential assignments, private-key blocks and inline assignments, GitHub tokens, Slack tokens, and existing provider token prefixes.
+- Applied the shared policy to every caller-controlled persisted incident field and every exported repair-packet field. Loaded-state validation now rejects each governed secret class when it appears unredacted.
+- Replaced path-based stat-then-read with one open descriptor, bounded allocation/read, before/after descriptor size checks, and rejection of overflow, shrink, or growth.
+- Added RED/GREEN coverage spanning summary, impact, correlation IDs, event references, expected/actual state, reproduction steps, verification commands, multivalue cookies, private-key material, loaded secrets, and oversized state.
+- Follow-up verification: incident and observability suites pass 12/12 tests; typecheck and `git diff --check` pass.
+
+## Second review follow-up
+
+- Split redaction policies: incident persistence/repair export uses the strong governed-secret policy, while observability calls an explicit legacy wrapper after its original 200-character pre-slice, preserving output compatibility.
+- Strong incident redaction now handles quoted JSON key/value secrets, quoted Cookie and Set-Cookie values, and every PEM `BEGIN` marker through the remaining bounded field even when the block is truncated or unterminated.
+- Loaded incidents now require redacted RFC 4122-style IDs and canonical millisecond UTC timestamps; generated UUIDs and ISO timestamps satisfy the same validators.
+- The single-descriptor reader allocates and requests only the `fstat`-approved size, never `MAX + 1`, reads no more than 2 MiB, and rejects short reads or descriptor size changes.
+- Added adversarial persistence, export, load-validation, identity/timestamp, and legacy observability compatibility tests.
+- Second follow-up verification: incident and observability suites pass 15/15 tests; typecheck and `git diff --check` pass.
+
+## Third review follow-up
+
+- Loaded non-null `acknowledged_at` values now require the same canonical millisecond UTC shape and strong redaction check as `recorded_at`; repair export rejects an invalid loaded acknowledgement timestamp before returning a packet.
+- Strong structured redaction now recognizes quoted JSON `authorization` keys and consumes JSON string values with escaped quotes/backslashes as a unit, preventing secret suffix leakage.
+- Re-audited all string surfaces: incident IDs use UUID structure plus redaction validation; recorded and acknowledged timestamps use canonical ISO structure plus redaction validation; stage, summary, impact, acknowledgement owner, correlation keys/values, and event references require redacted bounded strings; repair expected/actual/steps/commands are redacted and bounded before export. Fixed schema/intent/execution/status/severity strings are closed enums or literals.
+- Added RED/GREEN input, persisted-load, and repair-export adversarial tests for JSON authorization, escape sequences, suffix leakage, and password-shaped acknowledgement timestamps.
+- Third follow-up verification: incident and observability suites pass 17/17 tests; typecheck and `git diff --check` pass.

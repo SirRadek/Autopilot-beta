@@ -310,9 +310,10 @@ export interface CodexDispatchConfig {
 export const DEFAULT_CLI_WORKER_MAX_PROMPT_CHARS =
   contextWidthSpecs.large.maxContextLines * contextWidthSpecs.large.maxFilesInPacket;
 
-function resolveAgyPath(): string {
+export function resolveAgyPath(): string {
   try {
-    return execSync("where agy", { encoding: "utf8" }).trim().split("\n")[0]?.trim() ?? "agy";
+    const command = platform === "win32" ? "where agy" : "command -v agy";
+    return execSync(command, { encoding: "utf8" }).trim().split(/\r?\n/)[0]?.trim() ?? "agy";
   } catch {
     return "agy";
   }
@@ -923,6 +924,50 @@ export interface CodexCaptureOptions {
   readonly maxPromptChars?: number;
   /** Retries on a transient empty-output exit (default 1; timeouts are never retried). */
   readonly retries?: number;
+}
+
+export interface ClaudeCaptureOptions {
+  readonly cwd?: string;
+  readonly timeoutMs?: number;
+  readonly maxPromptChars?: number;
+}
+
+export interface ClaudeCaptureResult {
+  readonly exitCode: number;
+  readonly rawOutput: string;
+  readonly durationMs: number;
+  readonly errorOutput: string;
+  readonly timedOut: boolean;
+}
+
+export async function captureClaudeResponse(
+  prompt: string,
+  opts: ClaudeCaptureOptions = {}
+): Promise<ClaudeCaptureResult> {
+  assertPromptWithinLimit(prompt, opts);
+  const startedAt = Date.now();
+  const result = spawnSync("claude", [
+    "-p",
+    prompt,
+    "--output-format",
+    "text",
+    "--permission-mode",
+    "plan",
+    "--tools",
+    ""
+  ], {
+    encoding: "utf8",
+    cwd: opts.cwd ?? process.cwd(),
+    timeout: opts.timeoutMs ?? 120000,
+    env: buildVendorEnv()
+  });
+  return {
+    exitCode: result.status ?? 1,
+    rawOutput: result.stdout?.trim() ?? "",
+    durationMs: Date.now() - startedAt,
+    errorOutput: collectSpawnErrorOutput(result),
+    timedOut: isSpawnTimeout(result.error)
+  };
 }
 
 export interface CodexCaptureResult {

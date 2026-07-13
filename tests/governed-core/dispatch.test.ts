@@ -13,6 +13,7 @@ import {
   dispatchHandoff,
   type GovernedHandoff
 } from "../../src/governed-core";
+import { TokenGateway } from "../../src/data/delivery-system/tokenGateway";
 
 const mocks = vi.hoisted(() => ({
   runCliWorker: vi.fn(),
@@ -125,6 +126,40 @@ describe("dispatchHandoff", () => {
       now: "2026-06-30T12:00:00.000Z"
     });
     expect(mocks.runCliWorker).not.toHaveBeenCalled();
+  });
+
+  it("reserves through the token gateway before dispatch and refuses exhausted caps", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "governed-dispatch-token-gateway-"));
+    const gateway = new TokenGateway({ stateDir, limits: {
+      inputCapTokens: 100,
+      outputCapTokens: 100,
+      providerBudgetTokens: 1_000,
+      modelBudgetTokens: 1_000,
+      sessionBudgetTokens: 1_000
+    } });
+    const result = await dispatchHandoff(baseHandoff(), stateDir, { tokenGateway: gateway });
+    expect(result).toEqual({
+      refused: true,
+      reason: "token_budget_exhausted",
+      tier_id: null,
+      provenance_verified: true
+    });
+    expect(mocks.runCliWorker).not.toHaveBeenCalled();
+    expect(gateway.snapshot().activeReservations).toBe(0);
+  });
+
+  it("releases a reservation when the worker throws before returning a result", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "governed-dispatch-token-gateway-throw-"));
+    const gateway = new TokenGateway({ stateDir, limits: {
+      inputCapTokens: 100,
+      outputCapTokens: 10_000,
+      providerBudgetTokens: 10_000,
+      modelBudgetTokens: 10_000,
+      sessionBudgetTokens: 10_000
+    } });
+    mocks.runCliWorker.mockRejectedValueOnce(new Error("worker_failed"));
+    await expect(dispatchHandoff(baseHandoff(), stateDir, { tokenGateway: gateway })).rejects.toThrow("worker_failed");
+    expect(gateway.snapshot().activeReservations).toBe(0);
   });
 });
 

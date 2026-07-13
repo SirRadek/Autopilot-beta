@@ -1,0 +1,24 @@
+Models & Quota
+
+GEMINI MODELS
+  Models within this group: Gemini Flash, Gemini Pro
+
+  Weekly Limit
+    [██████████████████████████████████████████████████] 100.00%
+    Quota available
+
+  Five Hour Limit
+    [██████████████████████████████████████████████████] 100.00%
+    Quota available
+
+CLAUDE AND GPT MODELS
+  Models within this group: Claude Opus, Claude Sonnet, GPT-OSS
+
+  Weekly Limit
+    [██████████████████████████████████████████████████] 100.00%
+    Quota available
+
+  Five Hour Limit
+    [██████████████████████████████████████████████████] 100.00%
+    Quota available
+

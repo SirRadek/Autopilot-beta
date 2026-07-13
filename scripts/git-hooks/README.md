@@ -20,7 +20,9 @@ npm.cmd run hooks:install
 
 - `npm run mesh:changed -- --root . --since <range> --fail-on-blocker`
 - `npm run baseline:waiver-check -- --range <range>` (report-first, per pushed range)
+- `npm run beta:vendor-check`
 - `npm run typecheck`
+- `npm run test`
 - `npm run pdos:fit-safety-lint -- --no-pages`
 
 ## Boundaries

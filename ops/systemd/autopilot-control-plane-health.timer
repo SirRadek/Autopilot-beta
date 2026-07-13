@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically verify Autopilot control-plane health
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

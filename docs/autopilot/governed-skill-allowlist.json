@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "v1",
+  "policy": "Only IDs listed here with the exact source commit may enter governed routing.",
+  "sources": {
+    "openclaw": {
+      "locator": "https://github.com/openclaw/openclaw",
+      "commitSha": "48b0f4edf554607a718a93bac7893324f0086b6c",
+      "skills": [
+        { "id": "model-usage", "trust": "reviewed" },
+        { "id": "session-logs", "trust": "reviewed" },
+        { "id": "spike", "trust": "reviewed" },
+        { "id": "taskflow", "trust": "reviewed" },
+        { "id": "taskflow-inbox-triage", "trust": "reviewed" },
+        { "id": "skill-creator", "trust": "reviewed" },
+        { "id": "coding-agent", "trust": "reviewed" }
+      ]
+    },
+    "orchestra-research": {
+      "locator": "https://github.com/orchestra-research/AI-research-SKILLs",
+      "commitSha": "773a52944ba4747a18bd4ae9ade53fff041adcbc",
+      "skills": [
+        { "id": "autoresearch", "trust": "reviewed" },
+        { "id": "ara-research-manager", "trust": "reviewed" },
+        { "id": "ara-rigor-reviewer", "trust": "reviewed" }
+      ]
+    }
+  }
+}

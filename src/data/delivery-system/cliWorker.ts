@@ -5,6 +5,7 @@ import type { HandoffId } from "./checkCompletionMatrix";
 import {
   captureAgyResponse,
   captureCodexResponse,
+  captureClaudeResponse,
   captureOpenRouterResponse,
   assertOpenRouterAccessTierOptions,
   assertOpenRouterDailySpendBudgetAvailable,
@@ -17,6 +18,7 @@ import {
   openRouterSpendLedgerPathForStateDir,
   parseVendorProcessRegistryLines,
   redactOpenRouterApiKey,
+  resolveCodexDispatchConfig,
   resolveOpenRouterModel,
   selectOrphanedVendorPids,
   sweepStaleVendorArtifactDirectories,
@@ -41,7 +43,7 @@ import {
 
 // ─── Vendor types ─────────────────────────────────────────────────────────────
 
-export type CliVendor = "codex_cli" | "agy_cli" | "openrouter_api";
+export type CliVendor = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
 
 export type { CodexDispatchMode, OpenRouterMode };
 
@@ -82,13 +84,42 @@ export interface CliWorkerProviderUsage {
   readonly totalTokens?: number;
 }
 
+/** Runtime generation settings supplied by a model adapter and recorded for tuning. */
+export interface ModelGenerationSettings {
+  readonly temperature?: number;
+  readonly top_p?: number;
+  readonly top_k?: number;
+  readonly min_p?: number;
+  readonly max_output_tokens?: number;
+  readonly reasoning_effort?: string;
+  readonly speculative_decoding?: {
+    readonly type: string;
+    readonly draft_length?: number;
+  };
+}
+
+/** Adapter-enforced controls recorded separately from model sampling settings. */
+export interface ModelGovernanceSettings {
+  readonly sandbox?: string;
+  readonly approval_policy?: string;
+  readonly web_search?: boolean;
+  readonly allow_fallbacks?: boolean;
+  readonly max_price?: {
+    readonly prompt: number;
+    readonly completion: number;
+    readonly request: number;
+  };
+}
+
 export interface CliCallTelemetryRecord {
   readonly schema_version: "v1";
   readonly recorded_at: string;
   readonly worker_run_id: string;
   readonly handoff_id: HandoffId;
+  readonly session_id?: string;
+  readonly skill_ids?: readonly string[];
   readonly vendor: CliVendor;
-  readonly provider: "openai_gpt" | "gemini_cli" | "openrouter";
+  readonly provider: "openai_gpt" | "anthropic_claude" | "gemini_cli" | "openrouter";
   readonly model: string | null;
   readonly tier_id: string | null;
   readonly input_chars: number;
@@ -111,12 +142,16 @@ export interface CliCallTelemetryRecord {
   readonly routing_mode?: RoutingModeId;
   readonly task_packet_ref?: string;
   readonly attempt_counts?: OpenRouterAttemptCounts;
+  readonly generation_settings?: ModelGenerationSettings;
+  readonly governance_settings?: ModelGovernanceSettings;
 }
 
 export interface BuildCliCallTelemetryRecordInput {
   readonly recordedAt: string;
   readonly workerRunId: string;
   readonly handoffId: HandoffId;
+  readonly sessionId?: string;
+  readonly skillIds?: readonly string[];
   readonly vendor: CliVendor;
   readonly model: string | null;
   readonly tierId: string | null;
@@ -137,6 +172,8 @@ export interface BuildCliCallTelemetryRecordInput {
   readonly routingMode?: RoutingModeId;
   readonly taskPacketRef?: string;
   readonly attemptCounts?: OpenRouterAttemptCounts;
+  readonly generationSettings?: ModelGenerationSettings;
+  readonly governanceSettings?: ModelGovernanceSettings;
 }
 
 const AUTH_ERROR_PATTERNS: readonly RegExp[] = [
@@ -217,6 +254,8 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
     recorded_at: input.recordedAt,
     worker_run_id: input.workerRunId,
     handoff_id: input.handoffId,
+    ...(input.sessionId !== undefined ? { session_id: input.sessionId } : {}),
+    ...(input.skillIds !== undefined ? { skill_ids: [...input.skillIds] } : {}),
     vendor: input.vendor,
     provider: providerForCliVendor(input.vendor),
     model: input.model,
@@ -240,7 +279,9 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
     ...(input.openrouterMode !== undefined ? { openrouter_mode: input.openrouterMode } : {}),
     ...(input.routingMode !== undefined ? { routing_mode: input.routingMode } : {}),
     ...(input.taskPacketRef !== undefined ? { task_packet_ref: input.taskPacketRef } : {}),
-    ...(input.attemptCounts !== undefined ? { attempt_counts: input.attemptCounts } : {})
+    ...(input.attemptCounts !== undefined ? { attempt_counts: input.attemptCounts } : {}),
+    ...(input.generationSettings !== undefined ? { generation_settings: input.generationSettings } : {}),
+    ...(input.governanceSettings !== undefined ? { governance_settings: input.governanceSettings } : {})
   };
 }
 
@@ -334,6 +375,8 @@ function prefixForCliVendor(vendor: CliVendor): string {
   switch (vendor) {
     case "codex_cli":
       return "cli-codex";
+    case "claude_cli":
+      return "cli-claude";
     case "agy_cli":
       return "cli-agy";
     case "openrouter_api":
@@ -345,6 +388,8 @@ function prefixForCliVendor(vendor: CliVendor): string {
 
 export interface CliWorkerInput {
   readonly handoffId: HandoffId;
+  readonly sessionId?: string;
+  readonly skillIds?: readonly string[];
   readonly vendor: CliVendor;
   /** Prompt / handoff text to send to the worker. Must be redacted of secrets. */
   readonly prompt: string;
@@ -371,6 +416,8 @@ export interface CliWorkerInput {
   readonly lockSource?: string;
   /** Fail fast before forwarding oversized handoff prompts to a vendor CLI. */
   readonly maxPromptChars?: number;
+  /** Optional adapter-supplied generation settings recorded for model tuning. */
+  readonly generationSettings?: ModelGenerationSettings;
 }
 
 export interface CliWorkerResult {
@@ -407,6 +454,7 @@ export async function runCliWorker(
   const startedAt = new Date().toISOString();
   const lockSource = input.lockSource ?? "supervisor_spawn";
   const promptLimitOptions = promptLimitOptionsFor(input);
+  const governanceSettings = governanceSettingsFor(input.vendor, input.codexMode);
 
   // Write handoff prompt to temp file (artifact pointer for evidence)
   const handoffFilePath = writePromptFile(input.prompt, handoffSlug, promptLimitOptions);
@@ -438,6 +486,8 @@ export async function runCliWorker(
       recordedAt: new Date().toISOString(),
       workerRunId,
       handoffId: input.handoffId,
+      ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+      ...(input.skillIds !== undefined ? { skillIds: input.skillIds } : {}),
       vendor: input.vendor,
       model: modelForRun,
       tierId: null,
@@ -455,7 +505,9 @@ export async function runCliWorker(
       ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
       ...(openRouterConfig !== null ? { openrouterMode: openRouterConfig.openrouterMode } : {}),
       ...(input.routingMode !== undefined ? { routingMode: input.routingMode } : {}),
-      ...(taskPacketRef !== undefined ? { taskPacketRef } : {})
+      ...(taskPacketRef !== undefined ? { taskPacketRef } : {}),
+      ...(input.generationSettings !== undefined ? { generationSettings: input.generationSettings } : {}),
+      governanceSettings
     }), stateDir);
 
     return {
@@ -510,7 +562,19 @@ export async function runCliWorker(
   let providerUsage: CliWorkerProviderUsage | undefined;
 
   try {
-    if (input.vendor === "agy_cli") {
+    if (input.vendor === "claude_cli") {
+      const result = await captureClaudeResponse(input.prompt, {
+        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+        ...promptLimitOptions,
+        ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {})
+      });
+      exitCode = result.exitCode;
+      rawOutput = result.rawOutput;
+      durationSeconds = result.durationMs / 1000;
+      captureErrorText = result.errorOutput;
+      captureTimedOut = result.timedOut;
+      workerOutputPath = writeResponseFile(result.rawOutput, workerRunId, stateDir);
+    } else if (input.vendor === "agy_cli") {
       const result = await captureAgyResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
@@ -633,6 +697,8 @@ export async function runCliWorker(
     recordedAt: stoppedAt,
     workerRunId,
     handoffId: input.handoffId,
+    ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+    ...(input.skillIds !== undefined ? { skillIds: input.skillIds } : {}),
     vendor: input.vendor,
     model: modelForRun,
     tierId: null,
@@ -652,6 +718,8 @@ export async function runCliWorker(
     ...(openRouterConfig !== null ? { openrouterMode: openRouterConfig.openrouterMode } : {}),
     ...(input.routingMode !== undefined ? { routingMode: input.routingMode } : {}),
     ...(taskPacketRef !== undefined ? { taskPacketRef } : {}),
+    ...(input.generationSettings !== undefined ? { generationSettings: input.generationSettings } : {}),
+    governanceSettings,
     ...(openRouterAttemptCounts !== undefined ? { attemptCounts: openRouterAttemptCounts } : {})
   }), stateDir);
 
@@ -942,14 +1010,41 @@ function signalToAlertTrigger(signal: CliWorkerFailureSignal): AlertTrigger {
   }
 }
 
-function providerForCliVendor(vendor: CliVendor): "openai_gpt" | "gemini_cli" | "openrouter" {
+function providerForCliVendor(vendor: CliVendor): "openai_gpt" | "anthropic_claude" | "gemini_cli" | "openrouter" {
   switch (vendor) {
     case "codex_cli":
       return "openai_gpt";
+    case "claude_cli":
+      return "anthropic_claude";
     case "agy_cli":
       return "gemini_cli";
     case "openrouter_api":
       return "openrouter";
+  }
+}
+
+function governanceSettingsFor(
+  vendor: CliVendor,
+  codexMode: CodexDispatchMode | undefined
+): ModelGovernanceSettings {
+  switch (vendor) {
+    case "codex_cli": {
+      const config = resolveCodexDispatchConfig(codexMode);
+      return {
+        sandbox: config.sandboxMode,
+        approval_policy: config.approvalPolicy,
+        ...(config.webSearch !== undefined ? { web_search: config.webSearch } : {})
+      };
+    }
+    case "claude_cli":
+      return { sandbox: "claude_plan", approval_policy: "never", web_search: false };
+    case "agy_cli":
+      return { sandbox: "agy_sandbox" };
+    case "openrouter_api":
+      return {
+        allow_fallbacks: false,
+        max_price: { prompt: 0, completion: 0, request: 0 }
+      };
   }
 }
 

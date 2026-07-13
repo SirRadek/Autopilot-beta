@@ -187,7 +187,7 @@ function isGovernedHandoff(value: unknown): value is GovernedHandoff {
 }
 
 function isCliVendor(value: unknown): value is GovernedHandoff["vendor"] {
-  return value === "codex_cli" || value === "agy_cli";
+  return value === "codex_cli" || value === "claude_cli" || value === "agy_cli" || value === "openrouter_api";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
