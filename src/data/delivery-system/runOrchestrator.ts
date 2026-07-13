@@ -28,8 +28,8 @@ interface SupervisorTaskView {
 
 interface Supervisor {
   enqueue(input: { readonly taskId: string; readonly handoff: GovernedHandoff; readonly sessionId: string; readonly requiresApproval: true; readonly approvalGranted: true; readonly now: string; readonly maxAttempts?: number }): unknown;
+  peekClaimable(now: string): SupervisorTaskView | null;
   claim(now: string): SupervisorTaskView | null;
-  peekClaimable?(now: string): SupervisorTaskView | null;
   complete(taskId: string, now?: string): unknown;
   fail(taskId: string, reason: string, now?: string): { readonly status?: string };
   cancel(taskId: string, reason?: string, now?: string): unknown;
@@ -278,18 +278,16 @@ export function createRunOrchestrator(options: {
     let task = taskForPendingResult();
     if (task === null) {
       const claimAt = now();
-      const claimable = options.supervisor.peekClaimable?.(claimAt);
+      const claimable = options.supervisor.peekClaimable(claimAt);
       if (claimable === null) return null;
-      if (claimable !== undefined) {
-        const claimableTaskId = claimable.task_id ?? claimable.taskId;
-        if (claimableTaskId === undefined) throw new Error("invalid_supervisor_task");
-        const claimableRun = bindingForTask(claimableTaskId);
-        try {
-          resolveEnabledProject(options.stateDir, claimableRun.current.project_id, registryOptions);
-        } catch (error) {
-          if (isProjectConfigurationError(error)) return null;
-          throw error;
-        }
+      const claimableTaskId = claimable.task_id ?? claimable.taskId;
+      if (claimableTaskId === undefined) throw new Error("invalid_supervisor_task");
+      const claimableRun = bindingForTask(claimableTaskId);
+      try {
+        resolveEnabledProject(options.stateDir, claimableRun.current.project_id, registryOptions);
+      } catch (error) {
+        if (isProjectConfigurationError(error)) return null;
+        throw error;
       }
       task = options.supervisor.claim(claimAt);
     }

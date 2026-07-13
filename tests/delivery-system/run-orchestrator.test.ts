@@ -27,10 +27,12 @@ function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnT
   const tasks: Array<Record<string, unknown>> = [];
   const supervisor = {
     enqueue: options.enqueue ?? vi.fn((input) => { tasks.push({ ...input, status: "queued", attempt: 0 }); return { ...input, status: "queued", attempt: 0 }; }),
+    peekClaimable: vi.fn(() => tasks[0] ?? null),
     claim: vi.fn(() => tasks.shift() ?? null),
     complete: vi.fn(),
     fail: vi.fn((_id, _reason) => ({ status: "queued" })),
-    cancel: vi.fn()
+    cancel: vi.fn(),
+    snapshot: vi.fn(() => structuredClone(tasks))
   };
   const dispatch = options.dispatch ?? vi.fn(async () => ({ refused: false, workerRunId: "worker-1", rawOutput: "text result", exitCode: 0, model: "gpt-5" }));
   type OrchestratorOptions = Parameters<typeof createRunOrchestrator>[0];
@@ -66,13 +68,14 @@ describe("governed run orchestration", () => {
     const restarted = createRunOrchestrator({ stateDir, projectRoot, tokenGateway: new TokenGateway({ stateDir }), supervisor, dispatch, now: () => now, isRouteAvailable: () => true });
     const runBefore = readRunStore(stateDir).runs[0];
     const taskBefore = supervisor.snapshot()[0];
+    const reservationsBefore = new TokenGateway({ stateDir }).snapshot();
 
     expect(await restarted.runSupervisorOnce()).toBeNull();
     expect(readRunStore(stateDir).runs[0]).toEqual(runBefore);
     expect(supervisor.snapshot()[0]).toEqual(taskBefore);
+    expect(new TokenGateway({ stateDir }).snapshot()).toEqual(reservationsBefore);
     expect(runBefore).toMatchObject({ status: "queued", reservation_status: "active" });
     expect(taskBefore).toMatchObject({ status: "queued", attempt: 0 });
-    expect(new TokenGateway({ stateDir }).snapshot().activeReservations).toBe(1);
     expect(dispatch).not.toHaveBeenCalled();
 
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: inside, enabled: true }] });
@@ -103,7 +106,7 @@ describe("governed run orchestration", () => {
     );
   });
 
-  it("refuses a queued symlink that escapes the root before dispatch", async () => {
+  it("leaves an injected supervisor task unchanged until its escaped project is corrected", async () => {
     const fixture = mkdtempSync(join(tmpdir(), "run-orchestrator-root-"));
     const projectRoot = join(fixture, "projects");
     const firstTarget = join(projectRoot, "first");
@@ -115,11 +118,25 @@ describe("governed run orchestration", () => {
     const context = setup({ projectRoot, projectCwd: projectLink });
     const draft = context.orchestrator.prepareRun(context.input);
     context.orchestrator.approveAndQueueRun(draft.current.run_id, draft.current.revision, "owner");
+    const runBefore = readRunStore(context.stateDir).runs[0];
+    const taskBefore = context.supervisor.snapshot()[0];
+    const reservationBefore = structuredClone(runBefore?.token_reservation);
     unlinkSync(projectLink);
     linkDirectory(outside, projectLink);
 
-    await expect(context.orchestrator.runSupervisorOnce()).rejects.toThrow("project_path_outside_root");
+    expect(await context.orchestrator.runSupervisorOnce()).toBeNull();
+    expect(readRunStore(context.stateDir).runs[0]).toEqual(runBefore);
+    expect(context.supervisor.snapshot()[0]).toEqual(taskBefore);
+    expect(readRunStore(context.stateDir).runs[0]?.token_reservation).toEqual(reservationBefore);
+    expect(taskBefore).toMatchObject({ status: "queued", attempt: 0 });
+    expect(context.tokenGateway.release).not.toHaveBeenCalled();
+    expect(context.tokenGateway.settle).not.toHaveBeenCalled();
     expect(context.dispatch).not.toHaveBeenCalled();
+
+    unlinkSync(projectLink);
+    linkDirectory(firstTarget, projectLink);
+    expect((await context.orchestrator.runSupervisorOnce())?.status).toBe("completed");
+    expect(context.dispatch).toHaveBeenCalledTimes(1);
   });
 
   it("does not reserve or enqueue before approval", () => {
@@ -299,7 +316,9 @@ describe("governed run orchestration", () => {
     await expect(orchestrator.runSupervisorOnce()).rejects.toThrow("temporary");
     expect(tokenGateway.settle).not.toHaveBeenCalled();
     expect(tokenGateway.release).not.toHaveBeenCalled();
-    supervisor.claim.mockReturnValueOnce({ ...supervisor.enqueue.mock.calls[0]![0], status: "running", attempt: 2 });
+    const retryTask = { ...supervisor.enqueue.mock.calls[0]![0], status: "running", attempt: 2 };
+    supervisor.peekClaimable.mockReturnValueOnce(retryTask);
+    supervisor.claim.mockReturnValueOnce(retryTask);
     await orchestrator.runSupervisorOnce();
     expect(dispatch.mock.calls[0]![0]).toEqual(dispatch.mock.calls[1]![0]);
     expect(tokenGateway.settle).toHaveBeenCalledTimes(1);
@@ -398,7 +417,7 @@ describe("governed run orchestration", () => {
     const supervisor = new SupervisorQueue({ stateDir });
     const throwingSupervisor = {
       enqueue: (input: Parameters<SupervisorQueue["enqueue"]>[0]) => { supervisor.enqueue(input); throw new Error("after_enqueue"); },
-      claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor),
+      peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor),
       cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor)
     };
     const gateway = new TokenGateway({ stateDir });
@@ -462,7 +481,7 @@ describe("governed run orchestration", () => {
     const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
     const draft = first.prepareRun({ project_id: "alpha", prompt: "cancel throw", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     first.approveAndQueueRun(draft.current.run_id, 1, "owner");
-    const throwingSupervisor = { enqueue: supervisor.enqueue.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), cancel: vi.fn(() => { throw new Error("cancel_failed"); }) };
+    const throwingSupervisor = { enqueue: supervisor.enqueue.bind(supervisor), peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), cancel: vi.fn(() => { throw new Error("cancel_failed"); }) };
     const faulty = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor: throwingSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
     expect(() => faulty.cancelRun(draft.current.run_id)).toThrow("cancel_failed");
     expect(readRunStore(stateDir).runs[0]).toMatchObject({ cancellation_requested: true, reservation_status: "released" });
@@ -492,7 +511,7 @@ describe("governed run orchestration", () => {
     const supervisor = new SupervisorQueue({ stateDir });
     const dispatch = vi.fn(async () => ({ refused: true as const, reason: "routing_no_viable_provider" as const, tier_id: null, provenance_verified: true }));
     let fault = true;
-    const throwingSupervisor = { enqueue: supervisor.enqueue.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), cancel: (taskId: string, reason?: string, at?: string) => { const value = supervisor.cancel(taskId, reason, at); if (fault) { fault = false; throw new Error("after_cancel_commit"); } return value; } };
+    const throwingSupervisor = { enqueue: supervisor.enqueue.bind(supervisor), peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), cancel: (taskId: string, reason?: string, at?: string) => { const value = supervisor.cancel(taskId, reason, at); if (fault) { fault = false; throw new Error("after_cancel_commit"); } return value; } };
     const first = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: throwingSupervisor, dispatch, now: () => now, isRouteAvailable: () => true });
     const draft = first.prepareRun({ project_id: "alpha", prompt: "refuse", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     first.approveAndQueueRun(draft.current.run_id, 1, "owner");
@@ -510,7 +529,7 @@ describe("governed run orchestration", () => {
     const gateway = { reserve: realGateway.reserve.bind(realGateway), settle: realGateway.settle.bind(realGateway), release: (reservation: Parameters<TokenGateway["release"]>[0]) => { realGateway.release(reservation); if (releaseFault) { releaseFault = false; throw new Error("after_release_commit"); } }, findActiveReservation: realGateway.findActiveReservation.bind(realGateway) };
     const supervisor = new SupervisorQueue({ stateDir });
     let enqueueFault = true;
-    const throwingSupervisor = { claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: (input: Parameters<SupervisorQueue["enqueue"]>[0]) => { const value = supervisor.enqueue(input); if (enqueueFault) { enqueueFault = false; throw new Error("after_enqueue_commit"); } return value; } };
+    const throwingSupervisor = { peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: (input: Parameters<SupervisorQueue["enqueue"]>[0]) => { const value = supervisor.enqueue(input); if (enqueueFault) { enqueueFault = false; throw new Error("after_enqueue_commit"); } return value; } };
     const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor: throwingSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
     const draft = first.prepareRun({ project_id: "alpha", prompt: "compensate", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     expect(() => first.approveAndQueueRun(draft.current.run_id, 1, "owner")).toThrow("after_enqueue_commit");
@@ -525,7 +544,7 @@ describe("governed run orchestration", () => {
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
     const supervisor = new SupervisorQueue({ stateDir });
     let enqueueFault = true;
-    const throwingSupervisor = { claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: (input: Parameters<SupervisorQueue["enqueue"]>[0]) => { const value = supervisor.enqueue(input); if (enqueueFault) { enqueueFault = false; throw new Error("after_enqueue_commit"); } return value; } };
+    const throwingSupervisor = { peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: (input: Parameters<SupervisorQueue["enqueue"]>[0]) => { const value = supervisor.enqueue(input); if (enqueueFault) { enqueueFault = false; throw new Error("after_enqueue_commit"); } return value; } };
     let clearFault = true;
     const first = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: throwingSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true, afterPhase: (phase) => { if (phase === "compensation_cleared" && clearFault) { clearFault = false; throw new Error("after_clear_commit"); } } });
     const draft = first.prepareRun({ project_id: "alpha", prompt: "clear", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
@@ -557,7 +576,7 @@ describe("governed run orchestration", () => {
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
     const supervisor = new SupervisorQueue({ stateDir });
     let fault = true;
-    const throwingSupervisor = { enqueue: supervisor.enqueue.bind(supervisor), claim: supervisor.claim.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), complete: (taskId: string, at?: string) => { const value = supervisor.complete(taskId, at); if (fault) { fault = false; throw new Error("after_complete_commit"); } return value; } };
+    const throwingSupervisor = { enqueue: supervisor.enqueue.bind(supervisor), peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), complete: (taskId: string, at?: string) => { const value = supervisor.complete(taskId, at); if (fault) { fault = false; throw new Error("after_complete_commit"); } return value; } };
     const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-complete", handoffId: "handoff" as never, vendor: "codex_cli" as const, model: "gpt-5", exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 1, lockStatus: "acquired_supervisor_spawn" as const, workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true as const }));
     const first = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: throwingSupervisor, dispatch, now: () => now, isRouteAvailable: () => true });
     const draft = first.prepareRun({ project_id: "alpha", prompt: "complete", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
@@ -575,7 +594,7 @@ describe("governed run orchestration", () => {
     let releaseFault = true;
     const gateway = { reserve: realGateway.reserve.bind(realGateway), settle: realGateway.settle.bind(realGateway), findActiveReservation: realGateway.findActiveReservation.bind(realGateway), release: (reservation: Parameters<TokenGateway["release"]>[0]) => { realGateway.release(reservation); if (releaseFault) { releaseFault = false; throw new Error("after_release_commit"); } } };
     const supervisor = new SupervisorQueue({ stateDir });
-    const noTaskSupervisor = { claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: () => { throw new Error("enqueue_before_commit"); } };
+    const noTaskSupervisor = { peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: () => { throw new Error("enqueue_before_commit"); } };
     const first = createRunOrchestrator({ stateDir, tokenGateway: gateway, supervisor: noTaskSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
     const draft = first.prepareRun({ project_id: "alpha", prompt: "no task", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
     expect(() => first.approveAndQueueRun(draft.current.run_id, 1, "owner")).toThrow("enqueue_before_commit");
@@ -589,7 +608,7 @@ describe("governed run orchestration", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-no-task-clear-"));
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true }] });
     const supervisor = new SupervisorQueue({ stateDir });
-    const noTaskSupervisor = { claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: () => { throw new Error("enqueue_before_commit"); } };
+    const noTaskSupervisor = { peekClaimable: supervisor.peekClaimable.bind(supervisor), claim: supervisor.claim.bind(supervisor), complete: supervisor.complete.bind(supervisor), fail: supervisor.fail.bind(supervisor), cancel: supervisor.cancel.bind(supervisor), snapshot: supervisor.snapshot.bind(supervisor), enqueue: () => { throw new Error("enqueue_before_commit"); } };
     let clearFault = true;
     const first = createRunOrchestrator({ stateDir, tokenGateway: new TokenGateway({ stateDir }), supervisor: noTaskSupervisor, dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true, afterPhase: (phase) => { if (phase === "compensation_cleared" && clearFault) { clearFault = false; throw new Error("after_clear_commit"); } } });
     const draft = first.prepareRun({ project_id: "alpha", prompt: "no task clear", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"] });
