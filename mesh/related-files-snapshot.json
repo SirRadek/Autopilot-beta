@@ -9,7 +9,7 @@
   "src/lib/decision-mesh/types.ts": "4b42bd54588452805bd0212a1e16eb241362aabf",
   "mcp/server.ts": "49914885599dae1669c8e74272d377edcd7ef936",
   "AGENTS.md": "f6f3c959ee35f5999dbfcdf3f07bcd3e0a0cedf7",
-  "mesh/nodes": "tree:7800a85194f310eb36c79f4a60255bdd03bc56c32579737ec7ca9e627e4c21de",
+  "mesh/nodes": "tree:82fc262c20bafc7a310b6d7c04faa9fb87038a010c51d80ed3f81cf32e77620e",
   "mesh/rules.yaml": "b20792700c3da2a35eb082361e2b9e941cfc0ccf",
   "mesh/edges.yaml": "0761193d1699ee0fc92ed271252f401f66273b24",
   ".codex/hooks.json": "dd37d1633446888857a3693eecbbd640e45cba8c",

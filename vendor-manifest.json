@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 125,
+  "file_count": 124,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -97,6 +97,7 @@
     "src/data/delivery-system/runPromptPolicy.ts",
     "src/data/delivery-system/runRouteEligibility.ts",
     "src/data/delivery-system/runStore.ts",
+    "src/data/delivery-system/runtimePaths.ts",
     "src/data/delivery-system/sessionDispatch.ts",
     "src/data/delivery-system/sessionRegistry.ts",
     "src/data/delivery-system/skillRegistry.ts",
@@ -754,11 +755,6 @@
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "74b7a84e601974a3f9fd18e2ab959b97cc214ae24883a6531ace1e00e5354168",
       "patched_by": "agy-projects-access"
-    },
-    {
-      "source_path": "src/data/delivery-system/runtimePaths.ts",
-      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "de713695104fafb45b91b989ec520de3542bb0b788d7bdfd27c3c6357b5f398e"
     },
     {
       "source_path": "src/data/delivery-system/sessionState.ts",
