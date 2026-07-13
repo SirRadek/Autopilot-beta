@@ -50,6 +50,15 @@ Autopilot installation and an unlisted home-directory path must fail. R5 does no
 proof because it would require installing and restarting the user units; static verification is
 not a substitute for the target-VM namespace test.
 
+D3 and any live cutover must also quiesce every legacy OpenRouter writer generation before the
+new runtime is enabled. Stop the prior service units and processes, verify that none can still
+append to the legacy ledgers directly under `dirname(stateDir)`, and only then start the revision
+that writes managed ledgers. Migration revalidates each retained legacy source after publication
+and fails if its identity or bytes changed, but there is no shared lock or generation protocol
+with old writers. Consequently, code cannot exclude an append that occurs after its final check;
+writer quiescence is an operational correctness requirement, not an optional precaution. Retain
+the legacy files after cutover as migration evidence.
+
 The service starts the provider-quota scheduler with the same persistent state directory and
 session registry. It polls only providers with active sessions, persists snapshots/events in
 that directory, and stops polling cleanly on `SIGTERM`/`SIGINT` before systemd terminates it.

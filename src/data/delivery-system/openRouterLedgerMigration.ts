@@ -30,6 +30,11 @@ export interface OpenRouterLedgerMigrationResult {
   readonly retained_legacy_files: readonly string[];
 }
 
+export interface OpenRouterLedgerMigrationHooks {
+  /** Deterministic phase hook for concurrency tests; production callers leave this unset. */
+  readonly afterPublication?: () => void;
+}
+
 type OpenRouterLedgerKind = "attempt" | "spend";
 
 interface LedgerSpec {
@@ -41,6 +46,8 @@ interface ValidatedLedger {
   readonly path: string;
   readonly bytes: Buffer;
   readonly hash: string;
+  readonly device: bigint;
+  readonly inode: bigint;
 }
 
 interface LedgerMigrationPlan {
@@ -55,7 +62,10 @@ const LEDGER_SPECS: readonly LedgerSpec[] = [
   { fileName: OPENROUTER_SPEND_LEDGER_FILE, kind: "spend" }
 ];
 
-export function ensureOpenRouterLedgersMigrated(stateDir: string): OpenRouterLedgerMigrationResult {
+export function ensureOpenRouterLedgersMigrated(
+  stateDir: string,
+  hooks: OpenRouterLedgerMigrationHooks = {}
+): OpenRouterLedgerMigrationResult {
   const legacyDir = dirname(stateDir);
   const plans = LEDGER_SPECS.map((spec) => buildMigrationPlan(spec, legacyDir, stateDir));
   const retainedLegacyFiles = plans.flatMap((plan) => plan.legacy === null ? [] : [plan.legacy.path]);
@@ -77,6 +87,9 @@ export function ensureOpenRouterLedgersMigrated(stateDir: string): OpenRouterLed
       migratedFiles.push(plan.managedPath);
     }
   }
+
+  hooks.afterPublication?.();
+  assertRetainedLegacySourcesUnchanged(plans);
 
   return {
     status: migratedFiles.length > 0 ? "migrated" : hasAnyLedger ? "already_migrated" : "not_needed",
@@ -150,7 +163,25 @@ function readValidatedLedgerIfPresent(path: string, kind: OpenRouterLedgerKind):
   }
 
   validateJsonl(bytes, kind, path);
-  return { path, bytes, hash: sha256(bytes) };
+  return {
+    path,
+    bytes,
+    hash: sha256(bytes),
+    device: pathStats.dev,
+    inode: pathStats.ino
+  };
+}
+
+function assertRetainedLegacySourcesUnchanged(plans: readonly LedgerMigrationPlan[]): void {
+  for (const plan of plans) {
+    if (plan.legacy === null) {
+      continue;
+    }
+    const current = readValidatedLedgerIfPresent(plan.legacy.path, plan.spec.kind);
+    if (current === null || !sameSourceSnapshot(plan.legacy, current)) {
+      throw new Error(`openrouter_ledger_migration_source_changed: ${plan.legacy.path}`);
+    }
+  }
 }
 
 function readBoundedLedger(fileDescriptor: number, path: string): Buffer {
@@ -297,6 +328,15 @@ function fsyncDirectory(path: string): void {
 
 function ledgersMatch(left: ValidatedLedger, right: ValidatedLedger): boolean {
   return left.bytes.byteLength === right.bytes.byteLength && left.hash === right.hash;
+}
+
+function sameSourceSnapshot(left: ValidatedLedger, right: ValidatedLedger): boolean {
+  return (
+    left.device === right.device &&
+    left.inode === right.inode &&
+    ledgersMatch(left, right) &&
+    left.bytes.equals(right.bytes)
+  );
 }
 
 function sha256(bytes: Buffer): string {

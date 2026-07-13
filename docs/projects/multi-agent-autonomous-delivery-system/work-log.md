@@ -1,5 +1,20 @@
 # Multi-Agent Autonomous Delivery System Work Log
 
+## 2026-07-13 Retained OpenRouter Source Revalidation
+
+Date: 2026-07-13
+Request or trigger: integrated R6 quality review found that a legacy writer could append after the migration's initial snapshot and publication, allowing one new worker attempt to continue from stale managed evidence.
+Mode: WRITE_ALLOWED for the bounded OpenRouter migration, deterministic concurrency test, operational cutover contract, project mesh, and verification report only.
+Scope: revalidate every retained legacy ledger after publication and before migration success; do not change project registry or orchestrator behavior.
+
+Architecture impact: migration now performs a final retained-source check after all no-replace publications. The check reopens and strictly validates each source and requires unchanged device/inode identity, byte length, SHA-256, and bytes. A detected mutation fails before the caller can append a managed attempt or fetch the provider. Published managed snapshots and retained legacy sources are not deleted or overwritten.
+
+Operational boundary: final revalidation narrows the race window but is not a mutual-exclusion protocol with old binaries. D3 and live cutover must stop and verify quiescence of every legacy writer generation before enabling the new runtime. Code does not claim to exclude an append after its final check.
+
+Verification: deterministic post-publication mutation coverage and exact gate output are recorded in `.superpowers/sdd/task-r6-ledger-remediation-report.md`.
+
+Project mesh impact: the managed-provider-ledger boundary now requires post-publication source revalidation and cutover writer quiescence, and stops on an active legacy writer during cutover.
+
 ## 2026-07-13 Managed OpenRouter Ledgers
 
 Date: 2026-07-13

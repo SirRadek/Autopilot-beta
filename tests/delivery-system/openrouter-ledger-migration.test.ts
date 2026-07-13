@@ -1,4 +1,5 @@
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -313,5 +314,38 @@ describe("managed OpenRouter ledger migration", () => {
         process.env.OPENROUTER_API_KEY = priorKey;
       }
     }
+  });
+
+  it("fails closed when a retained legacy ledger changes after publication", () => {
+    const legacyAttemptPath = join(parentDir, OPENROUTER_ATTEMPT_COUNTER_FILE);
+    const legacySpendPath = join(parentDir, OPENROUTER_SPEND_LEDGER_FILE);
+    const managedAttemptPath = join(stateDir, OPENROUTER_ATTEMPT_COUNTER_FILE);
+    const managedSpendPath = join(stateDir, OPENROUTER_SPEND_LEDGER_FILE);
+    const initialAttemptBytes = jsonl([attemptRecord("packet-before-race")]);
+    const initialSpendBytes = jsonl([spendRecord(0.25)]);
+    writeFileSync(legacyAttemptPath, initialAttemptBytes, "utf8");
+    writeFileSync(legacySpendPath, initialSpendBytes, "utf8");
+    const appendAttempt = vi.fn();
+    const fetchProvider = vi.fn();
+    let bothLedgersPublishedBeforeMutation = false;
+
+    const migrateThenContinue = () => {
+      ensureOpenRouterLedgersMigrated(stateDir, {
+        afterPublication: () => {
+          bothLedgersPublishedBeforeMutation = existsSync(managedAttemptPath) && existsSync(managedSpendPath);
+          appendFileSync(legacySpendPath, jsonl([spendRecord(0.5)]), "utf8");
+        }
+      });
+      appendAttempt();
+      fetchProvider();
+    };
+
+    expect(migrateThenContinue).toThrow("openrouter_ledger_migration_source_changed");
+    expect(bothLedgersPublishedBeforeMutation).toBe(true);
+    expect(readFileSync(managedAttemptPath, "utf8")).toBe(initialAttemptBytes);
+    expect(readFileSync(managedSpendPath, "utf8")).toBe(initialSpendBytes);
+    expect(readFileSync(legacySpendPath, "utf8")).toBe(`${initialSpendBytes}${jsonl([spendRecord(0.5)])}`);
+    expect(appendAttempt).not.toHaveBeenCalled();
+    expect(fetchProvider).not.toHaveBeenCalled();
   });
 });

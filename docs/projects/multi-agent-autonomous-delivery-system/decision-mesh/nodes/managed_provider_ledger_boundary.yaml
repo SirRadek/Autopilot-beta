@@ -26,6 +26,8 @@ required_checks:
   - atomic_no_overwrite_publication
   - byte_count_and_hash_verified
   - migration_precedes_provider_call
+  - retained_sources_revalidated_after_publication
+  - legacy_writer_generations_quiesced_at_cutover
 stop_conditions:
   - legacy_ledger_removed
   - ledger_outside_managed_state
@@ -33,6 +35,8 @@ stop_conditions:
   - conflicting_ledger_overwritten
   - unbounded_ledger_migration
   - provider_called_before_migration
+  - legacy_writer_active_during_cutover
 objective:
   - Keep provider accounting evidence in managed state while retaining legacy files indefinitely.
   - Fail closed before provider use when migration input is unsafe, malformed, oversized, or conflicting.
+  - Require D3 and live cutover to quiesce every legacy writer because final revalidation is not a shared writer protocol.
