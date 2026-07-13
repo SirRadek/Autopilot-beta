@@ -24,6 +24,18 @@ function button(host: HTMLElement, text: string) { return [...host.querySelector
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 
 describe("RunComposer", () => {
+  it("adopts the first allowlisted route when cockpit data arrives asynchronously", () => {
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<RunComposer projects={[]} quotas={[]} onPrepare={vi.fn()} onApprove={vi.fn()} />));
+    act(() => root.render(<RunComposer projects={projects} quotas={[quota]} models={models} onPrepare={vi.fn()} onApprove={vi.fn()} />));
+    change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
+    expect((host.querySelector('[aria-label="Projekt"]') as HTMLSelectElement).value).toBe("autopilot-beta");
+    expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).value).toBe("codex_cli");
+    expect((host.querySelector('[aria-label="Model"]') as HTMLSelectElement).value).toBe("gpt-5");
+    expect(button(host, "Připravit běh").disabled).toBe(false);
+    act(() => root.unmount()); host.remove();
+  });
+
   it("prepares separately, displays governance estimates, and approves the displayed revision", async () => {
     const { host, root, onPrepare, onApprove } = mount();
     change(host.querySelector('[aria-label="Projekt"]')!, "autopilot-beta");

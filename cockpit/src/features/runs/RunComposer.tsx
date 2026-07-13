@@ -16,6 +16,10 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
   const [projectId, setProjectId] = useState(enabledProjects[0]?.project_id ?? "");
   const selectedProject = enabledProjects.find((project) => project.project_id === projectId);
   const [provider, setProvider] = useState(quotas[0]?.provider ?? "");
+  useEffect(() => {
+    if (!enabledProjects.some((project) => project.project_id === projectId)) setProjectId(enabledProjects[0]?.project_id ?? "");
+    if (!quotas.some((candidate) => candidate.provider === provider)) setProvider(quotas[0]?.provider ?? "");
+  }, [enabledProjects, projectId, provider, quotas]);
   const quota = quotas.find((candidate) => candidate.provider === provider);
   const routeFresh = quota?.freshness === "fresh" && models?.freshness === "fresh" && quota.health !== "unavailable";
   const availableModels = useMemo(() => {
