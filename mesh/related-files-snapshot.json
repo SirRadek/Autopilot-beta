@@ -51,7 +51,7 @@
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
   "src/data/delivery-system/cliWorker.ts": "5e89f95b62bb17a92d18102262104c0cadf5f6c6",
   "src/data/delivery-system/cliWorkerCapture.ts": "d9cf90fe91e5393c0ecf93937aba9e21f47d1247",
-  "src/data/delivery-system/openRouterLedgerMigration.ts": "9860aa81c6a06c0776d1c95d036c20a1ec8b9a78",
+  "src/data/delivery-system/openRouterLedgerMigration.ts": "8925b9f38ab3a9c6bbad7fbaf0989c2e62f6782c",
   "src/data/delivery-system/sessionState.ts": "688001a88c6957acdde441afb919911eaf6cfc8b",
   "src/data/delivery-system/projectRegistry.ts": "bc6b247d1002bb0622b3b5fd0608048873a58776",
   "src/data/delivery-system/runStore.ts": "17a245384406d884b994d3d26f54fa51cb54236f",

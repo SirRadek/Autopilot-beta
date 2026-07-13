@@ -14,6 +14,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { TextDecoder } from "node:util";
 
 import {
   OPENROUTER_ATTEMPT_COUNTER_FILE,
@@ -169,8 +170,15 @@ function readBoundedLedger(fileDescriptor: number, path: string): Buffer {
 }
 
 function validateJsonl(bytes: Buffer, kind: OpenRouterLedgerKind, path: string): void {
+  let ledgerText: string;
+  try {
+    ledgerText = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error(`openrouter_ledger_migration_malformed: ${path}`);
+  }
+
   let recordCount = 0;
-  for (const line of bytes.toString("utf8").split(/\r?\n/)) {
+  for (const line of ledgerText.split(/\r?\n/)) {
     if (line.trim().length === 0) {
       continue;
     }

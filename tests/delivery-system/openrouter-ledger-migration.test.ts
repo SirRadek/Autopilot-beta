@@ -220,4 +220,50 @@ describe("managed OpenRouter ledger migration", () => {
       }
     }
   });
+
+  it("rejects invalid UTF-8 inside a required field before publication or provider call", async () => {
+    const invalidUtf8Ledger = Buffer.concat([
+      Buffer.from('{"schema_version":"v1","recorded_at":"2026-07-13T10:00:00.000Z","provider":"openrouter","openrouter_mode":"qwen3_code_draft","model":"'),
+      Buffer.from([0xc3, 0x28]),
+      Buffer.from('","task_packet_ref":"packet-invalid-utf8"}\n')
+    ]);
+    writeFileSync(join(parentDir, OPENROUTER_ATTEMPT_COUNTER_FILE), invalidUtf8Ledger);
+    const fetchMock = vi.fn<OpenRouterFetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    const priorKey = process.env.OPENROUTER_API_KEY;
+    process.env.OPENROUTER_API_KEY = "sk-or-v1-test-secret-must-not-leak";
+    const input: CliWorkerInput = {
+      handoffId: "hp-openrouter-invalid-utf8" as CliWorkerInput["handoffId"],
+      vendor: "openrouter_api",
+      prompt: "bounded invalid UTF-8 migration packet",
+      openrouterMode: "qwen3_code_draft",
+      taskPacketRef: "packet-openrouter-invalid-utf8",
+      parentSessionHash: "session-hash",
+      parentTurnHash: "turn-hash"
+    };
+
+    try {
+      const result = await runCliWorker(input, stateDir);
+      expect(result.errorReason).toContain("openrouter_ledger_migration_malformed");
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(existsSync(openRouterAttemptCounterPathForStateDir(stateDir))).toBe(false);
+    } finally {
+      if (priorKey === undefined) {
+        delete process.env.OPENROUTER_API_KEY;
+      } else {
+        process.env.OPENROUTER_API_KEY = priorKey;
+      }
+    }
+  });
+
+  it("classifies the migration source as beta-authored provenance", () => {
+    const manifest = JSON.parse(readFileSync(join(process.cwd(), "vendor-manifest.json"), "utf8")) as {
+      readonly beta_authored?: readonly string[];
+      readonly files?: readonly { readonly source_path?: string }[];
+    };
+    const sourcePath = "src/data/delivery-system/openRouterLedgerMigration.ts";
+
+    expect(manifest.beta_authored).toContain(sourcePath);
+    expect(manifest.files?.map((entry) => entry.source_path)).not.toContain(sourcePath);
+  });
 });

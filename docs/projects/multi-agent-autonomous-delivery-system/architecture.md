@@ -1,7 +1,7 @@
 # Multi-Agent Autonomous Delivery System Architecture
 
 Last updated: 2026-07-13
-Next review: 2026-06-07
+Next review: 2026-07-20
 Status: phase-3 read-only Decision Mesh context router
 Slug: `multi-agent-autonomous-delivery-system`
 Canonical remote repository: `SirRadek/autopilot`

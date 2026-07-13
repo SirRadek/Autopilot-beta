@@ -62,3 +62,51 @@ No live OpenRouter or other provider API call was made. Provider behavior was ex
 - The atomic publication strategy intentionally depends on hard-link support in the managed state filesystem. This is appropriate for the frozen Ubuntu runtime and guarantees no overwrite; a future non-POSIX runtime would need an equivalent atomic no-replace primitive.
 - Legacy archival remains deliberately out of scope. Operators must keep legacy files until a separately approved archival procedure exists.
 - The repository-wide test suite was not run; this task ran the exact focused, adjacent observability/mesh, typecheck, vendor, mesh, and diff gates required by the Task 4 brief.
+
+## 2026-07-13 Review Fixes
+
+Status: complete
+
+Resolved findings:
+
+- Ledger bytes now pass through `TextDecoder("utf-8", { fatal: true })` before line splitting or JSON parsing. Any invalid UTF-8 fails closed as `openrouter_ledger_migration_malformed`.
+- Added a raw-buffer regression with invalid UTF-8 inside the required `model` string. The test verifies no managed ledger is published and the OpenRouter fetch mock is never called.
+- Moved `src/data/delivery-system/openRouterLedgerMigration.ts` from the false canonical `files` entry to `beta_authored`; regenerated provenance now contains 124 canonical entries.
+- Added a provenance regression asserting the source is present in `beta_authored` and absent from canonical `files`.
+- Kept architecture `Last updated: 2026-07-13` and corrected `Next review` to `2026-07-20`.
+
+TDD red evidence under Node 24:
+
+- `npm test -- tests/delivery-system/openrouter-ledger-migration.test.ts`
+  - FAIL as expected: 2 failed, 15 passed.
+  - Invalid UTF-8 reached the fetch mock and produced `TypeError: Cannot read properties of undefined (reading 'ok')` instead of the bounded migration error.
+  - Provenance did not contain the migration source in `beta_authored`.
+
+Final verification under Node 24 (`PATH=/home/radek/.npm/_npx/387698761821791d/node_modules/node/bin:$PATH`):
+
+- `npm run beta:vendor-manifest`
+  - PASS: regenerated 124 canonical entries at base `599785fb710c`.
+- `npm test -- tests/delivery-system/openrouter-ledger-migration.test.ts tests/delivery-system/openrouter-stage0.test.ts tests/delivery-system/openrouter-stage1.test.ts tests/delivery-system/openrouter-spend-cap.test.ts`
+  - PASS: 4 files, 45 tests.
+- `npm test -- tests/decision-mesh/query.test.ts tests/delivery-system/observability.test.ts`
+  - PASS: 2 files, 38 tests.
+- `npm run typecheck`
+  - PASS: TypeScript no-emit check exited 0.
+- `npm run beta:vendor-check`
+  - PASS: migration source reported `AUTHORED`; 78 pristine and 46 intentional patched canonical files.
+- `npm run mesh:snapshot:regen`
+  - PASS: regenerated 60 related-file hint hashes after the migration source changed.
+- `npm run mesh:gate:ci`
+  - PASS: 99 verified, 0 stale, 0 unsnapshotted, and 0 new dead pointers.
+- `git diff --check`
+  - PASS: no whitespace errors.
+
+No live provider API call was made. All provider-path assertions used injected Vitest fetch mocks.
+
+Review-fix self-review:
+
+- Fatal decoding happens before line counting and JSON parsing, so replacement characters can no longer normalize invalid ledger bytes into accepted required strings.
+- Invalid bytes retain the existing bounded fail-closed error contract and are rejected before any publication or provider activity.
+- Regeneration, the provenance regression, and vendor-check output independently confirm the new source is beta-authored rather than falsely attributed to the pinned canonical revision.
+
+Remaining concerns are unchanged: hard-link publication targets the frozen Ubuntu runtime, legacy archival is intentionally out of scope, and independent governance review remains required.
