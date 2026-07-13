@@ -8,6 +8,9 @@
 - Preparing and approving are distinct actions. A prepared server revision is displayed, and changing any draft field clears it and disables approval.
 - The composer displays five-hour and weekly usage, API spend, a prompt token estimate, and an optional visual artifact request.
 - Existing bearer/cookie authentication behavior is preserved through the shared request helper (`Authorization` when configured and `credentials: "include"` for every request).
+- Review hardening binds prepared revisions to the exact draft and live route snapshot, rejects mismatched/stale/out-of-order responses, and keeps approval invalid after edits or provider-data refreshes.
+- Prepare and approve callbacks have synchronous duplicate guards, visible pending states, and an accessible `aria-live` status/error channel.
+- A route now requires fresh, usable provider quota plus an explicitly available model present in both the quota snapshot and live model catalog.
 
 ## TDD evidence
 
@@ -22,7 +25,7 @@ GREEN/final verification:
 
 `npm --prefix cockpit test -- src/api/controlPlaneClient.test.ts src/features/runs/RunComposer.test.tsx && npm --prefix cockpit run build && npm run typecheck && git diff --check`
 
-- 2 test files passed; 9 tests passed.
+- 2 test files passed; 16 tests passed.
 - Vite production build completed successfully (39 modules transformed).
 - Root TypeScript typecheck completed successfully.
 - `git diff --check` completed without findings.
