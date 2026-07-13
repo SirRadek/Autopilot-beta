@@ -103,8 +103,8 @@ export function readProjectRegistry(stateDir: string): ProjectRegistryDocument {
   const path = join(stateDir, PROJECT_REGISTRY_FILE);
   let file: number;
   try {
-    const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
-    file = openSync(path, constants.O_RDONLY | noFollow);
+    const posixSafetyFlags = process.platform === "win32" ? 0 : constants.O_NOFOLLOW | constants.O_NONBLOCK;
+    file = openSync(path, constants.O_RDONLY | posixSafetyFlags);
   } catch (error) {
     if (nodeErrorCode(error) === "ENOENT") return { schema_version: "v1", projects: [] };
     if (nodeErrorCode(error) === "ELOOP") throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);

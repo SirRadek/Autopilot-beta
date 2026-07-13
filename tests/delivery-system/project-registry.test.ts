@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import {
   appendFileSync,
@@ -16,6 +17,7 @@ import {
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -401,6 +403,26 @@ describe("project registry", () => {
     const nonregular = createStateDir();
     mkdirSync(join(nonregular, "projects.json"));
     expect(() => readProjectRegistry(nonregular)).toThrow("invalid_project_registry");
+  });
+
+  it.runIf(process.platform !== "win32")("rejects a FIFO registry without blocking", () => {
+    const stateDir = createStateDir();
+    const fifo = spawnSync("mkfifo", [join(stateDir, "projects.json")], { encoding: "utf8" });
+    expect(fifo).toMatchObject({ status: 0, signal: null });
+
+    const moduleUrl = pathToFileURL(join(process.cwd(), "src/data/delivery-system/projectRegistry.ts")).href;
+    const child = spawnSync(process.execPath, [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      `const { readProjectRegistry } = await import(${JSON.stringify(moduleUrl)});` +
+        `try { readProjectRegistry(${JSON.stringify(stateDir)}); } catch (error) { console.log(error.message); }`
+    ], { encoding: "utf8", timeout: 2_000 });
+
+    expect(child.error).toBeUndefined();
+    expect(child).toMatchObject({ status: 0, signal: null });
+    expect(child.stdout.trim()).toBe("invalid_project_registry");
   });
 
   it("rejects BOM-prefixed and invalid UTF-8 registry bytes", () => {
