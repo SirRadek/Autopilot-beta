@@ -29,7 +29,9 @@ related_files:
   - scripts/ops-recovery-drill.ts
   - ops/systemd/autopilot-control-plane.service
   - ops/systemd/autopilot-state-maintenance.service
-  - docs/operations/autopilot-recovery-runbook.md
+  - docs/operations/state-and-recovery.md
+  - docs/operations/service-runbook.md
+  - docs/operations/troubleshooting.md
   - docs/autopilot/product-brief-template.md
 required_checks:
   - backup_current_state

@@ -1,5 +1,9 @@
 # VM control-plane service
 
+> Canonical operator procedures: [Ubuntu VM installation](../../docs/operations/install-ubuntu-vm.md),
+> [Configuration](../../docs/operations/configuration.md), and
+> [Service runbook](../../docs/operations/service-runbook.md).
+
 The supported VM runtime is Node `>=24 <25` installed at `/usr/bin/node`, with npm at
 `/usr/bin/npm`. Verify the exact service runtime before installation:
 

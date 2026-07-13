@@ -1,5 +1,8 @@
 # Cockpit production authentication
 
+> **Superseded:** This focused note is retained for historical compatibility. Use canonical
+> [Configuration](configuration.md) and [Ubuntu VM installation](install-ubuntu-vm.md).
+
 The Control Plane keeps `CONTROL_PLANE_TOKEN` server-side. Browser access uses
 `POST /auth/login` once and receives an eight-hour `HttpOnly`, `SameSite=Lax`
 `autopilot_session` cookie. The cookie is held in the Control Plane process and

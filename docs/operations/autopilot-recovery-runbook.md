@@ -1,5 +1,8 @@
 # Autopilot VM recovery runbook
 
+> **Superseded:** This page is retained for historical compatibility. Use the canonical
+> [State and recovery](state-and-recovery.md) guide and [Service runbook](service-runbook.md).
+
 ## Safety invariants
 
 - The live state directory is `~/.local/state/autopilot` and must be mode `0700`.
