@@ -7,8 +7,44 @@ import {
   assertTokenBudget,
   remainingTokenBudget,
   TokenGateway,
-  TokenGatewayError
+  TokenGatewayError,
+  validateTokenGatewayState
 } from "../../src/data/delivery-system/tokenGateway";
+
+const STATE_FILE = "token-gateway-state.json";
+const NOW = "2026-07-13T12:00:00.000Z";
+
+function writeGatewayState(stateDir: string, state: unknown): string {
+  const serialized = JSON.stringify(state);
+  writeFileSync(join(stateDir, STATE_FILE), serialized);
+  return serialized;
+}
+
+function activeState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const reservationId = "tgr-00000000-0000-4000-8000-000000000000";
+  return {
+    used: {
+      "provider:codex_cli": 5,
+      "model:codex_cli:gpt-5": 5,
+      "session:session-1": 5
+    },
+    reservations: {
+      [reservationId]: {
+        provider: "codex_cli",
+        model: "gpt-5",
+        sessionId: "session-1",
+        inputTokens: 2,
+        outputTokens: 3,
+        handoffId: "handoff-1",
+        reservationId,
+        reservedAt: NOW,
+        totalTokens: 5
+      }
+    },
+    terminal: {},
+    ...overrides
+  };
+}
 
 describe("token gateway", () => {
   it("allows within budget and reports remaining capacity", () => {
@@ -92,5 +128,143 @@ describe("token gateway", () => {
     const used = Object.fromEntries(Array.from({ length: 1_537 }, (_, index) => [`session:${index}`, 1]));
     writeFileSync(join(stateDir, "token-gateway-state.json"), JSON.stringify({ used, reservations: {}, terminal: {} }));
     expect(() => new TokenGateway({ stateDir })).toThrow("invalid_token_gateway_state");
+  });
+
+  it("rejects semantically malformed persisted state with a fixed error and no mutation", () => {
+    const reservationId = "tgr-00000000-0000-4000-8000-000000000000";
+    const reservation = (overrides: Record<string, unknown> = {}) => ({
+      provider: "codex_cli",
+      model: "gpt-5",
+      sessionId: "session-1",
+      inputTokens: 2,
+      outputTokens: 3,
+      handoffId: "handoff-1",
+      reservationId,
+      reservedAt: NOW,
+      totalTokens: 5,
+      ...overrides
+    });
+    const terminal = (overrides: Record<string, unknown> = {}) => ({
+      event: "settled",
+      settlement: { inputTokens: 2, outputTokens: 3, released: false },
+      completedAt: NOW,
+      ...overrides
+    });
+    const cases: readonly [string, unknown][] = [
+      ["unknown top-level field", { ...activeState(), secret: "must-not-leak" }],
+      ["fractional usage", activeState({ used: { "provider:codex_cli": 0.5, "model:codex_cli:gpt-5": 0.5, "session:session-1": 0.5 } })],
+      ["zero usage", activeState({ used: { "provider:codex_cli": 0, "model:codex_cli:gpt-5": 0, "session:session-1": 0 } })],
+      ["unsafe usage", activeState({ used: { "provider:codex_cli": Number.MAX_SAFE_INTEGER + 1, "model:codex_cli:gpt-5": Number.MAX_SAFE_INTEGER + 1, "session:session-1": Number.MAX_SAFE_INTEGER + 1 } })],
+      ["unknown usage namespace", activeState({ used: { "other:codex_cli": 5, "model:codex_cli:gpt-5": 5, "session:session-1": 5 } })],
+      ["empty usage route", activeState({ used: { "provider:": 5, "model:codex_cli:gpt-5": 5, "session:session-1": 5 } })],
+      ["oversized usage key", activeState({ used: { [`provider:${"p".repeat(129)}`]: 5, "model:codex_cli:gpt-5": 5, "session:session-1": 5 } })],
+      ["incoherent aggregate totals", activeState({ used: { "provider:codex_cli": 6, "model:codex_cli:gpt-5": 5, "session:session-1": 5 } })],
+      ["active reservation not covered", activeState({ used: { "provider:codex_cli": 4, "provider:other": 1, "model:codex_cli:gpt-5": 5, "session:session-1": 5 } })],
+      ["unknown reservation field", activeState({ reservations: { [reservationId]: reservation({ secret: "must-not-leak" }) } })],
+      ["empty provider", activeState({ reservations: { [reservationId]: reservation({ provider: "" }) } })],
+      ["oversized model", activeState({ reservations: { [reservationId]: reservation({ model: "m".repeat(129) }) } })],
+      ["unnormalized session", activeState({ reservations: { [reservationId]: reservation({ sessionId: "line\nbreak" }) } })],
+      ["empty handoff", activeState({ reservations: { [reservationId]: reservation({ handoffId: "" }) } })],
+      ["invalid reservation timestamp", activeState({ reservations: { [reservationId]: reservation({ reservedAt: "yesterday" }) } })],
+      ["fractional reservation count", activeState({ reservations: { [reservationId]: reservation({ inputTokens: 2.5, totalTokens: 5.5 }) } })],
+      ["unsafe reservation count", activeState({ reservations: { [reservationId]: reservation({ inputTokens: Number.MAX_SAFE_INTEGER, outputTokens: 1, totalTokens: Number.MAX_SAFE_INTEGER + 1 }) } })],
+      ["duplicate handoff", activeState({ reservations: {
+        [reservationId]: reservation(),
+        "tgr-00000000-0000-4000-8000-000000000001": reservation({ reservationId: "tgr-00000000-0000-4000-8000-000000000001" })
+      } })],
+      ["active and terminal id collision", activeState({ terminal: { [reservationId]: terminal() } })],
+      ["unknown terminal field", activeState({ reservations: {}, terminal: { [reservationId]: terminal({ secret: "must-not-leak" }) } })],
+      ["unknown settlement field", activeState({ reservations: {}, terminal: { [reservationId]: terminal({ settlement: { inputTokens: 2, outputTokens: 3, released: false, secret: "must-not-leak" } }) } })],
+      ["invalid terminal status", activeState({ reservations: {}, terminal: { [reservationId]: terminal({ event: "pending" }) } })],
+      ["invalid terminal timestamp", activeState({ reservations: {}, terminal: { [reservationId]: terminal({ completedAt: "yesterday" }) } })],
+      ["fractional settlement count", activeState({ reservations: {}, terminal: { [reservationId]: terminal({ settlement: { inputTokens: 2.5, outputTokens: 3, released: false } }) } })],
+      ["incoherent released terminal", activeState({ reservations: {}, terminal: { [reservationId]: terminal({ event: "released" }) } })]
+    ];
+
+    for (const [name, state] of cases) {
+      const stateDir = mkdtempSync(join(tmpdir(), "token-gateway-invalid-"));
+      const before = writeGatewayState(stateDir, state);
+      let message = "";
+      try {
+        validateTokenGatewayState(stateDir);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      expect.soft(message, name).toBe("invalid_token_gateway_state");
+      expect.soft(readFileSync(join(stateDir, STATE_FILE), "utf8"), name).toBe(before);
+    }
+  });
+
+  it("accepts valid boundary, legacy, active, and settled states without rewriting them", () => {
+    const reservationId = "tgr-00000000-0000-4000-8000-000000000000";
+    const maxField = "x".repeat(128);
+    const states = [
+      { used: {}, reservations: {}, terminal: {} },
+      activeState(),
+      {
+        used: {},
+        reservations: {
+          [reservationId]: {
+            provider: "codex_cli",
+            model: null,
+            sessionId: null,
+            inputTokens: 0,
+            outputTokens: 0,
+            reservationId,
+            reservedAt: NOW,
+            totalTokens: 0
+          }
+        },
+        terminal: {}
+      },
+      {
+        used: {
+          [`provider:${maxField}`]: 1,
+          [`model:${maxField}:${maxField}`]: 1,
+          [`session:${maxField}`]: 1
+        },
+        reservations: {
+          [reservationId]: {
+            provider: maxField,
+            model: maxField,
+            sessionId: maxField,
+            inputTokens: 0,
+            outputTokens: 1,
+            handoffId: maxField,
+            reservationId,
+            reservedAt: NOW,
+            totalTokens: 1
+          }
+        },
+        terminal: {}
+      },
+      {
+        used: { "provider:codex_cli": 5, "model:codex_cli:gpt-5": 5, "session:session-1": 5 },
+        reservations: {},
+        terminal: {
+          [reservationId]: {
+            event: "settled",
+            settlement: { inputTokens: 2, outputTokens: 3 }
+          }
+        }
+      },
+      {
+        used: {},
+        reservations: {},
+        terminal: {
+          [reservationId]: {
+            event: "released",
+            settlement: { inputTokens: 0, outputTokens: 0, released: true }
+          }
+        }
+      }
+    ];
+
+    for (const state of states) {
+      const stateDir = mkdtempSync(join(tmpdir(), "token-gateway-valid-"));
+      const before = writeGatewayState(stateDir, state);
+      expect(() => validateTokenGatewayState(stateDir)).not.toThrow();
+      expect(readFileSync(join(stateDir, STATE_FILE), "utf8")).toBe(before);
+    }
   });
 });

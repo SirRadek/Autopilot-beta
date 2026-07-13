@@ -59,8 +59,8 @@
   "src/data/delivery-system/readiness.ts": "64128f7356ab69acf48e2d727966267058df0255",
   "src/data/delivery-system/runStore.ts": "17a245384406d884b994d3d26f54fa51cb54236f",
   "src/data/delivery-system/runOrchestrator.ts": "c3f48d3f9162d0bba9929f735717e522b46eb957",
-  "src/data/delivery-system/supervisorQueue.ts": "6d8efdcc9e19ded868128daf7c6277057766ec20",
-  "src/data/delivery-system/tokenGateway.ts": "c9ca6b0c3501e0757b42dc0d70827c69fa2c697c",
+  "src/data/delivery-system/supervisorQueue.ts": "4f1ac1253ff79b656089d722e2e1278e9c7a026b",
+  "src/data/delivery-system/tokenGateway.ts": "9bb16cb795b132a1806d6a40b008e91e6d565e3d",
   "model-output-evals/": "tree:16c32a21cbaf4b39e18380506f54bb1eab85e02092fdc31b32573099b9a326f8",
   "docs/autopilot/workstream-plan.md": "ddc82360c7b925bb039195b8022134da9abe71bb"
 }

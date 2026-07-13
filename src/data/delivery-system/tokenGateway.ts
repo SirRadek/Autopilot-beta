@@ -327,43 +327,124 @@ function readGatewayState(path: string): GatewayState {
 }
 
 function isGatewayState(value: unknown): value is GatewayState {
-  if (!isRecord(value) || !isRecord(value.used) || !isRecord(value.reservations) || !isRecord(value.terminal) ||
+  if (!isRecord(value) || !hasOnlyKeys(value, ["used", "reservations", "terminal"]) ||
+    !isRecord(value.used) || !isRecord(value.reservations) || !isRecord(value.terminal) ||
     Object.keys(value.used).length > MAX_USAGE_KEYS ||
     Object.keys(value.reservations).length > MAX_ACTIVE_RESERVATIONS ||
     Object.keys(value.terminal).length > MAX_TERMINAL_RESERVATIONS) {
     return false;
   }
-  return Object.values(value.used).every(isNonNegativeNumber) &&
-    Object.entries(value.reservations).every(([id, reservation]) => isReservation(id, reservation)) &&
-    Object.values(value.terminal).every(isTerminalReservation);
+  const reservationEntries = Object.entries(value.reservations);
+  const terminalEntries = Object.entries(value.terminal);
+  if (!reservationEntries.every(([id, reservation]) => isReservation(id, reservation)) ||
+    !terminalEntries.every(([id, terminal]) => isPersistedString(id) && isTerminalReservation(terminal))) {
+    return false;
+  }
+  const reservations = reservationEntries.map(([, reservation]) => reservation as TokenReservation);
+  const handoffIds = reservations.flatMap((reservation) => reservation.handoffId === undefined ? [] : [reservation.handoffId]);
+  const terminalIds = new Set(terminalEntries.map(([id]) => id));
+  if (new Set(handoffIds).size !== handoffIds.length ||
+    reservationEntries.some(([id]) => terminalIds.has(id))) {
+    return false;
+  }
+  return usageIsCoherent(value.used, reservations);
 }
 
 function isReservation(id: string, value: unknown): value is TokenReservation {
-  return isRecord(value) && value.reservationId === id &&
-    typeof value.provider === "string" &&
-    (value.model === null || typeof value.model === "string") &&
-    (value.sessionId === null || typeof value.sessionId === "string") &&
-    (value.handoffId === undefined || typeof value.handoffId === "string") &&
-    typeof value.reservedAt === "string" &&
-    isNonNegativeNumber(value.inputTokens) &&
-    isNonNegativeNumber(value.outputTokens) &&
-    isNonNegativeNumber(value.totalTokens) &&
+  return isPersistedString(id) && isRecord(value) &&
+    hasOnlyKeys(value, ["provider", "model", "sessionId", "inputTokens", "outputTokens", "reservationId", "reservedAt", "totalTokens"], ["handoffId"]) &&
+    value.reservationId === id && isPersistedString(value.provider) &&
+    (value.model === null || isPersistedString(value.model)) &&
+    (value.sessionId === null || isPersistedString(value.sessionId)) &&
+    (value.handoffId === undefined || isPersistedString(value.handoffId)) &&
+    isTimestamp(value.reservedAt) &&
+    isNonNegativeSafeInteger(value.inputTokens) &&
+    isNonNegativeSafeInteger(value.outputTokens) &&
+    isNonNegativeSafeInteger(value.totalTokens) &&
+    Number.isSafeInteger(value.inputTokens + value.outputTokens) &&
     value.totalTokens === value.inputTokens + value.outputTokens;
 }
 
 function isTerminalReservation(value: unknown): value is GatewayState["terminal"][string] {
-  return isRecord(value) && (value.event === "settled" || value.event === "released") &&
-    isRecord(value.settlement) &&
-    isNonNegativeNumber(value.settlement.inputTokens) &&
-    isNonNegativeNumber(value.settlement.outputTokens) &&
-    (value.settlement.released === undefined || typeof value.settlement.released === "boolean") &&
-    (value.completedAt === undefined || typeof value.completedAt === "string");
+  if (!isRecord(value) || !hasOnlyKeys(value, ["event", "settlement"], ["completedAt"]) ||
+    (value.event !== "settled" && value.event !== "released") || !isRecord(value.settlement) ||
+    !hasOnlyKeys(value.settlement, ["inputTokens", "outputTokens"], ["released"]) ||
+    !isNonNegativeSafeInteger(value.settlement.inputTokens) ||
+    !isNonNegativeSafeInteger(value.settlement.outputTokens) ||
+    !Number.isSafeInteger(value.settlement.inputTokens + value.settlement.outputTokens) ||
+    (value.settlement.released !== undefined && typeof value.settlement.released !== "boolean") ||
+    (value.completedAt !== undefined && !isTimestamp(value.completedAt))) {
+    return false;
+  }
+  return value.event !== "released" ||
+    (value.settlement.inputTokens === 0 && value.settlement.outputTokens === 0 && value.settlement.released === true);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isNonNegativeNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+function hasOnlyKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isPersistedString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_FIELD_LENGTH && bounded(value) === value;
+}
+
+function isTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 32) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function usageIsCoherent(used: Record<string, unknown>, reservations: readonly TokenReservation[]): boolean {
+  const totals = { provider: 0, model: 0, session: 0 };
+  for (const [key, value] of Object.entries(used)) {
+    const kind = usageKeyKind(key);
+    if (kind === null || !isNonNegativeSafeInteger(value) || value === 0 || !safeIncrement(totals, kind, value)) return false;
+  }
+  if (totals.provider !== totals.model || totals.provider !== totals.session) return false;
+
+  const required = new Map<string, number>();
+  for (const reservation of reservations) {
+    if (reservation.totalTokens === 0) continue;
+    for (const key of routeUsageKeys(reservation)) {
+      const next = (required.get(key) ?? 0) + reservation.totalTokens;
+      if (!Number.isSafeInteger(next)) return false;
+      required.set(key, next);
+    }
+  }
+  return [...required].every(([key, minimum]) => isNonNegativeSafeInteger(used[key]) && used[key] >= minimum);
+}
+
+function usageKeyKind(key: string): keyof { provider: number; model: number; session: number } | null {
+  if (key.startsWith("provider:")) return isPersistedString(key.slice("provider:".length)) ? "provider" : null;
+  if (key.startsWith("session:")) return isPersistedString(key.slice("session:".length)) ? "session" : null;
+  if (!key.startsWith("model:")) return null;
+  const route = key.slice("model:".length);
+  for (let separator = 1; separator < route.length - 1; separator += 1) {
+    if (route[separator] === ":" && isPersistedString(route.slice(0, separator)) && isPersistedString(route.slice(separator + 1))) return "model";
+  }
+  return null;
+}
+
+function safeIncrement(totals: { provider: number; model: number; session: number }, kind: "provider" | "model" | "session", amount: number): boolean {
+  const next = totals[kind] + amount;
+  if (!Number.isSafeInteger(next)) return false;
+  totals[kind] = next;
+  return true;
+}
+
+function routeUsageKeys(reservation: TokenReservation): readonly string[] {
+  return [
+    `provider:${reservation.provider}`,
+    `model:${reservation.provider}:${reservation.model ?? "default"}`,
+    `session:${reservation.sessionId ?? "unscoped"}`
+  ];
 }
