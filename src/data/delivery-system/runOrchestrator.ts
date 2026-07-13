@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
-import { readProviderQuotaStore } from "./providerQuotaStore";
+import { isRunRouteEligible } from "./runRouteEligibility";
 import { resolveEnabledProject } from "./projectRegistry";
 import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import { estimateTokenCount, type TokenReservation, type TokenReservationRequest, type TokenSettlement } from "./tokenGateway";
+import { redactTelemetryText } from "./telemetryRedaction";
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { computePacketHash } from "../../governed-core/dispatch";
 import { buildAgentPacket, loadDecisionMeshFromRoot } from "../../lib/decision-mesh";
@@ -54,9 +55,7 @@ export function createRunOrchestrator(options: {
 
   function routeAvailable(provider: string, model: string | null): boolean {
     if (options.isRouteAvailable !== undefined) return options.isRouteAvailable(provider, model);
-    const snapshot = readProviderQuotaStore(options.stateDir).snapshots.find((item) => item.provider === provider);
-    return snapshot !== undefined && snapshot.health !== "unavailable" &&
-      (model === null || snapshot.models.some((item) => item.model_id === model && item.available && item.health !== "unavailable"));
+    return isRunRouteEligible(options.stateDir, provider, model, now());
   }
 
   function prepareRun(input: RunDraftInput): RunRecord {
@@ -70,7 +69,7 @@ export function createRunOrchestrator(options: {
   }
 
   function handoffFor(run: RunRecord): GovernedHandoff {
-    const task = run.current.prompt;
+    const task = `Execute approved run ${run.current.run_id} revision ${run.current.revision}`;
     const agent = "worker";
     const packet = buildAgentPacket(loadDecisionMeshFromRoot(process.cwd()), { task, agent, token_budget: run.current.estimated_tokens });
     return {
@@ -118,6 +117,7 @@ export function createRunOrchestrator(options: {
     if (before.current.revision !== revision) throw new Error("run_revision_conflict");
     if (before.status === "queued" && before.supervisor_task_id !== null) return { ...before, supervisor_task_id: before.supervisor_task_id };
     if (!["draft", "approved"].includes(before.status)) throw new Error("run_revision_conflict");
+    if (!routeAvailable(before.current.provider, before.current.model)) throw new Error("run_route_unavailable");
     const queue = readApprovalQueue(options.stateDir);
     const index = queue.records.findIndex((item) => item.run_id === runId && item.revision === revision);
     if (index < 0) throw new Error("approval_not_found");
@@ -170,14 +170,14 @@ export function createRunOrchestrator(options: {
 
   function persistResult(run: RunRecord, result: DispatchResult): RunRecord {
     return recordRunProviderResult(options.stateDir, run.current.run_id, result.refused
-      ? { refused: true, reason: result.reason, worker_run_id: null, raw_output: "" }
-      : { refused: false, reason: null, worker_run_id: result.workerRunId, raw_output: result.rawOutput.slice(0, 32_000) }, now());
+      ? { refused: true, reason: result.reason, worker_run_id: null, raw_output: "", exit_code: null, error_reason: null, lock_status: null }
+      : { refused: false, reason: null, worker_run_id: result.workerRunId, raw_output: redactTelemetryText(result.rawOutput, 32_000), exit_code: result.exitCode ?? 0, error_reason: result.errorReason == null ? null : redactTelemetryText(result.errorReason, 32_000), lock_status: result.lockStatus ?? "acquired_supervisor_spawn" }, now());
   }
 
   function reconstructedResult(run: RunRecord): DispatchResult {
     const result = run.provider_result!;
     if (result.refused) return { refused: true, reason: result.reason as Extract<DispatchResult, { refused: true }>["reason"], tier_id: null, provenance_verified: true };
-    return { refused: false, workerRunId: result.worker_run_id!, handoffId: "persisted" as Extract<DispatchResult, { refused: false }>["handoffId"], vendor: run.current.provider, model: run.current.model, exitCode: 0, rawOutput: result.raw_output, parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
+    return { refused: false, workerRunId: result.worker_run_id!, handoffId: "persisted" as Extract<DispatchResult, { refused: false }>["handoffId"], vendor: run.current.provider, model: run.current.model, exitCode: result.exit_code ?? 1, rawOutput: result.raw_output, parsedJson: null, durationSeconds: 0, lockStatus: result.lock_status ?? "failed", workerOutputPath: null, errorReason: result.error_reason, tier_id: null, provenance_verified: true };
   }
 
   function finishProviderResult(taskId: string, run: RunRecord, result: DispatchResult): RunRecord & { readonly result: DispatchResult } {
@@ -200,14 +200,20 @@ export function createRunOrchestrator(options: {
       run = markRunReservationTerminal(options.stateDir, run.current.run_id, "settled", now());
       options.afterPhase?.("reservation_terminal");
     }
+    const failed = (result.exitCode ?? 0) !== 0 || result.errorReason != null || result.lockStatus === "failed";
+    const cancelled = record(run.current.run_id).cancellation_requested;
     const task = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
-    if (task === undefined || task.status === "running") options.supervisor.complete(taskId, now());
+    if (cancelled) options.supervisor.cancel(taskId, "run_cancelled", now());
+    else if (failed) options.supervisor.fail(taskId, result.errorReason ?? `worker_exit_${result.exitCode}`, now());
+    else if (task === undefined || task.status === "running") options.supervisor.complete(taskId, now());
     const latest = record(run.current.run_id);
     if (!latest.artifacts.some((artifact) => artifact.artifact_id === `text-${result.workerRunId}`)) {
-      appendRunArtifact(options.stateDir, run.current.run_id, { artifact_id: `text-${result.workerRunId}`, type: "text", preview: result.rawOutput.slice(0, 32_000) }, now());
+      appendRunArtifact(options.stateDir, run.current.run_id, { artifact_id: `text-${result.workerRunId}`, type: "text", preview: redactTelemetryText(result.rawOutput, 32_000) }, now());
       options.afterPhase?.("artifact");
     }
-    const finalized = finalizeRun(options.stateDir, run.current.run_id, "completed", null, now());
+    const finalized = cancelled
+      ? transitionRun(options.stateDir, run.current.run_id, "cancelled", now())
+      : finalizeRun(options.stateDir, run.current.run_id, failed ? "failed" : "completed", failed ? result.errorReason ?? `worker_exit_${result.exitCode}` : null, now());
     options.afterPhase?.("finalized");
     options.tokenGateway.acknowledgeTerminal?.(reservation.reservationId);
     return { ...finalized, result };
@@ -244,6 +250,7 @@ export function createRunOrchestrator(options: {
     if (taskId === undefined) throw new Error("invalid_supervisor_task");
     let run = bindingForTask(taskId);
     if (run.provider_result !== null) return finishProviderResult(taskId, run, reconstructedResult(run));
+    if (run.status === "queued") run = transitionRun(options.stateDir, run.current.run_id, "running", now());
     let result: DispatchResult;
     try {
       result = await options.dispatch(task.handoff, options.stateDir);
@@ -271,6 +278,7 @@ export function createRunOrchestrator(options: {
     let current = record(runId);
     if (current.status === "cancelled") return current;
     current = requestRunCancellation(options.stateDir, runId, now());
+    if (current.status === "running") return current;
     let firstError: unknown;
     if (current.token_reservation === null) {
       const orphan = options.tokenGateway.findActiveReservation?.(handoffFor(current).handoffId as string) ?? null;

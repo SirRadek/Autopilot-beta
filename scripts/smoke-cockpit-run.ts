@@ -2,14 +2,13 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createControlPlaneServer } from "./control-plane-server";
+import { createControlPlaneRuntime } from "./control-plane-server";
 import { readApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { writeProjectRegistry } from "../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
-import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { readRunStore } from "../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
-import { TokenGateway, type TokenGatewayTelemetry } from "../src/data/delivery-system/tokenGateway";
+import type { TokenGatewayTelemetry } from "../src/data/delivery-system/tokenGateway";
 import type { DispatchResult } from "../src/governed-core/dispatch";
 
 type SmokeMode = "dry-run" | "live";
@@ -43,7 +42,16 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
   if (options.mode !== "dry-run") throw new Error("live_execution_forbidden");
   const stateDir = mkdtempSync(join(tmpdir(), "autopilot-cockpit-smoke-"));
   const token = "cockpit-smoke-local-token";
-  const server = createControlPlaneServer(stateDir, token);
+  let dispatchOutput: DispatchResult | undefined;
+  const runtime = createControlPlaneRuntime(stateDir, token, {
+    scheduler: { start() {}, stop() {} },
+    supervisorPollMs: 5,
+    dispatch: async (handoff) => {
+      dispatchOutput = { refused: false, workerRunId: "smoke-worker-1", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "deterministic cockpit smoke result", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
+      return dispatchOutput;
+    }
+  });
+  const server = runtime.server;
   try {
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "cockpit-smoke", name: "Cockpit smoke fixture", cwd: process.cwd(), enabled: true }] });
     const now = new Date().toISOString();
@@ -60,19 +68,8 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
     const runId = prepared.current.run_id as string;
     await call(`/runs/${runId}/approve`, { revision: 1, operator: "cockpit-smoke" });
 
-    const gateway = new TokenGateway({ stateDir });
-    const supervisor = new SupervisorQueue({ stateDir });
-    let dispatchOutput: DispatchResult | undefined;
-    const orchestrator = createRunOrchestrator({
-      stateDir,
-      tokenGateway: gateway,
-      supervisor,
-      dispatch: async (handoff) => {
-        dispatchOutput = { refused: false, workerRunId: "smoke-worker-1", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "deterministic cockpit smoke result", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
-        return dispatchOutput;
-      }
-    });
-    const completed = await orchestrator.runSupervisorOnce();
+    await waitFor(() => readRunStore(stateDir).runs[0]?.status === "completed");
+    const completed = readRunStore(stateDir).runs[0] ?? null;
     if (completed === null || dispatchOutput === undefined || dispatchOutput.refused || completed.token_reservation === null || completed.supervisor_task_id === null) throw new Error("smoke_run_did_not_complete");
     options.beforeEvidenceInspection?.(stateDir);
     const telemetry = readTelemetry(stateDir);
@@ -106,8 +103,16 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
       correlation_ids: { run_id: runId, session_id: reservation.sessionId!, handoff_id: reservation.handoffId!, worker_run_id: result.worker_run_id!, supervisor_task_id: task.task_id, reservation_id: reservation.reservationId }
     };
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    runtime.stop();
     rmSync(stateDir, { recursive: true, force: true });
+  }
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("smoke_run_timeout");
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
 

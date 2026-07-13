@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { resolveEnabledProject } from "./projectRegistry";
+import type { CliWorkerResult } from "./cliWorker";
 
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
@@ -47,6 +48,9 @@ export interface RunProviderResult {
   readonly reason: string | null;
   readonly worker_run_id: string | null;
   readonly raw_output: string;
+  readonly exit_code: number | null;
+  readonly error_reason: string | null;
+  readonly lock_status: CliWorkerResult["lockStatus"] | null;
 }
 
 export type RunArtifactInput = Omit<RunArtifact, "created_at">;
@@ -138,7 +142,9 @@ function validReservation(value: RunReservation | null): boolean {
 
 function validProviderResult(value: RunProviderResult | null): boolean {
   return value === null || (typeof value.refused === "boolean" && validNullableString(value.reason, MAX_TERMINAL_REASON) &&
-    validNullableString(value.worker_run_id, MAX_ID) && typeof value.raw_output === "string" && value.raw_output.length <= MAX_PREVIEW);
+    validNullableString(value.worker_run_id, MAX_ID) && typeof value.raw_output === "string" && value.raw_output.length <= MAX_PREVIEW &&
+    (value.exit_code === null || Number.isSafeInteger(value.exit_code)) && validNullableString(value.error_reason, MAX_TERMINAL_REASON) &&
+    (value.lock_status === null || ["acquired_supervisor_spawn", "already_locked", "stale_replaced", "failed"].includes(value.lock_status)));
 }
 
 function hasApproval(record: RunRecord): boolean {
@@ -194,7 +200,7 @@ export function readRunStore(stateDir: string): RunStoreDocument {
   }
   if (typeof document === "object" && document !== null && Array.isArray((document as { runs?: unknown }).runs)) {
     document = { ...(document as object), runs: (document as { runs: unknown[] }).runs.map((run) =>
-      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, ...run } : run) };
+      typeof run === "object" && run !== null ? { token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, ...run, ...((run as RunRecord).provider_result === null || (run as RunRecord).provider_result === undefined ? {} : { provider_result: { exit_code: null, error_reason: null, lock_status: null, ...(run as RunRecord).provider_result } }) } : run) };
   }
   validate(document);
   return document;

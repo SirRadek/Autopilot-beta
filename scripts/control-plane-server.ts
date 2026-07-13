@@ -13,6 +13,10 @@ import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderC
 import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
+import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
+import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
+import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
+import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
 
 const execFileAsync = promisify(execFile);
 
@@ -34,6 +38,8 @@ export interface ControlPlaneRuntimeOptions {
   readonly providerCommands?: Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>>;
   /** Add Secure to browser cookies when the public cockpit is served over TLS. */
   readonly secureCookies?: boolean;
+  readonly dispatch?: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
+  readonly supervisorPollMs?: number;
 }
 
 export function providerUsageCommandsFromEnvironment(
@@ -50,6 +56,7 @@ export function providerUsageCommandsFromEnvironment(
 export interface ControlPlaneServerOptions {
   /** Add Secure to browser cookies; disabled by default for loopback HTTP development. */
   readonly secureCookies?: boolean;
+  readonly runOrchestrator?: ReturnType<typeof createRunOrchestrator>;
 }
 
 export function createControlPlaneServer(stateDir: string, authToken: string | undefined, options: ControlPlaneServerOptions = {}) {
@@ -84,7 +91,7 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     }
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
-    else if (await handleControlPlaneRunRoute(request, response, stateDir)) return;
+    else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator)) return;
     else returnJson(response, { error: "not_found" }, 404);
   });
 }
@@ -255,12 +262,26 @@ export function createControlPlaneRuntime(
     }),
     store: { stateDir }
   });
-  const server = createControlPlaneServer(stateDir, authToken, options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies });
+  const orchestrator = createRunOrchestrator({
+    stateDir,
+    tokenGateway: new TokenGateway({ stateDir }),
+    supervisor: new SupervisorQueue({ stateDir }),
+    dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
+  });
+  const server = createControlPlaneServer(stateDir, authToken, { ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }), runOrchestrator: orchestrator });
   scheduler.start();
   let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const poll = async () => {
+    if (stopped) return;
+    try { await orchestrator.runSupervisorOnce(); } catch (error) { process.stderr.write(`control-plane supervisor: ${error instanceof Error ? error.message : "dispatch_failed"}\n`); }
+    if (!stopped) timer = setTimeout(poll, options.supervisorPollMs ?? 250);
+  };
+  void poll();
   const stop = () => {
     if (stopped) return;
     stopped = true;
+    if (timer !== undefined) clearTimeout(timer);
     scheduler.stop();
     server.close();
   };

@@ -161,7 +161,7 @@ export function buildDispatchDecisionRecord(input: BuildDispatchDecisionRecordIn
 export async function dispatchHandoff(
   handoff: GovernedHandoff,
   stateDir: string,
-  options: { readonly tokenGateway?: TokenGateway; readonly tokenGatewayLimits?: Partial<TokenGatewayLimits> } = {}
+  options: { readonly tokenGateway?: TokenGateway; readonly tokenGatewayLimits?: Partial<TokenGatewayLimits>; readonly reservationOwner?: "dispatch" | "caller" } = {}
 ): Promise<DispatchResult> {
   const mesh = loadDecisionMeshFromRoot(REPO_ROOT);
   const packet = buildAgentPacket(mesh, {
@@ -227,6 +227,11 @@ export async function dispatchHandoff(
   }
 
   const workerInput = toCliWorkerInput(handoff);
+  if (options.reservationOwner === "caller") {
+    const result = await runCliWorker(workerInput, stateDir);
+    recordDispatchDecision(handoff, stateDir, { decision: "dispatched", refusalReason: null, tierId });
+    return { ...result, refused: false, tier_id: tierId, provenance_verified: true };
+  }
   const gateway = options.tokenGateway ?? new TokenGateway({
     stateDir,
     ...(options.tokenGatewayLimits === undefined ? {} : { limits: options.tokenGatewayLimits })

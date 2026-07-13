@@ -1,10 +1,10 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
-import { createControlPlaneServer, providerUsageCommandsFromEnvironment } from "../../scripts/control-plane-server";
+import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment } from "../../scripts/control-plane-server";
 import { readApprovalQueue, writeApprovalQueue } from "../../src/data/delivery-system/approvalQueue";
 import { recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
@@ -69,6 +69,16 @@ describe("control plane governed run API", () => {
     expect(await oversized.json()).toEqual({ error: "request_body_too_large" });
   });
 
+  it("requires manual review above 1k estimated tokens and hard-caps prompts below 10k", async () => {
+    const api = await governedApi();
+    const reviewPrompt = "x".repeat(4_004);
+    const reviewRequired = await api.call("POST", "/runs", { ...draft, prompt: reviewPrompt });
+    expect(await reviewRequired.json()).toEqual({ error: "run_prompt_review_required" });
+    expect((await api.call("POST", "/runs", { ...draft, prompt: reviewPrompt, prompt_review_acknowledged: true })).status).toBe(201);
+    const hardCap = await api.call("POST", "/runs", { ...draft, prompt: "x".repeat(32_000), prompt_review_acknowledged: true });
+    expect(await hardCap.json()).toEqual({ error: "run_prompt_token_cap_exceeded" });
+  });
+
   it("requires application/json for every mutation body", async () => {
     const api = await governedApi();
     const missing = await fetch(`${api.base}/runs`, { method: "POST", headers: { authorization: "Bearer secret" }, body: JSON.stringify(draft) });
@@ -91,6 +101,33 @@ describe("control plane governed run API", () => {
     const stale = await api.call("POST", `/runs/${created.current.run_id}/revisions`, { ...draft, revision: 1 });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toEqual({ error: "run_revision_conflict" });
+  });
+
+  it("rejects stale routes at prepare and revalidates before approval", async () => {
+    const api = await governedApi();
+    writeProviderQuotaStore(api.stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", "2026-01-01T00:00:00.000Z")] });
+    expect((await api.call("POST", "/runs", draft)).status).toBe(409);
+    writeProviderQuotaStore(api.stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    const created = await (await api.call("POST", "/runs", draft)).json() as { current: { run_id: string; revision: number } };
+    writeProviderQuotaStore(api.stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", "2026-01-01T00:00:00.000Z")] });
+    expect((await api.call("POST", `/runs/${created.current.run_id}/approve`, { revision: 1, operator: "owner" })).status).toBe(409);
+    expect(new SupervisorQueue({ stateDir: api.stateDir }).snapshot()).toEqual([]);
+  });
+
+  it("runs the production supervisor loop to a terminal result", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+    writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    const runtime = createControlPlaneRuntime(stateDir, "secret", { scheduler: { start() {}, stop() {} }, dispatch: async (handoff) => ({ refused: false, workerRunId: "runtime-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "runtime terminal", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }), supervisorPollMs: 5 });
+    servers.push(runtime.server);
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    const address = runtime.server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+    const created = await (await call("/runs", draft)).json() as { current: { run_id: string } };
+    await call(`/runs/${created.current.run_id}/approve`, { revision: 1, operator: "owner" });
+    await vi.waitFor(() => expect(readRunStore(stateDir).runs[0]?.status).toBe("completed"));
+    runtime.stop();
   });
 
   it("keeps authentication and cookie CSRF protection on mutations", async () => {

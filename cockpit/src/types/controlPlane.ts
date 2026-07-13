@@ -19,7 +19,7 @@ export interface ProjectEntry { readonly schema_version: "v1"; readonly project_
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
 export type RunArtifactType = "text" | "visual";
-export interface RunDraftInput { readonly project_id: string; readonly prompt: string; readonly provider: RunProvider; readonly model: string | null; readonly estimated_tokens: number; readonly requested_artifacts: readonly RunArtifactType[] }
+export interface RunDraftInput { readonly project_id: string; readonly prompt: string; readonly provider: RunProvider; readonly model: string | null; readonly estimated_tokens: number; readonly requested_artifacts: readonly RunArtifactType[]; readonly prompt_review_acknowledged?: boolean }
 export interface RunDraft extends RunDraftInput { readonly run_id: string; readonly revision: number; readonly created_at: string }
 export interface RunReservation { readonly reservationId: string; readonly provider: string; readonly model: string | null; readonly sessionId: string | null; readonly inputTokens: number; readonly outputTokens: number; readonly handoffId?: string; readonly reservedAt: string; readonly totalTokens: number }
 export interface RunProviderResult { readonly refused: boolean; readonly reason: string | null; readonly worker_run_id: string | null; readonly raw_output: string }

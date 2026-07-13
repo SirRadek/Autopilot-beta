@@ -5,11 +5,12 @@ import { isDeepStrictEqual } from "node:util";
 import { createApprovalRecord, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { acknowledgeIncident, prepareRepairPacket, readIncidentStore, recordAutopilotIncident } from "../src/data/delivery-system/incidentStore";
 import { readProjectRegistry } from "../src/data/delivery-system/projectRegistry";
-import { readProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
+import { isRunRouteEligible } from "../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { readRunStore, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { estimateTokenCount, TokenGateway } from "../src/data/delivery-system/tokenGateway";
+import { dispatchHandoff } from "../src/governed-core/dispatch";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const PROVIDERS = new Set<RunProvider>(["codex_cli", "claude_cli", "agy_cli", "openrouter_api"]);
@@ -28,17 +29,17 @@ class HttpError extends Error {
   constructor(readonly status: number, readonly code: string) { super(code); }
 }
 
-export async function handleControlPlaneRunRoute(request: IncomingMessage, response: ServerResponse, stateDir: string): Promise<boolean> {
+export async function handleControlPlaneRunRoute(request: IncomingMessage, response: ServerResponse, stateDir: string, suppliedOrchestrator?: ReturnType<typeof createRunOrchestrator>): Promise<boolean> {
   const method = request.method ?? "";
   const path = new URL(request.url ?? "/", "http://control-plane.local").pathname;
   const match = matchRoute(method, path);
   if (match === null) return false;
   try {
-    const orchestrator = createRunOrchestrator({
+    const orchestrator = suppliedOrchestrator ?? createRunOrchestrator({
       stateDir,
       tokenGateway: new TokenGateway({ stateDir }),
       supervisor: new SupervisorQueue({ stateDir }),
-      dispatch: async () => { throw new Error("http_handler_must_not_dispatch"); }
+      dispatch: (handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" })
     });
     if (match.kind === "projects") return json(response, readProjectRegistry(stateDir).projects);
     if (match.kind === "runs") {
@@ -117,7 +118,8 @@ function draftInput(body: Record<string, unknown>): RunDraftInput {
   if (typeof body.project_id !== "string" || typeof body.prompt !== "string" || !PROVIDERS.has(body.provider as RunProvider) ||
       body.model !== null && typeof body.model !== "string" || !Array.isArray(body.requested_artifacts)) throw new HttpError(400, "invalid_run_draft");
   const estimated = body.estimated_tokens === undefined ? estimateTokenCount(body.prompt) : body.estimated_tokens;
-  if (!Number.isSafeInteger(estimated)) throw new HttpError(400, "invalid_run_draft");
+  const conservativeEstimate = estimateTokenCount(body.prompt);
+  if (!Number.isSafeInteger(estimated) || conservativeEstimate >= 8_000 || conservativeEstimate > 1_000 && body.prompt_review_acknowledged !== true) throw new HttpError(400, conservativeEstimate >= 8_000 ? "run_prompt_token_cap_exceeded" : conservativeEstimate > 1_000 ? "run_prompt_review_required" : "invalid_run_draft");
   return { project_id: body.project_id, prompt: body.prompt, provider: body.provider as RunProvider, model: body.model, estimated_tokens: estimated as number, requested_artifacts: body.requested_artifacts as RunDraftInput["requested_artifacts"] };
 }
 
@@ -153,7 +155,7 @@ function knownHttpError(error: unknown): HttpError | null {
   if (["project_not_found", "run_not_found", "incident_not_found", "approval_not_found"].includes(code)) return new HttpError(404, code);
   if (["run_revision_conflict", "run_route_unavailable", "invalid_run_cancellation", "approval_already_decided", "approval_not_approved", "token_input_cap_exceeded", "token_output_cap_exceeded", "token_budget_exhausted", "token_route_mismatch", "token_reservation_limit", "run_limit", "run_revision_limit"].includes(code)) return new HttpError(409, code);
   if (code === "repair_packet_too_large") return new HttpError(413, code);
-  if (["invalid_run_draft", "invalid_run_approval", "invalid_incident"].includes(code)) return new HttpError(400, code);
+  if (["invalid_run_draft", "invalid_run_approval", "invalid_incident", "run_prompt_token_cap_exceeded", "run_prompt_review_required"].includes(code)) return new HttpError(400, code);
   return null;
 }
 
@@ -161,8 +163,7 @@ function integer(value: unknown, code: string): number { if (!Number.isSafeInteg
 function nonEmpty(value: unknown, code: string): string { if (typeof value !== "string" || value.length === 0 || value.length > 200) throw new HttpError(400, code); return value; }
 function isStringArray(value: unknown): value is string[] { return Array.isArray(value) && value.every((item) => typeof item === "string"); }
 function routeAvailable(stateDir: string, provider: string, model: string | null): boolean {
-  const snapshot = readProviderQuotaStore(stateDir).snapshots.find((candidate) => candidate.provider === provider);
-  return snapshot !== undefined && snapshot.health !== "unavailable" && (model === null || snapshot.models.some((candidate) => candidate.model_id === model && candidate.available && candidate.health !== "unavailable"));
+  return isRunRouteEligible(stateDir, provider, model, new Date().toISOString());
 }
 function sameDraftInput(draft: RunDraft, input: RunDraftInput): boolean {
   return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts }, input);

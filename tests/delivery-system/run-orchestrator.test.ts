@@ -94,6 +94,36 @@ describe("governed run orchestration", () => {
     expect(readRunStore(stateDir).runs[0]).toMatchObject({ status: "completed", artifacts: [{ type: "text", preview: "text result" }] });
   });
 
+  it("fails a nonzero worker result while settling its actual usage", async () => {
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "password=hunter2 authorization: Bearer bearer-secret api_key=key-secret", exitCode: 7, errorReason: "provider_failed", lockStatus: "failed" as const, model: "gpt-5" }));
+    const { orchestrator, input, tokenGateway, stateDir } = setup({ dispatch });
+    const draft = orchestrator.prepareRun(input);
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    const result = await orchestrator.runSupervisorOnce();
+    expect(result?.status).toBe("failed");
+    expect(tokenGateway.settle).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("hunter2");
+    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("bearer-secret");
+    expect(JSON.stringify(readRunStore(stateDir))).not.toContain("key-secret");
+    expect(readRunStore(stateDir).runs[0]?.provider_result).toMatchObject({ exit_code: 7, error_reason: "provider_failed" });
+  });
+
+  it("keeps a running cancellation durable until dispatch finishes", async () => {
+    let resolveDispatch!: (value: any) => void;
+    const dispatch = vi.fn(() => new Promise((resolve) => { resolveDispatch = resolve; }));
+    const { orchestrator, input, tokenGateway, stateDir } = setup({ dispatch });
+    const draft = orchestrator.prepareRun(input);
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    const pending = orchestrator.runSupervisorOnce();
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1));
+    expect(orchestrator.cancelRun(draft.current.run_id).status).not.toBe("cancelled");
+    expect(tokenGateway.release).not.toHaveBeenCalled();
+    resolveDispatch({ refused: false, workerRunId: "worker-1", rawOutput: "used", exitCode: 0, errorReason: null, lockStatus: "acquired_supervisor_spawn", model: "gpt-5" });
+    expect((await pending)?.status).toBe("cancelled");
+    expect(tokenGateway.settle).toHaveBeenCalledTimes(1);
+    expect(readRunStore(stateDir).runs[0]?.status).toBe("cancelled");
+  });
+
   it("releases once when a governed refusal is terminal", async () => {
     const dispatch = vi.fn(async () => ({ refused: true as const, reason: "routing_no_viable_provider" as const, tier_id: null, provenance_verified: true }));
     const context = setup({ dispatch });
