@@ -82,6 +82,20 @@ describe("Autopilot incident store", () => {
     expect(`${persisted}${exported}`).not.toMatch(/json-password-secret|unterminated-pem-secret|quoted-cookie-secret|quoted-set-cookie-secret|json-client-secret|truncated-private-secret|json-api-secret|json-aws-secret|repair-cookie-secret/);
   });
 
+  it("redacts JSON authorization and escaped JSON secret strings without leaking suffixes", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "incident-escaped-json-"));
+    const incident = recordAutopilotIncident(stateDir, incidentInput('{"authorization":"Bearer input-auth-secret\\\" input-suffix-secret"}'));
+    const packet = prepareRepairPacket(stateDir, incident.incident_id, {
+      expected: '{"password":"expected-secret\\\" expected-suffix-secret"}',
+      actual: '{"authorization":"Bearer actual-secret\\\\path actual-suffix-secret"}',
+      reproduction_steps: ['{"client_secret":"repro-secret\\\" repro-suffix-secret"}'],
+      verification_commands: ['{"access_token":"command-secret\\\\path command-suffix-secret"}']
+    });
+    const output = JSON.stringify(packet);
+
+    expect(output).not.toMatch(/input-auth-secret|input-suffix-secret|expected-secret|expected-suffix-secret|actual-secret|actual-suffix-secret|repro-secret|repro-suffix-secret|command-secret|command-suffix-secret/);
+  });
+
   it("redacts before persistence and bounds incident fields and count", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "incident-bounds-"));
     for (let index = 0; index < 260; index += 1) {
@@ -181,6 +195,7 @@ describe("Autopilot incident store", () => {
       { ...incident, recorded_at: "access_token=timestamp-secret" },
       { ...incident, recorded_at: "yesterday" },
       { ...incident, summary: '{"password":"loaded-json-secret"}' },
+      { ...incident, summary: '{"authorization":"Bearer loaded-auth-secret\\\" loaded-auth-suffix"}' },
       { ...incident, impact: "Cookie: \"loaded-quoted-cookie-secret\"" },
       { ...incident, event_refs: ["-----BEGIN CERTIFICATE-----\nloaded-truncated-pem"] }
     ];
@@ -188,6 +203,18 @@ describe("Autopilot incident store", () => {
       writeFileSync(path, JSON.stringify({ schema_version: "v1", incidents: [candidate] }));
       expect(() => readIncidentStore(stateDir)).toThrow("invalid_incident_store");
     }
+  });
+
+  it("rejects a password-shaped acknowledgement timestamp before repair export", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "incident-loaded-ack-time-"));
+    const path = join(stateDir, "autopilot-incidents.json");
+    const incident = acknowledgeIncident(stateDir, recordAutopilotIncident(stateDir, incidentInput("safe")).incident_id, "owner");
+    writeFileSync(path, JSON.stringify({
+      schema_version: "v1",
+      incidents: [{ ...incident, acknowledged_at: "password=loaded-ack-secret" }]
+    }));
+
+    expect(() => prepareRepairPacket(stateDir, incident.incident_id, { expected: "safe", actual: "safe" })).toThrow("invalid_incident_store");
   });
 
   it("rejects unknown incidents without mutating state", () => {

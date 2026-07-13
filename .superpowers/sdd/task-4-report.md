@@ -45,3 +45,11 @@ This implements the already-approved incident/repair boundary and does not chang
 - The single-descriptor reader allocates and requests only the `fstat`-approved size, never `MAX + 1`, reads no more than 2 MiB, and rejects short reads or descriptor size changes.
 - Added adversarial persistence, export, load-validation, identity/timestamp, and legacy observability compatibility tests.
 - Second follow-up verification: incident and observability suites pass 15/15 tests; typecheck and `git diff --check` pass.
+
+## Third review follow-up
+
+- Loaded non-null `acknowledged_at` values now require the same canonical millisecond UTC shape and strong redaction check as `recorded_at`; repair export rejects an invalid loaded acknowledgement timestamp before returning a packet.
+- Strong structured redaction now recognizes quoted JSON `authorization` keys and consumes JSON string values with escaped quotes/backslashes as a unit, preventing secret suffix leakage.
+- Re-audited all string surfaces: incident IDs use UUID structure plus redaction validation; recorded and acknowledged timestamps use canonical ISO structure plus redaction validation; stage, summary, impact, acknowledgement owner, correlation keys/values, and event references require redacted bounded strings; repair expected/actual/steps/commands are redacted and bounded before export. Fixed schema/intent/execution/status/severity strings are closed enums or literals.
+- Added RED/GREEN input, persisted-load, and repair-export adversarial tests for JSON authorization, escape sequences, suffix leakage, and password-shaped acknowledgement timestamps.
+- Third follow-up verification: incident and observability suites pass 17/17 tests; typecheck and `git diff --check` pass.

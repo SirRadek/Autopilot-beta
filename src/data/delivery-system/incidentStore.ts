@@ -184,6 +184,7 @@ function isIncident(value: unknown): value is AutopilotIncident {
   if (![value.stage, value.summary, value.impact].every(isRedacted)) return false;
   if (!Number.isInteger(value.retry_count) || (value.retry_count as number) < 0 || (value.retry_count as number) > 1_000) return false;
   if (!nullableBoundedString(value.acknowledged_at, MAX_ID_CHARS) || !nullableBoundedString(value.acknowledged_by, MAX_ID_CHARS)) return false;
+  if (value.acknowledged_at !== null && (!isIsoTimestamp(value.acknowledged_at) || !isRedacted(value.acknowledged_at))) return false;
   if (value.acknowledged_by !== null && !isRedacted(value.acknowledged_by)) return false;
   if (value.status === "open" && (value.acknowledged_at !== null || value.acknowledged_by !== null)) return false;
   if (value.status === "acknowledged" && (value.acknowledged_at === null || value.acknowledged_by === null)) return false;
