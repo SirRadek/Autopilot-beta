@@ -53,6 +53,33 @@ describe("cockpit governed run smoke harness", () => {
     } })).rejects.toThrow("smoke_correlation_mismatch");
   });
 
+  it("rejects an unrelated approval record", async () => {
+    await expect(runCockpitSmoke({ mode: "dry-run", beforeEvidenceInspection: (stateDir) => {
+      const path = join(stateDir, "approval-queue.json");
+      const state = JSON.parse(readFileSync(path, "utf8"));
+      state.records.push({ ...state.records[0], approval_id: "unrelated-approval", run_id: "unrelated-run", session_id: "unrelated-run" });
+      writeFileSync(path, JSON.stringify(state));
+    } })).rejects.toThrow("smoke_persisted_count_mismatch");
+  });
+
+  it("rejects an unrelated reservation lifecycle", async () => {
+    await expect(runCockpitSmoke({ mode: "dry-run", beforeEvidenceInspection: (stateDir) => {
+      const path = join(stateDir, "token-gateway-telemetry.jsonl");
+      const records = readFileSync(path, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      const unrelated = records.filter((record) => record.event === "reserved" || record.event === "settled").map((record) => ({ ...record, reservation_id: "unrelated-reservation", handoff_id: "unrelated-handoff", session_id: "unrelated-run" }));
+      appendFileSync(path, `${unrelated.map((record) => JSON.stringify(record)).join("\n")}\n`);
+    } })).rejects.toThrow("smoke_reservation_lifecycle_mismatch");
+  });
+
+  it("rejects an unrelated supervisor task", async () => {
+    await expect(runCockpitSmoke({ mode: "dry-run", beforeEvidenceInspection: (stateDir) => {
+      const path = join(stateDir, "supervisor-queue.json");
+      const state = JSON.parse(readFileSync(path, "utf8"));
+      state.tasks.push({ ...state.tasks[0], task_id: "unrelated-task" });
+      writeFileSync(path, JSON.stringify(state));
+    } })).rejects.toThrow("smoke_persisted_count_mismatch");
+  });
+
   it("leaves no provider credentials or dispatch capability in its source", () => {
     const source = readFileSync(new URL("../../scripts/smoke-cockpit-run.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/OPENAI_API_KEY|ANTHROPIC_API_KEY|OPENROUTER_API_KEY/);

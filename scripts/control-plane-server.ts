@@ -277,8 +277,8 @@ async function runProviderCommand(input: { readonly command: string; readonly ar
   }
 }
 
-const stateDir = process.argv[2] ?? "";
-const port = Number(process.argv[3] ?? "8787");
+const stateDir = process.argv[2] ?? process.env.CONTROL_PLANE_STATE_DIR ?? "";
+const port = Number(process.argv[3] ?? process.env.CONTROL_PLANE_PORT ?? "8787");
 const authToken = process.env.CONTROL_PLANE_TOKEN?.trim();
 const secureCookies = /^(1|true|yes)$/i.test(process.env.CONTROL_PLANE_SECURE_COOKIES?.trim() ?? "");
 if (process.argv[1]?.endsWith("control-plane-server.ts")) {

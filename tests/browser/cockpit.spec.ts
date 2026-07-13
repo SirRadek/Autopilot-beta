@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const browserStateDir = "/tmp/autopilot-browser-qa-state";
+const browserStateDir = process.env.AUTOPILOT_BROWSER_STATE_DIR;
+if (browserStateDir === undefined) throw new Error("AUTOPILOT_BROWSER_STATE_DIR is required");
 
 async function login(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");

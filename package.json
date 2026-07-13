@@ -63,7 +63,7 @@
     ,"cockpit:dev": "npm --prefix cockpit run dev"
     ,"cockpit:build": "npm --prefix cockpit run build"
     ,"cockpit:test": "npm --prefix cockpit run test"
-    ,"browser:qa": "playwright test --config=playwright.config.ts"
+    ,"browser:qa": "tsx scripts/browser-qa.ts"
     ,"smoke:cockpit-run": "tsx scripts/smoke-cockpit-run.ts"
   },
   "dependencies": {
