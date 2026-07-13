@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createControlPlaneServer, providerUsageCommandsFromEnvironment } from "../../scripts/control-plane-server";
-import { writeProviderQuotaStore, type ProviderQuotaStoreDocument } from "../../src/data/delivery-system/providerQuotaStore";
+import { recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
+import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
+import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
+import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
+import type { ProviderQuotaStoreDocument } from "../../src/data/delivery-system/providerQuotaStore";
 
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
@@ -23,6 +27,103 @@ const snapshot = (provider: string, fetchedAt: string) => ({
   five_hour: { limit: 100, used: 20, remaining: 80, resets_at: null },
   weekly: { limit: 1_000, used: 100, remaining: 900, resets_at: null }, api_spend: 1.25, currency: "USD",
   models: [{ model_id: "model-a", available: true, health: "healthy" as const, source: "api" as const }], health: "healthy" as const, error_code: null
+});
+
+async function governedApi() {
+  const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runs-"));
+  writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: stateDir, enabled: true }] });
+  writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+  const server = createControlPlaneServer(stateDir, "secret");
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("missing address");
+  const base = `http://127.0.0.1:${address.port}`;
+  const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => fetch(`${base}${path}`, {
+    method,
+    headers: { authorization: "Bearer secret", ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) })
+  });
+  return { stateDir, base, call };
+}
+
+describe("control plane governed run API", () => {
+  const draft = { project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: null, requested_artifacts: ["text"] };
+
+  it("prepares but does not execute a run", async () => {
+    const api = await governedApi();
+    const response = await api.call("POST", "/runs", draft);
+    expect(response.status).toBe(201);
+    expect(((await response.json()) as { status: string }).status).toBe("draft");
+    expect(new SupervisorQueue({ stateDir: api.stateDir }).snapshot()).toEqual([]);
+  });
+
+  it("rejects arbitrary paths and bodies larger than 64 KiB", async () => {
+    const api = await governedApi();
+    expect((await api.call("GET", "/runs/not-a-run/extra")).status).toBe(404);
+    const oversized = await api.call("POST", "/runs", `{"prompt":"${"x".repeat(64 * 1024)}"}`);
+    expect(oversized.status).toBe(413);
+    expect(await oversized.json()).toEqual({ error: "request_body_too_large" });
+  });
+
+  it("maps unavailable models and stale revisions to conflict", async () => {
+    const api = await governedApi();
+    const unavailable = await api.call("POST", "/runs", { ...draft, model: "missing" });
+    expect(unavailable.status).toBe(409);
+    expect(await unavailable.json()).toEqual({ error: "run_route_unavailable" });
+    const created = await (await api.call("POST", "/runs", draft)).json() as { current: { run_id: string } };
+    const revised = await api.call("POST", `/runs/${created.current.run_id}/revisions`, { ...draft, prompt: "new", revision: 1 });
+    expect(revised.status).toBe(201);
+    const stale = await api.call("POST", `/runs/${created.current.run_id}/revisions`, { ...draft, revision: 1 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ error: "run_revision_conflict" });
+  });
+
+  it("keeps authentication and cookie CSRF protection on mutations", async () => {
+    const api = await governedApi();
+    expect((await fetch(`${api.base}/projects`)).status).toBe(401);
+    const login = await fetch(`${api.base}/auth/login`, { method: "POST", body: JSON.stringify({ token: "secret" }) });
+    const cookie = login.headers.get("set-cookie") ?? "";
+    const crossOrigin = await fetch(`${api.base}/runs`, { method: "POST", headers: { cookie, origin: "https://attacker.example", "content-type": "application/json" }, body: JSON.stringify(draft) });
+    expect(crossOrigin.status).toBe(403);
+  });
+
+  it("approves idempotently without launching a worker", async () => {
+    const api = await governedApi();
+    const created = await (await api.call("POST", "/runs", draft)).json() as { current: { run_id: string; revision: number } };
+    const path = `/runs/${created.current.run_id}/approve`;
+    const body = { revision: created.current.revision, operator: "owner" };
+    const first = await (await api.call("POST", path, body)).json();
+    const second = await (await api.call("POST", path, body)).json();
+    expect(second).toEqual(first);
+    expect(new SupervisorQueue({ stateDir: api.stateDir }).snapshot()).toHaveLength(1);
+  });
+
+  it("acknowledges incidents and returns redacted manual repair packets", async () => {
+    const api = await governedApi();
+    const incident = recordAutopilotIncident(api.stateDir, { severity: "high", stage: "api", summary: "Bearer secret-value", correlation_ids: {}, impact: "password=hunter2", retry_count: 0, event_refs: [] });
+    const acknowledged = await api.call("POST", `/incidents/${incident.incident_id}/acknowledge`, { owner: "owner" });
+    expect(acknowledged.status).toBe(200);
+    expect(((await acknowledged.json()) as { status: string }).status).toBe("acknowledged");
+    const packet = await api.call("POST", `/incidents/${incident.incident_id}/repair-packet`, { expected: "authorization: Bearer expected-secret", actual: "password=actual-secret" });
+    expect(packet.status).toBe(200);
+    const text = await packet.text();
+    expect(text).toContain('"execution": "manual"');
+    expect(text).not.toContain("expected-secret");
+    expect(text).not.toContain("actual-secret");
+  });
+
+  it("records a redacted incident for an unknown internal failure", async () => {
+    const api = await governedApi();
+    writeFileSync(join(api.stateDir, "runs.json"), "not json secret-token");
+    const response = await api.call("GET", "/runs");
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error: string; incident_id: string };
+    expect(body.error).toBe("autopilot_internal_error");
+    const incidents = await (await api.call("GET", "/incidents")).text();
+    expect(incidents).toContain(body.incident_id);
+    expect(incidents).not.toContain("secret-token");
+  });
 });
 
 describe("control plane provider endpoints", () => {

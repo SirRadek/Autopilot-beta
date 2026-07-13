@@ -12,6 +12,7 @@ import { readProviderQuotaStore } from "../src/data/delivery-system/providerQuot
 import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderCommandRunner } from "../src/data/delivery-system/providerQuotaAdapters";
 import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
+import { handleControlPlaneRunRoute } from "./control-plane-runs";
 
 const execFileAsync = promisify(execFile);
 
@@ -83,6 +84,7 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     }
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
+    else if (await handleControlPlaneRunRoute(request, response, stateDir)) return;
     else returnJson(response, { error: "not_found" }, 404);
   });
 }
