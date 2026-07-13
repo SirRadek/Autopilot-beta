@@ -28,3 +28,11 @@ Complete. Added bounded, redaction-first Autopilot incident persistence and read
 ## Governance and concerns
 
 This implements the already-approved incident/repair boundary and does not change Decision Mesh architecture, so no mesh node update is required. Decision Mesh MCP tools were unavailable in this session; the task brief, repository governance, focused tests, and local typecheck were used as authority. No known implementation concerns remain.
+
+## Review follow-up
+
+- Expanded shared telemetry redaction to cover password/passwd assignments, API keys, access and refresh tokens, client secrets, cookie and set-cookie headers, AWS access IDs and credential assignments, private-key blocks and inline assignments, GitHub tokens, Slack tokens, and existing provider token prefixes.
+- Applied the shared policy to every caller-controlled persisted incident field and every exported repair-packet field. Loaded-state validation now rejects each governed secret class when it appears unredacted.
+- Replaced path-based stat-then-read with one open descriptor, bounded allocation/read, before/after descriptor size checks, and rejection of overflow, shrink, or growth.
+- Added RED/GREEN coverage spanning summary, impact, correlation IDs, event references, expected/actual state, reproduction steps, verification commands, multivalue cookies, private-key material, loaded secrets, and oversized state.
+- Follow-up verification: incident and observability suites pass 12/12 tests; typecheck and `git diff --check` pass.

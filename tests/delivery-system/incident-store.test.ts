@@ -42,6 +42,27 @@ describe("Autopilot incident store", () => {
     expect(readIncidentStore(stateDir).incidents[0]?.acknowledged_by).toBe("owner");
   });
 
+  it("redacts governed secret classes from every incident and packet surface", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "incident-secret-classes-"));
+    const privateKey = "-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----";
+    const incident = recordAutopilotIncident(stateDir, {
+      ...incidentInput("password=hunter2"),
+      impact: "AWS key AKIA1234567890ABCDEF",
+      correlation_ids: { api_key: "api_key=provider-secret" },
+      event_refs: [privateKey, "private_key=inline-private-material", "token sk-or-v1-abcdefghijk"]
+    });
+    const packet = prepareRepairPacket(stateDir, incident.incident_id, {
+      expected: "access_token=access-secret",
+      actual: "refresh_token: refresh-secret",
+      reproduction_steps: ["client_secret='client-secret'"],
+      verification_commands: ["curl -H 'Cookie: session=cookie-secret; secondary=second-cookie-secret'", "Set-Cookie: auth=set-cookie-secret"]
+    });
+    const exported = JSON.stringify(packet);
+
+    expect(exported).not.toMatch(/hunter2|AKIA1234567890ABCDEF|provider-secret|private-material|inline-private-material|abcdefghijk|access-secret|refresh-secret|client-secret|cookie-secret|second-cookie-secret|set-cookie-secret/);
+    expect(exported.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(11);
+  });
+
   it("redacts before persistence and bounds incident fields and count", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "incident-bounds-"));
     for (let index = 0; index < 260; index += 1) {
@@ -94,7 +115,7 @@ describe("Autopilot incident store", () => {
       writeFileSync(path, invalid, "utf8");
       expect(() => readIncidentStore(stateDir)).toThrow("invalid_incident_store");
     }
-    writeFileSync(path, Buffer.alloc(2 * 1024 * 1024, 0x20));
+    writeFileSync(path, Buffer.alloc(2 * 1024 * 1024 + 1, 0x20));
     expect(() => readIncidentStore(stateDir)).toThrow("invalid_incident_store");
   });
 
@@ -106,6 +127,29 @@ describe("Autopilot incident store", () => {
       incidents: [{ ...incident, impact: "Authorization: Bearer loaded-secret" }]
     }));
     expect(() => readIncidentStore(stateDir)).toThrow("invalid_incident_store");
+  });
+
+  it("rejects every governed secret class when found in loaded state", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "incident-loaded-secrets-"));
+    const path = join(stateDir, "autopilot-incidents.json");
+    const incident = recordAutopilotIncident(stateDir, incidentInput("safe"));
+    const secrets = [
+      "passwd=loaded-password",
+      "api-key: loaded-api-key",
+      "access_token=loaded-access",
+      "refresh_token=loaded-refresh",
+      "client_secret=loaded-client",
+      "Cookie: session=loaded-cookie",
+      "Set-Cookie: auth=loaded-set-cookie",
+      "AKIA1234567890ABCDEF",
+      "-----BEGIN RSA PRIVATE KEY-----\nloaded-key\n-----END RSA PRIVATE KEY-----",
+      "private-key=loaded-inline-private-key",
+      "github_pat_loadedprovidertoken"
+    ];
+    for (const summary of secrets) {
+      writeFileSync(path, JSON.stringify({ schema_version: "v1", incidents: [{ ...incident, summary }] }));
+      expect(() => readIncidentStore(stateDir), summary).toThrow("invalid_incident_store");
+    }
   });
 
   it("rejects unknown incidents without mutating state", () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
@@ -62,13 +62,32 @@ export interface AutopilotRepairPacket {
 
 export function readIncidentStore(stateDir: string): IncidentStoreDocument {
   const path = join(stateDir, INCIDENT_STORE_FILE);
-  if (!existsSync(path)) return { schema_version: "v1", incidents: [] };
-  if (statSync(path).size > MAX_STORE_BYTES) throw new Error("invalid_incident_store");
   let parsed: unknown;
+  let descriptor: number;
   try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
+    descriptor = openSync(path, "r");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { schema_version: "v1", incidents: [] };
+    throw new Error("invalid_incident_store");
+  }
+  try {
+    const initialSize = fstatSync(descriptor).size;
+    if (initialSize > MAX_STORE_BYTES) throw new Error("invalid_incident_store");
+    const buffer = Buffer.alloc(initialSize + 1);
+    let bytesRead = 0;
+    while (bytesRead < buffer.length) {
+      const count = readSync(descriptor, buffer, bytesRead, buffer.length - bytesRead, bytesRead);
+      if (count === 0) break;
+      bytesRead += count;
+    }
+    if (bytesRead !== initialSize || fstatSync(descriptor).size !== initialSize) {
+      throw new Error("invalid_incident_store");
+    }
+    parsed = JSON.parse(buffer.toString("utf8", 0, bytesRead));
   } catch {
     throw new Error("invalid_incident_store");
+  } finally {
+    closeSync(descriptor);
   }
   validateDocument(parsed);
   return parsed;
@@ -129,7 +148,6 @@ export function prepareRepairPacket(stateDir: string, incidentId: string, input:
 }
 
 function writeIncidentStore(stateDir: string, document: IncidentStoreDocument): void {
-  validateDocument(document);
   mkdirSync(stateDir, { recursive: true });
   const path = join(stateDir, INCIDENT_STORE_FILE);
   const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
