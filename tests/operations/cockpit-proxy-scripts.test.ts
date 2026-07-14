@@ -37,11 +37,18 @@ function git(checkout: string, ...args: string[]): string {
   return result.stdout.trim();
 }
 
-function makeCheckout(options: { distSymlink?: boolean } = {}): { checkout: string; sha: string } {
+function makeCheckout(
+  options: { distRootSymlink?: boolean; distSymlink?: boolean } = {},
+): { checkout: string; sha: string } {
   const checkout = join(makeTempDir(), "checkout");
-  mkdirSync(join(checkout, "cockpit", "dist", "assets"), { recursive: true });
-  writeFileSync(join(checkout, "cockpit", "dist", "index.html"), "cockpit\n");
-  writeFileSync(join(checkout, "cockpit", "dist", "assets", "app.js"), "app\n");
+  const dist = options.distRootSymlink ? join(makeTempDir(), "external-dist") : join(checkout, "cockpit", "dist");
+  mkdirSync(join(dist, "assets"), { recursive: true });
+  writeFileSync(join(dist, "index.html"), options.distRootSymlink ? "external\n" : "cockpit\n");
+  writeFileSync(join(dist, "assets", "app.js"), "app\n");
+  if (options.distRootSymlink) {
+    mkdirSync(join(checkout, "cockpit"), { recursive: true });
+    symlinkSync(dist, join(checkout, "cockpit", "dist"));
+  }
   if (options.distSymlink) {
     symlinkSync("index.html", join(checkout, "cockpit", "dist", "linked.html"));
   }
@@ -70,6 +77,7 @@ function runStage(checkout: string, root: string, runtime = node24) {
       AUTOPILOT_STAGE_TEST_FAIL_DURING_EARLY_SETUP: "0",
       AUTOPILOT_STAGE_TEST_FAIL_AFTER_RELEASE: "0",
       AUTOPILOT_STAGE_TEST_FAIL_AFTER_MANIFEST: "0",
+      AUTOPILOT_STAGE_TEST_CORRUPT_MANIFEST: "0",
     },
   });
 }
@@ -84,6 +92,7 @@ function runStageWithEnv(checkout: string, root: string, env: NodeJS.ProcessEnv)
       AUTOPILOT_STAGE_TEST_FAIL_DURING_EARLY_SETUP: "0",
       AUTOPILOT_STAGE_TEST_FAIL_AFTER_RELEASE: "0",
       AUTOPILOT_STAGE_TEST_FAIL_AFTER_MANIFEST: "0",
+      AUTOPILOT_STAGE_TEST_CORRUPT_MANIFEST: "0",
       ...env,
     },
   });
@@ -181,6 +190,16 @@ describe("Cockpit immutable release staging", () => {
     const root = makeReleaseRoot();
 
     expect(runStage(checkout, root).status).not.toBe(0);
+    expect(existsSync(join(root, "releases"))).toBe(false);
+  });
+
+  it("rejects cockpit/dist itself when it symlinks outside the checkout", () => {
+    const { checkout } = makeCheckout({ distRootSymlink: true });
+    const root = makeReleaseRoot();
+
+    const result = runStage(checkout, root);
+
+    expect(result.status).not.toBe(0);
     expect(existsSync(join(root, "releases"))).toBe(false);
   });
 
@@ -323,6 +342,32 @@ describe("Cockpit immutable release staging", () => {
     expect(statSync(join(root, "releases")).mode & 0o777).toBe(0o755);
     expect(statSync(join(root, "manifests")).mode & 0o777).toBe(0o755);
     expect(runStage(checkout, root).status).toBe(0);
+  });
+
+  it("does not trust TMPDIR to expand test-mode confinement", () => {
+    const { checkout } = makeCheckout();
+    const hostileParent = mkdtempSync(join(process.cwd(), ".autopilot-cockpit-release-"));
+    tempRoots.push(hostileParent);
+    const root = join(hostileParent, "release-root");
+    mkdirSync(root, { mode: 0o755 });
+
+    const result = runStageWithEnv(checkout, root, { TMPDIR: hostileParent });
+
+    expect(result.status).not.toBe(0);
+    expect(existsSync(join(root, "releases"))).toBe(false);
+  });
+
+  it("refuses publication when the generated manifest fails checksum verification", () => {
+    const { checkout, sha } = makeCheckout();
+    const root = makeReleaseRoot();
+
+    const result = runStageWithEnv(checkout, root, {
+      AUTOPILOT_STAGE_TEST_CORRUPT_MANIFEST: "1",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(existsSync(join(root, "releases", sha))).toBe(false);
+    expect(existsSync(join(root, "manifests", `${sha}.sha256`))).toBe(false);
   });
 
   it("refuses the test-mode bypass for the production release root", () => {

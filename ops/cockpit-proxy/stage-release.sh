@@ -30,7 +30,12 @@ test "$release_root_input" = "$release_root"
 test -d "$release_root"
 
 if [ "$test_mode" = "1" ]; then
-	temp_root="$(realpath -e -- "${TMPDIR:-/tmp}")"
+	test ! -L /tmp
+	test -d /tmp
+	test "$(stat -c %u -- /tmp)" -eq 0
+	test "$(stat -c %g -- /tmp)" -eq 0
+	test "$(stat -c %a -- /tmp)" = 1777
+	temp_root="$(realpath -e -- /tmp)"
 	case "$release_root" in
 		"$temp_root"/*) ;;
 		*) printf '%s\n' "test mode requires a canonical temporary release root" >&2; exit 1 ;;
@@ -55,6 +60,7 @@ case "$("$node_bin" --version)" in
 	v24.*) ;;
 	*) exit 1 ;;
 esac
+test ! -L "$checkout/cockpit/dist"
 test -f "$checkout/cockpit/dist/index.html"
 test -z "$(find -P "$checkout/cockpit/dist" -mindepth 1 ! -type d ! -type f -print -quit)"
 
@@ -148,6 +154,12 @@ if [ "$test_mode" != "1" ]; then
 	chown 0:0 -- "$temporary_manifest"
 fi
 validate_manifest_file "$temporary_manifest"
+if [ "$test_mode" = "1" ] && [ "${AUTOPILOT_STAGE_TEST_CORRUPT_MANIFEST:-0}" = "1" ]; then
+	chmod 0644 -- "$temporary_manifest"
+	printf '%064d  ./index.html\n' 0 > "$temporary_manifest"
+	chmod 0444 -- "$temporary_manifest"
+fi
+(cd "$candidate" && sha256sum --check "$temporary_manifest" >/dev/null)
 
 release="$releases/$sha"
 manifest="$manifests/$sha.sha256"
