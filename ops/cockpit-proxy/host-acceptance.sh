@@ -100,11 +100,24 @@ if grep -Eiq '^content-type:[[:space:]]*application/json([[:space:]]*;|[[:space:
 	exit 1
 fi
 
-token="$(bash -c "$token_command" 2>"$work/token-command.stderr")"
-[ -n "$token" ] && [[ "$token" != *$'\n'* ]] || {
+token_stdout="$work/token-command.stdout"
+: > "$token_stdout"
+chmod 600 "$token_stdout"
+timeout 30s bash -c "$token_command" >"$token_stdout" 2>"$work/token-command.stderr" || {
+	printf '%s\n' "token command failed or timed out" >&2
+	exit 1
+}
+TOKEN_STDOUT_PATH="$token_stdout" node -e '
+const fs = require("node:fs");
+const value = fs.readFileSync(process.env.TOKEN_STDOUT_PATH);
+if (value.length === 0) process.exit(1);
+const body = value.at(-1) === 0x0a ? value.subarray(0, -1) : value;
+if (body.length === 0 || body.includes(0x0a) || body.includes(0x0d) || body.includes(0x00)) process.exit(1);
+' || {
 	printf '%s\n' "token command must return exactly one non-empty line" >&2
 	exit 1
 }
+IFS= read -r token < "$token_stdout" || [ -n "$token" ]
 TOKEN_TO_ENCODE="$token" node -e \
 	'process.stdout.write(JSON.stringify({token: process.env.TOKEN_TO_ENCODE}))' > "$work/login.json"
 status="$(request login POST "$base_url/auth/login" \
@@ -172,7 +185,7 @@ require_status "$status" 200 logout
 status="$(request logged-out GET "$base_url/auth/session" --cookie "$cookie_jar")"
 require_status "$status" 401 logged-out
 
-AUTOPILOT_PROXY_TEST_TOKEN="$token" npx playwright test --config playwright.proxy.config.ts
+AUTOPILOT_PROXY_TEST_TOKEN="$token" timeout 120s npx --no-install playwright test --config playwright.proxy.config.ts
 unset token TOKEN_TO_ENCODE
 
 printf '%s\n' "HOST_PROXY_ACCEPTANCE_OK"

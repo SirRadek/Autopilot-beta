@@ -541,13 +541,21 @@ output=
 while [[ $# -gt 0 ]]; do
   case "$1" in --output) output="$2"; shift 2 ;; *) shift ;; esac
 done
-if [[ -n "$output" && "$output" == */ready.json ]]; then
-  case "\${STUB_READY_MODE:-ready}" in
-    ready) printf '%s' '{"configuration":{"status":"ready"},"managed_state":{"status":"ready"},"project_registry":{"status":"ready"},"supervisor":{"status":"ready"},"token_gateway":{"status":"ready"}}' > "$output"; printf 200 ;;
+if [[ -n "$output" && "$output" == */health.json ]]; then
+  case "\${STUB_HEALTH_MODE:-healthy}" in
+    healthy) printf '%s' '{"ok":true}' > "$output"; printf 200 ;;
     503) printf '{}' > "$output"; printf 503 ;;
     malformed) printf '{' > "$output"; printf 200 ;;
-    missing) printf '%s' '{"configuration":{"status":"ready"}}' > "$output"; printf 200 ;;
-    not-ready) printf '%s' '{"configuration":{"status":"ready"},"managed_state":{"status":"ready"},"project_registry":{"status":"ready"},"supervisor":{"status":"degraded"},"token_gateway":{"status":"ready"}}' > "$output"; printf 200 ;;
+    wrong) printf '%s' '{"ok":false}' > "$output"; printf 200 ;;
+  esac
+elif [[ -n "$output" && "$output" == */ready.json ]]; then
+  case "\${STUB_READY_MODE:-ready}" in
+    ready) printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$output"; printf 200 ;;
+    503) printf '{}' > "$output"; printf 503 ;;
+    malformed) printf '{' > "$output"; printf 200 ;;
+    missing) printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null}}}' > "$output"; printf 200 ;;
+    not-ready) printf '%s' '{"ready":false,"components":{"configuration":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"degraded","error_code":"degraded"},"token_gateway":{"status":"ready","error_code":null}}}' > "$output"; printf 200 ;;
+    error-code) printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":"unexpected"},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$output"; printf 200 ;;
   esac
 fi
 `);
@@ -832,9 +840,16 @@ describe("Cockpit isolated proxy acceptance", () => {
     if (kind === "nft") expect(log).not.toContain("nft delete table");
   });
 
-  it.each(["503", "malformed", "missing", "not-ready"])("does not announce READY for %s /ready state", (mode) => {
+  it.each(["503", "malformed", "missing", "not-ready", "error-code"])("does not announce READY for %s /ready state", (mode) => {
     const prepared = prepareIsolatedRun();
     const result = runIsolated(prepared, { STUB_READY_MODE: mode });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("ISOLATED_ACCEPTANCE_READY");
+  });
+
+  it.each(["503", "malformed", "wrong"])("does not announce READY for %s /health state", (mode) => {
+    const prepared = prepareIsolatedRun();
+    const result = runIsolated(prepared, { STUB_HEALTH_MODE: mode });
     expect(result.status).not.toBe(0);
     expect(result.stdout).not.toContain("ISOLATED_ACCEPTANCE_READY");
   });
@@ -901,6 +916,7 @@ if [[ "\${1:-}" == x509 ]]; then cat >/dev/null; fi
 `);
   writeExecutable(join(bin, "npx"), `
 [[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
+[[ "\${1:-}" == --no-install ]]
 printf 'playwright trusted-origin\\n' >> "$STUB_LOG"
 `);
   writeExecutable(join(bin, "curl"), `
@@ -985,7 +1001,7 @@ esac
       SSL_CERT_FILE: join(root, "evil-cert.pem"),
       SSL_CERT_DIR: join(root, "evil-certs"),
       AUTOPILOT_PROXY_BASE_URL: "https://autopilot.local:8443",
-      AUTOPILOT_PROXY_TOKEN_COMMAND: "printf %s behavioral-secret",
+      AUTOPILOT_PROXY_TOKEN_COMMAND: extraEnv.TEST_TOKEN_COMMAND ?? "printf %s behavioral-secret",
     },
   });
   return { result, log };
@@ -1008,6 +1024,8 @@ describe("Cockpit trusted host acceptance", () => {
     expect(source).toContain("--connect-timeout 2");
     expect(source).toContain("--max-time 5");
     expect(source).toMatch(/timeout 5s openssl s_client/);
+    expect(source).toMatch(/timeout [0-9]+s bash -c/);
+    expect(source).toMatch(/timeout [0-9]+s npx --no-install playwright/);
   });
 
   it("accepts trusted responses without exposing the token or weakening TLS", () => {
@@ -1042,5 +1060,14 @@ describe("Cockpit trusted host acceptance", () => {
     ["incomplete Content-Security-Policy", { STUB_INCOMPLETE_CSP: "1" }],
   ])("rejects %s", (_label, extraEnv) => {
     expect(runHostAcceptance(extraEnv).result.status).not.toBe(0);
+  });
+
+  it.each([
+    ["an extra blank token line", "printf 'behavioral-secret\\n\\n'"],
+    ["a NUL byte in token stdout", "printf 'behavioral\\0secret'"],
+  ])("rejects %s", (_label, command) => {
+    const { result, log } = runHostAcceptance({ TEST_TOKEN_COMMAND: command });
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(log, "utf8")).not.toContain("login.headers");
   });
 });

@@ -361,18 +361,36 @@ systemd-run \
 	caddy run --config "$caddyfile" --adapter caddyfile >/dev/null
 proxy_started=1
 
-ready=0
-ready_body="$isolated_runtime/ready.json"
 retry_delay=1
 [ "$test_mode" = 0 ] || retry_delay=0
+healthy=0
+health_body="$isolated_runtime/health.json"
+for _ in $(seq 1 12); do
+	health_status="$(curl --disable --noproxy '*' --silent --show-error --connect-timeout 2 --max-time 5 \
+		--output "$health_body" --write-out '%{http_code}' "http://127.0.0.1:8877/health" || true)"
+	if [ "$health_status" = 200 ] && HEALTH_JSON_PATH="$health_body" node -e '
+const fs = require("node:fs");
+const body = JSON.parse(fs.readFileSync(process.env.HEALTH_JSON_PATH, "utf8"));
+if (body?.ok !== true || Object.keys(body).length !== 1) process.exit(1);
+'; then
+		healthy=1
+		break
+	fi
+	sleep "$retry_delay"
+done
+[ "$healthy" = 1 ]
+
+ready=0
+ready_body="$isolated_runtime/ready.json"
 for _ in $(seq 1 12); do
 	ready_status="$(curl --disable --noproxy '*' --silent --show-error --connect-timeout 2 --max-time 5 \
 		--output "$ready_body" --write-out '%{http_code}' "http://127.0.0.1:8877/ready" || true)"
 	if [ "$ready_status" = 200 ] && READY_JSON_PATH="$ready_body" node -e '
 const fs = require("node:fs");
 const body = JSON.parse(fs.readFileSync(process.env.READY_JSON_PATH, "utf8"));
+if (body?.ready !== true) process.exit(1);
 for (const name of ["configuration", "managed_state", "project_registry", "supervisor", "token_gateway"])
-  if (body?.[name]?.status !== "ready") process.exit(1);
+  if (body?.components?.[name]?.status !== "ready" || body.components[name].error_code !== null) process.exit(1);
 '; then
 		ready=1
 		break

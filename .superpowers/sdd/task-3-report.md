@@ -14,6 +14,13 @@ Implementation complete for the bounded Task 3 repository slice. No VM, live ser
 
 ## RED evidence
 
+Closure-review RED: targeted readiness/health/token-runner regressions produced one explicit boundary failure (missing token-command/Playwright timeouts), with negative readiness, health, and raw-token cases installed before production changes.
+
+```text
+Test Files  1 failed (1)
+Tests       1 failed | 10 passed | 69 skipped (80)
+```
+
 Third full-review regression RED was captured before production changes. The focused host boundary test failed because curl had no connect/total timeout and OpenSSL had no timeout wrapper; new isolated regressions additionally exercised inspection errors, foreign unit/nft replacement, invalid `/ready` states, and invalid-length/encoding session tokens.
 
 ```text
@@ -58,6 +65,29 @@ Tests       6 failed | 26 skipped (32)
 The success lifecycle failed with status `127` because `ops/cockpit-proxy/isolated-acceptance.sh` was absent; the browser-policy test failed with `ENOENT` for `playwright.proxy.config.ts`. The failure was the expected missing-feature RED, not a passing test or production/network mutation.
 
 ## GREEN evidence
+
+Closure-review focused GREEN (Node 24 wrapper seam):
+
+```text
+AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npx vitest run tests/operations/cockpit-proxy-scripts.test.ts \
+  -t 'does not announce READY|keeps token|extra blank token line|NUL byte in token stdout'
+Test Files  1 passed (1)
+Tests       11 passed | 69 skipped (80)
+```
+
+Closure-review full operations GREEN:
+
+```text
+AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npx vitest run tests/operations/cockpit-proxy-scripts.test.ts
+Test Files  1 passed (1)
+Tests       80 passed (80)
+```
+
+The closure tests mirror the real Control Plane contract: exact `{"ok":true}` liveness and nested
+`components` readiness with `ready === true` plus all five core status/code pairs. Token-command
+stdout is captured in a private file, checked bytewise before login, and multiple lines or NUL bytes
+are rejected before any login request. Both the token command and Playwright runner are bounded;
+Playwright is invoked through the already installed dependency with `npx --no-install`.
 
 Third full-review regression GREEN:
 
@@ -112,7 +142,7 @@ External browser test discovery:
 ```text
 AUTOPILOT_PROXY_BASE_URL=https://autopilot.local:8443 \
 AUTOPILOT_PROXY_TEST_TOKEN=isolated-test-token \
-npx playwright test --config playwright.proxy.config.ts --list
+npx --no-install playwright test --config playwright.proxy.config.ts --list
 
 Total: 1 test in 1 file
 ```
@@ -133,9 +163,9 @@ All exited `0`.
 - Success intentionally leaves both transient units, the isolated table, and runtime available until explicit cleanup. Cleanup stops only the two named transient units that were started or are observed under valid ownership evidence, deletes only `inet autopilot_cockpit_isolated`, verifies units/listeners/table are absent, and removes the runtime only after complete verification. Missing or malicious ownership evidence never authorizes mutation; incomplete cleanup preserves the runtime and marker for recovery.
 - The runtime directory is atomically created with fail-on-existence `mkdir`; its canonical parent must be non-symlinked, correctly owned, and either non-writable by peers or sticky-protected. Directory and marker owner/mode are verified before any contained setup, closing the former `/tmp` check/install race.
 - Pre-existing `8443`, `8877`, or the named table fail before mutation. An unowned cleanup path is refused.
-- The fixed token is written only to a `0600` environment file. Behavioral tests prove it is absent from stdout/stderr and command logs. The host token command's stderr is captured privately, its stdout must be one non-empty line, and the token is not placed in curl arguments.
+- The fixed token is written only to a `0600` environment file. Behavioral tests prove it is absent from stdout/stderr and command logs. The host token command is bounded to 30 seconds; stderr and raw stdout are captured privately, stdout must be exactly one non-empty line (with an optional final newline), and invalid raw output is refused before login. The token is not placed in curl arguments.
 - Caddy's private PKI remains under its `0700` data directory. The public export requires a regular, non-symlink file containing exactly one certificate PEM object and whitespace only outside it; OpenSSL parses and re-emits that certificate instead of copying source bytes. Only the public path and SHA-256 fingerprint are printed.
-- Neither acceptance script uses an insecure TLS flag; the browser explicitly refuses HTTP errors and captures no trace, video, or screenshot.
+- Neither acceptance script uses an insecure TLS flag; the browser explicitly refuses HTTP errors and captures no trace, video, or screenshot. Its process is bounded to 120 seconds and `npx --no-install` prevents dependency installation during acceptance.
 - Isolated routing matches the review-approved Task 1 exact API roots; liveness/readiness remain loopback checks rather than accidentally becoming public proxy roots.
 - A supplemental read-only self-review initially found signal continuation, cleanup status propagation, and private-key-contaminated export gaps. All three were fixed with regressions; the scoped re-review reported no remaining issue. The parent will still perform the independent root-level review.
 
