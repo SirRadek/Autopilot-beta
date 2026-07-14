@@ -11,6 +11,7 @@ nft_created=0
 control_plane_started=0
 proxy_started=0
 runtime_created=0
+ownership_nonce=""
 test_mode="${AUTOPILOT_PROXY_TEST_MODE:-0}"
 case "$test_mode" in 0|1) ;; *) exit 1 ;; esac
 expected_runtime_uid=0
@@ -44,38 +45,96 @@ resolve_safe_runtime_path() {
 
 runtime_evidence_valid() {
 	local marker="$isolated_runtime/.autopilot-cockpit-isolated-owned"
+	local -a ledger_lines
 	[ -d "$isolated_runtime" ] && [ ! -L "$isolated_runtime" ] || return 1
 	[ "$(stat -c %u:%g:%a -- "$isolated_runtime")" = "$expected_runtime_uid:$expected_runtime_gid:755" ] || return 1
 	[ -f "$marker" ] && [ ! -L "$marker" ] || return 1
 	[ "$(stat -c %u:%g:%a -- "$marker")" = "$expected_runtime_uid:$expected_runtime_gid:600" ] || return 1
-	[ "$(cat -- "$marker")" = "autopilot-cockpit-isolated-v1" ]
+	mapfile -t ledger_lines < "$marker"
+	[ "${#ledger_lines[@]}" -eq 2 ] || return 1
+	[ "${ledger_lines[0]}" = "version=autopilot-cockpit-isolated-v2" ] || return 1
+	[[ "${ledger_lines[1]}" =~ ^nonce=([a-f0-9]{64})$ ]] || return 1
+	ownership_nonce="${BASH_REMATCH[1]}"
 }
 
-unit_absent() {
-	[ "$(systemctl show --property=LoadState --value "$1" 2>/dev/null || true)" = "not-found" ]
+unit_load_state() {
+	systemctl show --property=LoadState --value "$1" 2>/dev/null
+}
+
+unit_identity_matches() {
+	local description
+	description="$(systemctl show --property=Description --value "$1" 2>/dev/null)" || return 2
+	[ "$description" = "Autopilot isolated $ownership_nonce" ]
+}
+
+socket_absent() {
+	local output
+	output="$(ss -H -ltn "sport = :$1")" || return 2
+	[ -z "$output" ]
+}
+
+socket_inspection_succeeds() {
+	ss -H -ltn "sport = :$1" >/dev/null
+}
+
+nft_table_presence() {
+	local tables
+	tables="$(nft -j list tables)" || return 2
+	NFT_TABLES_JSON="$tables" NFT_TABLE_NAME="$table_name" node -e '
+const data = JSON.parse(process.env.NFT_TABLES_JSON);
+const matches = (data.nftables ?? []).filter((entry) => entry.table?.family === "inet" && entry.table?.name === process.env.NFT_TABLE_NAME);
+if (matches.length > 1) process.exit(2);
+process.stdout.write(matches.length === 1 ? "present" : "absent");
+' || return 2
+}
+
+nft_identity_matches() {
+	local table_json
+	table_json="$(nft -j list table inet "$table_name")" || return 2
+	NFT_TABLE_JSON="$table_json" NFT_TABLE_NAME="$table_name" NFT_NONCE="$ownership_nonce" node -e '
+const data = JSON.parse(process.env.NFT_TABLE_JSON);
+const expected = `autopilot-isolated:${process.env.NFT_NONCE}`;
+const entries = data.nftables ?? [];
+const table = entries.filter((e) => e.table?.family === "inet" && e.table?.name === process.env.NFT_TABLE_NAME);
+const chain = entries.filter((e) => e.chain?.family === "inet" && e.chain?.table === process.env.NFT_TABLE_NAME && e.chain?.name === "input");
+const rule = entries.filter((e) => e.rule?.family === "inet" && e.rule?.table === process.env.NFT_TABLE_NAME && e.rule?.chain === "input");
+if (table.length !== 1 || chain.length !== 1 || rule.length !== 1) process.exit(1);
+if (table[0].table.comment !== expected || chain[0].chain.comment !== expected || rule[0].rule.comment !== expected) process.exit(1);
+'
 }
 
 isolated_resources_absent() {
-	[ -z "$(ss -H -ltn 'sport = :8443')" ] || return 1
-	[ -z "$(ss -H -ltn 'sport = :8877')" ] || return 1
-	unit_absent "$unit_proxy" || return 1
-	unit_absent "$unit_control_plane" || return 1
-	! nft list table inet "$table_name" >/dev/null 2>&1
+	local state presence
+	socket_absent 8443 || return $?
+	socket_absent 8877 || return $?
+	state="$(unit_load_state "$unit_proxy")" || return 2
+	[ "$state" = "not-found" ] || return 1
+	state="$(unit_load_state "$unit_control_plane")" || return 2
+	[ "$state" = "not-found" ] || return 1
+	presence="$(nft_table_presence)" || return 2
+	[ "$presence" = "absent" ]
 }
 
 perform_cleanup() {
 	local status="$1"
 	local cleanup_status=0
+	local proxy_state control_state presence
 	set +e
 	[ "$cleanup_authorized" = 1 ] || return "$status"
-	if [ "$proxy_started" = 1 ] || ! unit_absent "$unit_proxy"; then
-		systemctl stop "$unit_proxy" >/dev/null 2>&1 || cleanup_status=1
+	socket_inspection_succeeds 8443 || cleanup_status=1
+	socket_inspection_succeeds 8877 || cleanup_status=1
+	proxy_state="$(unit_load_state "$unit_proxy")" || cleanup_status=1
+	control_state="$(unit_load_state "$unit_control_plane")" || cleanup_status=1
+	presence="$(nft_table_presence)" || cleanup_status=1
+	if [ "$cleanup_status" -eq 0 ]; then
+		[ "$proxy_state" = "not-found" ] || unit_identity_matches "$unit_proxy" || cleanup_status=1
+		[ "$control_state" = "not-found" ] || unit_identity_matches "$unit_control_plane" || cleanup_status=1
+		[ "$presence" = "absent" ] || nft_identity_matches || cleanup_status=1
 	fi
-	if [ "$control_plane_started" = 1 ] || ! unit_absent "$unit_control_plane"; then
-		systemctl stop "$unit_control_plane" >/dev/null 2>&1 || cleanup_status=1
-	fi
-	if [ "$nft_created" = 1 ] || nft list table inet "$table_name" >/dev/null 2>&1; then
-		nft delete table inet "$table_name" >/dev/null 2>&1 || cleanup_status=1
+	if [ "$cleanup_status" -eq 0 ]; then
+		[ "$proxy_state" = "not-found" ] || { unit_identity_matches "$unit_proxy" && systemctl stop "$unit_proxy" >/dev/null 2>&1; } || cleanup_status=1
+		[ "$control_state" = "not-found" ] || { unit_identity_matches "$unit_control_plane" && systemctl stop "$unit_control_plane" >/dev/null 2>&1; } || cleanup_status=1
+		[ "$presence" = "absent" ] || { nft_identity_matches && nft delete table inet "$table_name" >/dev/null 2>&1; } || cleanup_status=1
 	fi
 	isolated_resources_absent || cleanup_status=1
 	if [ "$cleanup_status" -eq 0 ]; then
@@ -174,19 +233,20 @@ cmp -s "$manifest" \
 )
 
 for port in 8443 8877; do
-	if [ -n "$(ss -H -ltn "sport = :$port")" ]; then
+	if ! socket_absent "$port"; then
 		printf '%s\n' "isolated port $port is already occupied" >&2
 		exit 1
 	fi
 done
 for unit in "$unit_proxy" "$unit_control_plane"; do
-	load_state="$(systemctl show --property=LoadState --value "$unit" 2>/dev/null || true)"
+	load_state="$(unit_load_state "$unit")" || exit 1
 	if [ "$load_state" != "not-found" ]; then
 		printf 'isolated transient unit already exists: %s\n' "$unit" >&2
 		exit 1
 	fi
 done
-if nft list table inet "$table_name" >/dev/null 2>&1; then
+nft_presence="$(nft_table_presence)" || exit 1
+if [ "$nft_presence" = "present" ]; then
 	printf '%s\n' "isolated nftables table already exists" >&2
 	exit 1
 fi
@@ -209,7 +269,12 @@ mkdir -m 0755 -- "$isolated_runtime"
 [ "$(stat -c %u:%g:%a -- "$isolated_runtime")" = "$expected_runtime_uid:$expected_runtime_gid:755" ]
 runtime_created=1
 cleanup_authorized=1
-printf '%s\n' "autopilot-cockpit-isolated-v1" > "$isolated_runtime/.autopilot-cockpit-isolated-owned"
+ownership_nonce="$(timeout 5s openssl rand -hex 32)"
+[[ "$ownership_nonce" =~ ^[a-f0-9]{64}$ ]]
+(
+	umask 077
+	printf '%s\n' "version=autopilot-cockpit-isolated-v2" "nonce=$ownership_nonce" > "$isolated_runtime/.autopilot-cockpit-isolated-owned"
+)
 chmod 0600 "$isolated_runtime/.autopilot-cockpit-isolated-owned"
 [ "$(stat -c %u:%g:%a -- "$isolated_runtime/.autopilot-cockpit-isolated-owned")" = "$expected_runtime_uid:$expected_runtime_gid:600" ]
 install -d -m 0700 -o "$candidate_uid" -g "$candidate_gid" "$isolated_runtime/state" "$isolated_runtime/projects"
@@ -266,16 +331,20 @@ chmod 0640 "$caddyfile"
 XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/caddy-config" \
 	caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
 
-nft add table inet "$table_name"
+nft_identity="autopilot-isolated:$ownership_nonce"
+nft -f - <<EOF
+add table inet $table_name { comment "$nft_identity"; }
+add chain inet $table_name input { type filter hook input priority -10; policy accept; comment "$nft_identity"; }
+add rule inet $table_name input tcp dport 8443 ip saddr != 192.168.122.1 drop comment "$nft_identity"
+EOF
 nft_created=1
-nft add chain inet "$table_name" input '{ type filter hook input priority -10; policy accept; }'
-nft add rule inet "$table_name" input tcp dport 8443 ip saddr != 192.168.122.1 drop
 
 systemd-run \
 	--unit=autopilot-cockpit-isolated-control-plane \
 	--uid="$candidate_uid" \
 	--property="WorkingDirectory=$candidate" \
 	--property="EnvironmentFile=$environment_file" \
+	--property="Description=Autopilot isolated $ownership_nonce" \
 	--property=NoNewPrivileges=yes \
 	--collect \
 	/usr/bin/npm --prefix "$candidate" run control-plane:serve -- "$isolated_runtime/state" 8877 >/dev/null
@@ -286,18 +355,29 @@ systemd-run \
 	--uid="$caddy_uid" \
 	--setenv="XDG_DATA_HOME=$isolated_runtime/caddy-data" \
 	--setenv="XDG_CONFIG_HOME=$isolated_runtime/caddy-config" \
+	--property="Description=Autopilot isolated $ownership_nonce" \
 	--property=NoNewPrivileges=yes \
 	--collect \
 	caddy run --config "$caddyfile" --adapter caddyfile >/dev/null
 proxy_started=1
 
 ready=0
-for _ in $(seq 1 30); do
-	if curl --disable --noproxy '*' --fail --silent --show-error "http://127.0.0.1:8877/health" >/dev/null; then
+ready_body="$isolated_runtime/ready.json"
+retry_delay=1
+[ "$test_mode" = 0 ] || retry_delay=0
+for _ in $(seq 1 12); do
+	ready_status="$(curl --disable --noproxy '*' --silent --show-error --connect-timeout 2 --max-time 5 \
+		--output "$ready_body" --write-out '%{http_code}' "http://127.0.0.1:8877/ready" || true)"
+	if [ "$ready_status" = 200 ] && READY_JSON_PATH="$ready_body" node -e '
+const fs = require("node:fs");
+const body = JSON.parse(fs.readFileSync(process.env.READY_JSON_PATH, "utf8"));
+for (const name of ["configuration", "managed_state", "project_registry", "supervisor", "token_gateway"])
+  if (body?.[name]?.status !== "ready") process.exit(1);
+'; then
 		ready=1
 		break
 	fi
-	sleep 1
+	sleep "$retry_delay"
 done
 [ "$ready" = 1 ]
 
@@ -323,12 +403,12 @@ if ! LC_ALL=C awk '
 	exit 1
 fi
 public_root_tmp="$isolated_runtime/.autopilot-caddy-root.crt.tmp"
-openssl x509 -in "$private_root" -out "$public_root_tmp"
+timeout 5s openssl x509 -in "$private_root" -out "$public_root_tmp"
 chmod 0644 "$public_root_tmp"
 mv -f -- "$public_root_tmp" "$public_root"
 proxy_ready=0
 for _ in $(seq 1 30); do
-	if curl --disable --noproxy '*' --fail --silent --show-error --cacert "$public_root" \
+	if curl --disable --noproxy '*' --fail --silent --show-error --connect-timeout 2 --max-time 5 --cacert "$public_root" \
 		--resolve "autopilot.local:8443:192.168.122.99" \
 		"https://autopilot.local:8443/" >/dev/null; then
 		proxy_ready=1
@@ -338,7 +418,7 @@ for _ in $(seq 1 30); do
 done
 [ "$proxy_ready" = 1 ]
 
-fingerprint="$(openssl x509 -in "$public_root" -noout -fingerprint -sha256)"
+fingerprint="$(timeout 5s openssl x509 -in "$public_root" -noout -fingerprint -sha256)"
 fingerprint="${fingerprint#*=}"
 [ -n "$fingerprint" ]
 

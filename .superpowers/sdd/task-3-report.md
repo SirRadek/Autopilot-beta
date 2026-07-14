@@ -14,6 +14,14 @@ Implementation complete for the bounded Task 3 repository slice. No VM, live ser
 
 ## RED evidence
 
+Third full-review regression RED was captured before production changes. The focused host boundary test failed because curl had no connect/total timeout and OpenSSL had no timeout wrapper; new isolated regressions additionally exercised inspection errors, foreign unit/nft replacement, invalid `/ready` states, and invalid-length/encoding session tokens.
+
+```text
+npx vitest run tests/operations/cockpit-proxy-scripts.test.ts -t 'keeps token' --reporter=verbose
+Test Files  1 failed (1)
+Tests       1 failed | 67 skipped (68)
+```
+
 Second full-review regression RED (before the second production-script fix):
 
 ```text
@@ -51,6 +59,16 @@ The success lifecycle failed with status `127` because `ops/cockpit-proxy/isolat
 
 ## GREEN evidence
 
+Third full-review regression GREEN:
+
+```text
+npm test -- tests/operations/cockpit-proxy-scripts.test.ts -t 'isolated|trusted host'
+Test Files  1 passed (1)
+Tests       49 passed | 25 skipped (74)
+```
+
+The ownership marker is now a mode-`0600` nonce ledger created before external resource mutation. One nft batch atomically creates the table, chain, and rule with matching nonce comments; both transient units expose the same nonce in `Description`. Cleanup performs a complete identity preflight and rechecks identity immediately before each mutation, refusing create races or later replacements. Socket/systemd/nft inspection errors fail closed. `/ready` must return HTTP 200 and valid JSON with all five core components ready. Every curl has explicit connect/total bounds, every OpenSSL call has a process timeout, and session tokens must match the server's `randomBytes(32).toString("base64url")` contract: exactly 43 base64url characters.
+
 Second full-review regression GREEN:
 
 ```text
@@ -84,7 +102,7 @@ Final complete operations file after review hardening:
 ```text
 AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npm test -- tests/operations/cockpit-proxy-scripts.test.ts
 Test Files  1 passed (1)
-Tests       58 passed (58)
+Tests       74 passed (74)
 ```
 
 The temporary `AUTOPILOT_NODE_BIN` wrapper reports Node 24 for the pre-existing staging guard and delegates execution to the installed Node binary. The workstation has Node 18 only; no production runtime claim is made from that wrapper.

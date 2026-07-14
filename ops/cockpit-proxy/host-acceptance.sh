@@ -28,9 +28,9 @@ cookie_jar="$work/cookie.jar"
 : > "$cookie_jar"
 chmod 600 "$cookie_jar"
 
-openssl s_client -connect "autopilot.local:$tls_port" -servername autopilot.local \
+timeout 5s openssl s_client -connect "autopilot.local:$tls_port" -servername autopilot.local \
 	-verify_return_error </dev/null 2>/dev/null \
-	| openssl x509 -noout -checkhost autopilot.local >/dev/null
+	| timeout 5s openssl x509 -noout -checkhost autopilot.local >/dev/null
 
 request() {
 	local name="$1"
@@ -38,6 +38,7 @@ request() {
 	local url="$3"
 	shift 3
 	curl --disable --noproxy '*' --silent --show-error \
+		--connect-timeout 2 --max-time 5 \
 		--request "$method" \
 		--dump-header "$work/$name.headers" \
 		--output "$work/$name.body" \
@@ -127,7 +128,7 @@ IFS=';' read -r -a session_cookie_fields <<< "${session_cookie_line#*:}"
 session_cookie_pair="${session_cookie_fields[0]}"
 session_cookie_pair="${session_cookie_pair#${session_cookie_pair%%[![:space:]]*}}"
 session_cookie_pair="${session_cookie_pair%${session_cookie_pair##*[![:space:]]}}"
-[[ "$session_cookie_pair" =~ ^[Aa][Uu][Tt][Oo][Pp][Ii][Ll][Oo][Tt]_[Ss][Ee][Ss][Ss][Ii][Oo][Nn]=[^[:space:],\;]+$ ]] || {
+[[ "$session_cookie_pair" =~ ^[Aa][Uu][Tt][Oo][Pp][Ii][Ll][Oo][Tt]_[Ss][Ee][Ss][Ss][Ii][Oo][Nn]=[A-Za-z0-9_-]{43}$ ]] || {
 	printf '%s\n' "invalid autopilot_session cookie value" >&2
 	exit 1
 }

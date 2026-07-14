@@ -444,6 +444,7 @@ exec /usr/bin/install "$@"
 `);
   writeExecutable(join(bin, "ss"), `
 printf 'ss %s\\n' "$*" >> "$STUB_LOG"
+[[ "\${STUB_SS_FAIL:-0}" != 1 ]] || exit 2
 case "\${STUB_OCCUPIED_PORT:-}" in
   8443) [[ "$*" == *8443* ]] && printf 'LISTEN 0 1 192.168.122.99:8443\\n' ;;
   8877) [[ "$*" == *8877* ]] && printf 'LISTEN 0 1 127.0.0.1:8877\\n' ;;
@@ -454,11 +455,32 @@ fi
 `);
   writeExecutable(join(bin, "nft"), `
 printf 'nft %s\\n' "$*" >> "$STUB_LOG"
-if [[ "$*" == "list table inet autopilot_cockpit_isolated" ]]; then
-  if [[ "\${STUB_TABLE_EXISTS:-0}" == 1 ]]; then exit 0; fi
-  if grep -q '^nft delete table inet autopilot_cockpit_isolated$' "$STUB_LOG"; then exit 1; fi
-  grep -q '^nft add table inet autopilot_cockpit_isolated$' "$STUB_LOG"
-  exit
+if [[ "$*" == *list* && "\${STUB_NFT_INSPECT_FAIL:-0}" == 1 ]]; then exit 2; fi
+if [[ "$*" == "-f -" ]]; then
+  batch="$(cat)"
+  printf '%s\\n' "$batch" >> "$STUB_LOG"
+  nonce="$(sed -n 's/.*autopilot-isolated:\\([a-f0-9]\\{64\\}\\).*/\\1/p' <<< "$batch" | head -1)"
+  printf '%s' "$nonce" > "$STUB_LOG.nonce"
+  printf '%s\\n' 'nft add table inet autopilot_cockpit_isolated' >> "$STUB_LOG"
+  if [[ "\${STUB_NFT_CREATE_RACE:-0}" == 1 ]]; then printf '%064d' 8 > "$STUB_LOG.nonce"; exit 1; fi
+  exit 0
+fi
+present=0
+if [[ "\${STUB_TABLE_EXISTS:-0}" == 1 ]]; then present=1
+elif [[ -f "$STUB_LOG.nonce" ]] && ! grep -q '^nft delete table inet autopilot_cockpit_isolated$' "$STUB_LOG"; then present=1
+fi
+if [[ "$*" == "-j list tables" ]]; then
+  if [[ "$present" == 1 ]]; then printf '%s' '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated"}}]}'
+  else printf '%s' '{"nftables":[]}' ; fi
+  exit 0
+fi
+if [[ "$*" == "-j list table inet autopilot_cockpit_isolated" ]]; then
+  [[ "$present" == 1 ]] || exit 1
+  nonce="$(cat "$STUB_LOG.nonce" 2>/dev/null || printf '%064d' 9)"
+  [[ "\${STUB_FOREIGN_REPLACEMENT:-}" != nft ]] || nonce="$(printf '%064d' 8)"
+  comment="autopilot-isolated:$nonce"
+  printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit_isolated","name":"input","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit_isolated","chain":"input","comment":"%s"}}]}' "$comment" "$comment" "$comment"
+  exit 0
 fi
 exit 0
 `);
@@ -469,6 +491,12 @@ printf 'caddy %s\\n' "$*" >> "$STUB_LOG"
   writeExecutable(join(bin, "systemctl"), `
 printf 'systemctl %s\\n' "$*" >> "$STUB_LOG"
 if [[ "\${1:-}" == show ]]; then
+  [[ "\${STUB_SYSTEMCTL_INSPECT_FAIL:-0}" != 1 ]] || exit 2
+  if [[ "$*" == *--property=Description* ]]; then
+    if [[ "\${STUB_FOREIGN_REPLACEMENT:-}" == unit ]]; then printf 'Autopilot isolated %064d\\n' 8
+    else sed -n 's/.*--property=Description=Autopilot isolated \\([a-f0-9]\\{64\\}\\).*/Autopilot isolated \\1/p' "$STUB_LOG" | tail -1; fi
+    exit 0
+  fi
   case "$*" in
     *autopilot-cockpit-isolated-proxy.service*)
       if [[ "\${STUB_PROXY_UNIT_EXISTS:-0}" == 1 ]]; then printf 'loaded\\n'
@@ -507,11 +535,27 @@ fi
 `);
   writeExecutable(join(bin, "curl"), `
 printf 'curl %s\\n' "$*" >> "$STUB_LOG"
+[[ "$*" == *'--connect-timeout 2'* && "$*" == *'--max-time 5'* ]] || exit 92
 if [[ "\${STUB_SIGNAL_ON_CURL:-}" == TERM ]]; then kill -TERM "$PPID"; sleep 1; fi
+output=
+while [[ $# -gt 0 ]]; do
+  case "$1" in --output) output="$2"; shift 2 ;; *) shift ;; esac
+done
+if [[ -n "$output" && "$output" == */ready.json ]]; then
+  case "\${STUB_READY_MODE:-ready}" in
+    ready) printf '%s' '{"configuration":{"status":"ready"},"managed_state":{"status":"ready"},"project_registry":{"status":"ready"},"supervisor":{"status":"ready"},"token_gateway":{"status":"ready"}}' > "$output"; printf 200 ;;
+    503) printf '{}' > "$output"; printf 503 ;;
+    malformed) printf '{' > "$output"; printf 200 ;;
+    missing) printf '%s' '{"configuration":{"status":"ready"}}' > "$output"; printf 200 ;;
+    not-ready) printf '%s' '{"configuration":{"status":"ready"},"managed_state":{"status":"ready"},"project_registry":{"status":"ready"},"supervisor":{"status":"degraded"},"token_gateway":{"status":"ready"}}' > "$output"; printf 200 ;;
+  esac
+fi
 `);
   writeExecutable(join(bin, "openssl"), `
 printf 'openssl %s\\n' "$*" >> "$STUB_LOG"
-if [[ "$*" == *' -out '* ]]; then
+if [[ "\${1:-}" == rand ]]; then
+  printf '%064d\\n' 0
+elif [[ "$*" == *' -out '* ]]; then
   output=
   while [[ $# -gt 0 ]]; do
     if [[ "$1" == -out ]]; then output="$2"; break; fi
@@ -730,6 +774,71 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(log).not.toContain("nft delete table");
   });
 
+  it.each([
+    ["socket inspection error", { STUB_SS_FAIL: "1" }],
+    ["nftables inspection error", { STUB_NFT_INSPECT_FAIL: "1" }],
+    ["systemd inspection error", { STUB_SYSTEMCTL_INSPECT_FAIL: "1" }],
+  ])("fails closed before mutation on %s", (_label, extraEnv) => {
+    const prepared = prepareIsolatedRun();
+    const result = runIsolated(prepared, extraEnv);
+    expect(result.status).not.toBe(0);
+    const log = readFileSync(prepared.stubs.log, "utf8");
+    expect(log).not.toContain("nft add table");
+    expect(log).not.toContain("systemd-run");
+  });
+
+  it.each([
+    ["socket", { STUB_SS_FAIL: "1" }],
+    ["nftables", { STUB_NFT_INSPECT_FAIL: "1" }],
+    ["systemd", { STUB_SYSTEMCTL_INSPECT_FAIL: "1" }],
+  ])("preserves cleanup evidence without mutation on %s inspection failure", (_label, extraEnv) => {
+    const prepared = prepareIsolatedRun();
+    expect(runIsolated(prepared).status).toBe(0);
+    const before = readFileSync(prepared.stubs.log, "utf8");
+    const cleanup = spawnSync("bash", [isolatedAcceptance, "--cleanup", prepared.runtime], {
+      encoding: "utf8", env: { ...prepared.env, ...extraEnv },
+    });
+    expect(cleanup.status).not.toBe(0);
+    expect(existsSync(prepared.runtime)).toBe(true);
+    const added = readFileSync(prepared.stubs.log, "utf8").slice(before.length);
+    expect(added).not.toContain("systemctl stop");
+    expect(added).not.toContain("nft delete table");
+  });
+
+  it.each(["unit", "nft"])("preserves evidence and refuses foreign %s replacement during cleanup", (kind) => {
+    const prepared = prepareIsolatedRun();
+    expect(runIsolated(prepared).status).toBe(0);
+    const before = readFileSync(prepared.stubs.log, "utf8");
+    const cleanup = spawnSync("bash", [isolatedAcceptance, "--cleanup", prepared.runtime], {
+      encoding: "utf8",
+      env: { ...prepared.env, STUB_FOREIGN_REPLACEMENT: kind },
+    });
+    expect(cleanup.status).not.toBe(0);
+    expect(existsSync(prepared.runtime)).toBe(true);
+    const added = readFileSync(prepared.stubs.log, "utf8").slice(before.length);
+    if (kind === "unit") expect(added).not.toContain("systemctl stop");
+    if (kind === "nft") expect(added).not.toContain("nft delete table");
+  });
+
+  it.each(["unit", "nft"])("does not take over a foreign %s that wins the create race", (kind) => {
+    const prepared = prepareIsolatedRun();
+    const result = runIsolated(prepared, kind === "unit"
+      ? { STUB_CONTROL_START_FAIL: "1", STUB_FOREIGN_REPLACEMENT: "unit" }
+      : { STUB_NFT_CREATE_RACE: "1", STUB_FOREIGN_REPLACEMENT: "nft" });
+    expect(result.status).not.toBe(0);
+    expect(existsSync(prepared.runtime)).toBe(true);
+    const log = readFileSync(prepared.stubs.log, "utf8");
+    if (kind === "unit") expect(log).not.toContain("systemctl stop");
+    if (kind === "nft") expect(log).not.toContain("nft delete table");
+  });
+
+  it.each(["503", "malformed", "missing", "not-ready"])("does not announce READY for %s /ready state", (mode) => {
+    const prepared = prepareIsolatedRun();
+    const result = runIsolated(prepared, { STUB_READY_MODE: mode });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("ISOLATED_ACCEPTANCE_READY");
+  });
+
   it("refuses cleanup of an unowned runtime without touching isolated resources", () => {
     const prepared = prepareIsolatedRun();
     mkdirSync(prepared.runtime);
@@ -797,6 +906,7 @@ printf 'playwright trusted-origin\\n' >> "$STUB_LOG"
   writeExecutable(join(bin, "curl"), `
 printf 'curl %s\\n' "$*" >> "$STUB_LOG"
 [[ "\${1:-}" == --disable && "\${2:-}" == --noproxy && "\${3:-}" == '*' ]] || exit 90
+[[ "$*" == *'--connect-timeout 2'* && "$*" == *'--max-time 5'* ]] || exit 92
 [[ -z "\${http_proxy:-}\${https_proxy:-}\${HTTP_PROXY:-}\${HTTPS_PROXY:-}\${ALL_PROXY:-}\${all_proxy:-}\${CURL_CA_BUNDLE:-}\${SSL_CERT_FILE:-}\${SSL_CERT_DIR:-}" ]] || exit 91
 headers= body= method=GET cookie_jar=
 while [[ $# -gt 0 ]]; do
@@ -834,13 +944,15 @@ case "$name" in
     printf method > "$body"; printf 405 ;;
   login)
     case "\${STUB_COOKIE_VARIANT:-valid}" in
-      valid) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Path=/; Secure' ;;
+      valid) cookie='autopilot_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; HttpOnly; SameSite=Lax; Path=/; Secure' ;;
       empty) cookie='autopilot_session=; HttpOnly; SameSite=Lax; Secure' ;;
       secure-value) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Secure=0' ;;
       httponly-value) cookie='autopilot_session=session-value; HttpOnly=no; SameSite=Lax; Secure' ;;
       lax-prefix) cookie='autopilot_session=session-value; HttpOnly; SameSite=Laxevil; Secure' ;;
       duplicate-secure) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Secure; Secure' ;;
       comma-joined) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Secure, autopilot_session=shadow; HttpOnly; SameSite=Lax; Secure' ;;
+      invalid-length) cookie='autopilot_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; HttpOnly; SameSite=Lax; Secure' ;;
+      invalid-char) cookie='autopilot_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!; HttpOnly; SameSite=Lax; Secure' ;;
     esac
     printf '%s\\n' 'HTTP/2 200' "Set-Cookie: $cookie" > "$headers"
     [[ "\${STUB_MULTI_SESSION_COOKIE:-0}" != 1 ]] || printf '%s\\n' 'Set-Cookie: autopilot_session=shadow; Path=/' >> "$headers"
@@ -893,6 +1005,9 @@ describe("Cockpit trusted host acceptance", () => {
     expect(source).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
     expect(source).not.toMatch(/set\s+-[^\n]*x/);
     expect(source).toContain("HOST_PROXY_ACCEPTANCE_OK");
+    expect(source).toContain("--connect-timeout 2");
+    expect(source).toContain("--max-time 5");
+    expect(source).toMatch(/timeout 5s openssl s_client/);
   });
 
   it("accepts trusted responses without exposing the token or weakening TLS", () => {
@@ -921,6 +1036,8 @@ describe("Cockpit trusted host acceptance", () => {
     ["a SameSite=Lax prefix match", { STUB_COOKIE_VARIANT: "lax-prefix" }],
     ["a duplicate Secure attribute", { STUB_COOKIE_VARIANT: "duplicate-secure" }],
     ["a comma-joined second session cookie", { STUB_COOKIE_VARIANT: "comma-joined" }],
+    ["a non-43-character session token", { STUB_COOKIE_VARIANT: "invalid-length" }],
+    ["a non-base64url session token", { STUB_COOKIE_VARIANT: "invalid-char" }],
     ["API-shaped unsupported lookalike POST", { STUB_UNSUPPORTED_API_SHAPED: "1" }],
     ["incomplete Content-Security-Policy", { STUB_INCOMPLETE_CSP: "1" }],
   ])("rejects %s", (_label, extraEnv) => {
