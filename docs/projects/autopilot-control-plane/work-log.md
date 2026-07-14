@@ -3223,3 +3223,41 @@ Fresh post-cutover verification:
 - Backup validation passed in validation-only mode.
 - Deterministic Cockpit smoke completed with one approved revision and one worker result, a settled
   reservation, and `provider_invoked=false`.
+
+## 2026-07-14 Post-Cutover Reboot Drill
+
+Date: 2026-07-14
+Request or trigger: after the successful root-systemd cutover, the owner approved continuing with the
+recommended operational soak and reboot acceptance.
+Mode: OWNER_APPROVED_VM_REBOOT with read-only post-boot validation and deterministic no-provider smoke.
+
+Pre-reboot recovery point:
+
+- Live checkout was clean at `0ee4ae2143d7be0465708a1cd8b6a0ffd217190c`; root service and both
+  timers were active and enabled.
+- A new locked backup was created at
+  `/home/radek/.local/state/autopilot/backups/autopilot-state-2026-07-14T13-53-08-708Z.apbackup.json`
+  with `5` files and `4457` bytes.
+- Backup checksum validation passed, and the recovery drill returned `ready=true`, `reconciled=true`.
+
+Post-boot evidence:
+
+- Graceful reboot changed the boot ID from `076d618a-e9a7-49b1-a8ee-de6f2554ca90` to
+  `63fb0c10-59de-4869-8ce4-11e743b113ee`.
+- Root service and both timers returned active and enabled automatically; the service remained at zero
+  restarts, and the health timer fired after boot.
+- The legacy user control-plane and timer entry units remained inactive and disabled after the
+  cutover's runtime masks expired. Their old wants symlinks remained absent.
+- Startup boundary evidence again reported `installation_read_only=true` and
+  `managed_write_roots=2`.
+- The live checkout remained clean at the deployed revision; the rollback checkout remained at
+  `390b4e1d0d7f298076a60b2934e5c744d82b30a7` with all `87` local changes.
+- Liveness and all five core readiness components passed. Provider capability states remained the
+  expected unconfigured values.
+- Backup validation passed again, and deterministic Cockpit smoke completed with a settled reservation,
+  one worker result, and `provider_invoked=false`.
+
+Next operational milestone:
+
+- Keep the rollback checkout and recovery points through production same-origin TLS proxy acceptance.
+- Design and verify the production Cockpit proxy/deployment before enabling any provider one at a time.
