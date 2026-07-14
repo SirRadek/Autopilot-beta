@@ -55,7 +55,8 @@ function makeCheckout(options: { distSymlink?: boolean } = {}): { checkout: stri
 
 function makeReleaseRoot(): string {
   const root = join(makeTempDir(), "release-root");
-  mkdirSync(root);
+  mkdirSync(root, { mode: 0o755 });
+  chmodSync(root, 0o755);
   return root;
 }
 
@@ -66,7 +67,9 @@ function runStage(checkout: string, root: string, runtime = node24) {
       ...process.env,
       AUTOPILOT_NODE_BIN: runtime,
       AUTOPILOT_RELEASE_TEST_MODE: "1",
+      AUTOPILOT_STAGE_TEST_FAIL_DURING_EARLY_SETUP: "0",
       AUTOPILOT_STAGE_TEST_FAIL_AFTER_RELEASE: "0",
+      AUTOPILOT_STAGE_TEST_FAIL_AFTER_MANIFEST: "0",
     },
   });
 }
@@ -78,7 +81,9 @@ function runStageWithEnv(checkout: string, root: string, env: NodeJS.ProcessEnv)
       ...process.env,
       AUTOPILOT_NODE_BIN: node24,
       AUTOPILOT_RELEASE_TEST_MODE: "1",
+      AUTOPILOT_STAGE_TEST_FAIL_DURING_EARLY_SETUP: "0",
       AUTOPILOT_STAGE_TEST_FAIL_AFTER_RELEASE: "0",
+      AUTOPILOT_STAGE_TEST_FAIL_AFTER_MANIFEST: "0",
       ...env,
     },
   });
@@ -103,11 +108,29 @@ describe("Cockpit immutable release staging", () => {
     expect(readFileSync(join(root, "releases", sha, "index.html"), "utf8")).toBe("cockpit\n");
     expect(readFileSync(join(root, "manifests", `${sha}.sha256`), "utf8")).toMatch(/assets\/app\.js/);
     expect(existsSync(join(root, "current"))).toBe(false);
-    expect(statSync(join(root, "releases", sha, "index.html")).mode & 0o222).toBe(0);
+    expect(statSync(join(root, "releases", sha, "index.html")).mode & 0o777).toBe(0o444);
     expect(statSync(join(root, "releases", sha)).mode & 0o777).toBe(0o555);
+    expect(statSync(join(root, "releases", sha, "assets")).mode & 0o777).toBe(0o555);
+    expect(statSync(join(root, "releases", sha, "assets", "app.js")).mode & 0o777).toBe(0o444);
     expect(statSync(join(root, "manifests", `${sha}.sha256`)).mode & 0o777).toBe(0o444);
-    expect(statSync(join(root, "releases")).mode & 0o777).toBe(0o555);
-    expect(statSync(join(root, "manifests")).mode & 0o777).toBe(0o555);
+    for (const published of [
+      join(root, "releases", sha),
+      join(root, "releases", sha, "index.html"),
+      join(root, "releases", sha, "assets"),
+      join(root, "releases", sha, "assets", "app.js"),
+      join(root, "manifests", `${sha}.sha256`),
+    ]) {
+      expect(statSync(published).uid).toBe(process.getuid!());
+      expect(statSync(published).gid).toBe(process.getgid!());
+    }
+    expect(statSync(root).mode & 0o777).toBe(0o755);
+    expect(statSync(join(root, "releases")).mode & 0o777).toBe(0o755);
+    expect(statSync(join(root, "manifests")).mode & 0o777).toBe(0o755);
+    for (const store of [root, join(root, "releases"), join(root, "manifests")]) {
+      expect(statSync(store).uid).toBe(process.getuid!());
+      expect(statSync(store).gid).toBe(process.getgid!());
+      expect(statSync(store).mode & 0o200).toBe(0o200);
+    }
   });
 
   it("is idempotent for an identical existing release", () => {
@@ -270,6 +293,36 @@ describe("Cockpit immutable release staging", () => {
     expect(recovered.status).toBe(0);
     expect(JSON.parse(recovered.stdout)).toMatchObject({ ok: true, sha });
     expect(existsSync(join(root, "manifests", `${sha}.sha256`))).toBe(true);
+  });
+
+  it("recovers a valid manifest left by interruption before release publication", () => {
+    const { checkout, sha } = makeCheckout();
+    const root = makeReleaseRoot();
+
+    const interrupted = runStageWithEnv(checkout, root, {
+      AUTOPILOT_STAGE_TEST_FAIL_AFTER_MANIFEST: "1",
+    });
+    expect(interrupted.status).not.toBe(0);
+    expect(existsSync(join(root, "releases", sha))).toBe(false);
+    expect(existsSync(join(root, "manifests", `${sha}.sha256`))).toBe(true);
+
+    const recovered = runStage(checkout, root);
+    expect(recovered.status).toBe(0);
+    expect(JSON.parse(recovered.stdout)).toMatchObject({ ok: true, sha });
+    expect(existsSync(join(root, "releases", sha))).toBe(true);
+  });
+
+  it("cleans an early setup failure and leaves the store reusable", () => {
+    const { checkout } = makeCheckout();
+    const root = makeReleaseRoot();
+
+    const interrupted = runStageWithEnv(checkout, root, {
+      AUTOPILOT_STAGE_TEST_FAIL_DURING_EARLY_SETUP: "1",
+    });
+    expect(interrupted.status).not.toBe(0);
+    expect(statSync(join(root, "releases")).mode & 0o777).toBe(0o755);
+    expect(statSync(join(root, "manifests")).mode & 0o777).toBe(0o755);
+    expect(runStage(checkout, root).status).toBe(0);
   });
 
   it("refuses the test-mode bypass for the production release root", () => {

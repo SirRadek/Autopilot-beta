@@ -46,9 +46,7 @@ fi
 
 test "$(stat -c %u -- "$release_root")" -eq "$expected_uid"
 test "$(stat -c %g -- "$release_root")" -eq "$expected_gid"
-if [ "$test_mode" != "1" ]; then
-	test $((8#$(stat -c %a -- "$release_root") & 8#022)) -eq 0
-fi
+test "$(stat -c %a -- "$release_root")" = 755
 
 sha="$(git -C "$checkout" rev-parse HEAD)"
 test -z "$(git -C "$checkout" status --porcelain)"
@@ -65,40 +63,27 @@ flock -x "$lock_fd"
 
 validate_child_directory() {
 	local path="$1"
-	local allow_writable="${2:-0}"
 	test ! -L "$path"
 	test -d "$path"
 	test "$(stat -c %u -- "$path")" -eq "$expected_uid"
 	test "$(stat -c %g -- "$path")" -eq "$expected_gid"
-	if [ "$allow_writable" = "1" ]; then
-		case "$(stat -c %a -- "$path")" in 555|755) ;; *) return 1 ;; esac
-	else
-		test "$(stat -c %a -- "$path")" = 555
-	fi
+	test "$(stat -c %a -- "$path")" = 755
 }
 
 for child in releases manifests; do
 	child_path="$release_root/$child"
 	if [ -e "$child_path" ] || [ -L "$child_path" ]; then
-		if [ "$test_mode" = "1" ]; then
-			validate_child_directory "$child_path" 1
-		else
-			validate_child_directory "$child_path"
-		fi
+		validate_child_directory "$child_path"
 	else
 		mkdir -m 0755 -- "$child_path"
-		validate_child_directory "$child_path" 1
+		validate_child_directory "$child_path"
 	fi
 done
 
 releases="$release_root/releases"
 manifests="$release_root/manifests"
-if [ "$test_mode" = "1" ]; then
-	chmod 0755 -- "$releases" "$manifests"
-fi
-
-candidate="$(mktemp -d -- "$releases/.candidate-${sha}.XXXXXXXXXX")"
-temporary_manifest="$(mktemp -- "$manifests/.manifest-${sha}.XXXXXXXXXX")"
+candidate=""
+temporary_manifest=""
 existing_manifest=""
 
 cleanup() {
@@ -112,9 +97,15 @@ cleanup() {
 	if [ -n "${existing_manifest:-}" ] && [ -f "$existing_manifest" ] && [ ! -L "$existing_manifest" ]; then
 		rm -f -- "$existing_manifest"
 	fi
-	chmod 0555 -- "$releases" "$manifests" 2>/dev/null || true
+	chmod 0755 -- "$releases" "$manifests" 2>/dev/null || true
 }
 trap cleanup EXIT
+
+candidate="$(mktemp -d -- "$releases/.candidate-${sha}.XXXXXXXXXX")"
+if [ "$test_mode" = "1" ] && [ "${AUTOPILOT_STAGE_TEST_FAIL_DURING_EARLY_SETUP:-0}" = "1" ]; then
+	exit 75
+fi
+temporary_manifest="$(mktemp -- "$manifests/.manifest-${sha}.XXXXXXXXXX")"
 
 write_manifest() {
 	local tree="$1"
@@ -177,6 +168,12 @@ fi
 if [ "$manifest_exists" -eq 1 ]; then
 	validate_manifest_file "$manifest"
 	cmp -s "$temporary_manifest" "$manifest"
+fi
+
+if [ "$test_mode" = "1" ] && [ "${AUTOPILOT_STAGE_TEST_FAIL_AFTER_MANIFEST:-0}" = "1" ] && [ "$release_exists" -eq 0 ] && [ "$manifest_exists" -eq 0 ]; then
+	mv -T -- "$temporary_manifest" "$manifest"
+	temporary_manifest=""
+	exit 75
 fi
 
 if [ "$release_exists" -eq 0 ]; then
