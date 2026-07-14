@@ -2,19 +2,20 @@
 
 [Back to the documentation index](../README.md)
 
-Status date: 2026-07-13. Evidence candidate: `b0448b2d0db13dfe277e119d7045cadc3d4fab1a`.
-This is an isolated release candidate, not a live cutover revision.
+Status date: 2026-07-14. Evidence runtime candidate: `1b2a35747f81ddf3fa7b06cdb5dcddad36e92d08`,
+merged to `main` by `6cd34466c6f1ad429b921b1949f07622534db98d`. This is the owner-approved live
+cutover candidate; the live service remains on its previous revision until the guarded cutover completes.
 
-Repository verification passed under Node 24 with 100 test files and 912 tests. The same exact commit
-passed `npm ci`, typecheck, and the complete deterministic repository gate in the Ubuntu 24.04 VM;
-host Cockpit tests, production build, and all seven Playwright scenarios also passed. Runtime ancestor
-`5a9ea88` passed isolated VM smoke, maintenance, backup validation, recovery drill, readiness, auth,
-same-origin proxy, and headless Cockpit login without provider calls; the intervening commits are
-documentation and test-timeout evidence only. The VM also proved that its previous user systemd
-manager did not enforce the intended negative-write boundary, and the candidate now fails closed
-there. An independent read-only `claude-opus-4-8` review of `b0448b2` returned `PASS` with no
-actionable findings. Final positive proof under the root system manager awaits the operator's sudo
-install of system Node 24 and the reviewed units.
+Repository verification passed under Node 24 with 100 test files and 912 tests. The same exact runtime
+candidate passed the complete deterministic repository gate in the Ubuntu 24.04 VM. Its isolated
+root-systemd acceptance proved a read-only installation, the two managed writable roots, and a managed
+private runtime temporary directory while preserving access to host tmux sockets. Liveness, core
+readiness, provider-unavailable reporting, and deterministic Cockpit smoke passed without provider
+invocation; the alternate acceptance service was then stopped. Earlier isolated acceptance also passed
+maintenance, backup validation, recovery drill, auth, same-origin proxy, headless Cockpit login, host
+Cockpit tests/build, and all seven Playwright scenarios. The full release baseline received an independent
+read-only `claude-opus-4-8` review with no actionable findings, and the final runtime-temp delta received
+an independent code review with its systemd regression finding resolved before merge.
 
 | Capability | Repository-tested | VM-verified | Runtime configuration | Limitations | Next step |
 |---|---|---|---|---|---|
@@ -33,15 +34,21 @@ install of system Node 24 and the reviewed units.
 | Recovery drill | Yes | Yes | Valid `.apbackup.json` | No automatic live cutover | Schedule periodic evidence |
 | Cockpit responsive/browser QA | Yes | Yes | Chromium dependencies | Partial Czech UI; not full AT certification | Product/design review |
 | Worker cancellation | CLI path tested | No Cockpit mutation | Exact worker ID and operator CLI | Cockpit shows unavailable | Design server/UI cancellation contract |
-| Filesystem service containment | Yes, including fail-closed probe | Negative user-manager case proved | Root system manager + system Node 24 required | Positive deployed-unit proof pending sudo | Install unit and run write proof |
+| Filesystem service containment | Yes, including fail-closed probe | Positive isolated root-manager proof passed | Root system manager; system Node 24 installed | Persistent unit not installed before cutover | Repeat proof on deployed unit |
 | Batch, scheduled, multivendor automation | No | No | None | Planned only | Separate design and budget gate |
 
-## Release blockers
+## Live cutover gate
 
-1. Install Node 24 at the documented system path and install the root-managed units in the VM.
-2. Prove the service can write managed state/projects and cannot write its installation.
-3. Run the final independent Claude Opus 4.8 review and resolve validated findings.
-4. Update this page to the final passing SHA and obtain explicit owner approval before live cutover.
+The evidence runtime candidate is merged, system Node 24 is installed, isolated root-manager containment
+has passed, independent review findings are resolved, and the owner approved live cutover on 2026-07-14.
+The cutover must still fail closed unless it:
+
+1. creates and checksum-validates a live-state backup;
+2. quiesces every legacy user service and writer before replacing the checkout;
+3. retains live revision `390b4e1d0d7f298076a60b2934e5c744d82b30a7` and the prior unit set for rollback;
+4. installs the reviewed root-managed units and repeats boundary, liveness, readiness, and deterministic
+   no-provider smoke checks; and
+5. immediately restores the retained checkout and unit generation if any acceptance check fails.
 
 ## Accepted warnings
 
