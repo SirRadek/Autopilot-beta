@@ -3143,3 +3143,44 @@ Verification:
 The initialization publisher now fsyncs a private same-directory temporary file and atomically hard-links it into place with create-if-absent semantics. A contending registry can never be overwritten: `EEXIST` routes through full validation, valid winner bytes remain unchanged, and malformed winner bytes remain unchanged while initialization fails closed.
 
 Additional coverage proves valid and malformed contention outcomes, independently formatted populated-registry preservation, portable malformed-file assertions, repeated CLI idempotence, and isolated default-project-root resolution. This strengthens the existing persistence invariant without changing architecture or project-mesh topology; the `supervisor_execution_loop` snapshot was refreshed after review.
+
+## 2026-07-14 Root-Systemd Cutover Failure And Rollback Repair
+
+Date: 2026-07-14
+Request or trigger: owner-approved live cutover reached the root-managed service start after the exact
+release candidate had passed isolated acceptance. The guarded script failed closed and automatically
+restored the prior checkout and legacy user units.
+Mode: WRITE_ALLOWED for the bounded unit, regression tests, operator documentation, isolated VM proof,
+and rollback/cutover tooling. No provider call, paid API request, credential output, or live-state
+replacement was accepted after a failed check.
+
+Observed failures and containment:
+
+- The first attempt rejected a valid runtime mask because static helper units report `static`; the
+  cutover assertion now checks the actual `/run/user/1000/systemd/user/<unit> -> /dev/null` masks.
+- The next root service start failed `226/NAMESPACE` because `%h` in a system unit resolved to `/root`,
+  not the configured `User=radek`. The unit now uses explicit `/home/radek` paths, with a dynamic
+  regression check covering every protected `User=radek` service.
+- The first repaired proof exposed that `ReadWritePaths=` bind targets are resolved before
+  `ExecStartPre`. A versioned tmpfiles definition now provisions the private runtime directory and
+  external incident spool before namespace construction, at installation and boot.
+- Every failed attempt retained the rejected candidate, restored live revision
+  `390b4e1d0d7f298076a60b2934e5c744d82b30a7`, restored the legacy unit generation, and left loopback
+  port `8787` healthy. Temporary proof services, environment files, and port `8877` were removed.
+
+Repaired candidate and verification:
+
+- Candidate: `1c83ded12718aad0699a77ac7d16be7e02dbe474`.
+- The VM checkout was clean and exact; the focused systemd suite passed `8/8`, and the complete
+  deterministic repository gate passed under system Node `v24.18.0`.
+- The root-manager proof reported `installation_read_only=true` with two managed writable roots,
+  started the candidate as UID `1000`, and served loopback health on port `8877`.
+- A separate exact-revision readiness acceptance returned HTTP `200`, `ready=true`, all five core
+  components `ready`, and only the expected unavailable provider states (`probe_not_configured` or
+  `missing_credential`). The production `ops:ready` client exited `0`.
+- Provider probes and OpenRouter credentials were disabled throughout this acceptance.
+
+Next gate:
+
+- Merge the repaired candidate, refresh the guarded cutover script to the exact merged revision,
+  create and validate a fresh live-state backup, and only then retry the owner-approved cutover.
