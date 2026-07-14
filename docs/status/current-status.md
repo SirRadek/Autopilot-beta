@@ -2,13 +2,12 @@
 
 [Back to the documentation index](../README.md)
 
-Status date: 2026-07-14. Repaired evidence runtime candidate:
-`1c83ded12718aad0699a77ac7d16be7e02dbe474`, based on approved candidate
-`1b2a35747f81ddf3fa7b06cdb5dcddad36e92d08` merged to `main` by
-`89568f6623519dc2bf447ee3b4ea01d2b2679e84`. The repaired candidate must merge before another live
-cutover attempt; the live service remains on its previous revision.
+Status date: 2026-07-14. Deployed runtime revision:
+`0ee4ae2143d7be0465708a1cd8b6a0ffd217190c`, the merge commit for the repaired
+root-systemd candidate. The live VM now runs the privileged system-manager unit as `User=radek`; the
+legacy user units are disabled, inactive, and runtime-masked.
 
-Repository verification passed under Node 24 with 100 test files and 912 tests. The same exact runtime
+Repository verification passed under Node 24 with 100 test files and 914 tests. The same exact runtime
 candidate passed the complete deterministic repository gate in the Ubuntu 24.04 VM. Its isolated
 root-systemd acceptance proved a read-only installation, the two managed writable roots, and a managed
 private runtime temporary directory while preserving access to host tmux sockets. A repeated proof on
@@ -38,24 +37,24 @@ an independent code review with its systemd regression finding resolved before m
 | Recovery drill | Yes | Yes | Valid `.apbackup.json` | No automatic live cutover | Schedule periodic evidence |
 | Cockpit responsive/browser QA | Yes | Yes | Chromium dependencies | Partial Czech UI; not full AT certification | Product/design review |
 | Worker cancellation | CLI path tested | No Cockpit mutation | Exact worker ID and operator CLI | Cockpit shows unavailable | Design server/UI cancellation contract |
-| Filesystem service containment | Yes, including fail-closed probe | Positive isolated root-manager proof passed | Root system manager; system Node 24 installed | Persistent unit not installed before cutover | Repeat proof on deployed unit |
+| Filesystem service containment | Yes, including fail-closed probe | Deployed root-manager proof passed | Root system manager; system Node 24; tmpfiles prerequisites | Requires explicit writable-root review for path changes | Monitor unit and timers |
 | Batch, scheduled, multivendor automation | No | No | None | Planned only | Separate design and budget gate |
 
-## Live cutover gate
+## Live cutover result
 
-The base evidence runtime candidate is merged, system Node 24 is installed, isolated root-manager
-containment has passed, independent review findings are resolved, and the owner approved live cutover
-on 2026-07-14. Two attempted cutovers rolled back cleanly: the first exposed a runtime-mask assertion
-error; the second exposed root-manager `%h` expansion and missing pre-namespace bind targets. Both are
-fixed in the repaired candidate, which must merge before cutover resumes.
-The cutover must still fail closed unless it:
+The owner-approved cutover completed on 2026-07-14 after two earlier attempts rolled back cleanly.
+Revision `0ee4ae2143d7be0465708a1cd8b6a0ffd217190c` is deployed from a clean checkout. Post-cutover
+verification confirmed:
 
-1. creates and checksum-validates a live-state backup;
-2. quiesces every legacy user service and writer before replacing the checkout;
-3. retains live revision `390b4e1d0d7f298076a60b2934e5c744d82b30a7` and the prior unit set for rollback;
-4. installs the reviewed root-managed units and repeats boundary, liveness, readiness, and deterministic
-   no-provider smoke checks; and
-5. immediately restores the retained checkout and unit generation if any acceptance check fails.
+1. root-managed service and health/maintenance timers are active and enabled;
+2. boundary proof, liveness, core readiness, and deterministic Cockpit smoke pass with no provider call;
+3. every installed unit and the tmpfiles definition byte-match the deployed revision;
+4. the fresh validated backup is
+   `/home/radek/.local/state/autopilot/backups/autopilot-state-2026-07-14T13-43-35-564Z.apbackup.json`;
+5. prior revision `390b4e1d0d7f298076a60b2934e5c744d82b30a7`, including its 87 local changes, is retained at
+   `/home/radek/autopilot-beta.rollback-20260714T134335Z`; and
+6. the legacy user units are inactive and runtime-masked, with exactly one listener on port `8787` and
+   no listener on isolated port `8877`.
 
 ## Accepted warnings
 
