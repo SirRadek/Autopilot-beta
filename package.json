@@ -53,6 +53,8 @@
     "ops:health": "tsx scripts/ops-healthcheck.ts",
     "ops:ready": "tsx scripts/ops-readinesscheck.ts",
     "ops:cockpit-proxy:stage": "bash ops/cockpit-proxy/stage-release.sh",
+    "ops:cockpit-proxy:isolated": "bash ops/cockpit-proxy/isolated-acceptance.sh",
+    "ops:cockpit-proxy:host-acceptance": "bash ops/cockpit-proxy/host-acceptance.sh",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "baseline:waiver-check": "node scripts/check-baseline-waivers.mjs",
@@ -71,6 +73,7 @@
     ,"cockpit:build": "npm --prefix cockpit run build"
     ,"cockpit:test": "npm --prefix cockpit run test"
     ,"browser:qa": "tsx scripts/browser-qa.ts"
+    ,"browser:qa:proxy": "playwright test --config playwright.proxy.config.ts"
     ,"smoke:cockpit-run": "tsx scripts/smoke-cockpit-run.ts"
   },
   "dependencies": {
