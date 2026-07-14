@@ -56,6 +56,20 @@ verification confirmed:
 6. the legacy user units are inactive and runtime-masked, with exactly one listener on port `8787` and
    no listener on isolated port `8877`.
 
+### Reboot drill
+
+A graceful VM reboot on 2026-07-14 changed the boot ID and returned without manual service recovery.
+The deployed checkout remained clean at the same revision; the root service and both timers returned
+active and enabled with zero service restarts. The health timer fired after boot, while all three legacy
+user entry units remained inactive and disabled after their runtime masks expired. Startup repeated the
+positive filesystem-boundary proof, and liveness, core readiness, backup validation, and deterministic
+Cockpit smoke passed again with `provider_invoked=false`.
+
+The pre-reboot recovery point is
+`/home/radek/.local/state/autopilot/backups/autopilot-state-2026-07-14T13-53-08-708Z.apbackup.json`
+(`5` files, `4457` bytes); its recovery drill returned ready and reconciled. Keep the retained rollback
+checkout until the production proxy acceptance is complete.
+
 ## Accepted warnings
 
 - Product & Design OS fit-safety reports six baseline-matched missing-mobile-breakpoint warnings; the
