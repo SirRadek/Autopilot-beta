@@ -3184,3 +3184,42 @@ Next gate:
 
 - Merge the repaired candidate, refresh the guarded cutover script to the exact merged revision,
   create and validate a fresh live-state backup, and only then retry the owner-approved cutover.
+
+## 2026-07-14 Successful Root-Systemd Live Cutover
+
+Date: 2026-07-14
+Request or trigger: PR #20 merged the reviewed root-systemd path and tmpfiles repairs; the owner then
+ran the refreshed guarded cutover against the exact merge commit.
+Mode: OWNER_APPROVED_LIVE_MUTATION with automatic rollback retained. Provider probes, OpenRouter
+credentials, and paid API calls were not enabled for acceptance.
+
+Deployed state:
+
+- Live revision: `0ee4ae2143d7be0465708a1cd8b6a0ffd217190c` with a clean worktree.
+- Root-managed `autopilot-control-plane.service` is active and enabled as UID/GID `1000`, with
+  `WorkingDirectory=/home/radek/autopilot-beta` and zero restarts during acceptance.
+- Root-managed health and maintenance timers are active and enabled.
+- All five legacy user units are inactive and runtime-masked.
+- Installed service/timer files and `/etc/tmpfiles.d/autopilot.conf` byte-match the deployed revision.
+- Runtime tmp and incident spool are `0700 radek:radek`; exactly one listener exists on `8787`, and
+  isolated acceptance port `8877` is stopped.
+
+Recovery evidence:
+
+- Fresh validated backup:
+  `/home/radek/.local/state/autopilot/backups/autopilot-state-2026-07-14T13-43-35-564Z.apbackup.json`
+  (`4` files, `4422` bytes).
+- Retained rollback checkout:
+  `/home/radek/autopilot-beta.rollback-20260714T134335Z` at
+  `390b4e1d0d7f298076a60b2934e5c744d82b30a7`, preserving `87` local changes.
+- Retained unit-state manifest:
+  `/home/radek/autopilot-systemd-units.rollback-20260714T134335Z`.
+
+Fresh post-cutover verification:
+
+- Boundary startup output: `installation_read_only=true`, `managed_write_roots=2`.
+- Liveness passed; readiness returned all five core components `ready` and only expected unconfigured
+  provider states.
+- Backup validation passed in validation-only mode.
+- Deterministic Cockpit smoke completed with one approved revision and one worker result, a settled
+  reservation, and `provider_invoked=false`.
