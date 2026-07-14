@@ -144,6 +144,21 @@ describe("systemd unit writable boundaries", () => {
     }
   });
 
+  it("provisions every external writable namespace path before protected services start", () => {
+    const tmpfiles = readSystemdFile("autopilot-tmpfiles.conf");
+    const readme = readSystemdFile("README.md");
+    const installGuide = readFileSync(join(process.cwd(), "docs", "operations", "install-ubuntu-vm.md"), "utf8");
+
+    expect(tmpfiles).toContain("d /home/radek/.local/state/.autopilot-runtime-tmp 0700 radek radek -");
+    expect(tmpfiles).toContain("d /home/radek/.local/state/.autopilot-incident-spool 0700 radek radek -");
+    for (const instructions of [readme, installGuide]) {
+      expect(instructions).toContain("sudo install -m 0644 ops/systemd/autopilot-tmpfiles.conf /etc/tmpfiles.d/autopilot.conf");
+      expect(instructions).toContain("sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf");
+      expect(instructions.indexOf("sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf"))
+        .toBeLessThan(instructions.indexOf("sudo systemctl enable --now autopilot-control-plane.service"));
+    }
+  });
+
   it("documents one authoritative custom-root assignment and matching writable path", () => {
     const readme = readSystemdFile("README.md");
 

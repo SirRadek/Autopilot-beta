@@ -31,6 +31,8 @@ chmod 600 ~/.config/autopilot/control-plane.env
 systemctl --user disable --now autopilot-control-plane.service \
   autopilot-control-plane-health.timer autopilot-state-maintenance.timer 2>/dev/null || true
 sudo cp ops/systemd/*.service ops/systemd/*.timer /etc/systemd/system/
+sudo install -m 0644 ops/systemd/autopilot-tmpfiles.conf /etc/tmpfiles.d/autopilot.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf
 sudo systemctl daemon-reload
 sudo systemctl enable --now autopilot-control-plane.service
 sudo systemctl enable --now autopilot-control-plane-health.timer autopilot-state-maintenance.timer
@@ -55,8 +57,10 @@ keeps the installation and the rest of the home directory read-only, while
 permits writes only to managed state, its lock-timeout incident spool, its private runtime temporary
 directory, and supervised projects. `TMPDIR` points `tsx` and other temporary-file consumers at that
 private runtime directory because `ProtectSystem=strict` keeps the shared host `/tmp` read-only.
-The fixed `ExecStartPre` commands create the private spool and runtime temporary directories before
-the filesystem namespace is applied. A second unprivileged `ExecStartPre` writes disposable markers to both managed roots and
+The tmpfiles definition creates the private spool and runtime temporary directories at boot and
+during installation, before systemd constructs the service filesystem namespace. The fixed
+`ExecStartPre` commands then enforce their owner and mode on every start. A second unprivileged
+`ExecStartPre` writes disposable markers to both managed roots and
 must fail to write into the installation; the service does not start if containment is ineffective.
 Maintenance backups stay inside managed state at `/home/radek/.local/state/autopilot/backups`.
 
