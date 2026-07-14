@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -72,16 +72,16 @@ describe("systemd unit writable boundaries", () => {
     expect(directives.get("PrivateUsers")).toEqual(["true"]);
     expect(environmentValue(directives, "TMPDIR")).toBe("/home/radek/.local/state/.autopilot-runtime-tmp");
     expect(directives.get("ReadWritePaths")).toEqual([
-      "%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp %h/projects"
+      "/home/radek/.local/state/autopilot /home/radek/.local/state/.autopilot-incident-spool /home/radek/.local/state/.autopilot-runtime-tmp /home/radek/projects"
     ]);
     expect(directives.get("ExecStartPre")).toEqual([
-      "+/usr/bin/install -d -o radek -g radek -m 0700 %h/.local/state/.autopilot-runtime-tmp",
-      "+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool",
+      "+/usr/bin/install -d -o radek -g radek -m 0700 /home/radek/.local/state/.autopilot-runtime-tmp",
+      "+/usr/bin/install -d -o radek -g radek -m 0700 /home/radek/.local/state/.autopilot-incident-spool",
       "/usr/bin/npm run ops:boundary-check -- /home/radek/autopilot-beta ${AUTOPILOT_STATE_DIR} ${AUTOPILOT_PROJECTS_DIR}"
     ]);
 
     const projectsRoot = environmentValue(directives, "AUTOPILOT_PROJECTS_DIR");
-    expect(projectsRoot).toBe("%h/projects");
+    expect(projectsRoot).toBe("/home/radek/projects");
     expect(directives.get("ReadWritePaths")?.flatMap((value) => value.split(/\s+/))).toContain(projectsRoot);
   });
 
@@ -106,10 +106,10 @@ describe("systemd unit writable boundaries", () => {
     expect(directives.get("ProtectSystem")).toEqual(["strict"]);
     expect(directives.get("ProtectHome")).toEqual(["read-only"]);
     expect(directives.get("PrivateUsers")).toEqual(["true"]);
-    expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool"]);
-    expect(directives.get("ExecStartPre")).toEqual(["+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool"]);
+    expect(directives.get("ReadWritePaths")).toEqual(["/home/radek/.local/state/autopilot /home/radek/.local/state/.autopilot-incident-spool"]);
+    expect(directives.get("ExecStartPre")).toEqual(["+/usr/bin/install -d -o radek -g radek -m 0700 /home/radek/.local/state/.autopilot-incident-spool"]);
     expect(directives.get("ExecStart")).toEqual([
-      "/usr/bin/npm run ops:maintenance -- %h/.local/state/autopilot %h/.local/state/autopilot/backups %h/.config/autopilot/control-plane.env --apply"
+      "/usr/bin/npm run ops:maintenance -- /home/radek/.local/state/autopilot /home/radek/.local/state/autopilot/backups /home/radek/.config/autopilot/control-plane.env --apply"
     ]);
     expect(directives.get("ExecStart")?.join("\n")).not.toContain("autopilot-backups");
   });
@@ -130,13 +130,42 @@ describe("systemd unit writable boundaries", () => {
     }
   });
 
+  it("uses explicit radek home paths in root-managed system units", () => {
+    const protectedServices = readdirSync(systemdDir)
+      .filter((name) => name.endsWith(".service"))
+      .filter((name) => {
+        const directives = activeServiceDirectives(readSystemdFile(name));
+        return directives.get("User")?.includes("radek") === true && directives.has("ProtectHome");
+      });
+
+    expect(protectedServices).not.toEqual([]);
+    for (const name of protectedServices) {
+      expect(readSystemdFile(name), name).not.toContain("%h");
+    }
+  });
+
+  it("provisions every external writable namespace path before protected services start", () => {
+    const tmpfiles = readSystemdFile("autopilot-tmpfiles.conf");
+    const readme = readSystemdFile("README.md");
+    const installGuide = readFileSync(join(process.cwd(), "docs", "operations", "install-ubuntu-vm.md"), "utf8");
+
+    expect(tmpfiles).toContain("d /home/radek/.local/state/.autopilot-runtime-tmp 0700 radek radek -");
+    expect(tmpfiles).toContain("d /home/radek/.local/state/.autopilot-incident-spool 0700 radek radek -");
+    for (const instructions of [readme, installGuide]) {
+      expect(instructions).toContain("sudo install -m 0644 ops/systemd/autopilot-tmpfiles.conf /etc/tmpfiles.d/autopilot.conf");
+      expect(instructions).toContain("sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf");
+      expect(instructions.indexOf("sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf"))
+        .toBeLessThan(instructions.indexOf("sudo systemctl enable --now autopilot-control-plane.service"));
+    }
+  });
+
   it("documents one authoritative custom-root assignment and matching writable path", () => {
     const readme = readSystemdFile("README.md");
 
     expect(readme).toContain("AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects");
     expect(readme).not.toContain("Environment=AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects");
     expect(readme).toContain(
-      "ReadWritePaths=\nReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects"
+      "ReadWritePaths=\nReadWritePaths=/home/radek/.local/state/autopilot /home/radek/.local/state/.autopilot-incident-spool /home/radek/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects"
     );
     expect(readme).toMatch(/resolved `AUTOPILOT_PROJECTS_DIR`.*equal.*`ReadWritePaths`/is);
     expect(readme).toMatch(/D3 acceptance.*positive\/negative write proof/is);

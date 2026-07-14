@@ -2,14 +2,18 @@
 
 [Back to the documentation index](../README.md)
 
-Status date: 2026-07-14. Evidence runtime candidate: `1b2a35747f81ddf3fa7b06cdb5dcddad36e92d08`,
-merged to `main` by `6cd34466c6f1ad429b921b1949f07622534db98d`. This is the owner-approved live
-cutover candidate; the live service remains on its previous revision until the guarded cutover completes.
+Status date: 2026-07-14. Repaired evidence runtime candidate:
+`1c83ded12718aad0699a77ac7d16be7e02dbe474`, based on approved candidate
+`1b2a35747f81ddf3fa7b06cdb5dcddad36e92d08` merged to `main` by
+`89568f6623519dc2bf447ee3b4ea01d2b2679e84`. The repaired candidate must merge before another live
+cutover attempt; the live service remains on its previous revision.
 
 Repository verification passed under Node 24 with 100 test files and 912 tests. The same exact runtime
 candidate passed the complete deterministic repository gate in the Ubuntu 24.04 VM. Its isolated
 root-systemd acceptance proved a read-only installation, the two managed writable roots, and a managed
-private runtime temporary directory while preserving access to host tmux sockets. Liveness, core
+private runtime temporary directory while preserving access to host tmux sockets. A repeated proof on
+the repaired candidate also proved explicit system-manager home paths and tmpfiles provisioning before
+namespace construction. Liveness, core
 readiness, provider-unavailable reporting, and deterministic Cockpit smoke passed without provider
 invocation; the alternate acceptance service was then stopped. Earlier isolated acceptance also passed
 maintenance, backup validation, recovery drill, auth, same-origin proxy, headless Cockpit login, host
@@ -39,8 +43,11 @@ an independent code review with its systemd regression finding resolved before m
 
 ## Live cutover gate
 
-The evidence runtime candidate is merged, system Node 24 is installed, isolated root-manager containment
-has passed, independent review findings are resolved, and the owner approved live cutover on 2026-07-14.
+The base evidence runtime candidate is merged, system Node 24 is installed, isolated root-manager
+containment has passed, independent review findings are resolved, and the owner approved live cutover
+on 2026-07-14. Two attempted cutovers rolled back cleanly: the first exposed a runtime-mask assertion
+error; the second exposed root-manager `%h` expansion and missing pre-namespace bind targets. Both are
+fixed in the repaired candidate, which must merge before cutover resumes.
 The cutover must still fail closed unless it:
 
 1. creates and checksum-validates a live-state backup;

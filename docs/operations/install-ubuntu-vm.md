@@ -80,6 +80,8 @@ systemctl --user disable --now autopilot-control-plane.service \
   autopilot-control-plane-health.timer autopilot-state-maintenance.timer 2>/dev/null || true
 cd ~/autopilot-beta
 sudo cp ops/systemd/*.service ops/systemd/*.timer /etc/systemd/system/
+sudo install -m 0644 ops/systemd/autopilot-tmpfiles.conf /etc/tmpfiles.d/autopilot.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf
 sudo systemctl daemon-reload
 sudo systemctl enable --now autopilot-control-plane.service
 sudo systemctl enable --now autopilot-control-plane-health.timer autopilot-state-maintenance.timer
@@ -90,6 +92,10 @@ on the target Ubuntu 24.04 VM because AppArmor-restricted unprivileged user name
 user manager to accept `ProtectHome` while leaving the checkout writable. The new startup probe fails
 closed unless state and projects are writable and the installation is read-only. `loginctl
 enable-linger` is not required for these system units.
+
+The tmpfiles definition is a namespace prerequisite, not optional cleanup. `ReadWritePaths=` bind
+targets must exist before systemd can run `ExecStartPre`; the explicit `systemd-tmpfiles --create`
+step provisions them immediately, and the system tmpfiles boot service recreates them after reboot.
 
 ## Cockpit
 

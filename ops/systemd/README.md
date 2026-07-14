@@ -31,6 +31,8 @@ chmod 600 ~/.config/autopilot/control-plane.env
 systemctl --user disable --now autopilot-control-plane.service \
   autopilot-control-plane-health.timer autopilot-state-maintenance.timer 2>/dev/null || true
 sudo cp ops/systemd/*.service ops/systemd/*.timer /etc/systemd/system/
+sudo install -m 0644 ops/systemd/autopilot-tmpfiles.conf /etc/tmpfiles.d/autopilot.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf
 sudo systemctl daemon-reload
 sudo systemctl enable --now autopilot-control-plane.service
 sudo systemctl enable --now autopilot-control-plane-health.timer autopilot-state-maintenance.timer
@@ -47,16 +49,20 @@ command, path, or arguments. Keep it empty until the corresponding trusted tmux 
 available. `ops/config/control-plane.env.example` intentionally contains neither
 `CONTROL_PLANE_TOKEN` nor `OPENROUTER_API_KEY`; provision secrets outside the repository.
 
-The control plane defaults `AUTOPILOT_PROJECTS_DIR` to `%h/projects`. `ProtectHome=read-only`
+The control plane defaults `AUTOPILOT_PROJECTS_DIR` to `/home/radek/projects`. Root-managed units use
+explicit `/home/radek` paths because `%h` resolves to the system manager's home (`/root`), not the
+service account's home. `ProtectHome=read-only`
 keeps the installation and the rest of the home directory read-only, while
-`ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp %h/projects`
+`ReadWritePaths=/home/radek/.local/state/autopilot /home/radek/.local/state/.autopilot-incident-spool /home/radek/.local/state/.autopilot-runtime-tmp /home/radek/projects`
 permits writes only to managed state, its lock-timeout incident spool, its private runtime temporary
 directory, and supervised projects. `TMPDIR` points `tsx` and other temporary-file consumers at that
 private runtime directory because `ProtectSystem=strict` keeps the shared host `/tmp` read-only.
-The fixed `ExecStartPre` commands create the private spool and runtime temporary directories before
-the filesystem namespace is applied. A second unprivileged `ExecStartPre` writes disposable markers to both managed roots and
+The tmpfiles definition creates the private spool and runtime temporary directories at boot and
+during installation, before systemd constructs the service filesystem namespace. The fixed
+`ExecStartPre` commands then enforce their owner and mode on every start. A second unprivileged
+`ExecStartPre` writes disposable markers to both managed roots and
 must fail to write into the installation; the service does not start if containment is ineffective.
-Maintenance backups stay inside managed state at `%h/.local/state/autopilot/backups`.
+Maintenance backups stay inside managed state at `/home/radek/.local/state/autopilot/backups`.
 
 A custom projects root uses the environment file as its one authoritative assignment. Edit
 `~/.config/autopilot/control-plane.env` so it contains exactly one active custom-root assignment:
@@ -72,7 +78,7 @@ drop-in only clears and replaces the writable-path allowlist:
 # /etc/systemd/system/autopilot-control-plane.service.d/projects-root.conf
 [Service]
 ReadWritePaths=
-ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects
+ReadWritePaths=/home/radek/.local/state/autopilot /home/radek/.local/state/.autopilot-incident-spool /home/radek/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects
 ```
 
 Review the resolved paths before reloading the unit. The resolved `AUTOPILOT_PROJECTS_DIR` must

@@ -42,7 +42,7 @@ that clears and replaces `ReadWritePaths` with the exact same project root:
 # /etc/systemd/system/autopilot-control-plane.service.d/projects-root.conf
 [Service]
 ReadWritePaths=
-ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects
+ReadWritePaths=/home/radek/.local/state/autopilot /home/radek/.local/state/.autopilot-incident-spool /home/radek/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects
 ```
 
 Then set `AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects` once in the environment file. Never add the
