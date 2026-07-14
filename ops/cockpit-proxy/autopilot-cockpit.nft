@@ -1,0 +1,6 @@
+table inet autopilot_cockpit {
+	chain input {
+		type filter hook input priority -10; policy accept;
+		tcp dport { 80, 443 } ip saddr != 192.168.122.1 drop
+	}
+}

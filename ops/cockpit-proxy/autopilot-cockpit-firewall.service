@@ -1,0 +1,13 @@
+[Unit]
+Description=Autopilot Cockpit host-only firewall boundary
+Before=caddy.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/sbin/nft delete table inet autopilot_cockpit
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/autopilot-cockpit.nft
+ExecStop=-/usr/sbin/nft delete table inet autopilot_cockpit
+
+[Install]
+WantedBy=multi-user.target
