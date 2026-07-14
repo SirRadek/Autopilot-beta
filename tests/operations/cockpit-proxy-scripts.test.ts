@@ -38,13 +38,16 @@ function git(checkout: string, ...args: string[]): string {
 }
 
 function makeCheckout(
-  options: { distRootSymlink?: boolean; distSymlink?: boolean } = {},
+  options: { distRootSymlink?: boolean; distSymlink?: boolean; emptyDistDir?: boolean } = {},
 ): { checkout: string; sha: string } {
   const checkout = join(makeTempDir(), "checkout");
   const dist = options.distRootSymlink ? join(makeTempDir(), "external-dist") : join(checkout, "cockpit", "dist");
   mkdirSync(join(dist, "assets"), { recursive: true });
   writeFileSync(join(dist, "index.html"), options.distRootSymlink ? "external\n" : "cockpit\n");
   writeFileSync(join(dist, "assets", "app.js"), "app\n");
+  if (options.emptyDistDir) {
+    mkdirSync(join(dist, "empty"));
+  }
   if (options.distRootSymlink) {
     mkdirSync(join(checkout, "cockpit"), { recursive: true });
     symlinkSync(dist, join(checkout, "cockpit", "dist"));
@@ -261,6 +264,29 @@ describe("Cockpit immutable release staging", () => {
     chmodSync(join(root, "releases", sha), 0o755);
     writeFileSync(join(root, "releases", sha, "extra.txt"), "untracked\n");
     chmodSync(join(root, "releases", sha, "extra.txt"), 0o444);
+    chmodSync(join(root, "releases", sha), 0o555);
+
+    expect(runStage(checkout, root).status).not.toBe(0);
+  });
+
+  it("rejects an extra exact-mode empty directory in an existing release", () => {
+    const { checkout, sha } = makeCheckout();
+    const root = makeReleaseRoot();
+    expect(runStage(checkout, root).status).toBe(0);
+    chmodSync(join(root, "releases", sha), 0o755);
+    mkdirSync(join(root, "releases", sha, "extra-empty"), { mode: 0o555 });
+    chmodSync(join(root, "releases", sha), 0o555);
+
+    expect(runStage(checkout, root).status).not.toBe(0);
+  });
+
+  it("rejects an existing release missing an empty candidate directory", () => {
+    const { checkout, sha } = makeCheckout({ emptyDistDir: true });
+    const root = makeReleaseRoot();
+    expect(runStage(checkout, root).status).toBe(0);
+    chmodSync(join(root, "releases", sha), 0o755);
+    chmodSync(join(root, "releases", sha, "empty"), 0o755);
+    rmSync(join(root, "releases", sha, "empty"), { recursive: true });
     chmodSync(join(root, "releases", sha), 0o555);
 
     expect(runStage(checkout, root).status).not.toBe(0);

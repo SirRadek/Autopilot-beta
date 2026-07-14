@@ -122,6 +122,14 @@ write_manifest() {
 	) > "$output"
 }
 
+write_topology() {
+	local tree="$1"
+	(
+		cd "$tree"
+		find -P . -mindepth 1 -printf '%y %P\0' | LC_ALL=C sort -z
+	)
+}
+
 validate_tree() {
 	local tree="$1"
 	test ! -L "$tree"
@@ -170,6 +178,7 @@ if [ -e "$manifest" ] || [ -L "$manifest" ]; then manifest_exists=1; fi
 
 if [ "$release_exists" -eq 1 ]; then
 	validate_tree "$release"
+	cmp -s <(write_topology "$candidate") <(write_topology "$release")
 	existing_manifest="$(mktemp -- "$manifests/.existing-${sha}.XXXXXXXXXX")"
 	write_manifest "$release" "$existing_manifest"
 	cmp -s "$temporary_manifest" "$existing_manifest"
