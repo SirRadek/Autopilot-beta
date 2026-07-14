@@ -113,6 +113,13 @@ for port in 8443 8877; do
 		exit 1
 	fi
 done
+for unit in "$unit_proxy" "$unit_control_plane"; do
+	load_state="$(systemctl show --property=LoadState --value "$unit" 2>/dev/null || true)"
+	if [ "$load_state" != "not-found" ]; then
+		printf 'isolated transient unit already exists: %s\n' "$unit" >&2
+		exit 1
+	fi
+done
 if nft list table inet "$table_name" >/dev/null 2>&1; then
 	printf '%s\n' "isolated nftables table already exists" >&2
 	exit 1
@@ -213,7 +220,7 @@ systemd-run \
 
 ready=0
 for _ in $(seq 1 30); do
-	if curl --fail --silent --show-error "http://127.0.0.1:8877/health" >/dev/null; then
+	if curl --disable --noproxy '*' --fail --silent --show-error "http://127.0.0.1:8877/health" >/dev/null; then
 		ready=1
 		break
 	fi
@@ -228,19 +235,27 @@ for _ in $(seq 1 30); do
 done
 [ -f "$private_root" ]
 [ ! -L "$private_root" ]
-if grep -Eq -- '-----BEGIN ([A-Z0-9]+ )?PRIVATE KEY-----' "$private_root"; then
-	printf '%s\n' "refusing private-key contaminated CA export" >&2
-	exit 1
-fi
 public_root="$isolated_runtime/autopilot-caddy-root.crt"
-install -m 0644 "$private_root" "$public_root"
-if grep -Eq -- '-----BEGIN ([A-Z0-9]+ )?PRIVATE KEY-----' "$public_root"; then
-	printf '%s\n' "refusing private-key contaminated public CA" >&2
+if ! LC_ALL=C awk '
+	BEGIN { state = 0; objects = 0; body = 0 }
+	state == 0 && /^[[:space:]]*$/ { next }
+	state == 0 && $0 == "-----BEGIN CERTIFICATE-----" { state = 1; objects++; next }
+	state == 1 && $0 == "-----END CERTIFICATE-----" { if (!body) exit 1; state = 2; next }
+	state == 1 && /^[A-Za-z0-9+\/=]+$/ { body = 1; next }
+	state == 2 && /^[[:space:]]*$/ { next }
+	{ exit 1 }
+	END { if (state != 2 || objects != 1) exit 1 }
+' "$private_root"; then
+	printf '%s\n' "refusing non-certificate data in CA export source" >&2
 	exit 1
 fi
+public_root_tmp="$isolated_runtime/.autopilot-caddy-root.crt.tmp"
+openssl x509 -in "$private_root" -out "$public_root_tmp"
+chmod 0644 "$public_root_tmp"
+mv -f -- "$public_root_tmp" "$public_root"
 proxy_ready=0
 for _ in $(seq 1 30); do
-	if curl --fail --silent --show-error --cacert "$public_root" \
+	if curl --disable --noproxy '*' --fail --silent --show-error --cacert "$public_root" \
 		--resolve "autopilot.local:8443:192.168.122.99" \
 		"https://autopilot.local:8443/" >/dev/null; then
 		proxy_ready=1

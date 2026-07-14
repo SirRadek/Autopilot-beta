@@ -451,7 +451,15 @@ exit 0
 printf 'caddy %s\\n' "$*" >> "$STUB_LOG"
 [[ "\${STUB_CADDY_VALIDATE_FAIL:-0}" != 1 ]]
 `);
-  writeExecutable(join(bin, "systemctl"), `printf 'systemctl %s\\n' "$*" >> "$STUB_LOG"`);
+  writeExecutable(join(bin, "systemctl"), `
+printf 'systemctl %s\\n' "$*" >> "$STUB_LOG"
+if [[ "\${1:-}" == show ]]; then
+  case "$*" in
+    *autopilot-cockpit-isolated-proxy.service*) [[ "\${STUB_PROXY_UNIT_EXISTS:-0}" == 1 ]] && printf 'loaded\\n' || printf 'not-found\\n' ;;
+    *autopilot-cockpit-isolated-control-plane.service*) [[ "\${STUB_CONTROL_UNIT_EXISTS:-0}" == 1 ]] && printf 'loaded\\n' || printf 'not-found\\n' ;;
+  esac
+fi
+`);
   writeExecutable(join(bin, "systemd-run"), `
 printf 'systemd-run %s\\n' "$*" >> "$STUB_LOG"
 if [[ "$*" == *autopilot-cockpit-isolated-control-plane* ]]; then
@@ -465,10 +473,13 @@ if [[ "$*" == *autopilot-cockpit-isolated-proxy* ]]; then
     esac
   done
   mkdir -p "$data_home/caddy/pki/authorities/local"
-  printf '%s\\n' '-----BEGIN CERTIFICATE-----' 'public-only-test-root' '-----END CERTIFICATE-----' > "$data_home/caddy/pki/authorities/local/root.crt"
-  if [[ "\${STUB_CA_PRIVATE:-0}" == 1 ]]; then
-    printf '%s\\n' '-----BEGIN PRIVATE KEY-----' 'must-not-export' '-----END PRIVATE KEY-----' >> "$data_home/caddy/pki/authorities/local/root.crt"
-  fi
+  printf '%s\\n' '-----BEGIN CERTIFICATE-----' 'cHVibGljLW9ubHktdGVzdC1yb290' '-----END CERTIFICATE-----' > "$data_home/caddy/pki/authorities/local/root.crt"
+  case "\${STUB_CA_PAYLOAD_MODE:-}" in
+    private) printf '%s\\n' '-----BEGIN PRIVATE KEY-----' 'must-not-export' '-----END PRIVATE KEY-----' >> "$data_home/caddy/pki/authorities/local/root.crt" ;;
+    appended-der) printf '\\060\\202\\001\\000' >> "$data_home/caddy/pki/authorities/local/root.crt" ;;
+    arbitrary) printf '%s\\n' 'trailing arbitrary data' >> "$data_home/caddy/pki/authorities/local/root.crt" ;;
+    multiple) printf '%s\\n' '-----BEGIN CERTIFICATE-----' 'c2Vjb25kLXJvb3Q=' '-----END CERTIFICATE-----' >> "$data_home/caddy/pki/authorities/local/root.crt" ;;
+  esac
 fi
 `);
   writeExecutable(join(bin, "curl"), `
@@ -477,7 +488,16 @@ if [[ "\${STUB_SIGNAL_ON_CURL:-}" == TERM ]]; then kill -TERM "$PPID"; sleep 1; 
 `);
   writeExecutable(join(bin, "openssl"), `
 printf 'openssl %s\\n' "$*" >> "$STUB_LOG"
-printf 'sha256 Fingerprint=AA:BB:CC:DD\\n'
+if [[ "$*" == *' -out '* ]]; then
+  output=
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == -out ]]; then output="$2"; break; fi
+    shift
+  done
+  printf '%s\\n' '-----BEGIN CERTIFICATE-----' 'bm9ybWFsaXplZC1wdWJsaWMtcm9vdA==' '-----END CERTIFICATE-----' > "$output"
+elif [[ "$*" == *-fingerprint* ]]; then
+  printf 'sha256 Fingerprint=AA:BB:CC:DD\\n'
+fi
 `);
   return { bin, log };
 }
@@ -529,7 +549,7 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain("PRIVATE KEY");
     const log = readFileSync(prepared.stubs.log, "utf8");
     expect(log.indexOf("nft add table inet autopilot_cockpit_isolated"))
-      .toBeLessThan(log.indexOf("autopilot-cockpit-isolated-proxy"));
+      .toBeLessThan(log.indexOf("systemd-run --unit=autopilot-cockpit-isolated-proxy"));
     expect(log).not.toContain("systemctl stop");
     expect(log).not.toContain("nft delete table");
     expect(statSync(join(prepared.runtime, "state")).mode & 0o777).toBe(0o700);
@@ -563,7 +583,10 @@ describe("Cockpit isolated proxy acceptance", () => {
     ["Caddy validation", { STUB_CADDY_VALIDATE_FAIL: "1" }],
     ["Control Plane startup", { STUB_CONTROL_START_FAIL: "1" }],
     ["proxy startup", { STUB_PROXY_START_FAIL: "1" }],
-    ["private-key contaminated CA export", { STUB_CA_PRIVATE: "1" }],
+    ["private-key contaminated CA export", { STUB_CA_PAYLOAD_MODE: "private" }],
+    ["CA export with appended DER", { STUB_CA_PAYLOAD_MODE: "appended-der" }],
+    ["CA export with trailing arbitrary data", { STUB_CA_PAYLOAD_MODE: "arbitrary" }],
+    ["CA export with multiple PEM objects", { STUB_CA_PAYLOAD_MODE: "multiple" }],
   ])("cleans every owned isolated mutation after %s fails", (_label, failureEnv) => {
     const prepared = prepareIsolatedRun();
 
@@ -608,6 +631,8 @@ describe("Cockpit isolated proxy acceptance", () => {
     ["occupied port 8443", { STUB_OCCUPIED_PORT: "8443" }],
     ["occupied port 8877", { STUB_OCCUPIED_PORT: "8877" }],
     ["pre-existing table", { STUB_TABLE_EXISTS: "1" }],
+    ["pre-existing proxy transient unit", { STUB_PROXY_UNIT_EXISTS: "1" }],
+    ["pre-existing Control Plane transient unit", { STUB_CONTROL_UNIT_EXISTS: "1" }],
   ])("refuses a pre-existing isolated resource before mutation: %s", (_label, extraEnv) => {
     const prepared = prepareIsolatedRun();
 
@@ -668,6 +693,99 @@ describe("Cockpit isolated proxy acceptance", () => {
   });
 });
 
+function runHostAcceptance(extraEnv: NodeJS.ProcessEnv = {}) {
+  const root = makeTempDir();
+  const bin = join(root, "bin");
+  const log = join(root, "host.log");
+  const home = join(root, "home");
+  mkdirSync(bin);
+  mkdirSync(home);
+  writeFileSync(join(home, ".curlrc"), "--insecure\n--proxy https://evil.example\n");
+  writeExecutable(join(bin, "openssl"), `
+printf 'openssl %s\\n' "$*" >> "$STUB_LOG"
+if [[ "\${1:-}" == s_client ]]; then printf '%s\\n' 'test certificate'; fi
+if [[ "\${1:-}" == x509 ]]; then cat >/dev/null; fi
+`);
+  writeExecutable(join(bin, "npx"), `
+[[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
+printf 'playwright trusted-origin\\n' >> "$STUB_LOG"
+`);
+  writeExecutable(join(bin, "curl"), `
+printf 'curl %s\\n' "$*" >> "$STUB_LOG"
+[[ "\${1:-}" == --disable && "\${2:-}" == --noproxy && "\${3:-}" == '*' ]] || exit 90
+[[ -z "\${http_proxy:-}\${https_proxy:-}\${HTTP_PROXY:-}\${HTTPS_PROXY:-}\${ALL_PROXY:-}\${all_proxy:-}\${CURL_CA_BUNDLE:-}\${SSL_CERT_FILE:-}\${SSL_CERT_DIR:-}" ]] || exit 91
+headers= body= method=GET cookie_jar=
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dump-header) headers="$2"; shift 2 ;;
+    --output) body="$2"; shift 2 ;;
+    --request) method="$2"; shift 2 ;;
+    --cookie-jar) cookie_jar="$2"; shift 2 ;;
+    --write-out|--header|--data-binary|--cookie|--noproxy) shift 2 ;;
+    --disable|--silent|--show-error) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+[[ -z "$cookie_jar" ]] || printf 'cookie-mode %s\\n' "$(stat -c %a "$cookie_jar")" >> "$STUB_LOG"
+name="$(basename "$headers" .headers)"
+full_csp="default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+case "$name" in
+  root|spa|lookalike-*)
+    [[ "\${STUB_INCOMPLETE_CSP:-0}" != 1 ]] || full_csp="default-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'"
+    printf '%s\\n' 'HTTP/2 200' "Content-Security-Policy: $full_csp" 'X-Content-Type-Options: nosniff' 'Referrer-Policy: no-referrer' 'Strict-Transport-Security: max-age=300' 'Cache-Control: no-cache' > "$headers"
+    printf '%s\\n' '<!doctype html><script src="/assets/app.js"></script>' > "$body"
+    printf 200 ;;
+  asset)
+    printf '%s\\n' 'HTTP/2 200' 'Cache-Control: public, max-age=31536000, immutable' > "$headers"
+    printf app > "$body"; printf 200 ;;
+  unauthenticated-api)
+    printf '%s\\n' 'HTTP/2 401' 'Cache-Control: no-store' > "$headers"
+    printf unauthorized > "$body"; printf 401 ;;
+  unsupported)
+    if [[ "\${STUB_UNSUPPORTED_API_SHAPED:-0}" == 1 ]]; then
+      printf '%s\\n' 'HTTP/2 405' 'Cache-Control: no-store' 'Content-Type: application/json' > "$headers"
+    else
+      printf '%s\\n' 'HTTP/2 405' 'Cache-Control: no-cache' 'Content-Type: text/plain; charset=utf-8' > "$headers"
+    fi
+    printf method > "$body"; printf 405 ;;
+  login)
+    printf '%s\\n' 'HTTP/2 200' 'Set-Cookie: autopilot_session=session-value; HttpOnly; SameSite=Lax; Path=/; Secure' > "$headers"
+    [[ "\${STUB_MULTI_SESSION_COOKIE:-0}" != 1 ]] || printf '%s\\n' 'Set-Cookie: autopilot_session=shadow; Path=/' >> "$headers"
+    printf authenticated > "$body"; printf 200 ;;
+  session|status|api-*)
+    printf '%s\\n' 'HTTP/2 200' 'Cache-Control: no-store' > "$headers"
+    printf authenticated > "$body"; printf 200 ;;
+  evil-origin|evil-referer)
+    printf '%s\\n' 'HTTP/2 403' > "$headers"; printf csrf > "$body"; printf 403 ;;
+  logout)
+    printf '%s\\n' 'HTTP/2 200' > "$headers"; printf logout > "$body"; printf 200 ;;
+  logged-out)
+    printf '%s\\n' 'HTTP/2 401' > "$headers"; printf logged-out > "$body"; printf 401 ;;
+esac
+`);
+
+  const result = spawnSync("bash", [hostAcceptance], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...extraEnv,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: home,
+      STUB_LOG: log,
+      http_proxy: "http://evil.example",
+      HTTPS_PROXY: "http://evil.example",
+      ALL_PROXY: "socks5://evil.example",
+      CURL_CA_BUNDLE: join(root, "evil-ca.pem"),
+      SSL_CERT_FILE: join(root, "evil-cert.pem"),
+      SSL_CERT_DIR: join(root, "evil-certs"),
+      AUTOPILOT_PROXY_BASE_URL: "https://autopilot.local:8443",
+      AUTOPILOT_PROXY_TOKEN_COMMAND: "printf %s behavioral-secret",
+    },
+  });
+  return { result, log };
+}
+
 describe("Cockpit trusted host acceptance", () => {
   it("keeps token, cookies, TLS verification, and cleanup boundaries explicit", () => {
     const source = readFileSync(hostAcceptance, "utf8");
@@ -685,73 +803,7 @@ describe("Cockpit trusted host acceptance", () => {
   });
 
   it("accepts trusted responses without exposing the token or weakening TLS", () => {
-    const root = makeTempDir();
-    const bin = join(root, "bin");
-    const log = join(root, "host.log");
-    mkdirSync(bin);
-    writeExecutable(join(bin, "openssl"), `
-printf 'openssl %s\\n' "$*" >> "$STUB_LOG"
-if [[ "\${1:-}" == s_client ]]; then printf '%s\\n' 'test certificate'; fi
-`);
-    writeExecutable(join(bin, "npx"), `
-[[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
-printf 'playwright trusted-origin\\n' >> "$STUB_LOG"
-`);
-    writeExecutable(join(bin, "curl"), `
-printf 'curl %s\\n' "$*" >> "$STUB_LOG"
-headers= body= method=GET cookie_jar=
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --dump-header) headers="$2"; shift 2 ;;
-    --output) body="$2"; shift 2 ;;
-    --request) method="$2"; shift 2 ;;
-    --cookie-jar) cookie_jar="$2"; shift 2 ;;
-    --write-out|--header|--data-binary|--cookie) shift 2 ;;
-    --silent|--show-error) shift ;;
-    *) url="$1"; shift ;;
-  esac
-done
-[[ -z "$cookie_jar" ]] || printf 'cookie-mode %s\\n' "$(stat -c %a "$cookie_jar")" >> "$STUB_LOG"
-name="$(basename "$headers" .headers)"
-case "$name" in
-  root|spa|lookalike-*)
-    printf '%s\\n' 'HTTP/2 200' "Content-Security-Policy: default-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'" 'X-Content-Type-Options: nosniff' 'Referrer-Policy: no-referrer' 'Strict-Transport-Security: max-age=300' 'Cache-Control: no-cache' > "$headers"
-    printf '%s\\n' '<!doctype html><script src="/assets/app.js"></script>' > "$body"
-    printf 200 ;;
-  asset)
-    printf '%s\\n' 'HTTP/2 200' 'Cache-Control: public, max-age=31536000, immutable' > "$headers"
-    printf app > "$body"; printf 200 ;;
-  unauthenticated-api)
-    printf '%s\\n' 'HTTP/2 401' 'Cache-Control: no-store' > "$headers"
-    printf unauthorized > "$body"; printf 401 ;;
-  unsupported)
-    printf '%s\\n' 'HTTP/2 405' > "$headers"; printf method > "$body"; printf 405 ;;
-  login)
-    printf '%s\\n' 'HTTP/2 200' 'Set-Cookie: autopilot_session=session-value; HttpOnly; SameSite=Lax; Path=/; Secure' > "$headers"
-    printf authenticated > "$body"; printf 200 ;;
-  session|status|api-*)
-    printf '%s\\n' 'HTTP/2 200' 'Cache-Control: no-store' > "$headers"
-    printf authenticated > "$body"; printf 200 ;;
-  evil-origin)
-    printf '%s\\n' 'HTTP/2 403' > "$headers"; printf csrf > "$body"; printf 403 ;;
-  logout)
-    printf '%s\\n' 'HTTP/2 200' > "$headers"; printf logout > "$body"; printf 200 ;;
-  logged-out)
-    printf '%s\\n' 'HTTP/2 401' > "$headers"; printf logged-out > "$body"; printf 401 ;;
-esac
-`);
-
-    const result = spawnSync("bash", [hostAcceptance], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
-        STUB_LOG: log,
-        AUTOPILOT_PROXY_BASE_URL: "https://autopilot.local:8443",
-        AUTOPILOT_PROXY_TOKEN_COMMAND: "printf %s behavioral-secret",
-      },
-    });
+    const { result, log } = runHostAcceptance();
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("HOST_PROXY_ACCEPTANCE_OK");
@@ -762,7 +814,16 @@ esac
     expect(commands).toContain("openssl x509 -noout -checkhost autopilot.local");
     expect(commands).toContain("cookie-mode 600");
     expect(commands).toContain("playwright trusted-origin");
+    expect(commands).toContain("evil-referer.headers");
     expect(commands).not.toContain("behavioral-secret");
     expect(commands).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
+  });
+
+  it.each([
+    ["multiple autopilot session cookies", { STUB_MULTI_SESSION_COOKIE: "1" }],
+    ["API-shaped unsupported lookalike POST", { STUB_UNSUPPORTED_API_SHAPED: "1" }],
+    ["incomplete Content-Security-Policy", { STUB_INCOMPLETE_CSP: "1" }],
+  ])("rejects %s", (_label, extraEnv) => {
+    expect(runHostAcceptance(extraEnv).result.status).not.toBe(0);
   });
 });

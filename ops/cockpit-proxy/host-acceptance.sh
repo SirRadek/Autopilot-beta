@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
+unset CURL_CA_BUNDLE SSL_CERT_FILE SSL_CERT_DIR
+
 base_url="${AUTOPILOT_PROXY_BASE_URL:-}"
 token_command="${AUTOPILOT_PROXY_TOKEN_COMMAND:-}"
 case "$base_url" in
@@ -34,12 +37,19 @@ request() {
 	local method="$2"
 	local url="$3"
 	shift 3
-	curl --silent --show-error \
+	curl --disable --noproxy '*' --silent --show-error \
 		--request "$method" \
 		--dump-header "$work/$name.headers" \
 		--output "$work/$name.body" \
 		--write-out '%{http_code}' \
 		"$@" "$url"
+}
+require_header_exact() {
+	local expected="$2: $3"
+	tr -d '\r' < "$1" | grep -Fxiq -- "$expected" || {
+		printf 'missing exact required response header: %s\n' "$2" >&2
+		exit 1
+	}
 }
 
 require_status() {
@@ -54,7 +64,7 @@ require_header() {
 
 status="$(request root GET "$base_url/")"
 require_status "$status" 200 root
-require_header "$work/root.headers" Content-Security-Policy ".*default-src 'self'.*connect-src 'self'.*object-src 'none'.*frame-ancestors 'none'.*"
+require_header_exact "$work/root.headers" Content-Security-Policy "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 require_header "$work/root.headers" X-Content-Type-Options "nosniff"
 require_header "$work/root.headers" Referrer-Policy "no-referrer"
 require_header "$work/root.headers" Strict-Transport-Security "max-age=300"
@@ -82,7 +92,12 @@ for lookalike in authentic statusx sessionsx approvalsx workersx providersx proj
 	require_header "$work/lookalike-$lookalike.headers" Cache-Control "no-cache"
 done
 status="$(request unsupported POST "$base_url/authentic")"
-[ "$status" != 200 ]
+require_status "$status" 405 unsupported
+require_header "$work/unsupported.headers" Cache-Control "no-cache"
+if grep -Eiq '^content-type:[[:space:]]*application/json([[:space:]]*;|[[:space:]]|\r)*$' "$work/unsupported.headers"; then
+	printf '%s\n' "unsupported static lookalike returned API-shaped content" >&2
+	exit 1
+fi
 
 token="$(bash -c "$token_command" 2>"$work/token-command.stderr")"
 [ -n "$token" ] && [[ "$token" != *$'\n'* ]] || {
@@ -97,10 +112,15 @@ status="$(request login POST "$base_url/auth/login" \
 	--cookie-jar "$cookie_jar")"
 rm -f "$work/login.json"
 require_status "$status" 200 login
-grep -Eiq '^set-cookie:[[:space:]]*autopilot_session=' "$work/login.headers"
-grep -Eiq '^set-cookie:.*HttpOnly' "$work/login.headers"
-grep -Eiq '^set-cookie:.*Secure' "$work/login.headers"
-grep -Eiq '^set-cookie:.*SameSite=Lax' "$work/login.headers"
+mapfile -t session_cookie_lines < <(grep -Ei '^set-cookie:[[:space:]]*autopilot_session=' "$work/login.headers" || true)
+[ "${#session_cookie_lines[@]}" -eq 1 ] || {
+	printf '%s\n' "expected exactly one autopilot_session Set-Cookie header" >&2
+	exit 1
+}
+session_cookie_line="${session_cookie_lines[0],,}"
+[[ "$session_cookie_line" == *"; httponly"* ]]
+[[ "$session_cookie_line" == *"; secure"* ]]
+[[ "$session_cookie_line" == *"; samesite=lax"* ]]
 
 status="$(request session GET "$base_url/auth/session" --cookie "$cookie_jar")"
 require_status "$status" 200 session
@@ -116,6 +136,9 @@ done
 status="$(request evil-origin POST "$base_url/auth/logout" \
 	--cookie "$cookie_jar" --header 'Origin: https://evil.example')"
 require_status "$status" 403 evil-origin
+status="$(request evil-referer POST "$base_url/auth/logout" \
+	--cookie "$cookie_jar" --header 'Referer: https://evil.example/hostile')"
+require_status "$status" 403 evil-referer
 status="$(request logout POST "$base_url/auth/logout" \
 	--cookie "$cookie_jar" --header "Origin: $base_url")"
 require_status "$status" 200 logout
