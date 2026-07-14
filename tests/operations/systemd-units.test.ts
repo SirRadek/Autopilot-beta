@@ -68,9 +68,14 @@ describe("systemd unit writable boundaries", () => {
     expect(directives.get("Group")).toEqual(["radek"]);
     expect(directives.get("ProtectSystem")).toEqual(["strict"]);
     expect(directives.get("ProtectHome")).toEqual(["read-only"]);
+    expect(directives.get("PrivateTmp")).toEqual(["false"]);
     expect(directives.get("PrivateUsers")).toEqual(["true"]);
-    expect(directives.get("ReadWritePaths")).toEqual(["%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects"]);
+    expect(environmentValue(directives, "TMPDIR")).toBe("/home/radek/.local/state/.autopilot-runtime-tmp");
+    expect(directives.get("ReadWritePaths")).toEqual([
+      "%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp %h/projects"
+    ]);
     expect(directives.get("ExecStartPre")).toEqual([
+      "+/usr/bin/install -d -o radek -g radek -m 0700 %h/.local/state/.autopilot-runtime-tmp",
       "+/usr/bin/install -d -m 0700 %h/.local/state/.autopilot-incident-spool",
       "/usr/bin/npm run ops:boundary-check -- /home/radek/autopilot-beta ${AUTOPILOT_STATE_DIR} ${AUTOPILOT_PROJECTS_DIR}"
     ]);
@@ -130,7 +135,9 @@ describe("systemd unit writable boundaries", () => {
 
     expect(readme).toContain("AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects");
     expect(readme).not.toContain("Environment=AUTOPILOT_PROJECTS_DIR=/srv/autopilot-projects");
-    expect(readme).toContain("ReadWritePaths=\nReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool /srv/autopilot-projects");
+    expect(readme).toContain(
+      "ReadWritePaths=\nReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects"
+    );
     expect(readme).toMatch(/resolved `AUTOPILOT_PROJECTS_DIR`.*equal.*`ReadWritePaths`/is);
     expect(readme).toMatch(/D3 acceptance.*positive\/negative write proof/is);
   });

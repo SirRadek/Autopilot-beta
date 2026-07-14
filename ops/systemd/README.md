@@ -49,10 +49,12 @@ available. `ops/config/control-plane.env.example` intentionally contains neither
 
 The control plane defaults `AUTOPILOT_PROJECTS_DIR` to `%h/projects`. `ProtectHome=read-only`
 keeps the installation and the rest of the home directory read-only, while
-`ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/projects`
-permits writes only to managed state, its lock-timeout incident spool, and supervised projects.
-The fixed `ExecStartPre` creates the private spool directory before the filesystem namespace is
-applied. A second unprivileged `ExecStartPre` writes disposable markers to both managed roots and
+`ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp %h/projects`
+permits writes only to managed state, its lock-timeout incident spool, its private runtime temporary
+directory, and supervised projects. `TMPDIR` points `tsx` and other temporary-file consumers at that
+private runtime directory because `ProtectSystem=strict` keeps the shared host `/tmp` read-only.
+The fixed `ExecStartPre` commands create the private spool and runtime temporary directories before
+the filesystem namespace is applied. A second unprivileged `ExecStartPre` writes disposable markers to both managed roots and
 must fail to write into the installation; the service does not start if containment is ineffective.
 Maintenance backups stay inside managed state at `%h/.local/state/autopilot/backups`.
 
@@ -70,7 +72,7 @@ drop-in only clears and replaces the writable-path allowlist:
 # /etc/systemd/system/autopilot-control-plane.service.d/projects-root.conf
 [Service]
 ReadWritePaths=
-ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool /srv/autopilot-projects
+ReadWritePaths=%h/.local/state/autopilot %h/.local/state/.autopilot-incident-spool %h/.local/state/.autopilot-runtime-tmp /srv/autopilot-projects
 ```
 
 Review the resolved paths before reloading the unit. The resolved `AUTOPILOT_PROJECTS_DIR` must
@@ -106,9 +108,9 @@ runtime injects their command configuration.
 `autopilot-state-maintenance.timer` runs one locked transaction that checks private permissions,
 scans bounded head/tail chunks for secret-like material, creates and validates an atomic bounded
 backup, rotates bounded JSONL files, and only then prunes retained backups. The service deliberately
-keeps the host `/tmp` visible because Codex,
-Claude, and AGY `/status` or `/usage` probes communicate with their existing tmux sessions through
-the per-user tmux socket. Other hardening remains enabled; service processes run as the
+keeps the host `/tmp` visible but read-only because Codex, Claude, and AGY `/status` or `/usage`
+probes communicate with their existing tmux sessions through the per-user tmux socket. Runtime
+temporary files use the separately writable private `TMPDIR`. Other hardening remains enabled; service processes run as the
 unprivileged `radek` account without privileged Linux capabilities.
 
 ## Governed cockpit dry run
