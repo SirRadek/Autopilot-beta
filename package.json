@@ -52,6 +52,7 @@
     "ops:boundary-check": "tsx scripts/ops-boundary-check.ts",
     "ops:health": "tsx scripts/ops-healthcheck.ts",
     "ops:ready": "tsx scripts/ops-readinesscheck.ts",
+    "ops:cockpit-proxy:stage": "bash ops/cockpit-proxy/stage-release.sh",
     "beta:vendor-check": "node scripts/vendor-check.mjs",
     "beta:vendor-manifest": "node scripts/vendor-check.mjs --generate",
     "baseline:waiver-check": "node scripts/check-baseline-waivers.mjs",
