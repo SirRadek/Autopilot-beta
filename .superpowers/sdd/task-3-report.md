@@ -14,6 +14,16 @@ Implementation complete for the bounded Task 3 repository slice. No VM, live ser
 
 ## RED evidence
 
+Second full-review regression RED (before the second production-script fix):
+
+```text
+npm test -- tests/operations/cockpit-proxy-scripts.test.ts -t 'isolated|trusted host'
+Test Files  1 failed (1)
+Tests       11 failed | 22 passed | 25 skipped (58)
+```
+
+The failures reproduced runtime symlink-race acceptance, cleanup of untrusted or missing ownership evidence, evidence deletion before failed cleanup verification, and permissive cookie parsing of empty/malformed/duplicated/comma-joined session cookies.
+
 Independent-review regression RED (before production-script changes):
 
 ```text
@@ -41,6 +51,16 @@ The success lifecycle failed with status `127` because `ops/cockpit-proxy/isolat
 
 ## GREEN evidence
 
+Second full-review regression GREEN:
+
+```text
+npm test -- tests/operations/cockpit-proxy-scripts.test.ts -t 'isolated|trusted host'
+Test Files  1 passed (1)
+Tests       33 passed | 25 skipped (58)
+```
+
+The runtime is now created atomically with `mkdir` beneath a canonical, non-symlinked, safely owned parent (sticky protection required when writable). Cleanup requires exact directory/marker ownership evidence unless acting on resources tracked by the same process, mutates only observed/started fixed resources, verifies their absence before deleting the runtime, and preserves evidence on incomplete cleanup. The session-cookie parser now validates an exact non-empty cookie pair and exactly one bare `Secure`, bare `HttpOnly`, and exact `SameSite=Lax` attribute.
+
 Independent-review regression GREEN:
 
 ```text
@@ -64,7 +84,7 @@ Final complete operations file after review hardening:
 ```text
 AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npm test -- tests/operations/cockpit-proxy-scripts.test.ts
 Test Files  1 passed (1)
-Tests       48 passed (48)
+Tests       58 passed (58)
 ```
 
 The temporary `AUTOPILOT_NODE_BIN` wrapper reports Node 24 for the pre-existing staging guard and delegates execution to the installed Node binary. The workstation has Node 18 only; no production runtime claim is made from that wrapper.
@@ -92,7 +112,8 @@ All exited `0`.
 ## Self-review
 
 - Cleanup is installed before the first runtime mutation, exercised after Caddy validation failure, Control Plane startup failure, proxy startup failure, CA contamination, and `TERM`, and disabled only after complete success evidence. `INT`/`TERM` handlers clean and terminate with nonzero signal status.
-- Success intentionally leaves both transient units, the isolated table, and runtime available until explicit cleanup. Cleanup stops only the two named transient units, deletes only `inet autopilot_cockpit_isolated`, removes only a marker-owned runtime, verifies `8443/8877` and the table are absent, and propagates verification failure.
+- Success intentionally leaves both transient units, the isolated table, and runtime available until explicit cleanup. Cleanup stops only the two named transient units that were started or are observed under valid ownership evidence, deletes only `inet autopilot_cockpit_isolated`, verifies units/listeners/table are absent, and removes the runtime only after complete verification. Missing or malicious ownership evidence never authorizes mutation; incomplete cleanup preserves the runtime and marker for recovery.
+- The runtime directory is atomically created with fail-on-existence `mkdir`; its canonical parent must be non-symlinked, correctly owned, and either non-writable by peers or sticky-protected. Directory and marker owner/mode are verified before any contained setup, closing the former `/tmp` check/install race.
 - Pre-existing `8443`, `8877`, or the named table fail before mutation. An unowned cleanup path is refused.
 - The fixed token is written only to a `0600` environment file. Behavioral tests prove it is absent from stdout/stderr and command logs. The host token command's stderr is captured privately, its stdout must be one non-empty line, and the token is not placed in curl arguments.
 - Caddy's private PKI remains under its `0700` data directory. The public export requires a regular, non-symlink file containing exactly one certificate PEM object and whitespace only outside it; OpenSSL parses and re-emits that certificate instead of copying source bytes. Only the public path and SHA-256 fingerprint are printed.

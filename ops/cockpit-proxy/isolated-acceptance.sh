@@ -6,21 +6,85 @@ unit_control_plane="autopilot-cockpit-isolated-control-plane.service"
 table_name="autopilot_cockpit_isolated"
 default_runtime="/tmp/autopilot-cockpit-proxy-state"
 isolated_runtime="${3:-$default_runtime}"
-cleanup_can_remove_runtime=0
+cleanup_authorized=0
+nft_created=0
+control_plane_started=0
+proxy_started=0
+runtime_created=0
+test_mode="${AUTOPILOT_PROXY_TEST_MODE:-0}"
+case "$test_mode" in 0|1) ;; *) exit 1 ;; esac
+expected_runtime_uid=0
+expected_runtime_gid=0
+if [ "$test_mode" = 1 ]; then
+	expected_runtime_uid="$(id -u)"
+	expected_runtime_gid="$(id -g)"
+fi
+
+resolve_safe_runtime_path() {
+	local input="$1" parent_input parent_lexical parent_resolved parent_mode parent_mode_value
+	parent_input="$(dirname -- "$input")"
+	parent_lexical="$(realpath -ms -- "$parent_input")"
+	parent_resolved="$(realpath -e -- "$parent_input")"
+	[ "$parent_lexical" = "$parent_resolved" ] || {
+		printf '%s\n' "isolated runtime parent must not contain symlinks" >&2
+		return 1
+	}
+	[ "$(stat -c %u:%g -- "$parent_resolved")" = "$expected_runtime_uid:$expected_runtime_gid" ] || {
+		printf '%s\n' "isolated runtime parent has unsafe ownership" >&2
+		return 1
+	}
+	parent_mode="$(stat -c %a -- "$parent_resolved")"
+	parent_mode_value=$((8#$parent_mode))
+	if (( (parent_mode_value & 0022) != 0 && (parent_mode_value & 01000) == 0 )); then
+		printf '%s\n' "isolated runtime parent is writable without sticky protection" >&2
+		return 1
+	fi
+	printf '%s/%s\n' "$parent_resolved" "$(basename -- "$input")"
+}
+
+runtime_evidence_valid() {
+	local marker="$isolated_runtime/.autopilot-cockpit-isolated-owned"
+	[ -d "$isolated_runtime" ] && [ ! -L "$isolated_runtime" ] || return 1
+	[ "$(stat -c %u:%g:%a -- "$isolated_runtime")" = "$expected_runtime_uid:$expected_runtime_gid:755" ] || return 1
+	[ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+	[ "$(stat -c %u:%g:%a -- "$marker")" = "$expected_runtime_uid:$expected_runtime_gid:600" ] || return 1
+	[ "$(cat -- "$marker")" = "autopilot-cockpit-isolated-v1" ]
+}
+
+unit_absent() {
+	[ "$(systemctl show --property=LoadState --value "$1" 2>/dev/null || true)" = "not-found" ]
+}
+
+isolated_resources_absent() {
+	[ -z "$(ss -H -ltn 'sport = :8443')" ] || return 1
+	[ -z "$(ss -H -ltn 'sport = :8877')" ] || return 1
+	unit_absent "$unit_proxy" || return 1
+	unit_absent "$unit_control_plane" || return 1
+	! nft list table inet "$table_name" >/dev/null 2>&1
+}
 
 perform_cleanup() {
 	local status="$1"
 	local cleanup_status=0
 	set +e
-	systemctl stop "$unit_proxy" >/dev/null 2>&1
-	systemctl stop "$unit_control_plane" >/dev/null 2>&1
-	nft delete table inet "$table_name" >/dev/null 2>&1
-	if [ "$cleanup_can_remove_runtime" = 1 ] || { [ -f "$isolated_runtime/.autopilot-cockpit-isolated-owned" ] && [ ! -L "$isolated_runtime/.autopilot-cockpit-isolated-owned" ] && [ "$(cat "$isolated_runtime/.autopilot-cockpit-isolated-owned")" = "autopilot-cockpit-isolated-v1" ]; }; then
-		rm -rf -- "$isolated_runtime"
+	[ "$cleanup_authorized" = 1 ] || return "$status"
+	if [ "$proxy_started" = 1 ] || ! unit_absent "$unit_proxy"; then
+		systemctl stop "$unit_proxy" >/dev/null 2>&1 || cleanup_status=1
 	fi
-	[ -z "$(ss -H -ltn 'sport = :8443')" ] || cleanup_status=1
-	[ -z "$(ss -H -ltn 'sport = :8877')" ] || cleanup_status=1
-	nft list table inet "$table_name" >/dev/null 2>&1 && cleanup_status=1
+	if [ "$control_plane_started" = 1 ] || ! unit_absent "$unit_control_plane"; then
+		systemctl stop "$unit_control_plane" >/dev/null 2>&1 || cleanup_status=1
+	fi
+	if [ "$nft_created" = 1 ] || nft list table inet "$table_name" >/dev/null 2>&1; then
+		nft delete table inet "$table_name" >/dev/null 2>&1 || cleanup_status=1
+	fi
+	isolated_resources_absent || cleanup_status=1
+	if [ "$cleanup_status" -eq 0 ]; then
+		if [ "$runtime_created" = 1 ] || runtime_evidence_valid; then
+			rm -rf -- "$isolated_runtime" || cleanup_status=1
+		else
+			cleanup_status=1
+		fi
+	fi
 	if [ "$status" -eq 0 ]; then
 		status="$cleanup_status"
 	fi
@@ -48,11 +112,20 @@ cleanup_on_terminate() {
 
 if [ "${1:-}" = "--cleanup" ]; then
 	[ "$#" -le 2 ] || exit 1
-	isolated_runtime="${2:-$default_runtime}"
-	if [ -e "$isolated_runtime" ] && { [ ! -f "$isolated_runtime/.autopilot-cockpit-isolated-owned" ] || [ -L "$isolated_runtime/.autopilot-cockpit-isolated-owned" ] || [ "$(cat "$isolated_runtime/.autopilot-cockpit-isolated-owned" 2>/dev/null)" != "autopilot-cockpit-isolated-v1" ]; }; then
+	[ "$test_mode" = 1 ] || [ "$EUID" -eq 0 ] || exit 1
+	isolated_runtime="$(resolve_safe_runtime_path "${2:-$default_runtime}")"
+	if [ ! -e "$isolated_runtime" ] && [ ! -L "$isolated_runtime" ]; then
+		if isolated_resources_absent; then
+			exit 0
+		fi
+		printf '%s\n' "isolated resources remain without runtime ownership evidence" >&2
+		exit 1
+	fi
+	if ! runtime_evidence_valid; then
 		printf '%s\n' "refusing to remove an unowned isolated runtime" >&2
 		exit 1
 	fi
+	cleanup_authorized=1
 	perform_cleanup 0
 	exit $?
 fi
@@ -65,19 +138,12 @@ fi
 candidate="$(realpath -e -- "$1")"
 release_root="$(realpath -e -- "$2")"
 runtime_input="$3"
-test_mode="${AUTOPILOT_PROXY_TEST_MODE:-0}"
-case "$test_mode" in 0|1) ;; *) exit 1 ;; esac
 
 if [ "$test_mode" = 0 ] && [ "$EUID" -ne 0 ]; then
 	printf '%s\n' "isolated acceptance requires EUID 0" >&2
 	exit 1
 fi
-if [ -e "$runtime_input" ] || [ -L "$runtime_input" ]; then
-	printf '%s\n' "isolated runtime already exists; run --cleanup first" >&2
-	exit 1
-fi
-runtime_parent="$(realpath -e -- "$(dirname -- "$runtime_input")")"
-isolated_runtime="$runtime_parent/$(basename -- "$runtime_input")"
+isolated_runtime="$(resolve_safe_runtime_path "$runtime_input")"
 if [ "$test_mode" = 1 ]; then
 	case "$isolated_runtime" in /tmp/*) ;; *) exit 1 ;; esac
 fi
@@ -128,7 +194,6 @@ fi
 trap cleanup_on_exit EXIT
 trap cleanup_on_interrupt INT
 trap cleanup_on_terminate TERM
-cleanup_can_remove_runtime=1
 
 candidate_uid="$(stat -c %u -- "$candidate")"
 candidate_gid="$(stat -c %g -- "$candidate")"
@@ -139,9 +204,14 @@ if [ "$test_mode" = 0 ]; then
 	caddy_gid="$(id -g caddy)"
 fi
 
-install -d -m 0755 -o "$(id -u)" -g "$(id -g)" "$isolated_runtime"
+mkdir -m 0755 -- "$isolated_runtime"
+[ -d "$isolated_runtime" ] && [ ! -L "$isolated_runtime" ]
+[ "$(stat -c %u:%g:%a -- "$isolated_runtime")" = "$expected_runtime_uid:$expected_runtime_gid:755" ]
+runtime_created=1
+cleanup_authorized=1
 printf '%s\n' "autopilot-cockpit-isolated-v1" > "$isolated_runtime/.autopilot-cockpit-isolated-owned"
 chmod 0600 "$isolated_runtime/.autopilot-cockpit-isolated-owned"
+[ "$(stat -c %u:%g:%a -- "$isolated_runtime/.autopilot-cockpit-isolated-owned")" = "$expected_runtime_uid:$expected_runtime_gid:600" ]
 install -d -m 0700 -o "$candidate_uid" -g "$candidate_gid" "$isolated_runtime/state" "$isolated_runtime/projects"
 install -d -m 0700 -o "$caddy_uid" -g "$caddy_gid" "$isolated_runtime/caddy-data" "$isolated_runtime/caddy-config"
 printf '%s\n' '{"schema_version":"v1","projects":[]}' > "$isolated_runtime/state/projects.json"
@@ -197,6 +267,7 @@ XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/
 	caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
 
 nft add table inet "$table_name"
+nft_created=1
 nft add chain inet "$table_name" input '{ type filter hook input priority -10; policy accept; }'
 nft add rule inet "$table_name" input tcp dport 8443 ip saddr != 192.168.122.1 drop
 
@@ -208,6 +279,7 @@ systemd-run \
 	--property=NoNewPrivileges=yes \
 	--collect \
 	/usr/bin/npm --prefix "$candidate" run control-plane:serve -- "$isolated_runtime/state" 8877 >/dev/null
+control_plane_started=1
 
 systemd-run \
 	--unit=autopilot-cockpit-isolated-proxy \
@@ -217,6 +289,7 @@ systemd-run \
 	--property=NoNewPrivileges=yes \
 	--collect \
 	caddy run --config "$caddyfile" --adapter caddyfile >/dev/null
+proxy_started=1
 
 ready=0
 for _ in $(seq 1 30); do

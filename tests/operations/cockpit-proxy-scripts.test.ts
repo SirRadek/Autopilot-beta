@@ -429,6 +429,19 @@ function makeIsolatedStubs(): { bin: string; log: string } {
   const bin = join(root, "bin");
   const log = join(root, "commands.log");
   mkdirSync(bin);
+  writeExecutable(join(bin, "mkdir"), `
+if [[ -n "\${STUB_RACE_RUNTIME:-}" && "\${*: -1}" == "$STUB_RACE_RUNTIME" ]]; then
+  ln -s "$STUB_RACE_TARGET" "$STUB_RACE_RUNTIME"
+  exit 0
+fi
+exec /usr/bin/mkdir "$@"
+`);
+  writeExecutable(join(bin, "install"), `
+if [[ -n "\${STUB_RACE_RUNTIME:-}" && "\${*: -1}" == "$STUB_RACE_RUNTIME" ]]; then
+  ln -s "$STUB_RACE_TARGET" "$STUB_RACE_RUNTIME"
+fi
+exec /usr/bin/install "$@"
+`);
   writeExecutable(join(bin, "ss"), `
 printf 'ss %s\\n' "$*" >> "$STUB_LOG"
 case "\${STUB_OCCUPIED_PORT:-}" in
@@ -442,7 +455,9 @@ fi
   writeExecutable(join(bin, "nft"), `
 printf 'nft %s\\n' "$*" >> "$STUB_LOG"
 if [[ "$*" == "list table inet autopilot_cockpit_isolated" ]]; then
-  [[ "\${STUB_TABLE_EXISTS:-0}" == 1 ]]
+  if [[ "\${STUB_TABLE_EXISTS:-0}" == 1 ]]; then exit 0; fi
+  if grep -q '^nft delete table inet autopilot_cockpit_isolated$' "$STUB_LOG"; then exit 1; fi
+  grep -q '^nft add table inet autopilot_cockpit_isolated$' "$STUB_LOG"
   exit
 fi
 exit 0
@@ -455,8 +470,16 @@ printf 'caddy %s\\n' "$*" >> "$STUB_LOG"
 printf 'systemctl %s\\n' "$*" >> "$STUB_LOG"
 if [[ "\${1:-}" == show ]]; then
   case "$*" in
-    *autopilot-cockpit-isolated-proxy.service*) [[ "\${STUB_PROXY_UNIT_EXISTS:-0}" == 1 ]] && printf 'loaded\\n' || printf 'not-found\\n' ;;
-    *autopilot-cockpit-isolated-control-plane.service*) [[ "\${STUB_CONTROL_UNIT_EXISTS:-0}" == 1 ]] && printf 'loaded\\n' || printf 'not-found\\n' ;;
+    *autopilot-cockpit-isolated-proxy.service*)
+      if [[ "\${STUB_PROXY_UNIT_EXISTS:-0}" == 1 ]]; then printf 'loaded\\n'
+      elif grep -q '^systemctl stop autopilot-cockpit-isolated-proxy.service$' "$STUB_LOG"; then printf 'not-found\\n'
+      elif grep -q '^systemd-run --unit=autopilot-cockpit-isolated-proxy' "$STUB_LOG"; then printf 'loaded\\n'
+      else printf 'not-found\\n'; fi ;;
+    *autopilot-cockpit-isolated-control-plane.service*)
+      if [[ "\${STUB_CONTROL_UNIT_EXISTS:-0}" == 1 ]]; then printf 'loaded\\n'
+      elif grep -q '^systemctl stop autopilot-cockpit-isolated-control-plane.service$' "$STUB_LOG"; then printf 'not-found\\n'
+      elif grep -q '^systemd-run --unit=autopilot-cockpit-isolated-control-plane' "$STUB_LOG"; then printf 'loaded\\n'
+      else printf 'not-found\\n'; fi ;;
   esac
 fi
 `);
@@ -580,23 +603,24 @@ describe("Cockpit isolated proxy acceptance", () => {
   });
 
   it.each([
-    ["Caddy validation", { STUB_CADDY_VALIDATE_FAIL: "1" }],
-    ["Control Plane startup", { STUB_CONTROL_START_FAIL: "1" }],
-    ["proxy startup", { STUB_PROXY_START_FAIL: "1" }],
-    ["private-key contaminated CA export", { STUB_CA_PAYLOAD_MODE: "private" }],
-    ["CA export with appended DER", { STUB_CA_PAYLOAD_MODE: "appended-der" }],
-    ["CA export with trailing arbitrary data", { STUB_CA_PAYLOAD_MODE: "arbitrary" }],
-    ["CA export with multiple PEM objects", { STUB_CA_PAYLOAD_MODE: "multiple" }],
-  ])("cleans every owned isolated mutation after %s fails", (_label, failureEnv) => {
+    ["Caddy validation", { STUB_CADDY_VALIDATE_FAIL: "1" }, []],
+    ["Control Plane startup", { STUB_CONTROL_START_FAIL: "1" }, ["control", "nft"]],
+    ["proxy startup", { STUB_PROXY_START_FAIL: "1" }, ["proxy", "control", "nft"]],
+    ["private-key contaminated CA export", { STUB_CA_PAYLOAD_MODE: "private" }, ["proxy", "control", "nft"]],
+    ["CA export with appended DER", { STUB_CA_PAYLOAD_MODE: "appended-der" }, ["proxy", "control", "nft"]],
+    ["CA export with trailing arbitrary data", { STUB_CA_PAYLOAD_MODE: "arbitrary" }, ["proxy", "control", "nft"]],
+    ["CA export with multiple PEM objects", { STUB_CA_PAYLOAD_MODE: "multiple" }, ["proxy", "control", "nft"]],
+  ])("cleans every owned isolated mutation after %s fails", (_label, failureEnv, expectedCleanup) => {
     const prepared = prepareIsolatedRun();
+    const cleanupNames = expectedCleanup as string[];
 
     const result = runIsolated(prepared, failureEnv);
 
     expect(result.status).not.toBe(0);
     const log = readFileSync(prepared.stubs.log, "utf8");
-    expect(log).toContain("systemctl stop autopilot-cockpit-isolated-proxy.service");
-    expect(log).toContain("systemctl stop autopilot-cockpit-isolated-control-plane.service");
-    expect(log).toContain("nft delete table inet autopilot_cockpit_isolated");
+    expect(log.includes("systemctl stop autopilot-cockpit-isolated-proxy.service")).toBe(cleanupNames.includes("proxy"));
+    expect(log.includes("systemctl stop autopilot-cockpit-isolated-control-plane.service")).toBe(cleanupNames.includes("control"));
+    expect(log.includes("nft delete table inet autopilot_cockpit_isolated")).toBe(cleanupNames.includes("nft"));
     expect(log).not.toMatch(/nft delete table (?!inet autopilot_cockpit_isolated)/);
     expect(existsSync(prepared.runtime)).toBe(false);
     expect(`${result.stdout}${result.stderr}`).not.toContain("isolated-test-token");
@@ -625,6 +649,66 @@ describe("Cockpit isolated proxy acceptance", () => {
     });
 
     expect(cleanup.status).not.toBe(0);
+    expect(existsSync(prepared.runtime)).toBe(true);
+  });
+
+  it("atomically refuses a runtime symlink race without changing the foreign target", () => {
+    const prepared = prepareIsolatedRun();
+    const foreign = join(makeTempDir(), "foreign-runtime");
+    mkdirSync(foreign, { mode: 0o711 });
+    const before = statSync(foreign);
+
+    const result = runIsolated(prepared, {
+      STUB_RACE_RUNTIME: prepared.runtime,
+      STUB_RACE_TARGET: foreign,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(statSync(foreign).mode & 0o777).toBe(before.mode & 0o777);
+    expect(statSync(foreign).uid).toBe(before.uid);
+    expect(statSync(foreign).gid).toBe(before.gid);
+    const log = readFileSync(prepared.stubs.log, "utf8");
+    expect(log).not.toContain("nft add table");
+    expect(log).not.toContain("systemd-run");
+  });
+
+  it.each(["runtime-symlink", "bad-marker-mode"])(
+    "refuses explicit cleanup with malicious ownership evidence: %s",
+    (variant) => {
+      const prepared = prepareIsolatedRun();
+      const foreign = join(makeTempDir(), "foreign-runtime");
+      mkdirSync(foreign, { mode: 0o755 });
+      writeFileSync(join(foreign, ".autopilot-cockpit-isolated-owned"), "autopilot-cockpit-isolated-v1\n", { mode: 0o600 });
+      if (variant === "runtime-symlink") {
+        symlinkSync(foreign, prepared.runtime);
+      } else {
+        mkdirSync(prepared.runtime, { mode: 0o755 });
+        writeFileSync(join(prepared.runtime, ".autopilot-cockpit-isolated-owned"), "autopilot-cockpit-isolated-v1\n", { mode: 0o644 });
+      }
+
+      const result = spawnSync("bash", [isolatedAcceptance, "--cleanup", prepared.runtime], {
+        encoding: "utf8",
+        env: prepared.env,
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(existsSync(prepared.stubs.log)).toBe(false);
+      expect(existsSync(prepared.runtime)).toBe(true);
+    },
+  );
+
+  it("refuses to mutate orphaned isolated resources when runtime evidence is missing", () => {
+    const prepared = prepareIsolatedRun();
+
+    const result = spawnSync("bash", [isolatedAcceptance, "--cleanup", prepared.runtime], {
+      encoding: "utf8",
+      env: { ...prepared.env, STUB_TABLE_EXISTS: "1" },
+    });
+
+    expect(result.status).not.toBe(0);
+    const log = readFileSync(prepared.stubs.log, "utf8");
+    expect(log).not.toContain("systemctl stop");
+    expect(log).not.toContain("nft delete table");
   });
 
   it.each([
@@ -749,7 +833,16 @@ case "$name" in
     fi
     printf method > "$body"; printf 405 ;;
   login)
-    printf '%s\\n' 'HTTP/2 200' 'Set-Cookie: autopilot_session=session-value; HttpOnly; SameSite=Lax; Path=/; Secure' > "$headers"
+    case "\${STUB_COOKIE_VARIANT:-valid}" in
+      valid) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Path=/; Secure' ;;
+      empty) cookie='autopilot_session=; HttpOnly; SameSite=Lax; Secure' ;;
+      secure-value) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Secure=0' ;;
+      httponly-value) cookie='autopilot_session=session-value; HttpOnly=no; SameSite=Lax; Secure' ;;
+      lax-prefix) cookie='autopilot_session=session-value; HttpOnly; SameSite=Laxevil; Secure' ;;
+      duplicate-secure) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Secure; Secure' ;;
+      comma-joined) cookie='autopilot_session=session-value; HttpOnly; SameSite=Lax; Secure, autopilot_session=shadow; HttpOnly; SameSite=Lax; Secure' ;;
+    esac
+    printf '%s\\n' 'HTTP/2 200' "Set-Cookie: $cookie" > "$headers"
     [[ "\${STUB_MULTI_SESSION_COOKIE:-0}" != 1 ]] || printf '%s\\n' 'Set-Cookie: autopilot_session=shadow; Path=/' >> "$headers"
     printf authenticated > "$body"; printf 200 ;;
   session|status|api-*)
@@ -805,6 +898,7 @@ describe("Cockpit trusted host acceptance", () => {
   it("accepts trusted responses without exposing the token or weakening TLS", () => {
     const { result, log } = runHostAcceptance();
 
+    if (result.status !== 0) throw new Error(`${result.stderr}\n${readFileSync(log, "utf8")}`);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("HOST_PROXY_ACCEPTANCE_OK");
     expect(`${result.stdout}${result.stderr}`).not.toContain("behavioral-secret");
@@ -821,6 +915,12 @@ describe("Cockpit trusted host acceptance", () => {
 
   it.each([
     ["multiple autopilot session cookies", { STUB_MULTI_SESSION_COOKIE: "1" }],
+    ["an empty session value", { STUB_COOKIE_VARIANT: "empty" }],
+    ["Secure=0 instead of a bare Secure token", { STUB_COOKIE_VARIANT: "secure-value" }],
+    ["HttpOnly=no instead of a bare HttpOnly token", { STUB_COOKIE_VARIANT: "httponly-value" }],
+    ["a SameSite=Lax prefix match", { STUB_COOKIE_VARIANT: "lax-prefix" }],
+    ["a duplicate Secure attribute", { STUB_COOKIE_VARIANT: "duplicate-secure" }],
+    ["a comma-joined second session cookie", { STUB_COOKIE_VARIANT: "comma-joined" }],
     ["API-shaped unsupported lookalike POST", { STUB_UNSUPPORTED_API_SHAPED: "1" }],
     ["incomplete Content-Security-Policy", { STUB_INCOMPLETE_CSP: "1" }],
   ])("rejects %s", (_label, extraEnv) => {

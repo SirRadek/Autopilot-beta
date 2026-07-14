@@ -112,15 +112,41 @@ status="$(request login POST "$base_url/auth/login" \
 	--cookie-jar "$cookie_jar")"
 rm -f "$work/login.json"
 require_status "$status" 200 login
+session_cookie_occurrences="$(grep -Eio 'autopilot_session=' "$work/login.headers" | wc -l)"
 mapfile -t session_cookie_lines < <(grep -Ei '^set-cookie:[[:space:]]*autopilot_session=' "$work/login.headers" || true)
-[ "${#session_cookie_lines[@]}" -eq 1 ] || {
+[ "$session_cookie_occurrences" -eq 1 ] && [ "${#session_cookie_lines[@]}" -eq 1 ] || {
 	printf '%s\n' "expected exactly one autopilot_session Set-Cookie header" >&2
 	exit 1
 }
-session_cookie_line="${session_cookie_lines[0],,}"
-[[ "$session_cookie_line" == *"; httponly"* ]]
-[[ "$session_cookie_line" == *"; secure"* ]]
-[[ "$session_cookie_line" == *"; samesite=lax"* ]]
+session_cookie_line="${session_cookie_lines[0]%$'\r'}"
+[[ "$session_cookie_line" != *,* ]] || {
+	printf '%s\n' "comma-joined session cookies are forbidden" >&2
+	exit 1
+}
+IFS=';' read -r -a session_cookie_fields <<< "${session_cookie_line#*:}"
+session_cookie_pair="${session_cookie_fields[0]}"
+session_cookie_pair="${session_cookie_pair#${session_cookie_pair%%[![:space:]]*}}"
+session_cookie_pair="${session_cookie_pair%${session_cookie_pair##*[![:space:]]}}"
+[[ "$session_cookie_pair" =~ ^[Aa][Uu][Tt][Oo][Pp][Ii][Ll][Oo][Tt]_[Ss][Ee][Ss][Ss][Ii][Oo][Nn]=[^[:space:],\;]+$ ]] || {
+	printf '%s\n' "invalid autopilot_session cookie value" >&2
+	exit 1
+}
+secure_count=0
+httponly_count=0
+samesite_lax_count=0
+for session_cookie_attribute in "${session_cookie_fields[@]:1}"; do
+	session_cookie_attribute="${session_cookie_attribute#${session_cookie_attribute%%[![:space:]]*}}"
+	session_cookie_attribute="${session_cookie_attribute%${session_cookie_attribute##*[![:space:]]}}"
+	case "${session_cookie_attribute,,}" in
+		secure) secure_count=$((secure_count + 1)) ;;
+		httponly) httponly_count=$((httponly_count + 1)) ;;
+		samesite=lax) samesite_lax_count=$((samesite_lax_count + 1)) ;;
+	esac
+done
+[ "$secure_count" -eq 1 ] && [ "$httponly_count" -eq 1 ] && [ "$samesite_lax_count" -eq 1 ] || {
+	printf '%s\n' "session cookie security attributes are invalid" >&2
+	exit 1
+}
 
 status="$(request session GET "$base_url/auth/session" --cookie "$cookie_jar")"
 require_status "$status" 200 session
