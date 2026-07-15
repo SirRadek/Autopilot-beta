@@ -69,3 +69,65 @@ The required Task 4 configuration/scripts suite is fully green under the Node-24
 - Rollback refuses to stop or remove proxy resources whose installed identity no longer matches the reviewed source, preventing deletion of foreign replacements.
 - Caddy unmask/enable and both service-start attempts are marked before invocation so partial failures remain rollback-owned.
 - The canonical state backup is retained only as a recovery point and is never automatically restored.
+
+## Review-fix TDD cycle
+
+Review RED was established before implementation changes:
+
+```text
+npm test -- tests/operations/cockpit-proxy-config.test.ts \
+  tests/operations/cockpit-proxy-scripts.test.ts \
+  -t 'production proxy boundary|retains the firewall|no-final-newline|non-single-false|runtime mask'
+Test Files 2 failed (2)
+Tests 7 failed | 2 passed | 107 skipped
+```
+
+The failures proved the reviewed gaps: the firewall was stopped after failed/uncertain Caddy shutdown,
+the unit still contained unconditional nft deletion, no-final-newline environment bytes changed, an
+already-true secure-cookie assignment was accepted, and Caddy metadata/runtime mask location were not
+restored exactly. GREEN evidence is appended below after the complete fix.
+
+Review-fix GREEN:
+
+```text
+AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npm test -- \
+  tests/operations/cockpit-proxy-config.test.ts \
+  tests/operations/cockpit-proxy-scripts.test.ts
+Test Files 2 passed (2)
+Tests 132 passed (132)
+Duration 134.39s
+
+npm test -- tests/operations/cockpit-proxy-scripts.test.ts -t cutover
+Test Files 1 passed (1)
+Tests 44 passed | 87 skipped
+Duration 74.51s
+
+npm test -- tests/operations/cockpit-proxy-config.test.ts
+Test Files 1 passed (1)
+Tests 1 passed (1)
+
+npm run typecheck
+PASS
+bash -n ops/cockpit-proxy/live-cutover.sh ops/cockpit-proxy/autopilot-cockpit-firewall.sh
+PASS
+git diff --check
+PASS
+```
+
+Review findings closed:
+
+- Caddy stop success, transaction-owned Caddy identity, inactive state, and empty `80/443` listeners
+  are all mandatory before the firewall can stop. Uncertainty retains the firewall and emits
+  `ROLLBACK_FAILED`.
+- The unconditional nft deletion unit was replaced by a nonce-bound helper/template. Preflight refuses
+  an existing table; both the cutover and helper validate the exact transaction comment, single table,
+  chain, and rule before deletion. Foreign replacement is preserved.
+- File installations, created directories, daemon reloads, unmask/enable/start attempts, `current`, and
+  environment mutations are individually ledgered before atomic mutation and failure-injected in tests.
+- Package Caddyfile bytes and metadata, runtime versus persistent mask location, and prior enablement
+  links are preserved exactly. Only transaction-created empty directories are removed.
+- `current` and environment rollback occurs only when the live object still matches the transaction
+  target/hash; race and SIGTERM replacement tests prove foreign objects are retained.
+- Secure-cookie mutation accepts exactly one `CONTROL_PLANE_SECURE_COOKIES=false` line and performs a
+  byte-preserving replacement for both final-newline variants; true, missing, and duplicate forms refuse
+  before live mutation.

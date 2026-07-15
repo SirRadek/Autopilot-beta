@@ -10,6 +10,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1160,7 +1161,7 @@ function stubExecutable(directory: string, name: string, source: string): void {
   chmodSync(path, 0o755);
 }
 
-function prepareCutover(): {
+function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; runtimeMask?: boolean } = {}): {
   root: string;
   checkout: string;
   releaseRoot: string;
@@ -1168,6 +1169,9 @@ function prepareCutover(): {
   envPath: string;
   currentPath: string;
   evidencePath: string;
+  caddyConfigPath: string;
+  persistentMaskPath: string;
+  runtimeMaskPath: string;
   previousTarget: string;
   previousEnvironment: Buffer;
   stubLog: string;
@@ -1175,7 +1179,7 @@ function prepareCutover(): {
 } {
   const { checkout } = makeCheckout();
   mkdirSync(join(checkout, "ops", "cockpit-proxy"), { recursive: true });
-  for (const name of ["Caddyfile", "autopilot-cockpit.nft", "autopilot-cockpit-firewall.service", "caddy-autopilot.conf"]) {
+  for (const name of ["Caddyfile", "autopilot-cockpit.nft", "autopilot-cockpit-firewall.service", "autopilot-cockpit-firewall.sh", "caddy-autopilot.conf"]) {
     writeFileSync(join(checkout, "ops", "cockpit-proxy", name), readFileSync(join(process.cwd(), "ops", "cockpit-proxy", name)));
   }
   git(checkout, "add", ".");
@@ -1193,7 +1197,8 @@ function prepareCutover(): {
   const envPath = join(root, "home", "radek", ".config", "autopilot", "control-plane.env");
   const currentPath = join(releaseRoot, "current");
   mkdirSync(dirname(envPath), { recursive: true });
-  const previousEnvironment = Buffer.from("CONTROL_PLANE_TOKEN=secret-do-not-print\nCONTROL_PLANE_SECURE_COOKIES=false\nAUTOPILOT_STATE_DIR=/state\nAUTOPILOT_PROJECTS_DIR=/projects\n");
+  const environmentText = `CONTROL_PLANE_TOKEN=secret-do-not-print\n${options.secureLine ?? "CONTROL_PLANE_SECURE_COOKIES=false"}\nAUTOPILOT_STATE_DIR=/state\nAUTOPILOT_PROJECTS_DIR=/projects${options.finalNewline === false ? "" : "\n"}`;
+  const previousEnvironment = Buffer.from(environmentText);
   writeFileSync(envPath, previousEnvironment, { mode: 0o600 });
   chmodSync(envPath, 0o600);
   const previousTarget = `releases/${"1".repeat(40)}`;
@@ -1201,23 +1206,35 @@ function prepareCutover(): {
   symlinkSync(previousTarget, currentPath);
   const evidencePath = join(root, "var", "lib", "autopilot-cockpit", "isolated-acceptance", `${sha}.ok`);
   mkdirSync(dirname(evidencePath), { recursive: true });
+  chmodSync(join(root, "var", "lib", "autopilot-cockpit"), 0o755);
   writeFileSync(evidencePath, `sha=${sha}\nhost_acceptance=ok\ncleanup=ok\n`, { mode: 0o600 });
   chmodSync(evidencePath, 0o600);
   const stubDir = join(makeTempDir(), "bin");
   mkdirSync(stubDir);
   const stubLog = join(makeTempDir(), "events.log");
   writeFileSync(stubLog, "");
+  const caddyConfigPath = join(root, "etc", "caddy", "Caddyfile");
+  mkdirSync(dirname(caddyConfigPath), { recursive: true });
+  chmodSync(dirname(caddyConfigPath), 0o755);
+  const persistentMaskPath = join(root, "etc", "systemd", "system", "caddy.service");
+  const runtimeMaskPath = join(root, "run", "systemd", "system", "caddy.service");
+  const maskPath = options.runtimeMask ? runtimeMaskPath : persistentMaskPath;
+  mkdirSync(join(root, "etc", "systemd", "system"), { recursive: true });
+  mkdirSync(dirname(maskPath), { recursive: true });
+  chmodSync(join(root, "etc", "systemd", "system"), 0o755);
+  symlinkSync("/dev/null", maskPath);
   const log = 'printf "%s\\n" "' + '${0##*/}' + ':$*" >> "$STUB_LOG"';
-  stubExecutable(stubDir, "ss", `${log}\nif [[ "$*" == *":8787"* ]]; then printf 'LISTEN 0 511 127.0.0.1:8787 0.0.0.0:*\\n'; exit 0; fi\ncase "\${STUB_OCCUPIED_PORT:-}" in 8443|8877) [[ "$*" == *":$STUB_OCCUPIED_PORT"* ]] && printf 'LISTEN occupied\\n'; exit 0 ;; esac\nif grep -q '^systemctl:start caddy.service$' "$STUB_LOG"; then case "$*" in *':80'*) printf 'LISTEN 0 511 192.168.122.99:80 0.0.0.0:*\\n' ;; *':443'*) printf 'LISTEN 0 511 192.168.122.99:443 0.0.0.0:*\\n' ;; esac; fi`);
+  stubExecutable(stubDir, "ss", `${log}\nif [[ "$*" == *":8787"* ]]; then printf 'LISTEN 0 511 127.0.0.1:8787 0.0.0.0:*\\n'; exit 0; fi\ncase "\${STUB_OCCUPIED_PORT:-}" in 8443|8877) [[ "$*" == *":$STUB_OCCUPIED_PORT"* ]] && printf 'LISTEN occupied\\n'; exit 0 ;; esac\nif grep -q '^systemctl:start caddy.service$' "$STUB_LOG" && { [[ "\${STUB_CADDY_SURVIVES_STOP:-0}" == 1 ]] || ! grep -q '^systemctl:stop caddy.service$' "$STUB_LOG"; }; then case "$*" in *':80'*) printf 'LISTEN 0 511 192.168.122.99:80 0.0.0.0:*\\n' ;; *':443'*) printf 'LISTEN 0 511 192.168.122.99:443 0.0.0.0:*\\n' ;; esac; fi`);
   stubExecutable(stubDir, "dpkg", `${log}\n[[ "$1" == -s && "$2" == caddy ]] && exit 0\n[[ "$1" == -V && "$2" == caddy ]] && exit 0\nexit 1`);
   stubExecutable(stubDir, "caddy", `${log}\n[[ "$1" == validate ]]`);
-  stubExecutable(stubDir, "nft", `${log}\nexit 0`);
-  stubExecutable(stubDir, "systemctl", `${log}\nif [[ -n "\${STUB_SYSTEMCTL_FAIL_ON:-}" && "$*" == "$STUB_SYSTEMCTL_FAIL_ON" ]]; then exit 1; fi\ncase "$*" in\n'is-enabled caddy.service') printf 'masked\\n' ;;\n'is-active caddy.service') if grep -q '^systemctl:start caddy.service$' "$STUB_LOG" && ! grep -q '^systemctl:stop caddy.service$' "$STUB_LOG"; then printf 'active\\n'; else printf 'inactive\\n'; exit 3; fi ;;\n'is-active autopilot-control-plane.service') printf 'active\\n' ;;\n'is-active autopilot-control-plane-health.timer') printf 'active\\n' ;;\n'is-active autopilot-state-maintenance.timer') printf 'active\\n' ;;\n'is-active autopilot-cockpit-firewall.service') printf 'active\\n' ;;\n*) exit 0 ;;\nesac`);
+  stubExecutable(stubDir, "nft", `${log}\nstate="$STUB_NFT_STATE"\nif [[ "$*" == '-j list tables' ]]; then if [[ "\${STUB_NFT_EXISTING:-0}" == 1 || -f "$state" ]]; then printf '%s' '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit"}}]}'; else printf '%s' '{"nftables":[]}'; fi; exit 0; fi\nif [[ "$*" == '-j list table inet autopilot_cockpit' ]]; then nonce="$(cat "$state" 2>/dev/null || true)"; comment="autopilot-cockpit:$nonce"; [[ "$nonce" == foreign ]] && comment=foreign; printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit","chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":{"set":[80,443]}}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"; exit 0; fi\nexit 0`);
+  stubExecutable(stubDir, "systemctl", `${log}\nif [[ -n "\${STUB_SYSTEMCTL_FAIL_ON:-}" && "$*" == "$STUB_SYSTEMCTL_FAIL_ON" && "$*" != 'start autopilot-cockpit-firewall.service' ]]; then exit 1; fi\nif [[ "$*" == 'start autopilot-cockpit-firewall.service' ]]; then cat "$STUB_FIREWALL_IDENTITY" > "$STUB_NFT_STATE"; fi\nif [[ "$*" == 'restart autopilot-control-plane.service' ]]; then case "\${STUB_REPLACE_ON_CONTROL_RESTART:-}" in current) rm -f "$STUB_CURRENT_PATH"; ln -s 'releases/2222222222222222222222222222222222222222' "$STUB_CURRENT_PATH"; exit 1;; environment) printf 'FOREIGN=1\\n' > "$STUB_ENV_PATH"; exit 1;; esac; fi\nif [[ "$*" == 'stop caddy.service' && "\${STUB_FOREIGN_NFT_DURING_ROLLBACK:-0}" == 1 ]]; then printf 'foreign\\n' > "$STUB_NFT_STATE"; fi\nif [[ "$*" == 'stop autopilot-cockpit-firewall.service' && -f "$STUB_NFT_STATE" ]]; then rm -f "$STUB_NFT_STATE"; fi\nif [[ -n "\${STUB_SYSTEMCTL_FAIL_ON:-}" && "$*" == "$STUB_SYSTEMCTL_FAIL_ON" ]]; then exit 1; fi\ncase "$*" in\n'is-enabled caddy.service') if [[ "\${STUB_RUNTIME_MASK:-0}" == 1 ]]; then printf 'masked-runtime\\n'; else printf 'masked\\n'; fi ;;\n'is-active caddy.service') if grep -q '^systemctl:start caddy.service$' "$STUB_LOG" && ! grep -q '^systemctl:stop caddy.service$' "$STUB_LOG"; then if [[ "\${STUB_FOREIGN_CADDY_BEFORE_ROLLBACK:-0}" == 1 ]]; then printf 'foreign\\n' > "$STUB_CADDY_CONFIG"; exit 1; fi; printf 'active\\n'; else printf 'inactive\\n'; exit 3; fi ;;\n'is-active autopilot-control-plane.service') printf 'active\\n' ;;\n'is-active autopilot-control-plane-health.timer') printf 'active\\n' ;;\n'is-active autopilot-state-maintenance.timer') printf 'active\\n' ;;\n'is-active autopilot-cockpit-firewall.service') if grep -q '^systemctl:stop autopilot-cockpit-firewall.service$' "$STUB_LOG" && [[ ! -f "$STUB_NFT_STATE" ]]; then printf 'inactive\\n'; exit 3; else printf 'active\\n'; fi ;;\n*) exit 0 ;;\nesac`);
   stubExecutable(stubDir, "curl", `${log}\nout=''; url=''; while (($#)); do case "$1" in --output) out="$2"; shift 2;; http://*) url="$1"; shift;; *) shift;; esac; done\nif [[ "$url" == */ready ]]; then printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$out"; else printf '%s' '{"ok":true}' > "$out"; fi\nprintf 200`);
   stubExecutable(stubDir, "npm", `${log}\ncase "$*" in\n*ops:backup*) archive="$AUTOPILOT_CUTOVER_TEST_ROOT/backup.apbackup.json"; printf '{}\\n' > "$archive"; printf '{"path":"%s","validation":{"valid":true}}\\n' "$archive" ;;\n*ops:recovery-drill*) printf '{"ok":true,"validation":{"ready":true,"reconciled":true,"errors":[]}}\\n' ;;\n*ops:boundary-check*) printf '{"ok":true}\\n' ;;\n*smoke:cockpit-run*) printf '{"mode":"dry-run","provider_invoked":false,"run_status":"completed"}\\n' ;;\n*) exit 1 ;;\nesac`);
 
   return {
-    root, checkout, releaseRoot, sha, envPath, currentPath, evidencePath, previousTarget, previousEnvironment, stubLog,
+    root, checkout, releaseRoot, sha, envPath, currentPath, evidencePath, caddyConfigPath,
+    persistentMaskPath, runtimeMaskPath, previousTarget, previousEnvironment, stubLog,
     env: {
       ...process.env,
       PATH: `${stubDir}:${process.env.PATH}`,
@@ -1227,6 +1244,12 @@ function prepareCutover(): {
       AUTOPILOT_CUTOVER_TEST_AUTO_ACK: "1",
       AUTOPILOT_CUTOVER_TEST_ACK_TIMEOUT: "1",
       AUTOPILOT_NODE_BIN: fakeNode24,
+      STUB_CADDY_CONFIG: caddyConfigPath,
+      STUB_NFT_STATE: join(root, "nft-state"),
+      STUB_FIREWALL_IDENTITY: join(root, "var", "lib", "autopilot-cockpit", "firewall.identity"),
+      STUB_CURRENT_PATH: currentPath,
+      STUB_ENV_PATH: envPath,
+      STUB_RUNTIME_MASK: options.runtimeMask ? "1" : "0",
     },
   };
 }
@@ -1252,6 +1275,13 @@ describe("Cockpit transactional live cutover", () => {
     const events = readFileSync(fixture.stubLog, "utf8");
     expect(events.indexOf("systemctl:start autopilot-cockpit-firewall.service"))
       .toBeLessThan(events.indexOf("systemctl:start caddy.service"));
+    const ledger = readFileSync(join(fixture.root, "run", "autopilot-cockpit-cutover", "transaction.ledger"), "utf8");
+    for (const field of [
+      "firewall_unit_installed=1", "nft_config_installed=1", "firewall_helper_installed=1",
+      "firewall_identity_installed=1", "firewall_reload_attempted=1", "firewall_attempted=1", "current_attempted=1",
+      "environment_attempted=1", "caddy_config_installed=1", "caddy_dropin_installed=1",
+      "caddy_reload_attempted=1", "caddy_unmasked=1", "caddy_enabled=1", "caddy_attempted=1",
+    ]) expect(ledger).toContain(field);
   });
 
   it.each(["firewall", "current", "environment", "control-plane", "caddy-files", "caddy"])(
@@ -1270,6 +1300,29 @@ describe("Cockpit transactional live cutover", () => {
       expect(events).not.toMatch(/nft:delete table (?!inet autopilot_cockpit)/);
     },
   );
+
+  it.each([
+    "firewall-unit-install",
+    "nft-config-install",
+    "firewall-helper-install",
+    "firewall-identity-install",
+    "firewall-reload",
+    "caddy-config-install",
+    "caddy-dropin-install",
+    "caddy-reload",
+  ])("restores every file/install/reload boundary after %s", (phase) => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, { AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: phase });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_OK");
+    for (const path of [
+      join(fixture.root, "etc", "systemd", "system", "autopilot-cockpit-firewall.service"),
+      join(fixture.root, "etc", "nftables.d", "autopilot-cockpit.nft"),
+      join(fixture.root, "usr", "local", "libexec", "autopilot-cockpit-firewall"),
+      join(fixture.root, "var", "lib", "autopilot-cockpit", "firewall.identity"),
+      join(fixture.root, "etc", "systemd", "system", "caddy.service.d", "autopilot.conf"),
+    ]) expect(existsSync(path)).toBe(false);
+  });
 
   it("times out awaiting host acceptance and rolls back", () => {
     const fixture = prepareCutover();
@@ -1336,12 +1389,129 @@ describe("Cockpit transactional live cutover", () => {
   });
 
   it.each([
+    ["Caddy stop fails", { STUB_SYSTEMCTL_FAIL_ON: "stop caddy.service" }],
+    ["Caddy listener survives stop", { STUB_CADDY_SURVIVES_STOP: "1" }],
+    ["Caddy config is replaced before rollback", { STUB_FOREIGN_CADDY_BEFORE_ROLLBACK: "1" }],
+  ])("retains the firewall and reports rollback failure when %s", (_label, extraEnv) => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, {
+      ...extraEnv,
+      ...("STUB_FOREIGN_CADDY_BEFORE_ROLLBACK" in extraEnv ? {} : { AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "caddy" }),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_FAILED");
+    expect(readFileSync(fixture.stubLog, "utf8")).not.toContain("systemctl:stop autopilot-cockpit-firewall.service");
+  });
+
+  it("refuses a pre-existing production nft table before mutation", () => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, { STUB_NFT_EXISTING: "1" });
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(fixture.stubLog, "utf8")).not.toContain("systemctl:start autopilot-cockpit-firewall.service");
+  });
+
+  it("retains a foreign replacement nft table during rollback", () => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, {
+      AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "caddy",
+      STUB_FOREIGN_NFT_DURING_ROLLBACK: "1",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_FAILED");
+    expect(readFileSync(fixture.stubLog, "utf8")).not.toContain("systemctl:stop autopilot-cockpit-firewall.service");
+    expect(readFileSync(fixture.env.STUB_NFT_STATE!, "utf8")).toBe("foreign\n");
+  });
+
+  it("retains the owned firewall artifacts when its stop fails", () => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, {
+      AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "firewall",
+      STUB_SYSTEMCTL_FAIL_ON: "stop autopilot-cockpit-firewall.service",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_FAILED");
+    expect(existsSync(fixture.env.STUB_NFT_STATE!)).toBe(true);
+    expect(existsSync(join(fixture.root, "etc", "systemd", "system", "autopilot-cockpit-firewall.service"))).toBe(true);
+  });
+
+  it.each(["current", "environment"])("preserves a foreign %s replacement and fails rollback", (kind) => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, { STUB_REPLACE_ON_CONTROL_RESTART: kind });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_FAILED");
+    if (kind === "current") expect(readlinkSync(fixture.currentPath)).toBe(`releases/${"2".repeat(40)}`);
+    else expect(readFileSync(fixture.envPath, "utf8")).toBe("FOREIGN=1\n");
+  });
+
+  it.each(["current", "environment"])("preserves a foreign %s replacement across SIGTERM rollback", async (kind) => {
+    const fixture = prepareCutover();
+    const child = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...fixture.env, AUTOPILOT_CUTOVER_TEST_PAUSE_AFTER: kind },
+    });
+    let stdout = "";
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    const ledger = join(fixture.root, "run", "autopilot-cockpit-cutover", "transaction.ledger");
+    const field = kind === "current" ? "current_switched=1" : "environment_changed=1";
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && (!existsSync(ledger) || !readFileSync(ledger, "utf8").includes(field))) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(existsSync(ledger) && readFileSync(ledger, "utf8").includes(field)).toBe(true);
+    if (kind === "current") {
+      rmSync(fixture.currentPath);
+      symlinkSync(`releases/${"3".repeat(40)}`, fixture.currentPath);
+    } else writeFileSync(fixture.envPath, "SIGNAL_FOREIGN=1\n");
+    child.kill("SIGTERM");
+    const status = await new Promise<number | null>((resolve) => child.once("close", resolve));
+    expect(status).not.toBe(0);
+    expect(stdout).toContain("ROLLBACK_FAILED");
+    if (kind === "current") expect(readlinkSync(fixture.currentPath)).toBe(`releases/${"3".repeat(40)}`);
+    else expect(readFileSync(fixture.envPath, "utf8")).toBe("SIGNAL_FOREIGN=1\n");
+  }, 12_000);
+
+  it("preserves a no-final-newline environment while changing exactly false to true", () => {
+    const fixture = prepareCutover({ finalNewline: false });
+    const result = runCutover(fixture);
+    expect(result.status).toBe(0);
+    const changed = readFileSync(fixture.envPath);
+    expect(changed.at(-1)).not.toBe(0x0a);
+    expect(changed.toString("utf8")).toContain("CONTROL_PLANE_SECURE_COOKIES=true");
+  });
+
+  it.each([
+    "CONTROL_PLANE_SECURE_COOKIES=true",
+    "CONTROL_PLANE_SECURE_COOKIES=false\nCONTROL_PLANE_SECURE_COOKIES=false",
+    "NO_SECURE_COOKIE_ASSIGNMENT=1",
+  ])("refuses a non-single-false secure cookie assignment before mutation: %s", (secureLine) => {
+    const fixture = prepareCutover({ secureLine });
+    const result = runCutover(fixture);
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(fixture.stubLog, "utf8")).not.toContain("systemctl:start autopilot-cockpit-firewall.service");
+  });
+
+  it("restores Caddyfile metadata and the original runtime mask location", () => {
+    const fixture = prepareCutover({ runtimeMask: true });
+    mkdirSync(dirname(fixture.caddyConfigPath), { recursive: true });
+    writeFileSync(fixture.caddyConfigPath, "package default\n", { mode: 0o644 });
+    const oldTime = new Date(1_700_000_000_000);
+    utimesSync(fixture.caddyConfigPath, oldTime, oldTime);
+    const result = runCutover(fixture, { AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "caddy" });
+    expect(result.status).not.toBe(0);
+    expect(statSync(fixture.caddyConfigPath).mode & 0o777).toBe(0o644);
+    expect(Math.trunc(statSync(fixture.caddyConfigPath).mtimeMs / 1000)).toBe(Math.trunc(oldTime.getTime() / 1000));
+    const events = readFileSync(fixture.stubLog, "utf8");
+    expect(events).toContain("systemctl:mask --runtime caddy.service");
+    expect(events).not.toContain("systemctl:mask caddy.service");
+  });
+
+  it.each([
     ["dirty checkout", {}],
     ["invalid manifest", {}],
     ["occupied 8443", { STUB_OCCUPIED_PORT: "8443" }],
     ["occupied 8877", { STUB_OCCUPIED_PORT: "8877" }],
     ["missing isolated evidence", {}],
     ["unowned Caddy", {}],
+    ["modified Caddy package mode", {}],
   ])("refuses %s before the first mutation", (label, extraEnv) => {
     const fixture = prepareCutover();
     if (label === "dirty checkout") writeFileSync(join(fixture.checkout, "dirty.txt"), "dirty\n");
@@ -1357,6 +1527,7 @@ describe("Cockpit transactional live cutover", () => {
       mkdirSync(dirname(foreign), { recursive: true });
       writeFileSync(foreign, "foreign\n");
     }
+    if (label === "modified Caddy package mode") writeFileSync(fixture.caddyConfigPath, "package\n", { mode: 0o666 });
     const result = runCutover(fixture, extraEnv);
     expect(result.status).not.toBe(0);
     expect(readFileSync(fixture.stubLog, "utf8")).not.toContain("systemctl:start autopilot-cockpit-firewall.service");

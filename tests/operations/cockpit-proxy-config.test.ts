@@ -14,6 +14,7 @@ describe("Cockpit production proxy boundary", () => {
     const caddy = readProxyFile("Caddyfile");
     const nft = readProxyFile("autopilot-cockpit.nft");
     const firewallUnit = readProxyFile("autopilot-cockpit-firewall.service");
+    const firewallHelper = readProxyFile("autopilot-cockpit-firewall.sh");
     const caddyDropIn = readProxyFile("caddy-autopilot.conf");
 
     expect(caddy).toContain("admin 127.0.0.1:2019");
@@ -28,10 +29,15 @@ describe("Cockpit production proxy boundary", () => {
     }
     expect(caddy).not.toContain("/auth*");
     expect(nft).toContain("table inet autopilot_cockpit");
+    expect(nft).toContain("__AUTOPILOT_COCKPIT_NONCE__");
     expect(nft).toContain("tcp dport { 80, 443 } ip saddr != 192.168.122.1 drop");
     expect(nft).not.toMatch(/dport\s+22|policy\s+drop/i);
-    expect(firewallUnit).toContain("ExecStartPre=-/usr/sbin/nft delete table inet autopilot_cockpit");
-    expect(firewallUnit).toContain("ExecStop=-/usr/sbin/nft delete table inet autopilot_cockpit");
+    expect(firewallUnit).not.toContain("delete table");
+    expect(firewallUnit).toContain("ExecStart=/usr/local/libexec/autopilot-cockpit-firewall start");
+    expect(firewallUnit).toContain("ExecStop=/usr/local/libexec/autopilot-cockpit-firewall stop");
+    expect(firewallHelper).toContain("autopilot-cockpit:");
+    expect(firewallHelper).toContain("nft -j list table inet");
+    expect(firewallHelper).toContain("nft delete table inet");
     expect(caddyDropIn).toContain("Requires=autopilot-cockpit-firewall.service");
   });
 });
