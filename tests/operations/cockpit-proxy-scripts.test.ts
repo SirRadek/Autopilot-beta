@@ -1376,13 +1376,14 @@ describe("Cockpit transactional live cutover", () => {
 
   it.each([
     "invalid-bool", "invalid-enum", "invalid-owner", "invalid-deadline", "invalid-boot-id",
-    "unsafe-path", "invalid-hash", "invalid-identity", "inconsistent-flags",
+    "unsafe-path", "invalid-hash", "invalid-identity", "inconsistent-flags", "multiple-empty-dir-gaps", "caddy-gap-missing-predecessor",
     "unexpected-file", "hidden-file", "double-dot-active", "double-dot-backup", "unexpected-allowed-backup",
-    "hardlinked-file", "symlinked-file",
+    "missing-expected-backup", "injected-plausible-backup", "hardlinked-file", "symlinked-file",
   ])("rejects terminal transaction semantic/tree corruption %s before launcher archival", (kind) => {
     const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);
+    if (kind === "missing-expected-backup") writeFileSync(fixture.caddyConfigPath, "prior caddy config\n", { mode: 0o644 });
     const first = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
-      encoding: "utf8", env: { ...trusted.env, AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "firewall" }, timeout: 15_000,
+      encoding: "utf8", env: { ...trusted.env, AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: kind === "injected-plausible-backup" ? "caddy-files" : "firewall" }, timeout: 15_000,
     });
     expect(first.stdout).toContain("ROLLBACK_OK");
     const active = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active");
@@ -1397,6 +1398,12 @@ describe("Cockpit transactional live cutover", () => {
     else if (kind === "invalid-hash") replace("package_caddy_unit_hash", "g".repeat(64));
     else if (kind === "invalid-identity") replace("environment_pre_identity", "1:2");
     else if (kind === "inconsistent-flags") { replace("firewall_started", "1"); replace("firewall_attempted", "0"); }
+    else if (kind === "multiple-empty-dir-gaps") {
+      for (const key of ["firewall_unit_installed", "nft_config_installed", "firewall_helper_installed", "firewall_identity_installed", "firewall_reload_attempted", "firewall_attempted", "firewall_started"]) replace(key, "0");
+      replace("created_nft_dir", "1"); replace("created_nft_dir_identity", "");
+      replace("created_helper_dir", "1"); replace("created_helper_dir_identity", "");
+    }
+    else if (kind === "caddy-gap-missing-predecessor") { replace("created_caddy_dropin_dir", "1"); replace("created_caddy_dropin_dir_identity", ""); }
     else if (kind === "unexpected-file") writeFileSync(join(active, "foreign"), "foreign\n", { mode: 0o600 });
     else if (kind === "hidden-file") writeFileSync(join(active, ".foreign"), "foreign\n", { mode: 0o600 });
     else if (kind === "double-dot-active") writeFileSync(join(active, "..foreign"), "foreign\n", { mode: 0o600 });
@@ -1405,8 +1412,30 @@ describe("Cockpit transactional live cutover", () => {
       copyFileSync(join(active, "backups", "environment"), join(active, "backups", "caddy-config"));
       chmodSync(join(active, "backups", "caddy-config"), 0o644);
     }
+    else if (kind === "missing-expected-backup") rmSync(join(active, "backups", "caddy-config"));
+    else if (kind === "injected-plausible-backup") {
+      copyFileSync(join(active, "backups", "environment"), join(active, "backups", "caddy-config"));
+      chmodSync(join(active, "backups", "caddy-config"), 0o644);
+    }
     else if (kind === "hardlinked-file") linkSync(join(active, "backups", "environment"), join(active, "backups", "firewall-identity"));
     else symlinkSync("environment", join(active, "backups", "firewall-identity"));
+    const second = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(second.status).not.toBe(0);
+    expect(existsSync(active)).toBe(true);
+    expect(existsSync(join(dirname(active), "history"))).toBe(false);
+  }, 25_000);
+
+  it("rejects an injected plausible backup in a completed transaction", () => {
+    const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);
+    const first = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(first.status, `${first.stdout}\n${first.stderr}`).toBe(0);
+    const active = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active");
+    copyFileSync(join(active, "backups", "environment"), join(active, "backups", "caddy-config"));
+    chmodSync(join(active, "backups", "caddy-config"), 0o644);
     const second = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
       encoding: "utf8", env: trusted.env, timeout: 15_000,
     });
