@@ -39,10 +39,33 @@ long_command() {
 }
 
 project_long() {
-	(
-		cd "$checkout"
-		long_command npm --silent "$@"
-	)
+	local setpriv_bin=/usr/bin/setpriv env_bin=/usr/bin/env npm_bin=/usr/bin/npm project_path=/usr/bin:/bin
+	if [ "$test_mode" = 1 ]; then
+		setpriv_bin="$(command -v setpriv)"; env_bin="$(command -v env)"; npm_bin="$(command -v npm)"
+		project_path="$(dirname "$npm_bin"):/usr/bin:/bin"
+	fi
+	if [ "$test_mode" = 1 ]; then
+		long_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" npm_config_prefix="$checkout" AUTOPILOT_PRIVDROP_ACTIVE=1 STUB_LOG="$STUB_LOG" AUTOPILOT_CUTOVER_TEST_ROOT="$root" "$npm_bin" --silent "$@"
+	else
+		long_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" npm_config_prefix="$checkout" /usr/bin/npm --silent "$@"
+	fi
+}
+
+project_git() {
+	local setpriv_bin=/usr/bin/setpriv env_bin=/usr/bin/env git_bin=/usr/bin/git project_path=/usr/bin:/bin
+	if [ "$test_mode" = 1 ]; then setpriv_bin="$(command -v setpriv)"; env_bin="$(command -v env)"; git_bin="$(command -v git)"; project_path="$(dirname "$git_bin"):/usr/bin:/bin"; fi
+	if [ "$test_mode" = 1 ]; then
+		short_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" AUTOPILOT_PRIVDROP_ACTIVE=1 STUB_LOG="$STUB_LOG" "$git_bin" -C "$checkout" "$@"
+	else
+		short_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" /usr/bin/git -C "$checkout" "$@"
+	fi
+}
+
+proc_starttime() {
+	local pid="$1" rest
+	[ -r "/proc/$pid/stat" ] || return 1
+	rest="$(sed 's/^.*) //' "/proc/$pid/stat")" || return 1
+	printf '%s\n' "$rest" | awk '{print $20}'
 }
 
 runtime="$(under_root /run/autopilot-cockpit-cutover)"
@@ -51,15 +74,58 @@ transaction_dir="$transaction_root/active"
 ledger="$transaction_dir/transaction.ledger"
 runtime_ledger="$runtime/transaction.ledger"
 ack_file="$runtime/host.accepted"
+lock_held=0
+
+open_transaction_lock() {
+	[ -d "$transaction_root" ] && [ ! -L "$transaction_root" ] || return 1
+	[ "$(stat -c %u:%g:%a "$transaction_root")" = "$expected_uid:$expected_gid:700" ] || return 1
+	exec {transaction_lock_fd}>"$transaction_root/transaction.lock"
+	if [ "$test_mode" = 0 ]; then chown 0:0 "$transaction_root/transaction.lock"; fi
+	chmod 0600 "$transaction_root/transaction.lock"
+}
+
+lock_transaction() {
+	[ "$lock_held" = 0 ] || return 0
+	flock -w 30 "$transaction_lock_fd"
+	lock_held=1
+}
+
+unlock_transaction() {
+	[ "$lock_held" = 1 ] || return 0
+	flock -u "$transaction_lock_fd"
+	lock_held=0
+}
 
 inspect_command() {
 	inspection_output=""
 	if inspection_output="$("$@")"; then inspection_rc=0; else inspection_rc=$?; fi
 }
 
+require_active() {
+	inspect_command short_command systemctl is-active "$1"
+	[ "$inspection_rc" -eq 0 ] && [ "$inspection_output" = active ]
+}
+
 ledger_value() {
 	local key="$1"
 	awk -F= -v key="$key" '$1 == key { if (++n > 1) exit 2; print substr($0, length(key) + 2) } END { if (n != 1) exit 2 }' "$ledger"
+}
+
+archive_terminal_transaction() {
+	[ -e "$transaction_dir" ] || [ -L "$transaction_dir" ] || return 0
+	[ -d "$transaction_dir" ] && [ ! -L "$transaction_dir" ] && [ "$(stat -c %u:%g:%a "$transaction_dir")" = "$expected_uid:$expected_gid:700" ] || return 1
+	safe_regular "$ledger" && [ "$(stat -c %a "$ledger")" = 600 ] || return 1
+	local archived_state archived_sha archived_ack history_entry
+	archived_state="$(ledger_value state)"
+	case "$archived_state" in completed|rolled-back) ;; *) return 1 ;; esac
+	archived_sha="$(ledger_value sha)"; archived_ack="$(ledger_value ack_id)"
+	[[ "$archived_sha" =~ ^[a-f0-9]{40}$ && "$archived_ack" =~ ^[a-f0-9]{64}$ ]] || return 1
+	install -d -m 0700 "$transaction_root/history"
+	history_entry="$transaction_root/history/$archived_sha-$archived_ack"
+	[ ! -e "$history_entry" ] && [ ! -L "$history_entry" ] || return 1
+	mv -T "$transaction_dir" "$history_entry"
+	find -P "$history_entry" -type f -exec chmod 0400 {} +
+	find -P "$history_entry" -type d -exec chmod 0500 {} +
 }
 
 safe_regular() {
@@ -78,15 +144,60 @@ safe_owned_symlink() {
 	[ -L "$1" ] && [ "$(stat -c %u:%g "$1")" = "$expected_uid:$expected_gid" ]
 }
 
+trusted_root_executable() {
+	local resolved mode
+	resolved="$(realpath -e "$1")" || return 1
+	[ -f "$resolved" ] && [ ! -L "$resolved" ] && [ -x "$resolved" ] || return 1
+	[ "$(stat -c %u:%g "$resolved")" = 0:0 ] || return 1
+	mode="$(stat -c %a "$resolved")"
+	(( (8#$mode & 8#022) == 0 ))
+}
+
+create_transaction_snapshot() {
+	local name
+	mkdir -m 0700 -- "$snapshot_dir"
+	for name in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer; do
+		project_git show "$accepted_sha:ops/cockpit-proxy/$name" > "$snapshot_dir/$name"
+		chmod 0400 "$snapshot_dir/$name"
+	done
+	install -m 0400 "$package_caddy_unit" "$snapshot_dir/package-caddy.service"
+	install -m 0400 "$recovery_program" "$snapshot_dir/live-cutover.sh"
+	(
+		cd "$snapshot_dir"
+		find -P . -maxdepth 1 -type f -printf '%f\0' | LC_ALL=C sort -z | xargs -0 sha256sum
+	) > "$transaction_dir/snapshot.sha256"
+	chmod 0400 "$transaction_dir/snapshot.sha256"
+	chmod 0500 "$snapshot_dir"
+	if [ "$test_mode" = 0 ]; then chown -R 0:0 "$snapshot_dir" "$transaction_dir/snapshot.sha256"; fi
+}
+
+transaction_snapshot_valid() {
+	[ -d "$snapshot_dir" ] && [ ! -L "$snapshot_dir" ] && [ "$(stat -c %u:%g:%a "$snapshot_dir")" = "$expected_uid:$expected_gid:500" ] || return 1
+	safe_regular "$transaction_dir/snapshot.sha256" && [ "$(stat -c %a "$transaction_dir/snapshot.sha256")" = 400 ] || return 1
+	[ "$(find -P "$snapshot_dir" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 9 ] || return 1
+	[ -z "$(find -P "$snapshot_dir" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ] || return 1
+	[ -z "$(find -P "$snapshot_dir" -type f \( ! -uid "$expected_uid" -o ! -gid "$expected_gid" -o ! -perm 0400 \) -print -quit)" ] || return 1
+	(cd "$snapshot_dir" && sha256sum --check --strict "$transaction_dir/snapshot.sha256" >/dev/null)
+}
+
 if [ "${1:-}" = "--accept" ]; then
 	[ "$#" -eq 2 ] || exit 1
 	ack_id="$2"
 	[[ "$ack_id" =~ ^[a-f0-9]{64}$ ]] || { printf '%s\n' "invalid acknowledgement ID" >&2; exit 1; }
+	open_transaction_lock
+	lock_transaction
 	[ -d "$runtime" ] && [ ! -L "$runtime" ] || exit 1
 	[ "$(stat -c %u:%g:%a -- "$runtime")" = "$expected_uid:$expected_gid:700" ] || exit 1
 	safe_regular "$ledger" && [ "$(stat -c %a -- "$ledger")" = 600 ] || exit 1
-	[ "$(sed -n 's/^state=//p' "$ledger")" = waiting ] || exit 1
-	[ "$(sed -n 's/^ack_id=//p' "$ledger")" = "$ack_id" ] || exit 1
+	[ "$(ledger_value state)" = waiting ] || exit 1
+	[ "$(ledger_value ack_id)" = "$ack_id" ] || exit 1
+	ack_owner_pid="$(ledger_value owner_pid)"; ack_owner_starttime="$(ledger_value owner_starttime)"
+	ack_boot_id="$(ledger_value boot_id)"; ack_deadline="$(ledger_value deadline_epoch)"
+	[[ "$ack_owner_pid" =~ ^[0-9]+$ && "$ack_owner_starttime" =~ ^[0-9]+$ && "$ack_deadline" =~ ^[0-9]+$ ]] || exit 1
+	[ "$ack_boot_id" = "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || printf unknown)" ] || exit 1
+	kill -0 "$ack_owner_pid" 2>/dev/null
+	[ "$(proc_starttime "$ack_owner_pid")" = "$ack_owner_starttime" ]
+	[ "$(date +%s)" -le "$ack_deadline" ]
 	[ ! -e "$ack_file" ] && [ ! -L "$ack_file" ] || exit 1
 	umask 077
 	tmp_ack="$(mktemp -- "$runtime/.host.accepted.XXXXXXXXXX")"
@@ -98,6 +209,7 @@ if [ "${1:-}" = "--accept" ]; then
 	tmp_ack=""
 	trap - EXIT
 	printf '%s\n' "CUTOVER_HOST_ACCEPTANCE_ACKNOWLEDGED"
+	unlock_transaction
 	exit 0
 fi
 
@@ -111,6 +223,8 @@ elif [ "$#" -ne 3 ]; then
 fi
 
 if [ "$recover_mode" = 1 ]; then
+	open_transaction_lock
+	lock_transaction
 	safe_regular "$ledger" && [ "$(stat -c %a -- "$ledger")" = 600 ] || { printf '%s\n' RECOVERY_NOT_NEEDED; exit 0; }
 	case "$(ledger_value state)" in completed|rolled-back) printf '%s\n' RECOVERY_NOT_NEEDED; exit 0 ;; esac
 	checkout="$(ledger_value checkout)"
@@ -126,12 +240,21 @@ if [ "$recover_mode" = 0 ]; then
 	[ ! -L "$1" ] && [ ! -L "$2" ] || exit 1
 	[ "$1" = "$checkout" ] && [ "$2" = "$release_root" ] || exit 1
 else
-	[ "$(realpath -e -- "$checkout")" = "$checkout" ] && [ "$(realpath -e -- "$release_root")" = "$release_root" ] || exit 1
+	[ "$(realpath -e -- "$release_root")" = "$release_root" ] || exit 1
 fi
 if [ "$test_mode" = 0 ]; then [ "$release_root" = /srv/autopilot-cockpit ] || exit 1; fi
 [ "$(stat -c %u:%g:%a -- "$release_root")" = "$expected_uid:$expected_gid:755" ]
-exec {release_lock_fd}<"$release_root"
-flock -w 30 "$release_lock_fd"
+if [ "$recover_mode" = 0 ]; then
+	exec {release_lock_fd}<"$release_root"
+	flock -w 30 "$release_lock_fd"
+	if [ -e "$transaction_dir" ] || [ -L "$transaction_dir" ]; then
+		[ -d "$transaction_root" ] && [ ! -L "$transaction_root" ] && [ "$(stat -c %u:%g:%a "$transaction_root")" = "$expected_uid:$expected_gid:700" ] || exit 1
+		open_transaction_lock
+		lock_transaction
+		archive_terminal_transaction
+		unlock_transaction
+	fi
+fi
 
 environment="$(under_root /home/radek/.config/autopilot/control-plane.env)"
 caddy_config="$(under_root /etc/caddy/Caddyfile)"
@@ -153,10 +276,17 @@ evidence="$(under_root "/var/lib/autopilot-cockpit/isolated-acceptance/$accepted
 release="$release_root/releases/$accepted_sha"
 manifest="$release_root/manifests/$accepted_sha.sha256"
 current="$release_root/current"
-source_dir="$checkout/ops/cockpit-proxy"
-checkout_uid="$(stat -c %u -- "$checkout")"
-checkout_gid="$(stat -c %g -- "$checkout")"
-node_bin="${AUTOPILOT_NODE_BIN:-/usr/bin/node}"
+checkout_source_dir="$checkout/ops/cockpit-proxy"
+snapshot_dir="$transaction_dir/snapshot"
+source_dir="$snapshot_dir"
+if [ "$recover_mode" = 0 ]; then
+	checkout_uid="$(stat -c %u -- "$checkout")"
+	checkout_gid="$(stat -c %g -- "$checkout")"
+	if [ "$test_mode" = 0 ]; then
+		[ "$checkout_uid" = "$(id -u radek)" ] && [ "$checkout_gid" = "$(id -g radek)" ] || exit 1
+	fi
+fi
+if [ "$test_mode" = 1 ]; then node_bin="${AUTOPILOT_NODE_BIN:-/usr/bin/node}"; else node_bin=/usr/bin/node; fi
 
 cutover_started=0
 rollback_started=0
@@ -204,10 +334,11 @@ registered_temp_kind=""
 registered_temp_identity=""
 
 write_ledger() {
-	local state="$1" tmp
+	local state="$1" tmp acquired=0
+	if [ "$lock_held" = 0 ]; then lock_transaction; acquired=1; fi
 	tmp="$(mktemp -- "$transaction_dir/.ledger.XXXXXXXXXX")"
-	printf 'version=autopilot-cockpit-cutover-v3\nstate=%s\nack_id=%s\nsha=%s\ncheckout=%s\nrelease_root=%s\nowner_pid=%s\nboot_id=%s\ndeadline_epoch=%s\nprior_mask_kind=%s\nprior_persistent_enable=%s\nprior_runtime_enable=%s\nprior_persistent_enable_target=%s\nprior_runtime_enable_target=%s\nprior_current_kind=%s\nprior_current_target=%s\nenvironment_owned_hash=%s\npackage_caddy_unit_hash=%s\npackage_caddy_unit_metadata=%s\nregistered_temp_path=%s\nregistered_temp_kind=%s\nregistered_temp_identity=%s\ncreated_nft_dir=%s\ncreated_helper_dir=%s\ncreated_caddy_dropin_dir=%s\nfirewall_unit_installed=%s\nnft_config_installed=%s\nfirewall_helper_installed=%s\nfirewall_identity_installed=%s\nfirewall_reload_attempted=%s\nfirewall_attempted=%s\nfirewall_started=%s\ncurrent_attempted=%s\ncurrent_switched=%s\nenvironment_attempted=%s\nenvironment_changed=%s\ncontrol_plane_restarted=%s\ncaddy_files_installed=%s\ncaddy_config_installed=%s\ncaddy_dropin_installed=%s\ncaddy_reload_attempted=%s\ncaddy_unmasked=%s\ncaddy_enabled=%s\ncaddy_attempted=%s\ncaddy_started=%s\n' \
-		"$state" "$ack_id" "$accepted_sha" "$checkout" "$release_root" "${transaction_owner_pid:-$$}" "${transaction_boot_id:-unknown}" "${transaction_deadline_epoch:-0}" "$prior_mask_kind" "$prior_persistent_enable" "$prior_runtime_enable" "$prior_persistent_enable_target" "$prior_runtime_enable_target" "$prior_current_kind" "$prior_current_target" "$environment_owned_hash" "$package_caddy_unit_hash" "$package_caddy_unit_metadata" "$registered_temp_path" "$registered_temp_kind" "$registered_temp_identity" "$created_nft_dir" "$created_helper_dir" "$created_caddy_dropin_dir" "$firewall_unit_installed" "$nft_config_installed" "$firewall_helper_installed" "$firewall_identity_installed" "$firewall_reload_attempted" "$firewall_attempted" "$firewall_started" "$current_attempted" "$current_switched" "$environment_attempted" "$environment_changed" "$control_plane_restarted" "$caddy_files_installed" "$caddy_config_installed" "$caddy_dropin_installed" "$caddy_reload_attempted" "$caddy_unmasked" "$caddy_enabled" "$caddy_attempted" "$caddy_started" > "$tmp"
+	printf 'version=autopilot-cockpit-cutover-v4\nstate=%s\nack_id=%s\nsha=%s\ncheckout=%s\nrelease_root=%s\nowner_pid=%s\nowner_starttime=%s\nboot_id=%s\ndeadline_epoch=%s\nprior_mask_kind=%s\nprior_persistent_enable=%s\nprior_runtime_enable=%s\nprior_persistent_enable_target=%s\nprior_runtime_enable_target=%s\nprior_current_kind=%s\nprior_current_target=%s\nenvironment_owned_hash=%s\npackage_caddy_unit_hash=%s\npackage_caddy_unit_metadata=%s\nregistered_temp_path=%s\nregistered_temp_kind=%s\nregistered_temp_identity=%s\ncreated_nft_dir=%s\ncreated_helper_dir=%s\ncreated_caddy_dropin_dir=%s\nfirewall_unit_installed=%s\nnft_config_installed=%s\nfirewall_helper_installed=%s\nfirewall_identity_installed=%s\nfirewall_reload_attempted=%s\nfirewall_attempted=%s\nfirewall_started=%s\ncurrent_attempted=%s\ncurrent_switched=%s\nenvironment_attempted=%s\nenvironment_changed=%s\ncontrol_plane_restarted=%s\ncaddy_files_installed=%s\ncaddy_config_installed=%s\ncaddy_dropin_installed=%s\ncaddy_reload_attempted=%s\ncaddy_unmasked=%s\ncaddy_enabled=%s\ncaddy_attempted=%s\ncaddy_started=%s\n' \
+		"$state" "$ack_id" "$accepted_sha" "$checkout" "$release_root" "${transaction_owner_pid:-$$}" "${transaction_owner_starttime:-0}" "${transaction_boot_id:-unknown}" "${transaction_deadline_epoch:-0}" "$prior_mask_kind" "$prior_persistent_enable" "$prior_runtime_enable" "$prior_persistent_enable_target" "$prior_runtime_enable_target" "$prior_current_kind" "$prior_current_target" "$environment_owned_hash" "$package_caddy_unit_hash" "$package_caddy_unit_metadata" "$registered_temp_path" "$registered_temp_kind" "$registered_temp_identity" "$created_nft_dir" "$created_helper_dir" "$created_caddy_dropin_dir" "$firewall_unit_installed" "$nft_config_installed" "$firewall_helper_installed" "$firewall_identity_installed" "$firewall_reload_attempted" "$firewall_attempted" "$firewall_started" "$current_attempted" "$current_switched" "$environment_attempted" "$environment_changed" "$control_plane_restarted" "$caddy_files_installed" "$caddy_config_installed" "$caddy_dropin_installed" "$caddy_reload_attempted" "$caddy_unmasked" "$caddy_enabled" "$caddy_attempted" "$caddy_started" > "$tmp"
 	chmod 0600 "$tmp"
 	if [ "$test_mode" = 0 ]; then chown 0:0 "$tmp"; fi
 	mv -T -- "$tmp" "$ledger"
@@ -215,6 +346,7 @@ write_ledger() {
 		tmp="$(mktemp -- "$runtime/.ledger.XXXXXXXXXX")"
 		cp -- "$ledger" "$tmp" && chmod 0600 "$tmp" && { [ "$test_mode" = 1 ] || chown 0:0 "$tmp"; } && mv -T -- "$tmp" "$runtime_ledger"
 	fi
+	if [ "$acquired" = 1 ]; then unlock_transaction; fi
 }
 
 temp_identity() {
@@ -301,6 +433,7 @@ caddy_installed_identity_valid() {
 	[ -f "$caddy_config" ] && [ ! -L "$caddy_config" ] && cmp -s "$source_dir/Caddyfile" "$caddy_config" || return 1
 	[ -f "$caddy_dropin" ] && [ ! -L "$caddy_dropin" ] && cmp -s "$source_dir/caddy-autopilot.conf" "$caddy_dropin" || return 1
 	[ -f "$package_caddy_unit" ] && [ ! -L "$package_caddy_unit" ] || return 1
+	cmp -s "$source_dir/package-caddy.service" "$package_caddy_unit" || return 1
 	[ "$(sha256sum "$package_caddy_unit" | awk '{print $1}')" = "$package_caddy_unit_hash" ] || return 1
 	[ "$(stat -c %u:%g:%a "$package_caddy_unit")" = "$package_caddy_unit_metadata" ]
 }
@@ -323,6 +456,7 @@ validate_secure_cookie_environment() {
 const fs=require("fs"),{TextDecoder}=require("util"),b=fs.readFileSync(process.env.ENV_INPUT);
 let s;try{s=new TextDecoder("utf-8",{fatal:true}).decode(b)}catch{process.exit(1)}
 if(s.includes("\0"))process.exit(1);
+if(/\\\r?\n/.test(s))process.exit(1);
 const lines=s.split("\n"),mentions=lines.filter(v=>v.includes("CONTROL_PLANE_SECURE_COOKIES"));
 if(mentions.length!==1||mentions[0]!=="CONTROL_PLANE_SECURE_COOKIES=false")process.exit(1);'
 }
@@ -370,6 +504,7 @@ recovery_checks() {
 
 rollback_verification() {
 	loopback_checks
+	[ "$recover_mode" = 0 ] || return 0
 	local state_dir projects_dir
 	state_dir="$(sed -n 's/^AUTOPILOT_STATE_DIR=//p' "$environment")"
 	projects_dir="$(sed -n 's/^AUTOPILOT_PROJECTS_DIR=//p' "$environment")"
@@ -524,19 +659,20 @@ trap on_term TERM
 
 if [ "$recover_mode" = 1 ]; then
 	[ -d "$transaction_dir" ] && [ ! -L "$transaction_dir" ] && [ "$(stat -c %u:%g:%a "$transaction_dir")" = "$expected_uid:$expected_gid:700" ] || exit 1
-	exec {transaction_lock_fd}>"$transaction_root/recovery.lock"
-	flock -w 30 "$transaction_lock_fd"
 	state="$(ledger_value state)"
 	case "$state" in completed|rolled-back) printf '%s\n' RECOVERY_NOT_NEEDED; exit 0 ;; prepared|mutating|verifying|waiting|rolling-back|rollback-failed) ;; *) exit 1 ;; esac
 	transaction_owner_pid="$(ledger_value owner_pid)"
+	transaction_owner_starttime="$(ledger_value owner_starttime)"
 	transaction_boot_id="$(ledger_value boot_id)"
 	transaction_deadline_epoch="$(ledger_value deadline_epoch)"
-	[[ "$transaction_owner_pid" =~ ^[0-9]+$ && "$transaction_deadline_epoch" =~ ^[0-9]+$ ]] || exit 1
+	[[ "$transaction_owner_pid" =~ ^[0-9]+$ && "$transaction_owner_starttime" =~ ^[0-9]+$ && "$transaction_deadline_epoch" =~ ^[0-9]+$ ]] || exit 1
 	current_boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || printf unknown)"
-	if [ "$transaction_boot_id" = "$current_boot_id" ] && kill -0 "$transaction_owner_pid" 2>/dev/null && [ "$(date +%s)" -le "$transaction_deadline_epoch" ]; then
+	if [ "$transaction_boot_id" = "$current_boot_id" ] && kill -0 "$transaction_owner_pid" 2>/dev/null && [ "$(proc_starttime "$transaction_owner_pid" 2>/dev/null || true)" = "$transaction_owner_starttime" ] && [ "$(date +%s)" -le "$transaction_deadline_epoch" ]; then
 		printf '%s\n' RECOVERY_OWNER_ACTIVE
 		exit 0
 	fi
+	exec {release_lock_fd}<"$release_root"
+	flock -w 30 "$release_lock_fd"
 	ack_id="$(ledger_value ack_id)"
 	[[ "$ack_id" =~ ^[a-f0-9]{64}$ ]] || exit 1
 	prior_mask_kind="$(ledger_value prior_mask_kind)"
@@ -568,6 +704,8 @@ if [ "$recover_mode" = 1 ]; then
 		value="$(ledger_value "$flag")"
 		case "$value" in 0|1) printf -v "$flag" '%s' "$value" ;; *) exit 1 ;; esac
 	done
+	if [ "$firewall_unit_installed" = 1 ] || [ "$nft_config_installed" = 1 ] || [ "$firewall_helper_installed" = 1 ]; then firewall_files_installed=1; fi
+	transaction_snapshot_valid || exit 1
 	cutover_started=1
 	rollback
 	[ "$rollback_failed" = 0 ]
@@ -575,9 +713,12 @@ if [ "$recover_mode" = 1 ]; then
 fi
 
 # Complete every refusal check before creating the transaction runtime or touching live state.
+if [ "$test_mode" = 0 ]; then
+	for trusted_binary in /usr/bin/setpriv /usr/bin/env /usr/bin/git /usr/bin/npm /usr/bin/node /usr/bin/caddy; do trusted_root_executable "$trusted_binary" || exit 1; done
+fi
 [ -x "$node_bin" ] && case "$(short_command "$node_bin" --version)" in v24.*) ;; *) exit 1 ;; esac
-[ "$(git -C "$checkout" rev-parse HEAD)" = "$accepted_sha" ]
-[ -z "$(git -C "$checkout" status --porcelain)" ]
+[ "$(project_git rev-parse HEAD)" = "$accepted_sha" ]
+[ -z "$(project_git status --porcelain)" ]
 [ -d "$release" ] && [ ! -L "$release" ] && safe_regular "$manifest"
 [ "$(stat -c %a -- "$manifest")" = 444 ]
 [ -z "$(find -P "$release" -mindepth 1 ! -type d ! -type f -print -quit)" ]
@@ -592,9 +733,9 @@ environment_gid="$(stat -c %g -- "$environment")"
 if [ "$test_mode" = 0 ]; then [ "$environment_uid" = "$(id -u radek)" ] && [ "$environment_gid" = "$(id -g radek)" ]; fi
 validate_secure_cookie_environment "$environment"
 loopback_checks
-short_command systemctl is-active autopilot-control-plane.service >/dev/null
-short_command systemctl is-active autopilot-control-plane-health.timer >/dev/null
-short_command systemctl is-active autopilot-state-maintenance.timer >/dev/null
+require_active autopilot-control-plane.service
+require_active autopilot-control-plane-health.timer
+require_active autopilot-state-maintenance.timer
 short_command dpkg -s caddy >/dev/null
 caddy_enable_state="$(short_command systemctl is-enabled caddy.service 2>/dev/null)"
 case "$caddy_enable_state" in masked|masked-runtime) ;; *) exit 1 ;; esac
@@ -606,14 +747,12 @@ for port in 80 443 8443 8877; do
 	inspect_command timeout --signal=TERM --kill-after=2s 5s ss -H -ltn "sport = :$port"
 	if [ "$inspection_rc" -ne 0 ] || [ -n "$inspection_output" ]; then exit 1; fi
 done
-for source in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer; do safe_checkout_regular "$source_dir/$source" || exit 1; done
-short_command caddy validate --config "$source_dir/Caddyfile" --adapter caddyfile >/dev/null
+for source in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer; do safe_checkout_regular "$checkout_source_dir/$source" || exit 1; done
 [ -f "$recovery_program" ] && [ ! -L "$recovery_program" ] && [ "$(stat -c %u:%g:%a "$recovery_program")" = "$expected_uid:$expected_gid:755" ] && cmp -s "$0" "$recovery_program"
-[ -f "$recovery_service" ] && [ ! -L "$recovery_service" ] && [ "$(stat -c %u:%g:%a "$recovery_service")" = "$expected_uid:$expected_gid:644" ] && cmp -s "$source_dir/autopilot-cockpit-cutover-recovery.service" "$recovery_service"
-[ -f "$recovery_timer" ] && [ ! -L "$recovery_timer" ] && [ "$(stat -c %u:%g:%a "$recovery_timer")" = "$expected_uid:$expected_gid:644" ] && cmp -s "$source_dir/autopilot-cockpit-cutover-recovery.timer" "$recovery_timer"
+[ -f "$recovery_service" ] && [ ! -L "$recovery_service" ] && [ "$(stat -c %u:%g:%a "$recovery_service")" = "$expected_uid:$expected_gid:644" ] && cmp -s "$checkout_source_dir/autopilot-cockpit-cutover-recovery.service" "$recovery_service"
+[ -f "$recovery_timer" ] && [ ! -L "$recovery_timer" ] && [ "$(stat -c %u:%g:%a "$recovery_timer")" = "$expected_uid:$expected_gid:644" ] && cmp -s "$checkout_source_dir/autopilot-cockpit-cutover-recovery.timer" "$recovery_timer"
 safe_owned_symlink "$recovery_timer_enable" && [ "$(readlink "$recovery_timer_enable")" = ../autopilot-cockpit-cutover-recovery.timer ]
-inspect_command short_command systemctl is-active autopilot-cockpit-cutover-recovery.timer
-if [ "$inspection_rc" -ne 0 ] || { [ "$test_mode" = 0 ] && [ "$inspection_output" != active ]; }; then exit 1; fi
+require_active autopilot-cockpit-cutover-recovery.timer
 safe_regular "$evidence" && [ "$(stat -c %a -- "$evidence")" = 600 ]
 [ "$(cat "$evidence")" = "sha=$accepted_sha
 host_acceptance=ok
@@ -652,9 +791,19 @@ package_caddy_unit_hash="$(sha256sum "$package_caddy_unit" | awk '{print $1}')"
 
 install -d -m 0700 "$transaction_root"
 [ "$(stat -c %u:%g:%a -- "$transaction_root")" = "$expected_uid:$expected_gid:700" ]
+open_transaction_lock
+lock_transaction
 mkdir -m 0700 -- "$transaction_dir"
 transaction_created=1
-mkdir -m 0700 -- "$runtime"
+if [ -e "$runtime" ] || [ -L "$runtime" ]; then
+	[ -d "$runtime" ] && [ ! -L "$runtime" ] && [ "$(stat -c %u:%g:%a "$runtime")" = "$expected_uid:$expected_gid:700" ] || exit 1
+	for old_runtime_file in "$runtime_ledger" "$ack_file"; do
+		if [ -e "$old_runtime_file" ] || [ -L "$old_runtime_file" ]; then safe_regular "$old_runtime_file" && [ "$(stat -c %a "$old_runtime_file")" = 600 ] || exit 1; rm -f "$old_runtime_file"; fi
+	done
+	[ -z "$(find -P "$runtime" -mindepth 1 -maxdepth 1 -print -quit)" ] || exit 1
+else
+	mkdir -m 0700 -- "$runtime"
+fi
 [ "$(stat -c %u:%g:%a -- "$runtime")" = "$expected_uid:$expected_gid:700" ]
 runtime_created=1
 mkdir -m 0700 -- "$transaction_dir/backups"
@@ -664,13 +813,19 @@ for item in "caddy-config:$caddy_config" "caddy-dropin:$caddy_dropin" "firewall-
 	name="${item%%:*}"; path="${item#*:}"
 	if [ -e "$path" ]; then [ -f "$path" ] && [ ! -L "$path" ] || exit 1; cp -a "$path" "$transaction_dir/backups/$name"; fi
 done
+create_transaction_snapshot
+transaction_snapshot_valid
+short_command caddy validate --config "$source_dir/Caddyfile" --adapter caddyfile >/dev/null
 ack_id="${AUTOPILOT_CUTOVER_TEST_ACK_ID:-}"
 if [ "$test_mode" = 0 ] || [ -z "$ack_id" ]; then ack_id="$(openssl rand -hex 32)"; fi
 [[ "$ack_id" =~ ^[a-f0-9]{64}$ ]] || exit 1
 transaction_owner_pid="$$"
+transaction_owner_starttime="$(proc_starttime "$$")"
+[[ "$transaction_owner_starttime" =~ ^[0-9]+$ ]] || exit 1
 transaction_boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || printf unknown)"
 transaction_deadline_epoch="$(( $(date +%s) + 600 ))"
 write_ledger prepared
+unlock_transaction
 
 rendered_nft="$transaction_dir/.nft-check-$ack_id"
 rendered_identity="$(NFT_TEMPLATE="$source_dir/autopilot-cockpit.nft" NFT_NONCE="$ack_id" "$node_bin" -e 'const fs=require("fs"),s=fs.readFileSync(process.env.NFT_TEMPLATE,"utf8"),p="__AUTOPILOT_COCKPIT_NONCE__";if((s.match(new RegExp(p,"g"))||[]).length!==3)process.exit(1);process.stdout.write(s.split(p).join(process.env.NFT_NONCE))' | sha256sum | awk '{print $1}')"
@@ -691,15 +846,19 @@ firewall_files_installed=1
 firewall_unit_installed=1; write_ledger mutating
 tmp_install="$(dirname "$firewall_unit")/.firewall-unit-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/autopilot-cockpit-firewall.service" | awk '{print $1}')"; install -m 0644 "$source_dir/autopilot-cockpit-firewall.service" "$tmp_install"; mv -T "$tmp_install" "$firewall_unit"; clear_registered_temp
 fail_after firewall-unit-install
+test_pause_after firewall-unit-install
 nft_config_installed=1; write_ledger mutating
 tmp_install="$(dirname "$nft_config")/.nft-config-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/autopilot-cockpit.nft" | awk '{print $1}')"; install -m 0644 "$source_dir/autopilot-cockpit.nft" "$tmp_install"; mv -T "$tmp_install" "$nft_config"; clear_registered_temp
 fail_after nft-config-install
+test_pause_after nft-config-install
 firewall_helper_installed=1; write_ledger mutating
 tmp_install="$(dirname "$firewall_helper")/.firewall-helper-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/autopilot-cockpit-firewall.sh" | awk '{print $1}')"; install -m 0755 "$source_dir/autopilot-cockpit-firewall.sh" "$tmp_install"; mv -T "$tmp_install" "$firewall_helper"; clear_registered_temp
 fail_after firewall-helper-install
+test_pause_after firewall-helper-install
 firewall_identity_installed=1; write_ledger mutating
 tmp_install="$(dirname "$firewall_identity")/.firewall-identity-$ack_id"; register_temp "$tmp_install" file "$(printf '%s\n' "$ack_id" | sha256sum | awk '{print $1}')"; printf '%s\n' "$ack_id" > "$tmp_install"; chmod 0600 "$tmp_install"; if [ "$test_mode" = 0 ]; then chown 0:0 "$tmp_install"; fi; mv -T "$tmp_install" "$firewall_identity"; clear_registered_temp
 fail_after firewall-identity-install
+test_pause_after firewall-identity-install
 firewall_reload_attempted=1; write_ledger mutating
 short_command systemctl daemon-reload >/dev/null
 fail_after firewall-reload
@@ -747,9 +906,11 @@ caddy_files_installed=1
 caddy_config_installed=1; write_ledger mutating
 tmp_install="$(dirname "$caddy_config")/.caddy-config-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/Caddyfile" | awk '{print $1}')"; install -m 0644 "$source_dir/Caddyfile" "$tmp_install"; mv -T "$tmp_install" "$caddy_config"; clear_registered_temp
 fail_after caddy-config-install
+test_pause_after caddy-config-install
 caddy_dropin_installed=1; write_ledger mutating
 tmp_install="$(dirname "$caddy_dropin")/.caddy-dropin-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/caddy-autopilot.conf" | awk '{print $1}')"; install -m 0644 "$source_dir/caddy-autopilot.conf" "$tmp_install"; mv -T "$tmp_install" "$caddy_dropin"; clear_registered_temp
 fail_after caddy-dropin-install
+test_pause_after caddy-dropin-install
 caddy_reload_attempted=1; write_ledger mutating
 short_command systemctl daemon-reload >/dev/null
 fail_after caddy-reload
@@ -763,12 +924,11 @@ caddy_attempted=1; write_ledger mutating
 short_command systemctl start caddy.service
 caddy_started=1; write_ledger verifying
 fail_after caddy
+test_pause_after caddy
 caddy_installed_identity_valid
 loopback_checks
-inspect_command short_command systemctl is-active autopilot-cockpit-firewall.service
-if [ "$inspection_rc" -ne 0 ] || [ "$inspection_output" != active ]; then exit 1; fi
-inspect_command short_command systemctl is-active caddy.service
-if [ "$inspection_rc" -ne 0 ] || [ "$inspection_output" != active ]; then exit 1; fi
+require_active autopilot-cockpit-firewall.service
+require_active caddy.service
 caddy_installed_identity_valid
 for port in 80 443; do
 	listener="$(short_command ss -H -ltn "sport = :$port")"
@@ -777,21 +937,33 @@ for port in 80 443; do
 	[[ "$listener" != *"0.0.0.0:$port"* && "$listener" != *"[::]:$port"* ]]
 done
 
+ack_timeout=300
+if [ "$test_mode" = 1 ]; then ack_timeout="${AUTOPILOT_CUTOVER_TEST_ACK_TIMEOUT:-1}"; [[ "$ack_timeout" =~ ^[1-5]$ ]] || exit 1; fi
+transaction_deadline_epoch="$(( $(date +%s) + ack_timeout ))"
 write_ledger waiting
 printf 'CUTOVER_WAITING_FOR_HOST_ACCEPTANCE ACK_ID=%s\n' "$ack_id"
 if [ "$test_mode" = 1 ] && [ "${AUTOPILOT_CUTOVER_TEST_AUTO_ACK:-0}" = 1 ]; then
 	AUTOPILOT_CUTOVER_TEST_ACK_ID="$ack_id" bash "$0" --accept "$ack_id" >/dev/null
 fi
-ack_timeout=300
-if [ "$test_mode" = 1 ]; then ack_timeout="${AUTOPILOT_CUTOVER_TEST_ACK_TIMEOUT:-1}"; [[ "$ack_timeout" =~ ^[1-5]$ ]] || exit 1; fi
 deadline=$((SECONDS + ack_timeout))
 while (( SECONDS < deadline )); do
+	lock_transaction
+	observed_state="$(ledger_value state)"
+	if [ "$observed_state" != waiting ]; then
+		unlock_transaction
+		rollback_started=1
+		cutover_started=0
+		printf '%s\n' "cutover ownership lost to recovery" >&2
+		exit 1
+	fi
 	if safe_regular "$ack_file" && [ "$(stat -c %a -- "$ack_file")" = 600 ] && [ "$(cat "$ack_file")" = "$ack_id" ]; then
 		write_ledger completed
+		unlock_transaction
 		cutover_started=0
 		printf '%s\n' CUTOVER_OK
 		exit 0
 	fi
+	unlock_transaction
 	sleep 1
 done
 printf '%s\n' "host acceptance acknowledgement timed out" >&2

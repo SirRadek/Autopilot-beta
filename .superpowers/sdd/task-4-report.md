@@ -187,3 +187,71 @@ Second-review findings closed:
   Partial firewall start is reversible only with exact file identity and proven table absence.
 - Caddy stop authorization covers the transaction Caddyfile/drop-in and original package unit hash and
   metadata, with identity rechecked immediately after start/state inspection.
+
+## Closure-review TDD cycle
+
+Closure-review RED:
+
+```text
+AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npm test -- \
+  tests/operations/cockpit-proxy-scripts.test.ts \
+  -t 'sanitized radek|immutable transaction snapshot|PID starttime|SIGKILL immediately|backslash-newline|exact active stdout|subsequent cutover'
+Test Files 1 failed (1)
+Tests 13 failed | 4 passed | 148 skipped
+Duration 46.68s
+```
+
+The RED run demonstrated direct project `npm` execution without a privilege boundary, no immutable
+transaction snapshot or PID starttime, checkout-dependent recovery, missing publication-boundary
+containment, acceptance of an unrelated backslash continuation, and no terminal-transaction rotation.
+The exact-active cases were then strengthened to assert refusal before the first firewall publication.
+
+Closure-review GREEN:
+
+```text
+AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npm test -- \
+  tests/operations/cockpit-proxy-config.test.ts \
+  tests/operations/cockpit-proxy-scripts.test.ts
+Test Files 2 passed (2)
+Tests 169 passed (169)
+Duration 281.36s
+
+npm run typecheck
+PASS
+
+bash -n ops/cockpit-proxy/live-cutover.sh \
+  ops/cockpit-proxy/autopilot-cockpit-firewall.sh \
+  ops/cockpit-proxy/install-cutover-recovery-watchdog.sh
+PASS
+
+git diff --check
+PASS
+```
+
+Closure-review findings closed:
+
+- Production verifies the checkout owner as the exact `radek` UID/GID and verifies fixed root-owned,
+  non-writable `setpriv`, `env`, `git`, `npm`, `node`, and `caddy` binaries. Checkout `git` and all
+  project `npm` commands run behind bounded `setpriv --clear-groups` plus `env -i`; root never executes
+  checkout or `node_modules` code. Test instrumentation proves hostile inherited environment is absent.
+- Before live mutation, reviewed proxy artifacts are materialized from the accepted commit through the
+  privilege-dropped Git boundary; the package Caddy unit and installed recovery program come only from
+  fixed root-owned paths. All enter a root-owned mode-0500/0400 snapshot with a strict SHA-256 manifest. Recovery
+  validates and uses only this snapshot, fixed live paths, ledger, and backups. It performs no checkout,
+  release-code, `git`, or `npm` diagnostic and succeeds after the checkout is removed, including after
+  Caddy has started.
+- Main, ACK, and recovery share one root-owned transaction lock. Ledger v4 records boot ID, PID,
+  `/proc` starttime, and a deadline renewed for the waiting state. ACK requires the exact live owner;
+  recovery takes over only after exact owner death or expiry. A concurrent two-recovery-plus-ACK test
+  proves one rollback, one idempotent no-op, rejected ACK, and no `CUTOVER_OK` race.
+- Recovery derives aggregate firewall-file ownership from the individually durable publication flags.
+  SIGKILL tests cover all firewall files, `current`, environment, both Caddy files, and started Caddy;
+  each recovers without checkout access while retaining all foreign-object safeguards.
+- Environment validation rejects every physical backslash-newline continuation in the complete file.
+  All relevant active-state inspections require both status zero and exact stdout `active`.
+- Under the shared lock, a completed or rolled-back active transaction is moved to a root-owned,
+  read-only history entry before the next release preflight; a subsequent cutover regression test passes.
+
+The host remains on Node `v18.19.1`, so the repository-wide `npm run verify` limitation documented
+above is unchanged. Task 4's complete configuration/scripts suite was run through the explicit Node 24
+seam; no VM, live service, network provider, or canonical-state restore was invoked.
