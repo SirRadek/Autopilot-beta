@@ -131,3 +131,59 @@ Review findings closed:
 - Secure-cookie mutation accepts exactly one `CONTROL_PLANE_SECURE_COOKIES=false` line and performs a
   byte-preserving replacement for both final-newline variants; true, missing, and duplicate forms refuse
   before live mutation.
+
+## Second review-fix TDD cycle
+
+Second-review RED:
+
+```text
+npm test -- tests/operations/cockpit-proxy-scripts.test.ts \
+  -t 'fails closed|offline nft|partial files|Caddy dropin identity|Caddy unit identity|EnvironmentFile ambiguity|invalid UTF-8|registered transaction temporary|recovers an uncompleted'
+Test Files 1 failed (1)
+Tests 8 failed | 16 passed | 124 skipped
+```
+
+The RED cases specifically demonstrated fail-open command-result handling, missing offline nft syntax
+validation, unsafe partial-start classification, incomplete Caddy identity, and the absence of durable
+post-process recovery. Environment ambiguity, invalid UTF-8, and the initial temporary cleanup cases
+were already rejected by conservative existing checks and remain explicit regression coverage.
+
+Second-review GREEN:
+
+```text
+AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npm test -- \
+  tests/operations/cockpit-proxy-config.test.ts \
+  tests/operations/cockpit-proxy-scripts.test.ts
+Test Files 2 passed (2)
+Tests 150 passed (150)
+Duration 179.84s
+
+npm run typecheck
+PASS
+
+bash -n ops/cockpit-proxy/live-cutover.sh \
+  ops/cockpit-proxy/autopilot-cockpit-firewall.sh \
+  ops/cockpit-proxy/install-cutover-recovery-watchdog.sh
+PASS
+
+git diff --check
+PASS
+```
+
+Second-review findings closed:
+
+- External inspections preserve and validate command status separately from stdout. Caddy uses the
+  exact inactive/failed contract; `dpkg -V`, listener, nftables, and post-start checks fail closed.
+- The EnvironmentFile uses fatal UTF-8 decoding and accepts one byte-exact, unquoted physical false
+  assignment. Whitespace, quoting, continuations, duplicates, NUL, and invalid UTF-8 refuse early.
+- The authoritative atomic ledger/backups are root-only under
+  `/var/lib/autopilot-cockpit/transactions/active`; `/run` is only an ACK/compatibility mirror.
+  Locked `--recover` validates every persisted field and is idempotent after successful rollback.
+- A root-installed recovery program, boot-persistent 30-second timer, and 180-second oneshot service
+  provide bounded process-loss/reboot recovery. Production refuses without byte-exact active recovery.
+- Normal-path temporaries are registered before creation with exact path, type, and SHA-256 identity;
+  recovery removes only a matching object and retains foreign replacements.
+- The nonce-rendered nft program passes bounded offline `nft --check --file` before live mutation.
+  Partial firewall start is reversible only with exact file identity and proven table absence.
+- Caddy stop authorization covers the transaction Caddyfile/drop-in and original package unit hash and
+  metadata, with identity rechecked immediately after start/state inspection.

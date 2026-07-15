@@ -1,0 +1,8 @@
+[Unit]
+Description=Recover an interrupted Autopilot Cockpit cutover
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/autopilot-cockpit-live-cutover --recover
+TimeoutStartSec=180

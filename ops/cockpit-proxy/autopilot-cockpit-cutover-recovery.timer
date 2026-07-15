@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch for interrupted Autopilot Cockpit cutovers
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Persistent=true
+Unit=autopilot-cockpit-cutover-recovery.service
+
+[Install]
+WantedBy=timers.target

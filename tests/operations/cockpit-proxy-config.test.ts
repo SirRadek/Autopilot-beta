@@ -40,4 +40,19 @@ describe("Cockpit production proxy boundary", () => {
     expect(firewallHelper).toContain("nft delete table inet");
     expect(caddyDropIn).toContain("Requires=autopilot-cockpit-firewall.service");
   });
+
+  it("defines a bounded boot-persistent cutover recovery watchdog", () => {
+    const service = readProxyFile("autopilot-cockpit-cutover-recovery.service");
+    const timer = readProxyFile("autopilot-cockpit-cutover-recovery.timer");
+    const installer = readProxyFile("install-cutover-recovery-watchdog.sh");
+
+    expect(service).toContain("ExecStart=/usr/local/libexec/autopilot-cockpit-live-cutover --recover");
+    expect(service).toContain("TimeoutStartSec=180");
+    expect(timer).toContain("OnBootSec=30s");
+    expect(timer).toContain("OnUnitActiveSec=30s");
+    expect(timer).toContain("Persistent=true");
+    expect(timer).toContain("WantedBy=timers.target");
+    expect(installer).toContain("systemctl enable --now autopilot-cockpit-cutover-recovery.timer");
+    expect(installer).toContain("/usr/local/libexec/autopilot-cockpit-live-cutover");
+  });
 });
