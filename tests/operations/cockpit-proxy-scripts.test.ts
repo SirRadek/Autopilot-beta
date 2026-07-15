@@ -477,9 +477,15 @@ fi
 if [[ "$*" == "-j list table inet autopilot_cockpit_isolated" ]]; then
   [[ "$present" == 1 ]] || exit 1
   nonce="$(cat "$STUB_LOG.nonce" 2>/dev/null || printf '%064d' 9)"
-  [[ "\${STUB_FOREIGN_REPLACEMENT:-}" != nft ]] || nonce="$(printf '%064d' 8)"
+  post_started=0
+  grep -q '^systemd-run --unit=autopilot-cockpit-isolated-control-plane' "$STUB_LOG" && \
+    grep -q '^systemd-run --unit=autopilot-cockpit-isolated-proxy' "$STUB_LOG" && post_started=1
+  nft_checks=0
+  if [[ "$post_started" == 1 ]]; then nft_checks=$(( $(cat "$STUB_LOG.nft-checks" 2>/dev/null || printf 0) + 1 )); printf '%s' "$nft_checks" > "$STUB_LOG.nft-checks"; fi
+  if [[ "\${STUB_FOREIGN_REPLACEMENT:-}" == nft ]] || [[ "\${STUB_POST_START_REPLACEMENT:-}" == nft && "$post_started" == 1 ]] || \
+    [[ "\${STUB_POST_START_REPLACEMENT:-}" == nft-late && "$nft_checks" -ge 2 ]]; then nonce="$(printf '%064d' 8)"; fi
   comment="autopilot-isolated:$nonce"
-  printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit_isolated","name":"input","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit_isolated","chain":"input","comment":"%s"}}]}' "$comment" "$comment" "$comment"
+  printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit_isolated","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit_isolated","chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":8443}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"
   exit 0
 fi
 exit 0
@@ -493,10 +499,17 @@ printf 'systemctl %s\\n' "$*" >> "$STUB_LOG"
 if [[ "\${1:-}" == show ]]; then
   [[ "\${STUB_SYSTEMCTL_INSPECT_FAIL:-0}" != 1 ]] || exit 2
   if [[ "$*" == *--property=Description* ]]; then
-    if [[ "\${STUB_FOREIGN_REPLACEMENT:-}" == unit ]]; then printf 'Autopilot isolated %064d\\n' 8
+    post_started=0
+    grep -q '^systemd-run --unit=autopilot-cockpit-isolated-control-plane' "$STUB_LOG" && \
+      grep -q '^systemd-run --unit=autopilot-cockpit-isolated-proxy' "$STUB_LOG" && post_started=1
+    unit_checks=0
+    if [[ "$post_started" == 1 ]]; then unit_checks=$(( $(cat "$STUB_LOG.unit-checks" 2>/dev/null || printf 0) + 1 )); printf '%s' "$unit_checks" > "$STUB_LOG.unit-checks"; fi
+    if [[ "\${STUB_FOREIGN_REPLACEMENT:-}" == unit ]] || [[ "\${STUB_POST_START_REPLACEMENT:-}" == unit && "$post_started" == 1 ]] || \
+      [[ "\${STUB_POST_START_REPLACEMENT:-}" == unit-late && "$unit_checks" -ge 3 ]]; then printf 'Autopilot isolated %064d\\n' 8
     else sed -n 's/.*--property=Description=Autopilot isolated \\([a-f0-9]\\{64\\}\\).*/Autopilot isolated \\1/p' "$STUB_LOG" | tail -1; fi
     exit 0
   fi
+  if [[ "$*" == *--property=ActiveState* ]]; then printf 'active\\n'; exit 0; fi
   case "$*" in
     *autopilot-cockpit-isolated-proxy.service*)
       if [[ "\${STUB_PROXY_UNIT_EXISTS:-0}" == 1 ]]; then printf 'loaded\\n'
@@ -828,6 +841,21 @@ describe("Cockpit isolated proxy acceptance", () => {
     if (kind === "nft") expect(added).not.toContain("nft delete table");
   });
 
+  it.each(["unit", "nft", "unit-late", "nft-late"])("fails closed when %s identity is replaced after startup", (kind) => {
+    const prepared = prepareIsolatedRun();
+
+    const result = runIsolated(prepared, { STUB_POST_START_REPLACEMENT: kind });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("ISOLATED_ACCEPTANCE_READY");
+    expect(existsSync(prepared.runtime)).toBe(true);
+    const log = readFileSync(prepared.stubs.log, "utf8");
+    expect(log).not.toContain("systemctl stop");
+    expect(log).not.toContain("nft delete table");
+    expect(readFileSync(join(prepared.runtime, ".autopilot-cockpit-isolated-owned"), "utf8"))
+      .toContain("nonce=");
+  });
+
   it.each(["unit", "nft"])("does not take over a foreign %s that wins the create race", (kind) => {
     const prepared = prepareIsolatedRun();
     const result = runIsolated(prepared, kind === "unit"
@@ -884,6 +912,20 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(existsSync(prepared.stubs.log)).toBe(false);
   });
 
+  it("rejects changed candidate content with identical release topology before mutation", () => {
+    const prepared = prepareIsolatedRun();
+    const candidateIndex = join(prepared.checkout, "cockpit", "dist", "index.html");
+    git(prepared.checkout, "update-index", "--assume-unchanged", "cockpit/dist/index.html");
+    writeFileSync(candidateIndex, "candidate content changed after staging\n");
+    expect(git(prepared.checkout, "status", "--porcelain")).toBe("");
+
+    const result = runIsolated(prepared);
+
+    expect(result.status).not.toBe(0);
+    expect(existsSync(prepared.runtime)).toBe(false);
+    expect(existsSync(prepared.stubs.log)).toBe(false);
+  });
+
   it("defines an isolated trusted-origin browser test with artifact capture disabled", () => {
     const config = readFileSync(join(process.cwd(), "playwright.proxy.config.ts"), "utf8");
     const spec = readFileSync(join(process.cwd(), "tests", "browser-proxy", "cockpit-proxy.spec.ts"), "utf8");
@@ -917,6 +959,7 @@ if [[ "\${1:-}" == x509 ]]; then cat >/dev/null; fi
   writeExecutable(join(bin, "npx"), `
 [[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
 [[ "\${1:-}" == --no-install ]]
+if [[ "\${STUB_NPX_IGNORE_TERM:-0}" == 1 ]]; then trap '' TERM; while :; do :; done; fi
 printf 'playwright trusted-origin\\n' >> "$STUB_LOG"
 `);
   writeExecutable(join(bin, "curl"), `
@@ -985,7 +1028,10 @@ case "$name" in
 esac
 `);
 
-  const result = spawnSync("bash", [hostAcceptance], {
+  const outerTimeout = extraEnv.TEST_OUTER_TIMEOUT_SECONDS;
+  const command = outerTimeout ? "/usr/bin/timeout" : "bash";
+  const args = outerTimeout ? ["--signal=KILL", `${outerTimeout}s`, "bash", hostAcceptance] : [hostAcceptance];
+  const result = spawnSync(command, args, {
     cwd: process.cwd(),
     encoding: "utf8",
     env: {
@@ -1023,9 +1069,12 @@ describe("Cockpit trusted host acceptance", () => {
     expect(source).toContain("HOST_PROXY_ACCEPTANCE_OK");
     expect(source).toContain("--connect-timeout 2");
     expect(source).toContain("--max-time 5");
-    expect(source).toMatch(/timeout 5s openssl s_client/);
-    expect(source).toMatch(/timeout [0-9]+s bash -c/);
-    expect(source).toMatch(/timeout [0-9]+s npx --no-install playwright/);
+    expect(source).toContain("npx --no-install playwright");
+    const isolatedSource = readFileSync(isolatedAcceptance, "utf8");
+    const timeoutWrappers = `${source}\n${isolatedSource}`.split("\n")
+      .filter((line) => /\btimeout\b/.test(line) && !line.includes("--connect-timeout"));
+    expect(timeoutWrappers).toHaveLength(7);
+    expect(timeoutWrappers.every((line) => /timeout --signal=TERM --kill-after=/.test(line))).toBe(true);
   });
 
   it("accepts trusted responses without exposing the token or weakening TLS", () => {
@@ -1070,4 +1119,34 @@ describe("Cockpit trusted host acceptance", () => {
     expect(result.status).not.toBe(0);
     expect(readFileSync(log, "utf8")).not.toContain("login.headers");
   });
+  it("hard-kills a token command that ignores TERM", () => {
+    const started = Date.now();
+    const { result, log } = runHostAcceptance({
+      AUTOPILOT_PROXY_TEST_MODE: "1",
+      AUTOPILOT_PROXY_TEST_TOKEN_TIMEOUT: "1s",
+      AUTOPILOT_PROXY_TEST_TOKEN_KILL_AFTER: "1s",
+      TEST_OUTER_TIMEOUT_SECONDS: "4",
+      TEST_TOKEN_COMMAND: "trap '' TERM; while :; do :; done",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(Date.now() - started).toBeLessThan(3500);
+    expect(readFileSync(log, "utf8")).not.toContain("login.headers");
+  });
+
+  it("hard-kills Playwright when its runner ignores TERM", () => {
+    const started = Date.now();
+    const { result } = runHostAcceptance({
+      AUTOPILOT_PROXY_TEST_MODE: "1",
+      AUTOPILOT_PROXY_TEST_PLAYWRIGHT_TIMEOUT: "1s",
+      AUTOPILOT_PROXY_TEST_PLAYWRIGHT_KILL_AFTER: "1s",
+      TEST_OUTER_TIMEOUT_SECONDS: "4",
+      STUB_NPX_IGNORE_TERM: "1",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(Date.now() - started).toBeLessThan(3500);
+    expect(result.stdout).not.toContain("HOST_PROXY_ACCEPTANCE_OK");
+  });
+
 });

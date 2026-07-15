@@ -13,6 +13,27 @@ case "$base_url" in
 esac
 [ -n "$token_command" ] || { printf '%s\n' "AUTOPILOT_PROXY_TOKEN_COMMAND is required" >&2; exit 1; }
 
+test_mode="${AUTOPILOT_PROXY_TEST_MODE:-0}"
+case "$test_mode" in
+	0|1) ;;
+	*) exit 1 ;;
+esac
+openssl_timeout=5s
+openssl_kill_after=2s
+token_timeout=30s
+token_kill_after=5s
+playwright_timeout=120s
+playwright_kill_after=10s
+if [ "$test_mode" = 1 ]; then
+	token_timeout="${AUTOPILOT_PROXY_TEST_TOKEN_TIMEOUT:-$token_timeout}"
+	token_kill_after="${AUTOPILOT_PROXY_TEST_TOKEN_KILL_AFTER:-$token_kill_after}"
+	playwright_timeout="${AUTOPILOT_PROXY_TEST_PLAYWRIGHT_TIMEOUT:-$playwright_timeout}"
+	playwright_kill_after="${AUTOPILOT_PROXY_TEST_PLAYWRIGHT_KILL_AFTER:-$playwright_kill_after}"
+fi
+for duration in "$openssl_timeout" "$openssl_kill_after" "$token_timeout" "$token_kill_after" "$playwright_timeout" "$playwright_kill_after"; do
+	[[ "$duration" =~ ^[1-9][0-9]*s$ ]] || exit 1
+done
+
 work="$(mktemp -d)"
 cleanup() {
 	local status=$?
@@ -28,9 +49,9 @@ cookie_jar="$work/cookie.jar"
 : > "$cookie_jar"
 chmod 600 "$cookie_jar"
 
-timeout 5s openssl s_client -connect "autopilot.local:$tls_port" -servername autopilot.local \
+timeout --signal=TERM --kill-after="$openssl_kill_after" "$openssl_timeout" openssl s_client -connect "autopilot.local:$tls_port" -servername autopilot.local \
 	-verify_return_error </dev/null 2>/dev/null \
-	| timeout 5s openssl x509 -noout -checkhost autopilot.local >/dev/null
+	| timeout --signal=TERM --kill-after="$openssl_kill_after" "$openssl_timeout" openssl x509 -noout -checkhost autopilot.local >/dev/null
 
 request() {
 	local name="$1"
@@ -103,7 +124,7 @@ fi
 token_stdout="$work/token-command.stdout"
 : > "$token_stdout"
 chmod 600 "$token_stdout"
-timeout 30s bash -c "$token_command" >"$token_stdout" 2>"$work/token-command.stderr" || {
+timeout --signal=TERM --kill-after="$token_kill_after" "$token_timeout" bash -c "$token_command" >"$token_stdout" 2>"$work/token-command.stderr" || {
 	printf '%s\n' "token command failed or timed out" >&2
 	exit 1
 }
@@ -185,7 +206,7 @@ require_status "$status" 200 logout
 status="$(request logged-out GET "$base_url/auth/session" --cookie "$cookie_jar")"
 require_status "$status" 401 logged-out
 
-AUTOPILOT_PROXY_TEST_TOKEN="$token" timeout 120s npx --no-install playwright test --config playwright.proxy.config.ts
+AUTOPILOT_PROXY_TEST_TOKEN="$token" timeout --signal=TERM --kill-after="$playwright_kill_after" "$playwright_timeout" npx --no-install playwright test --config playwright.proxy.config.ts
 unset token TOKEN_TO_ENCODE
 
 printf '%s\n' "HOST_PROXY_ACCEPTANCE_OK"

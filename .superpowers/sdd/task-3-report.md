@@ -157,6 +157,50 @@ git diff --check
 
 All exited `0`.
 
+## Latest closure review: content, identity, and hard timeouts
+
+RED evidence was captured independently for each finding before its production change:
+
+```text
+candidate content: 1 failed | 80 skipped (same topology incorrectly reached READY)
+post-start identity: 2 failed | 81 skipped (foreign unit and nft incorrectly reached READY)
+hard timeout flags: 1 failed | 84 skipped (kill-after contract absent)
+```
+
+GREEN evidence after the bounded fixes:
+
+```text
+focused closure regressions: 7 passed | 80 skipped
+Tests 7 passed (candidate mapping, early/late unit+nft identity, hard timeout behavior)
+full operations after late-checkpoint expansion: 87 passed
+Tests 87 passed (87)
+```
+
+Candidate files are compared to the staged manifest with the same sorted, NUL-safe `sha256sum`
+mapping used by staging. Resource identity is checked after startup and immediately before READY,
+including active units and exact nft chain/rule semantics. All timeout wrappers use TERM plus a
+bounded KILL escalation; TERM-ignoring token and Playwright children are exercised behaviorally.
+
+Final verification commands all exited `0`:
+
+```text
+AUTOPILOT_NODE_BIN=/tmp/autopilot-node24-test npx vitest run tests/operations/cockpit-proxy-scripts.test.ts
+Test Files  1 passed (1)
+Tests       87 passed (87)
+
+npm run typecheck
+bash -n ops/cockpit-proxy/isolated-acceptance.sh ops/cockpit-proxy/host-acceptance.sh
+AUTOPILOT_PROXY_BASE_URL=https://autopilot.local:8443 AUTOPILOT_PROXY_TEST_TOKEN=isolated-test-token \
+  npx --no-install playwright test --config playwright.proxy.config.ts --list
+Total: 1 test in 1 file
+
+git diff --check
+```
+
+The Node wrapper is the already documented local staging-test seam: it reports Node 24 only for
+the staging runtime guard and delegates actual execution to the installed Node binary. No runtime,
+VM, service, nftables, provider, or production state was touched.
+
 ## Self-review
 
 - Cleanup is installed before the first runtime mutation, exercised after Caddy validation failure, Control Plane startup failure, proxy startup failure, CA contamination, and `TERM`, and disabled only after complete success evidence. `INT`/`TERM` handlers clean and terminate with nonzero signal status.

@@ -67,6 +67,15 @@ unit_identity_matches() {
 	[ "$description" = "Autopilot isolated $ownership_nonce" ]
 }
 
+unit_active_identity_matches() {
+	local load_state active_state
+	load_state="$(unit_load_state "$1")" || return 2
+	[ "$load_state" = "loaded" ] || return 1
+	active_state="$(systemctl show --property=ActiveState --value "$1" 2>/dev/null)" || return 2
+	[ "$active_state" = "active" ] || return 1
+	unit_identity_matches "$1"
+}
+
 socket_absent() {
 	local output
 	output="$(ss -H -ltn "sport = :$1")" || return 2
@@ -99,8 +108,26 @@ const table = entries.filter((e) => e.table?.family === "inet" && e.table?.name 
 const chain = entries.filter((e) => e.chain?.family === "inet" && e.chain?.table === process.env.NFT_TABLE_NAME && e.chain?.name === "input");
 const rule = entries.filter((e) => e.rule?.family === "inet" && e.rule?.table === process.env.NFT_TABLE_NAME && e.rule?.chain === "input");
 if (table.length !== 1 || chain.length !== 1 || rule.length !== 1) process.exit(1);
-if (table[0].table.comment !== expected || chain[0].chain.comment !== expected || rule[0].rule.comment !== expected) process.exit(1);
+const expectedExpr = [
+  { match: { op: "==", left: { payload: { protocol: "tcp", field: "dport" } }, right: 8443 } },
+  { match: { op: "!=", left: { payload: { protocol: "ip", field: "saddr" } }, right: "192.168.122.1" } },
+  { drop: null },
+];
+const c = chain[0].chain;
+const r = rule[0].rule;
+if (table[0].table.comment !== expected || c.comment !== expected || r.comment !== expected) process.exit(1);
+if (c.type !== "filter" || c.hook !== "input" || c.prio !== -10 || c.policy !== "accept") process.exit(1);
+if (JSON.stringify(r.expr) !== JSON.stringify(expectedExpr)) process.exit(1);
 '
+}
+
+isolated_resources_identity_valid() {
+	local presence
+	unit_active_identity_matches "$unit_control_plane" || return $?
+	unit_active_identity_matches "$unit_proxy" || return $?
+	presence="$(nft_table_presence)" || return 2
+	[ "$presence" = "present" ] || return 1
+	nft_identity_matches
 }
 
 isolated_resources_absent() {
@@ -226,6 +253,9 @@ cmp -s \
 	<(cd "$candidate/cockpit/dist" && find -P . -mindepth 1 -printf '%y %P\0' | LC_ALL=C sort -z) \
 	<(cd "$release" && find -P . -mindepth 1 -printf '%y %P\0' | LC_ALL=C sort -z)
 cmp -s "$manifest" \
+	<(cd "$candidate/cockpit/dist" && \
+		find -P . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+cmp -s "$manifest" \
 	<(cd "$release" && find -P . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
 (
 	cd "$release"
@@ -269,7 +299,7 @@ mkdir -m 0755 -- "$isolated_runtime"
 [ "$(stat -c %u:%g:%a -- "$isolated_runtime")" = "$expected_runtime_uid:$expected_runtime_gid:755" ]
 runtime_created=1
 cleanup_authorized=1
-ownership_nonce="$(timeout 5s openssl rand -hex 32)"
+ownership_nonce="$(timeout --signal=TERM --kill-after=2s 5s openssl rand -hex 32)"
 [[ "$ownership_nonce" =~ ^[a-f0-9]{64}$ ]]
 (
 	umask 077
@@ -360,6 +390,7 @@ systemd-run \
 	--collect \
 	caddy run --config "$caddyfile" --adapter caddyfile >/dev/null
 proxy_started=1
+isolated_resources_identity_valid
 
 retry_delay=1
 [ "$test_mode" = 0 ] || retry_delay=0
@@ -421,7 +452,7 @@ if ! LC_ALL=C awk '
 	exit 1
 fi
 public_root_tmp="$isolated_runtime/.autopilot-caddy-root.crt.tmp"
-timeout 5s openssl x509 -in "$private_root" -out "$public_root_tmp"
+timeout --signal=TERM --kill-after=2s 5s openssl x509 -in "$private_root" -out "$public_root_tmp"
 chmod 0644 "$public_root_tmp"
 mv -f -- "$public_root_tmp" "$public_root"
 proxy_ready=0
@@ -436,10 +467,11 @@ for _ in $(seq 1 30); do
 done
 [ "$proxy_ready" = 1 ]
 
-fingerprint="$(timeout 5s openssl x509 -in "$public_root" -noout -fingerprint -sha256)"
+fingerprint="$(timeout --signal=TERM --kill-after=2s 5s openssl x509 -in "$public_root" -noout -fingerprint -sha256)"
 fingerprint="${fingerprint#*=}"
 [ -n "$fingerprint" ]
 
+isolated_resources_identity_valid
 trap - EXIT INT TERM
 printf 'PUBLIC_CA_PATH=%s\n' "$public_root"
 printf 'PUBLIC_CA_SHA256_FINGERPRINT=%s\n' "$fingerprint"
