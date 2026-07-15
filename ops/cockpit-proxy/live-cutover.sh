@@ -125,7 +125,7 @@ validate_ledger_schema() {
 	[ -n "$(tail -c 1 -- "$candidate")" ] && return 1 || :
 	LC_ALL=C awk -F= '
 	BEGIN {
-		n=split("version state ack_id sha checkout release_root owner_pid owner_starttime boot_id deadline_epoch prior_mask_kind prior_persistent_enable prior_runtime_enable prior_persistent_enable_target prior_runtime_enable_target prior_current_kind prior_current_target environment_pre_identity environment_pre_hash environment_owned_hash package_caddy_unit_hash package_caddy_unit_metadata registered_temp_path registered_temp_kind registered_temp_identity created_nft_dir created_helper_dir created_caddy_dropin_dir firewall_unit_installed nft_config_installed firewall_helper_installed firewall_identity_installed firewall_reload_attempted firewall_attempted firewall_started current_attempted current_switched environment_attempted environment_changed control_plane_restarted caddy_files_installed caddy_config_installed caddy_dropin_installed caddy_reload_attempted caddy_unmasked caddy_enabled caddy_attempted caddy_started", keys, " ");
+		n=split("version state ack_id sha checkout release_root owner_pid owner_starttime boot_id deadline_epoch prior_mask_kind prior_persistent_enable prior_runtime_enable prior_persistent_enable_target prior_runtime_enable_target prior_current_kind prior_current_target environment_pre_identity environment_pre_hash environment_owned_hash package_caddy_unit_hash package_caddy_unit_metadata registered_temp_path registered_temp_kind registered_temp_identity created_nft_dir created_nft_dir_identity created_helper_dir created_helper_dir_identity created_caddy_dropin_dir created_caddy_dropin_dir_identity firewall_unit_installed nft_config_installed firewall_helper_installed firewall_identity_installed firewall_reload_attempted firewall_attempted firewall_started current_attempted current_switched environment_attempted environment_changed control_plane_restarted caddy_files_installed caddy_config_installed caddy_dropin_installed caddy_reload_attempted caddy_unmasked caddy_enabled caddy_attempted caddy_started", keys, " ");
 		for (i=1;i<=n;i++) allowed[keys[i]]=1
 	}
 	{
@@ -168,6 +168,16 @@ safe_owned_directory() {
 	[ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %u:%g:%a "$1")" = "$expected_uid:$expected_gid:755" ]
 }
 
+path_identity() { stat -Lc %d:%i:%u:%g:%a:%s:%Y:%Z -- "$1"; }
+directory_identity() { stat -Lc %d:%i:%u:%g:%a -- "$1"; }
+
+test_kill_boundary() {
+	local variable="$1" phase="$2"
+	[ "$test_mode" = 1 ] || return 0
+	[ "${!variable:-}" = "$phase" ] || return 0
+	kill -KILL $$
+}
+
 safe_owned_symlink() {
 	[ -L "$1" ] && [ "$(stat -c %u:%g "$1")" = "$expected_uid:$expected_gid" ]
 }
@@ -184,7 +194,7 @@ trusted_root_executable() {
 create_transaction_snapshot() {
 	local name
 	mkdir -m 0700 -- "$snapshot_dir"
-	for name in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer; do
+	for name in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer autopilot-cockpit-recovery-verify.sh autopilot-cockpit-recovery-smoke.mjs; do
 		project_git show "$accepted_sha:ops/cockpit-proxy/$name" > "$snapshot_dir/$name"
 		chmod 0400 "$snapshot_dir/$name"
 	done
@@ -202,7 +212,7 @@ create_transaction_snapshot() {
 transaction_snapshot_valid() {
 	[ -d "$snapshot_dir" ] && [ ! -L "$snapshot_dir" ] && [ "$(stat -c %u:%g:%a "$snapshot_dir")" = "$expected_uid:$expected_gid:500" ] || return 1
 	safe_regular "$transaction_dir/snapshot.sha256" && [ "$(stat -c %a "$transaction_dir/snapshot.sha256")" = 400 ] || return 1
-	[ "$(find -P "$snapshot_dir" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 9 ] || return 1
+	[ "$(find -P "$snapshot_dir" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 11 ] || return 1
 	[ -z "$(find -P "$snapshot_dir" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ] || return 1
 	[ -z "$(find -P "$snapshot_dir" -type f \( ! -uid "$expected_uid" -o ! -gid "$expected_gid" -o ! -perm 0400 \) -print -quit)" ] || return 1
 	(cd "$snapshot_dir" && sha256sum --check --strict "$transaction_dir/snapshot.sha256" >/dev/null)
@@ -346,8 +356,11 @@ caddy_attempted=0
 runtime_created=0
 transaction_created=0
 created_nft_dir=0
+created_nft_dir_identity=""
 created_helper_dir=0
+created_helper_dir_identity=""
 created_caddy_dropin_dir=0
+created_caddy_dropin_dir_identity=""
 prior_mask_kind=""
 prior_persistent_enable=0
 prior_runtime_enable=0
@@ -367,8 +380,8 @@ write_ledger() {
 	local state="$1" tmp acquired=0
 	if [ "$lock_held" = 0 ]; then lock_transaction; acquired=1; fi
 	tmp="$(mktemp -- "$transaction_dir/.ledger.XXXXXXXXXX")"
-	printf 'version=autopilot-cockpit-cutover-v4\nstate=%s\nack_id=%s\nsha=%s\ncheckout=%s\nrelease_root=%s\nowner_pid=%s\nowner_starttime=%s\nboot_id=%s\ndeadline_epoch=%s\nprior_mask_kind=%s\nprior_persistent_enable=%s\nprior_runtime_enable=%s\nprior_persistent_enable_target=%s\nprior_runtime_enable_target=%s\nprior_current_kind=%s\nprior_current_target=%s\nenvironment_pre_identity=%s\nenvironment_pre_hash=%s\nenvironment_owned_hash=%s\npackage_caddy_unit_hash=%s\npackage_caddy_unit_metadata=%s\nregistered_temp_path=%s\nregistered_temp_kind=%s\nregistered_temp_identity=%s\ncreated_nft_dir=%s\ncreated_helper_dir=%s\ncreated_caddy_dropin_dir=%s\nfirewall_unit_installed=%s\nnft_config_installed=%s\nfirewall_helper_installed=%s\nfirewall_identity_installed=%s\nfirewall_reload_attempted=%s\nfirewall_attempted=%s\nfirewall_started=%s\ncurrent_attempted=%s\ncurrent_switched=%s\nenvironment_attempted=%s\nenvironment_changed=%s\ncontrol_plane_restarted=%s\ncaddy_files_installed=%s\ncaddy_config_installed=%s\ncaddy_dropin_installed=%s\ncaddy_reload_attempted=%s\ncaddy_unmasked=%s\ncaddy_enabled=%s\ncaddy_attempted=%s\ncaddy_started=%s\n' \
-		"$state" "$ack_id" "$accepted_sha" "$checkout" "$release_root" "${transaction_owner_pid:-$$}" "${transaction_owner_starttime:-0}" "${transaction_boot_id:-unknown}" "${transaction_deadline_epoch:-0}" "$prior_mask_kind" "$prior_persistent_enable" "$prior_runtime_enable" "$prior_persistent_enable_target" "$prior_runtime_enable_target" "$prior_current_kind" "$prior_current_target" "$environment_pre_identity" "$environment_pre_hash" "$environment_owned_hash" "$package_caddy_unit_hash" "$package_caddy_unit_metadata" "$registered_temp_path" "$registered_temp_kind" "$registered_temp_identity" "$created_nft_dir" "$created_helper_dir" "$created_caddy_dropin_dir" "$firewall_unit_installed" "$nft_config_installed" "$firewall_helper_installed" "$firewall_identity_installed" "$firewall_reload_attempted" "$firewall_attempted" "$firewall_started" "$current_attempted" "$current_switched" "$environment_attempted" "$environment_changed" "$control_plane_restarted" "$caddy_files_installed" "$caddy_config_installed" "$caddy_dropin_installed" "$caddy_reload_attempted" "$caddy_unmasked" "$caddy_enabled" "$caddy_attempted" "$caddy_started" > "$tmp"
+	printf 'version=autopilot-cockpit-cutover-v4\nstate=%s\nack_id=%s\nsha=%s\ncheckout=%s\nrelease_root=%s\nowner_pid=%s\nowner_starttime=%s\nboot_id=%s\ndeadline_epoch=%s\nprior_mask_kind=%s\nprior_persistent_enable=%s\nprior_runtime_enable=%s\nprior_persistent_enable_target=%s\nprior_runtime_enable_target=%s\nprior_current_kind=%s\nprior_current_target=%s\nenvironment_pre_identity=%s\nenvironment_pre_hash=%s\nenvironment_owned_hash=%s\npackage_caddy_unit_hash=%s\npackage_caddy_unit_metadata=%s\nregistered_temp_path=%s\nregistered_temp_kind=%s\nregistered_temp_identity=%s\ncreated_nft_dir=%s\ncreated_nft_dir_identity=%s\ncreated_helper_dir=%s\ncreated_helper_dir_identity=%s\ncreated_caddy_dropin_dir=%s\ncreated_caddy_dropin_dir_identity=%s\nfirewall_unit_installed=%s\nnft_config_installed=%s\nfirewall_helper_installed=%s\nfirewall_identity_installed=%s\nfirewall_reload_attempted=%s\nfirewall_attempted=%s\nfirewall_started=%s\ncurrent_attempted=%s\ncurrent_switched=%s\nenvironment_attempted=%s\nenvironment_changed=%s\ncontrol_plane_restarted=%s\ncaddy_files_installed=%s\ncaddy_config_installed=%s\ncaddy_dropin_installed=%s\ncaddy_reload_attempted=%s\ncaddy_unmasked=%s\ncaddy_enabled=%s\ncaddy_attempted=%s\ncaddy_started=%s\n' \
+		"$state" "$ack_id" "$accepted_sha" "$checkout" "$release_root" "${transaction_owner_pid:-$$}" "${transaction_owner_starttime:-0}" "${transaction_boot_id:-unknown}" "${transaction_deadline_epoch:-0}" "$prior_mask_kind" "$prior_persistent_enable" "$prior_runtime_enable" "$prior_persistent_enable_target" "$prior_runtime_enable_target" "$prior_current_kind" "$prior_current_target" "$environment_pre_identity" "$environment_pre_hash" "$environment_owned_hash" "$package_caddy_unit_hash" "$package_caddy_unit_metadata" "$registered_temp_path" "$registered_temp_kind" "$registered_temp_identity" "$created_nft_dir" "$created_nft_dir_identity" "$created_helper_dir" "$created_helper_dir_identity" "$created_caddy_dropin_dir" "$created_caddy_dropin_dir_identity" "$firewall_unit_installed" "$nft_config_installed" "$firewall_helper_installed" "$firewall_identity_installed" "$firewall_reload_attempted" "$firewall_attempted" "$firewall_started" "$current_attempted" "$current_switched" "$environment_attempted" "$environment_changed" "$control_plane_restarted" "$caddy_files_installed" "$caddy_config_installed" "$caddy_dropin_installed" "$caddy_reload_attempted" "$caddy_unmasked" "$caddy_enabled" "$caddy_attempted" "$caddy_started" > "$tmp"
 	validate_ledger_schema "$tmp"
 	chmod 0600 "$tmp"
 	if [ "$test_mode" = 0 ]; then chown 0:0 "$tmp"; fi
@@ -535,7 +548,10 @@ recovery_checks() {
 
 rollback_verification() {
 	loopback_checks
-	[ "$recover_mode" = 0 ] || return 0
+	if [ "$recover_mode" = 1 ]; then
+		AUTOPILOT_CUTOVER_TEST_BIN="${AUTOPILOT_CUTOVER_TEST_BIN:-}" bash "$source_dir/autopilot-cockpit-recovery-verify.sh" "$environment" "$(under_root /home/radek/autopilot-beta)" >/dev/null
+		return
+	fi
 	local state_dir projects_dir
 	state_dir="$(sed -n 's/^AUTOPILOT_STATE_DIR=//p' "$environment")"
 	projects_dir="$(sed -n 's/^AUTOPILOT_PROJECTS_DIR=//p' "$environment")"
@@ -573,7 +589,6 @@ restore_caddy_files() {
 	restore_one caddy-config "$caddy_config" "$source_dir/Caddyfile" "$caddy_config_installed" || rollback_failed=1
 	restore_one caddy-dropin "$caddy_dropin" "$source_dir/caddy-autopilot.conf" "$caddy_dropin_installed" || rollback_failed=1
 	short_command systemctl daemon-reload >/dev/null 2>&1 || rollback_failed=1
-	if [ "$created_caddy_dropin_dir" = 1 ]; then rmdir -- "$(dirname "$caddy_dropin")" 2>/dev/null || rollback_failed=1; fi
 }
 
 restore_firewall_files() {
@@ -582,8 +597,16 @@ restore_firewall_files() {
 	restore_one firewall-helper "$firewall_helper" "$source_dir/autopilot-cockpit-firewall.sh" "$firewall_helper_installed" || rollback_failed=1
 	restore_one firewall-identity "$firewall_identity" /dev/null "$firewall_identity_installed" || rollback_failed=1
 	short_command systemctl daemon-reload >/dev/null 2>&1 || rollback_failed=1
-	if [ "$created_nft_dir" = 1 ]; then rmdir -- "$(dirname "$nft_config")" 2>/dev/null || rollback_failed=1; fi
-	if [ "$created_helper_dir" = 1 ]; then rmdir -- "$(dirname "$firewall_helper")" 2>/dev/null || rollback_failed=1; fi
+}
+
+remove_created_directory() {
+	local path="$1" identity="$2"
+	if [ ! -e "$path" ] && [ ! -L "$path" ]; then return 0; fi
+	[ -n "$identity" ] && [ -d "$path" ] && [ ! -L "$path" ] || return 1
+	[ "$(stat -c %u:%g:%a -- "$path")" = "$expected_uid:$expected_gid:755" ] || return 1
+	[ "$(directory_identity "$path")" = "$identity" ] || return 1
+	[ -z "$(find -P "$path" -mindepth 1 -maxdepth 1 -print -quit)" ] || return 1
+	rmdir -- "$path"
 }
 
 restore_enable_link() {
@@ -631,6 +654,7 @@ rollback() {
 		esac
 	fi
 	if [ "$caddy_files_installed" = 1 ]; then restore_caddy_files; fi
+	if [ "$created_caddy_dropin_dir" = 1 ]; then remove_created_directory "$(dirname "$caddy_dropin")" "$created_caddy_dropin_dir_identity" || rollback_failed=1; fi
 	if [ "$firewall_attempted" = 1 ]; then
 		if [ "$caddy_safe" = 1 ] && firewall_installed_identity_valid; then
 			if short_command systemctl stop autopilot-cockpit-firewall.service >/dev/null 2>&1 && firewall_inactive && [ "$(nft_presence)" = absent ]; then firewall_safe=1; else rollback_failed=1; fi
@@ -642,6 +666,8 @@ rollback() {
 	else firewall_safe=1
 	fi
 	if [ "$firewall_safe" = 1 ] && { [ "$firewall_files_installed" = 1 ] || [ "$firewall_identity_installed" = 1 ]; }; then restore_firewall_files; fi
+	if [ "$firewall_safe" = 1 ] && [ "$created_nft_dir" = 1 ]; then remove_created_directory "$(dirname "$nft_config")" "$created_nft_dir_identity" || rollback_failed=1; fi
+	if [ "$firewall_safe" = 1 ] && [ "$created_helper_dir" = 1 ]; then remove_created_directory "$(dirname "$firewall_helper")" "$created_helper_dir_identity" || rollback_failed=1; fi
 	if [ "$environment_attempted" = 1 ]; then
 		if [ -f "$environment" ] && [ ! -L "$environment" ] && cmp -s "$transaction_dir/backups/environment" "$environment" && [ "$(stat -c %u:%g:%a:%s:%Y "$transaction_dir/backups/environment")" = "$(stat -c %u:%g:%a:%s:%Y "$environment")" ]; then :
 		elif [ -f "$environment" ] && [ ! -L "$environment" ] && [ "$(sha256sum "$environment" | awk '{print $1}')" = "$environment_owned_hash" ]; then
@@ -651,6 +677,7 @@ rollback() {
 	fi
 	if [ "$current_attempted" = 1 ]; then
 		if [ "$prior_current_kind" = symlink ] && [ -L "$current" ] && [ "$(readlink "$current")" = "$prior_current_target" ]; then :
+		elif [ -z "$prior_current_kind" ] && [ ! -e "$current" ] && [ ! -L "$current" ]; then :
 		elif [ -L "$current" ] && [ "$(readlink "$current")" = "releases/$accepted_sha" ]; then
 			tmp_restore="$release_root/.restore-current-$ack_id"
 			if [ "$prior_current_kind" = symlink ]; then { register_temp "$tmp_restore" symlink "$(printf '%s' "$prior_current_target" | sha256sum | awk '{print $1}')" rolling-back && ln -s "$prior_current_target" "$tmp_restore" && mv -T "$tmp_restore" "$current" && clear_registered_temp rolling-back; } || { rollback_failed=1; live_state_safe=0; }
@@ -737,6 +764,13 @@ if [ "$recover_mode" = 1 ]; then
 	for flag in prior_persistent_enable prior_runtime_enable created_nft_dir created_helper_dir created_caddy_dropin_dir firewall_unit_installed nft_config_installed firewall_helper_installed firewall_identity_installed firewall_reload_attempted firewall_attempted firewall_started current_attempted current_switched environment_attempted environment_changed control_plane_restarted caddy_files_installed caddy_config_installed caddy_dropin_installed caddy_reload_attempted caddy_unmasked caddy_enabled caddy_attempted caddy_started; do
 		value="$(ledger_value "$flag")"
 		case "$value" in 0|1) printf -v "$flag" '%s' "$value" ;; *) exit 1 ;; esac
+	done
+	created_nft_dir_identity="$(ledger_value created_nft_dir_identity)"
+	created_helper_dir_identity="$(ledger_value created_helper_dir_identity)"
+	created_caddy_dropin_dir_identity="$(ledger_value created_caddy_dropin_dir_identity)"
+	for directory_state in "created_nft_dir:$created_nft_dir_identity" "created_helper_dir:$created_helper_dir_identity" "created_caddy_dropin_dir:$created_caddy_dropin_dir_identity"; do
+		flag="${directory_state%%:*}"; value="${directory_state#*:}"
+		if [ "${!flag}" = 1 ]; then [ -z "$value" ] || [[ "$value" =~ ^[0-9]+(:[0-9]+){4}$ ]] || exit 1; else [ -z "$value" ] || exit 1; fi
 	done
 	if [ "$firewall_unit_installed" = 1 ] || [ "$nft_config_installed" = 1 ] || [ "$firewall_helper_installed" = 1 ]; then firewall_files_installed=1; fi
 	transaction_snapshot_valid || exit 1
@@ -878,8 +912,8 @@ clear_registered_temp
 recovery_checks
 cutover_started=1
 
-if [ ! -d "$(dirname "$nft_config")" ]; then created_nft_dir=1; write_ledger mutating; install -d -m 0755 "$(dirname "$nft_config")"; fi
-if [ ! -d "$(dirname "$firewall_helper")" ]; then created_helper_dir=1; write_ledger mutating; install -d -m 0755 "$(dirname "$firewall_helper")"; fi
+if [ ! -d "$(dirname "$nft_config")" ]; then created_nft_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR nft; install -d -m 0755 "$(dirname "$nft_config")"; created_nft_dir_identity="$(directory_identity "$(dirname "$nft_config")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR nft; fi
+if [ ! -d "$(dirname "$firewall_helper")" ]; then created_helper_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR helper; install -d -m 0755 "$(dirname "$firewall_helper")"; created_helper_dir_identity="$(directory_identity "$(dirname "$firewall_helper")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR helper; fi
 firewall_files_installed=1
 firewall_unit_installed=1; write_ledger mutating
 tmp_install="$(dirname "$firewall_unit")/.firewall-unit-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/autopilot-cockpit-firewall.service" | awk '{print $1}')"; install -m 0644 "$source_dir/autopilot-cockpit-firewall.service" "$tmp_install"; mv -T "$tmp_install" "$firewall_unit"; clear_registered_temp
@@ -910,6 +944,7 @@ tmp_current="$release_root/.current-$ack_id"
 register_temp "$tmp_current" symlink "$(printf '%s' "releases/$accepted_sha" | sha256sum | awk '{print $1}')"
 ln -s "releases/$accepted_sha" "$tmp_current"
 current_attempted=1; write_ledger mutating
+test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE current-mv
 mv -T -- "$tmp_current" "$current"
 clear_registered_temp
 current_switched=1; write_ledger mutating; fail_after current
@@ -944,7 +979,7 @@ loopback_checks
 fail_after control-plane
 
 install -d -m 0755 "$(dirname "$caddy_config")"
-if [ ! -d "$(dirname "$caddy_dropin")" ]; then created_caddy_dropin_dir=1; write_ledger mutating; install -d -m 0755 "$(dirname "$caddy_dropin")"; fi
+if [ ! -d "$(dirname "$caddy_dropin")" ]; then created_caddy_dropin_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR caddy-dropin; install -d -m 0755 "$(dirname "$caddy_dropin")"; created_caddy_dropin_dir_identity="$(directory_identity "$(dirname "$caddy_dropin")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR caddy-dropin; fi
 caddy_files_installed=1
 caddy_config_installed=1; write_ledger mutating
 tmp_install="$(dirname "$caddy_config")/.caddy-config-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/Caddyfile" | awk '{print $1}')"; install -m 0644 "$source_dir/Caddyfile" "$tmp_install"; mv -T "$tmp_install" "$caddy_config"; clear_registered_temp

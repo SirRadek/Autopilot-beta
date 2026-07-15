@@ -45,6 +45,7 @@ describe("Cockpit production proxy boundary", () => {
     const service = readProxyFile("autopilot-cockpit-cutover-recovery.service");
     const timer = readProxyFile("autopilot-cockpit-cutover-recovery.timer");
     const launcher = readProxyFile("autopilot-cockpit-trusted-launcher.sh");
+    const verifier = readProxyFile("autopilot-cockpit-recovery-verify.sh");
 
     expect(service).toContain("ExecStart=/usr/local/sbin/autopilot-cockpit-cutover --recover");
     expect(service).toContain("TimeoutStartSec=180");
@@ -57,6 +58,9 @@ describe("Cockpit production proxy boundary", () => {
     expect(launcher).toContain("env -i");
     expect(launcher).toMatch(/\/usr\/bin\/git[^\n]+ show /);
     expect(launcher).toContain("--install-watchdog");
+    expect(verifier).toContain("provider_invoked");
+    expect(verifier).toContain("systemd-run");
+    expect(verifier).not.toMatch(/npm|git|checkout/i);
     expect(existsSync(join(proxyDir, "install-cutover-recovery-watchdog.sh"))).toBe(false);
   });
 
@@ -70,5 +74,44 @@ describe("Cockpit production proxy boundary", () => {
     expect(worker.startsWith("#!/bin/bash\n")).toBe(true);
     expect(worker).toContain('trusted_worker_path="/usr/local/libexec/autopilot-cockpit-live-cutover"');
     expect(worker.indexOf("trusted_worker_path=")).toBeLessThan(worker.indexOf("under_root()"));
+  });
+
+  it("publishes a bounded independent Task 6 bootstrap contract", () => {
+    const contract = JSON.parse(readProxyFile("trusted-bootstrap-contract.json")) as {
+      version: string;
+      authority: string;
+      canonical_checkout: string;
+      canonical_origin: string;
+      launcher: { path: string; uid: number; gid: number; mode: string };
+      authorization: {
+        path: string; uid: number; gid: number; mode: string; schema: string;
+        digest: string; binds: string[]; authorization_id: string;
+      };
+      privileged_checkout_execution: boolean;
+      prohibited: string[];
+    };
+
+    expect(contract).toEqual({
+      version: "autopilot-cockpit-trusted-bootstrap-v1",
+      authority: "independent-vm-image-root-channel",
+      canonical_checkout: "/home/radek/autopilot-beta-proxy-candidate",
+      canonical_origin: "https://github.com/SirRadek/Autopilot-beta.git",
+      launcher: { path: "/usr/local/sbin/autopilot-cockpit-cutover", uid: 0, gid: 0, mode: "0755" },
+      authorization: {
+        path: "/etc/autopilot-cockpit/cutover.authorization",
+        uid: 0,
+        gid: 0,
+        mode: "0400",
+        schema: "autopilot-cockpit-authorization-v1",
+        digest: "sha256",
+        binds: ["sha", "checkout", "origin", "uid", "gid", "payload_count", "payload_hashes"],
+        authorization_id: "sha256-of-all-preceding-record-lines-with-final-newline",
+      },
+      privileged_checkout_execution: false,
+      prohibited: ["sudo-checkout-script", "sudo-npm", "sudo-bash-from-checkout"],
+    });
+    const launcher = readProxyFile("autopilot-cockpit-trusted-launcher.sh");
+    expect(launcher).toContain('canonical_checkout="/home/radek/autopilot-beta-proxy-candidate"');
+    expect(launcher).toContain('canonical_origin="https://github.com/SirRadek/Autopilot-beta.git"');
   });
 });
