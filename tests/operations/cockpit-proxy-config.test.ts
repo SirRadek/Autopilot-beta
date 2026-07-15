@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -44,15 +44,31 @@ describe("Cockpit production proxy boundary", () => {
   it("defines a bounded boot-persistent cutover recovery watchdog", () => {
     const service = readProxyFile("autopilot-cockpit-cutover-recovery.service");
     const timer = readProxyFile("autopilot-cockpit-cutover-recovery.timer");
-    const installer = readProxyFile("install-cutover-recovery-watchdog.sh");
+    const launcher = readProxyFile("autopilot-cockpit-trusted-launcher.sh");
 
-    expect(service).toContain("ExecStart=/usr/local/libexec/autopilot-cockpit-live-cutover --recover");
+    expect(service).toContain("ExecStart=/usr/local/sbin/autopilot-cockpit-cutover --recover");
     expect(service).toContain("TimeoutStartSec=180");
     expect(timer).toContain("OnBootSec=30s");
     expect(timer).toContain("OnUnitActiveSec=30s");
     expect(timer).toContain("Persistent=true");
     expect(timer).toContain("WantedBy=timers.target");
-    expect(installer).toContain("systemctl enable --now autopilot-cockpit-cutover-recovery.timer");
-    expect(installer).toContain("/usr/local/libexec/autopilot-cockpit-live-cutover");
+    expect(launcher).toContain("/usr/local/sbin/autopilot-cockpit-cutover");
+    expect(launcher).toContain("setpriv");
+    expect(launcher).toContain("env -i");
+    expect(launcher).toMatch(/\/usr\/bin\/git[^\n]+ show /);
+    expect(launcher).toContain("--install-watchdog");
+    expect(existsSync(join(proxyDir, "install-cutover-recovery-watchdog.sh"))).toBe(false);
+  });
+
+  it("does not expose a privileged cutover entry point from the mutable checkout", () => {
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const worker = readProxyFile("live-cutover.sh");
+
+    expect(packageJson.scripts["ops:cockpit-proxy:cutover"]).toBeUndefined();
+    expect(worker.startsWith("#!/bin/bash\n")).toBe(true);
+    expect(worker).toContain('trusted_worker_path="/usr/local/libexec/autopilot-cockpit-live-cutover"');
+    expect(worker.indexOf("trusted_worker_path=")).toBeLessThan(worker.indexOf("under_root()"));
   });
 });

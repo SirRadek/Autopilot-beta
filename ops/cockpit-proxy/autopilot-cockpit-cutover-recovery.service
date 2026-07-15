@@ -4,5 +4,5 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/libexec/autopilot-cockpit-live-cutover --recover
+ExecStart=/usr/local/sbin/autopilot-cockpit-cutover --recover
 TimeoutStartSec=180

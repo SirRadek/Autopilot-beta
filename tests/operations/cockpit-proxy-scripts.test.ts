@@ -1593,6 +1593,48 @@ describe("Cockpit transactional live cutover", () => {
     else expect(readFileSync(fixture.envPath, "utf8")).toBe("SIGNAL_FOREIGN=1\n");
   }, 12_000);
 
+  it("preserves a concurrent EnvironmentFile replacement before the CAS publication", async () => {
+    const fixture = prepareCutover();
+    const child = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...fixture.env, AUTOPILOT_CUTOVER_TEST_PAUSE_AFTER: "before-environment-cas" },
+    });
+    const ledger = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active", "transaction.ledger");
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && (!existsSync(ledger) || !readFileSync(ledger, "utf8").includes("/.control-plane.env-"))) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(readFileSync(ledger, "utf8")).toContain("environment_attempted=0");
+    const foreign = "CONCURRENT_FOREIGN=1\n";
+    const replacement = `${fixture.envPath}.foreign`;
+    writeFileSync(replacement, foreign, { mode: 0o600 });
+    renameSync(replacement, fixture.envPath);
+    const status = await new Promise<number | null>((resolve) => child.once("close", resolve));
+    expect(status).not.toBe(0);
+    expect(readFileSync(fixture.envPath, "utf8")).toBe(foreign);
+  }, 12_000);
+
+  it.each([
+    ["old version", (body: string) => body.replace("version=autopilot-cockpit-cutover-v4", "version=autopilot-cockpit-cutover-v3")],
+    ["unknown key", (body: string) => `${body}unknown_key=x\n`],
+    ["duplicate key", (body: string) => `${body}state=waiting\n`],
+    ["control character", (body: string) => body.replace("checkout=", "checkout=bad\t")],
+  ])("rejects a %s in the recovery ledger before systemd mutation", async (_name, mutate) => {
+    const fixture = prepareCutover();
+    const owner = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...fixture.env, AUTOPILOT_CUTOVER_TEST_AUTO_ACK: "0", AUTOPILOT_CUTOVER_TEST_ACK_TIMEOUT: "5" },
+    });
+    const ledger = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active", "transaction.ledger");
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && (!existsSync(ledger) || !readFileSync(ledger, "utf8").includes("state=waiting"))) await new Promise((resolve) => setTimeout(resolve, 20));
+    owner.kill("SIGKILL");
+    await new Promise((resolve) => owner.once("close", resolve));
+    writeFileSync(ledger, mutate(readFileSync(ledger, "utf8")), { mode: 0o600 });
+    const before = readFileSync(fixture.stubLog, "utf8");
+    const recovered = spawnSync("bash", [liveCutover, "--recover"], { encoding: "utf8", env: fixture.env });
+    expect(recovered.status).not.toBe(0);
+    expect(readFileSync(fixture.stubLog, "utf8").slice(before.length)).not.toContain("systemctl:");
+  }, 15_000);
+
   it("preserves a no-final-newline environment while changing exactly false to true", () => {
     const fixture = prepareCutover({ finalNewline: false });
     const result = runCutover(fixture);
@@ -1667,7 +1709,7 @@ describe("Cockpit transactional live cutover", () => {
     });
     expect(result.status).toBe(0);
     const events = readFileSync(fixture.stubLog, "utf8");
-    expect(events.match(/^setpriv:/gm)).toHaveLength(11);
+    expect(events.match(/^setpriv:/gm)).toHaveLength(13);
     expect(events).toContain(`--reuid ${process.getuid!()} --regid ${process.getgid!()} --clear-groups --`);
     expect(events).toContain(`npm-boundary:uid=${process.getuid!()}:user=radek:`);
     expect(events).not.toContain("must-not-cross-boundary");

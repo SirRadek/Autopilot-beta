@@ -1,8 +1,15 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -Eeuo pipefail
 
 test_mode="${AUTOPILOT_CUTOVER_TEST_MODE:-0}"
 case "$test_mode" in 0|1) ;; *) exit 1 ;; esac
+trusted_worker_path="/usr/local/libexec/autopilot-cockpit-live-cutover"
+if [ "$EUID" -eq 0 ]; then
+	PATH=/usr/sbin:/usr/bin:/sbin:/bin
+	export PATH
+	[ "$(readlink -f -- "$0")" = "$trusted_worker_path" ] || { printf '%s\n' "refusing mutable cutover worker" >&2; exit 1; }
+	[ ! -L "$trusted_worker_path" ] && [ "$(stat -c %u:%g:%a -- "$trusted_worker_path")" = 0:0:755 ] || exit 1
+fi
 if [ "$test_mode" = 0 ]; then
 	PATH=/usr/sbin:/usr/bin:/sbin:/bin
 	export PATH
@@ -108,7 +115,28 @@ require_active() {
 
 ledger_value() {
 	local key="$1"
+	validate_ledger_schema "$ledger" || return 1
 	awk -F= -v key="$key" '$1 == key { if (++n > 1) exit 2; print substr($0, length(key) + 2) } END { if (n != 1) exit 2 }' "$ledger"
+}
+
+validate_ledger_schema() {
+	local candidate="$1"
+	[ -f "$candidate" ] && [ ! -L "$candidate" ] || return 1
+	[ -n "$(tail -c 1 -- "$candidate")" ] && return 1 || :
+	LC_ALL=C awk -F= '
+	BEGIN {
+		n=split("version state ack_id sha checkout release_root owner_pid owner_starttime boot_id deadline_epoch prior_mask_kind prior_persistent_enable prior_runtime_enable prior_persistent_enable_target prior_runtime_enable_target prior_current_kind prior_current_target environment_pre_identity environment_pre_hash environment_owned_hash package_caddy_unit_hash package_caddy_unit_metadata registered_temp_path registered_temp_kind registered_temp_identity created_nft_dir created_helper_dir created_caddy_dropin_dir firewall_unit_installed nft_config_installed firewall_helper_installed firewall_identity_installed firewall_reload_attempted firewall_attempted firewall_started current_attempted current_switched environment_attempted environment_changed control_plane_restarted caddy_files_installed caddy_config_installed caddy_dropin_installed caddy_reload_attempted caddy_unmasked caddy_enabled caddy_attempted caddy_started", keys, " ");
+		for (i=1;i<=n;i++) allowed[keys[i]]=1
+	}
+	{
+		if ($0 !~ /^[A-Za-z0-9_]+=[A-Za-z0-9_.\/:@-]*$/) exit 10
+		key=$1; if (!(key in allowed) || ++seen[key] != 1) exit 11
+	}
+	END {
+		if (NR != n) exit 12
+		for (key in allowed) if (seen[key] != 1) exit 13
+	}' "$candidate" || return 1
+	[ "$(awk -F= '$1=="version" {print $2}' "$candidate")" = autopilot-cockpit-cutover-v4 ]
 }
 
 archive_terminal_transaction() {
@@ -235,6 +263,7 @@ else
 	release_root="$(realpath -e -- "$2")"
 	accepted_sha="$3"
 fi
+[[ "$checkout" =~ ^/[A-Za-z0-9._/-]+$ && "$release_root" =~ ^/[A-Za-z0-9._/-]+$ ]] || exit 1
 [[ "$accepted_sha" =~ ^[a-f0-9]{40}$ ]] || exit 1
 if [ "$recover_mode" = 0 ]; then
 	[ ! -L "$1" ] && [ ! -L "$2" ] || exit 1
@@ -276,7 +305,6 @@ evidence="$(under_root "/var/lib/autopilot-cockpit/isolated-acceptance/$accepted
 release="$release_root/releases/$accepted_sha"
 manifest="$release_root/manifests/$accepted_sha.sha256"
 current="$release_root/current"
-checkout_source_dir="$checkout/ops/cockpit-proxy"
 snapshot_dir="$transaction_dir/snapshot"
 source_dir="$snapshot_dir"
 if [ "$recover_mode" = 0 ]; then
@@ -296,6 +324,8 @@ current_switched=0
 current_attempted=0
 environment_changed=0
 environment_attempted=0
+environment_pre_identity=""
+environment_pre_hash=""
 environment_owned_hash=""
 control_plane_restarted=0
 caddy_files_installed=0
@@ -337,8 +367,9 @@ write_ledger() {
 	local state="$1" tmp acquired=0
 	if [ "$lock_held" = 0 ]; then lock_transaction; acquired=1; fi
 	tmp="$(mktemp -- "$transaction_dir/.ledger.XXXXXXXXXX")"
-	printf 'version=autopilot-cockpit-cutover-v4\nstate=%s\nack_id=%s\nsha=%s\ncheckout=%s\nrelease_root=%s\nowner_pid=%s\nowner_starttime=%s\nboot_id=%s\ndeadline_epoch=%s\nprior_mask_kind=%s\nprior_persistent_enable=%s\nprior_runtime_enable=%s\nprior_persistent_enable_target=%s\nprior_runtime_enable_target=%s\nprior_current_kind=%s\nprior_current_target=%s\nenvironment_owned_hash=%s\npackage_caddy_unit_hash=%s\npackage_caddy_unit_metadata=%s\nregistered_temp_path=%s\nregistered_temp_kind=%s\nregistered_temp_identity=%s\ncreated_nft_dir=%s\ncreated_helper_dir=%s\ncreated_caddy_dropin_dir=%s\nfirewall_unit_installed=%s\nnft_config_installed=%s\nfirewall_helper_installed=%s\nfirewall_identity_installed=%s\nfirewall_reload_attempted=%s\nfirewall_attempted=%s\nfirewall_started=%s\ncurrent_attempted=%s\ncurrent_switched=%s\nenvironment_attempted=%s\nenvironment_changed=%s\ncontrol_plane_restarted=%s\ncaddy_files_installed=%s\ncaddy_config_installed=%s\ncaddy_dropin_installed=%s\ncaddy_reload_attempted=%s\ncaddy_unmasked=%s\ncaddy_enabled=%s\ncaddy_attempted=%s\ncaddy_started=%s\n' \
-		"$state" "$ack_id" "$accepted_sha" "$checkout" "$release_root" "${transaction_owner_pid:-$$}" "${transaction_owner_starttime:-0}" "${transaction_boot_id:-unknown}" "${transaction_deadline_epoch:-0}" "$prior_mask_kind" "$prior_persistent_enable" "$prior_runtime_enable" "$prior_persistent_enable_target" "$prior_runtime_enable_target" "$prior_current_kind" "$prior_current_target" "$environment_owned_hash" "$package_caddy_unit_hash" "$package_caddy_unit_metadata" "$registered_temp_path" "$registered_temp_kind" "$registered_temp_identity" "$created_nft_dir" "$created_helper_dir" "$created_caddy_dropin_dir" "$firewall_unit_installed" "$nft_config_installed" "$firewall_helper_installed" "$firewall_identity_installed" "$firewall_reload_attempted" "$firewall_attempted" "$firewall_started" "$current_attempted" "$current_switched" "$environment_attempted" "$environment_changed" "$control_plane_restarted" "$caddy_files_installed" "$caddy_config_installed" "$caddy_dropin_installed" "$caddy_reload_attempted" "$caddy_unmasked" "$caddy_enabled" "$caddy_attempted" "$caddy_started" > "$tmp"
+	printf 'version=autopilot-cockpit-cutover-v4\nstate=%s\nack_id=%s\nsha=%s\ncheckout=%s\nrelease_root=%s\nowner_pid=%s\nowner_starttime=%s\nboot_id=%s\ndeadline_epoch=%s\nprior_mask_kind=%s\nprior_persistent_enable=%s\nprior_runtime_enable=%s\nprior_persistent_enable_target=%s\nprior_runtime_enable_target=%s\nprior_current_kind=%s\nprior_current_target=%s\nenvironment_pre_identity=%s\nenvironment_pre_hash=%s\nenvironment_owned_hash=%s\npackage_caddy_unit_hash=%s\npackage_caddy_unit_metadata=%s\nregistered_temp_path=%s\nregistered_temp_kind=%s\nregistered_temp_identity=%s\ncreated_nft_dir=%s\ncreated_helper_dir=%s\ncreated_caddy_dropin_dir=%s\nfirewall_unit_installed=%s\nnft_config_installed=%s\nfirewall_helper_installed=%s\nfirewall_identity_installed=%s\nfirewall_reload_attempted=%s\nfirewall_attempted=%s\nfirewall_started=%s\ncurrent_attempted=%s\ncurrent_switched=%s\nenvironment_attempted=%s\nenvironment_changed=%s\ncontrol_plane_restarted=%s\ncaddy_files_installed=%s\ncaddy_config_installed=%s\ncaddy_dropin_installed=%s\ncaddy_reload_attempted=%s\ncaddy_unmasked=%s\ncaddy_enabled=%s\ncaddy_attempted=%s\ncaddy_started=%s\n' \
+		"$state" "$ack_id" "$accepted_sha" "$checkout" "$release_root" "${transaction_owner_pid:-$$}" "${transaction_owner_starttime:-0}" "${transaction_boot_id:-unknown}" "${transaction_deadline_epoch:-0}" "$prior_mask_kind" "$prior_persistent_enable" "$prior_runtime_enable" "$prior_persistent_enable_target" "$prior_runtime_enable_target" "$prior_current_kind" "$prior_current_target" "$environment_pre_identity" "$environment_pre_hash" "$environment_owned_hash" "$package_caddy_unit_hash" "$package_caddy_unit_metadata" "$registered_temp_path" "$registered_temp_kind" "$registered_temp_identity" "$created_nft_dir" "$created_helper_dir" "$created_caddy_dropin_dir" "$firewall_unit_installed" "$nft_config_installed" "$firewall_helper_installed" "$firewall_identity_installed" "$firewall_reload_attempted" "$firewall_attempted" "$firewall_started" "$current_attempted" "$current_switched" "$environment_attempted" "$environment_changed" "$control_plane_restarted" "$caddy_files_installed" "$caddy_config_installed" "$caddy_dropin_installed" "$caddy_reload_attempted" "$caddy_unmasked" "$caddy_enabled" "$caddy_attempted" "$caddy_started" > "$tmp"
+	validate_ledger_schema "$tmp"
 	chmod 0600 "$tmp"
 	if [ "$test_mode" = 0 ]; then chown 0:0 "$tmp"; fi
 	mv -T -- "$tmp" "$ledger"
@@ -683,6 +714,9 @@ if [ "$recover_mode" = 1 ]; then
 	prior_current_target="$(ledger_value prior_current_target)"
 	case "$prior_current_kind" in ''|symlink) ;; *) exit 1 ;; esac
 	if [ "$prior_current_kind" = symlink ]; then [[ "$prior_current_target" =~ ^releases/[a-f0-9]{40}$ ]] || exit 1; fi
+	environment_pre_identity="$(ledger_value environment_pre_identity)"
+	environment_pre_hash="$(ledger_value environment_pre_hash)"
+	[[ "$environment_pre_identity" =~ ^[0-9]+(:[0-9]+){7}$ && "$environment_pre_hash" =~ ^[a-f0-9]{64}$ ]] || exit 1
 	environment_owned_hash="$(ledger_value environment_owned_hash)"
 	package_caddy_unit_hash="$(ledger_value package_caddy_unit_hash)"
 	package_caddy_unit_metadata="$(ledger_value package_caddy_unit_metadata)"
@@ -732,6 +766,8 @@ environment_uid="$(stat -c %u -- "$environment")"
 environment_gid="$(stat -c %g -- "$environment")"
 if [ "$test_mode" = 0 ]; then [ "$environment_uid" = "$(id -u radek)" ] && [ "$environment_gid" = "$(id -g radek)" ]; fi
 validate_secure_cookie_environment "$environment"
+environment_pre_identity="$(stat -Lc %d:%i:%u:%g:%a:%s:%Y:%Z -- "$environment")"
+environment_pre_hash="$(sha256sum -- "$environment" | awk '{print $1}')"
 loopback_checks
 require_active autopilot-control-plane.service
 require_active autopilot-control-plane-health.timer
@@ -747,10 +783,9 @@ for port in 80 443 8443 8877; do
 	inspect_command timeout --signal=TERM --kill-after=2s 5s ss -H -ltn "sport = :$port"
 	if [ "$inspection_rc" -ne 0 ] || [ -n "$inspection_output" ]; then exit 1; fi
 done
-for source in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer; do safe_checkout_regular "$checkout_source_dir/$source" || exit 1; done
 [ -f "$recovery_program" ] && [ ! -L "$recovery_program" ] && [ "$(stat -c %u:%g:%a "$recovery_program")" = "$expected_uid:$expected_gid:755" ] && cmp -s "$0" "$recovery_program"
-[ -f "$recovery_service" ] && [ ! -L "$recovery_service" ] && [ "$(stat -c %u:%g:%a "$recovery_service")" = "$expected_uid:$expected_gid:644" ] && cmp -s "$checkout_source_dir/autopilot-cockpit-cutover-recovery.service" "$recovery_service"
-[ -f "$recovery_timer" ] && [ ! -L "$recovery_timer" ] && [ "$(stat -c %u:%g:%a "$recovery_timer")" = "$expected_uid:$expected_gid:644" ] && cmp -s "$checkout_source_dir/autopilot-cockpit-cutover-recovery.timer" "$recovery_timer"
+[ -f "$recovery_service" ] && [ ! -L "$recovery_service" ] && [ "$(stat -c %u:%g:%a "$recovery_service")" = "$expected_uid:$expected_gid:644" ] && cmp -s <(project_git show "$accepted_sha:ops/cockpit-proxy/autopilot-cockpit-cutover-recovery.service") "$recovery_service"
+[ -f "$recovery_timer" ] && [ ! -L "$recovery_timer" ] && [ "$(stat -c %u:%g:%a "$recovery_timer")" = "$expected_uid:$expected_gid:644" ] && cmp -s <(project_git show "$accepted_sha:ops/cockpit-proxy/autopilot-cockpit-cutover-recovery.timer") "$recovery_timer"
 safe_owned_symlink "$recovery_timer_enable" && [ "$(readlink "$recovery_timer_enable")" = ../autopilot-cockpit-cutover-recovery.timer ]
 require_active autopilot-cockpit-cutover-recovery.timer
 safe_regular "$evidence" && [ "$(stat -c %a -- "$evidence")" = 600 ]
@@ -809,6 +844,9 @@ runtime_created=1
 mkdir -m 0700 -- "$transaction_dir/backups"
 cp -a "$environment" "$transaction_dir/backups/environment"
 chmod 0600 "$transaction_dir/backups/environment"
+validate_secure_cookie_environment "$transaction_dir/backups/environment"
+[ "$(sha256sum -- "$transaction_dir/backups/environment" | awk '{print $1}')" = "$environment_pre_hash" ]
+[ "$(stat -Lc %u:%g:%a:%s:%Y -- "$transaction_dir/backups/environment")" = "$(stat -Lc %u:%g:%a:%s:%Y -- "$environment")" ]
 for item in "caddy-config:$caddy_config" "caddy-dropin:$caddy_dropin" "firewall-unit:$firewall_unit" "nft-config:$nft_config" "firewall-helper:$firewall_helper" "firewall-identity:$firewall_identity"; do
 	name="${item%%:*}"; path="${item#*:}"
 	if [ -e "$path" ]; then [ -f "$path" ] && [ ! -L "$path" ] || exit 1; cp -a "$path" "$transaction_dir/backups/$name"; fi
@@ -878,9 +916,10 @@ current_switched=1; write_ledger mutating; fail_after current
 test_pause_after current
 
 tmp_env="$(dirname "$environment")/.control-plane.env-$ack_id"
-environment_expected_hash="$(ENV_INPUT="$environment" "$node_bin" -e 'const fs=require("fs"),b=fs.readFileSync(process.env.ENV_INPUT),f=Buffer.from("CONTROL_PLANE_SECURE_COOKIES=false"),t=Buffer.from("CONTROL_PLANE_SECURE_COOKIES=true"),i=b.indexOf(f);if(i<0||b.indexOf(f,i+1)>=0)process.exit(1);process.stdout.write(Buffer.concat([b.subarray(0,i),t,b.subarray(i+f.length)]))' | sha256sum | awk '{print $1}')"
+environment_backup="$transaction_dir/backups/environment"
+environment_expected_hash="$(ENV_INPUT="$environment_backup" "$node_bin" -e 'const fs=require("fs"),b=fs.readFileSync(process.env.ENV_INPUT),f=Buffer.from("CONTROL_PLANE_SECURE_COOKIES=false"),t=Buffer.from("CONTROL_PLANE_SECURE_COOKIES=true"),i=b.indexOf(f);if(i<0||b.indexOf(f,i+1)>=0)process.exit(1);process.stdout.write(Buffer.concat([b.subarray(0,i),t,b.subarray(i+f.length)]))' | sha256sum | awk '{print $1}')"
 register_temp "$tmp_env" file "$environment_expected_hash"
-ENV_INPUT="$environment" ENV_OUTPUT="$tmp_env" "$node_bin" -e '
+ENV_INPUT="$environment_backup" ENV_OUTPUT="$tmp_env" "$node_bin" -e '
 const fs=require("fs"),{TextDecoder}=require("util"),b=fs.readFileSync(process.env.ENV_INPUT);
 let s;try{s=new TextDecoder("utf-8",{fatal:true}).decode(b)}catch{process.exit(1)}
 const from="CONTROL_PLANE_SECURE_COOKIES=false",to="CONTROL_PLANE_SECURE_COOKIES=true";
@@ -889,6 +928,10 @@ fs.writeFileSync(process.env.ENV_OUTPUT,Buffer.from(s.replace(from,to),"utf8"));
 chmod 0600 "$tmp_env"
 chown "$environment_uid:$environment_gid" "$tmp_env"
 environment_owned_hash="$(sha256sum "$tmp_env" | awk '{print $1}')"
+test_pause_after before-environment-cas
+[ -f "$environment" ] && [ ! -L "$environment" ]
+[ "$(stat -Lc %d:%i:%u:%g:%a:%s:%Y:%Z -- "$environment")" = "$environment_pre_identity" ]
+[ "$(sha256sum -- "$environment" | awk '{print $1}')" = "$environment_pre_hash" ]
 environment_attempted=1; write_ledger mutating
 mv -T -- "$tmp_env" "$environment"
 clear_registered_temp

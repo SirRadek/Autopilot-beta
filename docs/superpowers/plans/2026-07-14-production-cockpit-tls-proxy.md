@@ -310,7 +310,7 @@ trap 'status=$?; if (( status != 0 && cutover_started == 1 && rollback_started =
 
 Preflight verifies SHA/manifest, live health, ownership, free `8443/8877`, stable paths, and isolated evidence. It requires the Caddy package to be installed, `caddy.service` masked/inactive, no Caddy listener, and `dpkg -V caddy` to prove the still-unmodified package-owned default files; any changed or unowned existing configuration is refused. Back up environment/config/link bytes, run fresh state backup and recovery validation, install/start firewall, atomically switch `current`, change exactly one secure-cookie assignment, restart Control Plane, install reviewed Caddy files/drop-in, remove mask, and start Caddy.
 
-After VM-local verification, print `CUTOVER_WAITING_FOR_HOST_ACCEPTANCE` with a random acknowledgement ID and wait at most 300 seconds for a root-owned acknowledgement file in a newly created mode-`0700` runtime directory. A second invocation `live-cutover.sh --accept ACK_ID` validates the ID and atomically writes that file only after the Victus host test succeeds. Missing or invalid acknowledgement triggers rollback; valid acknowledgement completes with `CUTOVER_OK`. Rollback stops owned Caddy/firewall, restores link/config/environment, restarts loopback Control Plane, and verifies boundary/readiness plus deterministic smoke with `provider_invoked=false`. Add package script `ops:cockpit-proxy:cutover`.
+After VM-local verification, print `CUTOVER_WAITING_FOR_HOST_ACCEPTANCE` with a random acknowledgement ID and wait at most 300 seconds for a root-owned acknowledgement file in a newly created mode-`0700` runtime directory. A second invocation through the fixed trusted launcher with `--accept ACK_ID` validates the ID and atomically writes that file only after the Victus host test succeeds. Missing or invalid acknowledgement triggers rollback; valid acknowledgement completes with `CUTOVER_OK`. Rollback stops owned Caddy/firewall, restores link/config/environment, restarts loopback Control Plane, and verifies boundary/readiness plus deterministic smoke with `provider_invoked=false`. Do not expose a package-script or checkout-shell cutover entrypoint.
 
 - [ ] **Step 4: Verify and commit**
 
@@ -449,10 +449,9 @@ Create/fetch candidate at exact PR SHA; require clean status; run `/usr/bin/npm 
 
 - [ ] **Step 5: Stage and run isolated acceptance**
 
-```bash
-sudo bash /home/radek/autopilot-beta-proxy-candidate/ops/cockpit-proxy/stage-release.sh /home/radek/autopilot-beta-proxy-candidate /srv/autopilot-cockpit
-sudo bash /home/radek/autopilot-beta-proxy-candidate/ops/cockpit-proxy/isolated-acceptance.sh /home/radek/autopilot-beta-proxy-candidate /srv/autopilot-cockpit /tmp/autopilot-cockpit-proxy-state
-```
+Use only the root-owned operational entrypoints provisioned by Task 6. Never run
+an installer, `bash`, or `npm` from the mutable checkout with `sudo`; the
+checkout is input data, not a privileged execution boundary.
 
 On Victus, add exact hosts mapping, copy only public root, compare fingerprint, install it as `/usr/local/share/ca-certificates/autopilot-caddy-root.crt`, update trust, and run host acceptance against `https://autopilot.local:8443` with `AUTOPILOT_PROXY_TOKEN_COMMAND='printf %s isolated-test-token'`. Expected: trusted TLS without bypass, Playwright green, `HOST_PROXY_ACCEPTANCE_OK`. Then invoke `isolated-acceptance.sh --cleanup` and prove no `8443/8877` or isolated table.
 
@@ -480,8 +479,13 @@ Report SHA, PR/CI, CA fingerprint, isolated results, stable IP, live SHA, recove
 Create/validate fresh backup and recovery drill; record hashes, services/timers, boundary, liveness/readiness, and deterministic smoke. Run:
 
 ```bash
-sudo bash /home/radek/autopilot-beta-proxy-candidate/ops/cockpit-proxy/live-cutover.sh /home/radek/autopilot-beta-proxy-candidate /srv/autopilot-cockpit "$CANDIDATE_SHA"
+sudo /usr/local/sbin/autopilot-cockpit-cutover /home/radek/autopilot-beta-proxy-candidate /srv/autopilot-cockpit "$CANDIDATE_SHA"
 ```
+
+Task 6 must have installed `/usr/local/sbin/autopilot-cockpit-cutover` as
+root-owned mode `0755`. The launcher reads artifacts only from the accepted SHA
+with fixed `git`, `setpriv`, and an empty environment, verifies a root-owned
+snapshot, and executes the trusted worker from `/usr/local/libexec`.
 
 Expected: the first terminal reports `CUTOVER_WAITING_FOR_HOST_ACCEPTANCE` and an acknowledgement ID while keeping the rollback trap active. It must not print a secret.
 
@@ -498,7 +502,7 @@ bash ops/cockpit-proxy/host-acceptance.sh
 The host script captures command stdout directly into a private shell variable, rejects zero or multiple token lines, and never forwards the token to terminal output or Playwright artifacts. If and only if that command returns `HOST_PROXY_ACCEPTANCE_OK`, acknowledge the waiting cutover with:
 
 ```bash
-ssh -t -i ~/.ssh/autopilot-vm_ed25519 radek@192.168.122.99 "sudo /home/radek/autopilot-beta-proxy-candidate/ops/cockpit-proxy/live-cutover.sh --accept $ACK_ID"
+ssh -t -i ~/.ssh/autopilot-vm_ed25519 radek@192.168.122.99 "sudo /usr/local/sbin/autopilot-cockpit-cutover --accept $ACK_ID"
 ```
 
 The first terminal must then finish with `CUTOVER_OK`. If host acceptance fails, do not acknowledge; the 300-second timeout must produce `ROLLBACK_OK`.
