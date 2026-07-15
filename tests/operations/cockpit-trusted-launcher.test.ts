@@ -73,6 +73,14 @@ exec /usr/bin/mv "$@"
   return { base, root, checkout, sha, launcher, env, authorization, refreshAuthorization, eventLog };
 }
 
+function replaceInstalledWorkerWithNoop(f: ReturnType<typeof fixture>): void {
+  const worker = join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover");
+  const manifest = join(f.root, "var/lib/autopilot-cockpit/trusted-payload.manifest");
+  writeFileSync(worker, "#!/bin/bash\nexit 0\n"); chmodSync(worker, 0o755);
+  const hash = createHash("sha256").update(readFileSync(worker)).digest("hex");
+  writeFileSync(manifest, readFileSync(manifest, "utf8").replace(new RegExp(`^[a-f0-9]{64} 755 ${worker}$`, "m"), `${hash} 755 ${worker}`));
+}
+
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("trusted cockpit cutover launcher", () => {
@@ -236,6 +244,32 @@ describe("trusted cockpit cutover launcher", () => {
     mkdirSync(payload); chmodSync(payload, 0o777);
     const result = command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env });
     expect(result.status).not.toBe(0); expect(statSync(payload).mode & 0o777).toBe(0o777);
+  });
+
+  it.each(["substituted", "extra"])("rejects a manifest with an %s managed path", (kind) => {
+    const f = fixture();
+    expect(command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env }).status).toBe(0);
+    replaceInstalledWorkerWithNoop(f);
+    const manifest = join(f.root, "var/lib/autopilot-cockpit/trusted-payload.manifest");
+    const payload = join(f.root, "usr/local/libexec/autopilot-cockpit-payload");
+    const substitute = join(payload, "substitute");
+    copyFileSync(join(payload, "Caddyfile"), substitute); chmodSync(substitute, 0o644);
+    const original = readFileSync(manifest, "utf8");
+    if (kind === "substituted") writeFileSync(manifest, original.replace(`${payload}/Caddyfile`, substitute));
+    else {
+      const hash = createHash("sha256").update(readFileSync(substitute)).digest("hex");
+      writeFileSync(manifest, `${original}${hash} 644 ${substitute}\n`);
+    }
+    expect(command(f.launcher, ["--recover"], { env: f.env }).status).not.toBe(0);
+  });
+
+  it("rejects a hardlinked installed trusted payload file", () => {
+    const f = fixture();
+    expect(command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env }).status).toBe(0);
+    replaceInstalledWorkerWithNoop(f);
+    const worker = join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover");
+    linkSync(worker, join(f.base, "foreign-worker-link"));
+    expect(command(f.launcher, ["--recover"], { env: f.env }).status).not.toBe(0);
   });
 
   it("refuses a foreign watchdog file without changing it", () => {

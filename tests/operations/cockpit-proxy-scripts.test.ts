@@ -1377,7 +1377,8 @@ describe("Cockpit transactional live cutover", () => {
   it.each([
     "invalid-bool", "invalid-enum", "invalid-owner", "invalid-deadline", "invalid-boot-id",
     "unsafe-path", "invalid-hash", "invalid-identity", "inconsistent-flags",
-    "unexpected-file", "hidden-file", "hardlinked-file", "symlinked-file",
+    "unexpected-file", "hidden-file", "double-dot-active", "double-dot-backup", "unexpected-allowed-backup",
+    "hardlinked-file", "symlinked-file",
   ])("rejects terminal transaction semantic/tree corruption %s before launcher archival", (kind) => {
     const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);
     const first = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
@@ -1398,6 +1399,12 @@ describe("Cockpit transactional live cutover", () => {
     else if (kind === "inconsistent-flags") { replace("firewall_started", "1"); replace("firewall_attempted", "0"); }
     else if (kind === "unexpected-file") writeFileSync(join(active, "foreign"), "foreign\n", { mode: 0o600 });
     else if (kind === "hidden-file") writeFileSync(join(active, ".foreign"), "foreign\n", { mode: 0o600 });
+    else if (kind === "double-dot-active") writeFileSync(join(active, "..foreign"), "foreign\n", { mode: 0o600 });
+    else if (kind === "double-dot-backup") writeFileSync(join(active, "backups", "..foreign"), "foreign\n", { mode: 0o600 });
+    else if (kind === "unexpected-allowed-backup") {
+      copyFileSync(join(active, "backups", "environment"), join(active, "backups", "caddy-config"));
+      chmodSync(join(active, "backups", "caddy-config"), 0o644);
+    }
     else if (kind === "hardlinked-file") linkSync(join(active, "backups", "environment"), join(active, "backups", "firewall-identity"));
     else symlinkSync("environment", join(active, "backups", "firewall-identity"));
     const second = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
@@ -1407,6 +1414,39 @@ describe("Cockpit transactional live cutover", () => {
     expect(existsSync(active)).toBe(true);
     expect(existsSync(join(dirname(active), "history"))).toBe(false);
   }, 25_000);
+
+  it.each([
+    ["nft", {}, false],
+    ["helper", { AUTOPILOT_CUTOVER_TEST_FORCE_HELPER_DIR_ABSENT: "1" }, true],
+    ["caddy-dropin", {}, false],
+  ] as const)("archives a recovered %s mkdir identity crash-gap through the next trusted launcher", async (phase, extraEnv, relocateLibexec) => {
+    const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);
+    const installed = spawnSync(trusted.launcher, ["--install-watchdog", fixture.checkout, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(0);
+    const libexec = join(fixture.root, "usr", "local", "libexec");
+    const savedLibexec = join(fixture.root, "usr", "local", "saved-libexec");
+    if (relocateLibexec) {
+      renameSync(libexec, savedLibexec); mkdirSync(libexec, { mode: 0o755 });
+      copyFileSync(join(savedLibexec, "autopilot-cockpit-live-cutover"), join(libexec, "autopilot-cockpit-live-cutover"));
+      chmodSync(join(libexec, "autopilot-cockpit-live-cutover"), 0o755);
+    }
+    const worker = join(relocateLibexec ? savedLibexec : libexec, "autopilot-cockpit-live-cutover");
+    const child = spawn(worker, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...trusted.env, ...extraEnv, AUTOPILOT_CUTOVER_TEST_KILL_MKDIR_GAP: phase },
+    });
+    expect(await new Promise<number | null>((resolve) => child.once("close", resolve))).not.toBe(0);
+    const recovered = spawnSync(worker, ["--recover"], { encoding: "utf8", env: trusted.env, timeout: 15_000 });
+    expect(recovered.status, `${phase}\n${recovered.stdout}\n${recovered.stderr}`).toBe(0);
+    expect(recovered.stdout).toContain("ROLLBACK_OK");
+    if (relocateLibexec) renameSync(savedLibexec, libexec);
+    const next = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(next.status, `${phase}\n${next.stdout}\n${next.stderr}\n${readFileSync(fixture.stubLog, "utf8")}`).toBe(0);
+    expect(next.stdout).toContain("CUTOVER_OK");
+  }, 35_000);
 
   it("keeps concurrent launcher recovery from taking over the live adopted-lock owner", async () => {
     const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);

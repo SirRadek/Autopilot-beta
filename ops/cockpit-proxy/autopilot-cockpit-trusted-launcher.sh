@@ -37,7 +37,7 @@ if [ -z "$test_root" ]; then
 	[ "$EUID" -eq 0 ] || { printf '%s\n' "trusted launcher requires EUID 0" >&2; exit 1; }
 fi
 [ "$(readlink -f -- "$0")" = "$trusted_launcher" ] || { printf '%s\n' "Task 6 must provision the trusted launcher" >&2; exit 1; }
-[ ! -L "$trusted_launcher" ] && [ "$(stat -c %u:%g:%a -- "$trusted_launcher")" = "$expected_uid:$expected_gid:755" ] || exit 1
+[ ! -L "$trusted_launcher" ] && [ "$(stat -c %u:%g:%a:%h -- "$trusted_launcher")" = "$expected_uid:$expected_gid:755:1" ] || exit 1
 for trusted_directory in "$test_root/usr/local/libexec" "$test_root/var/lib/autopilot-cockpit" "$test_root/etc/systemd/system"; do
 	[ -d "$trusted_directory" ] && [ ! -L "$trusted_directory" ] || exit 1
 	trusted_directory_mode="$(stat -c %u:%g:%a -- "$trusted_directory")"
@@ -89,26 +89,33 @@ acquire_root_transaction_lock() {
 verify_managed_file() {
 	local path="$1" expected_mode="$2" expected_hash="$3"
 	[ -f "$path" ] && [ ! -L "$path" ] || return 1
-	[ "$(stat -c %u:%g:%a -- "$path")" = "$expected_uid:$expected_gid:$expected_mode" ] || return 1
+	[ "$(stat -c %u:%g:%a:%h -- "$path")" = "$expected_uid:$expected_gid:$expected_mode:1" ] || return 1
 	[ "$(sha256sum -- "$path" | awk '{print $1}')" = "$expected_hash" ]
 }
 
 verify_installed_payload() {
-	local count=0 hash mode path
+	local count=0 hash mode path expected_mode
 	declare -A seen=()
-	[ -f "$manifest" ] && [ ! -L "$manifest" ] && [ "$(stat -c %u:%g:%a -- "$manifest")" = "$expected_uid:$expected_gid:600" ] || return 1
+	[ -f "$manifest" ] && [ ! -L "$manifest" ] && [ "$(stat -c %u:%g:%a:%h -- "$manifest")" = "$expected_uid:$expected_gid:600:1" ] || return 1
 	while IFS=' ' read -r hash mode path; do
 		[[ "$hash" =~ ^[a-f0-9]{64}$ ]] && [[ "$mode" =~ ^(644|755)$ ]] || return 1
 		case "$path" in "$trusted_worker"|"$trusted_payload"/*|"$service"|"$timer") ;; *) return 1 ;; esac
+		case "$path" in "$trusted_worker"|*.sh) expected_mode=755 ;; *) expected_mode=644 ;; esac
+		[ "$mode" = "$expected_mode" ] || return 1
 		[ -z "${seen[$path]:-}" ] || return 1; seen[$path]=1; count=$((count + 1))
 		verify_managed_file "$path" "$mode" "$hash" || return 1
 	done < "$manifest"
-	[ "$count" -eq "${#managed_paths[@]}" ] && [ -n "${seen[$trusted_worker]:-}" ] && [ -n "${seen[$service]:-}" ] && [ -n "${seen[$timer]:-}" ]
+	[ "$count" -eq "${#managed_paths[@]}" ] || return 1
+	for path in "${managed_paths[@]}"; do [ -n "${seen[$path]:-}" ] || return 1; done
+	[ -d "$trusted_payload" ] && [ ! -L "$trusted_payload" ] && [ "$(stat -c %u:%g:%a -- "$trusted_payload")" = "$expected_uid:$expected_gid:755" ] || return 1
+	cmp -s <(printf '%s\0' Caddyfile caddy-autopilot.conf autopilot-cockpit.nft autopilot-cockpit-firewall.sh autopilot-cockpit-firewall.service autopilot-cockpit-recovery-verify.sh autopilot-cockpit-recovery-smoke.mjs | LC_ALL=C sort -z) \
+		<(find -P "$trusted_payload" -mindepth 1 -maxdepth 1 -printf '%P\0' | LC_ALL=C sort -z)
 }
 
 validate_terminal_cutover_transaction() {
 	local expected_checkout="$1" expected_release_root="$2" active="$cutover_transaction_root/active" candidate="$cutover_transaction_root/active/transaction.ledger"
 	local state sha ack value flag identity target owner_pid owner_starttime deadline boot_id key entry name env_dev env_ino env_uid env_gid env_mode env_size env_mtime env_ctime
+	local nft_config="$test_root/etc/nftables.d/autopilot-cockpit.nft" firewall_helper="$test_root/usr/local/libexec/autopilot-cockpit-firewall" caddy_dropin="$test_root/etc/systemd/system/caddy.service.d/autopilot.conf"
 	[ -d "$active" ] && [ ! -L "$active" ] && [ "$(stat -c %u:%g:%a -- "$active")" = "$expected_uid:$expected_gid:700" ] || return 1
 	[ -f "$candidate" ] && [ ! -L "$candidate" ] && [ "$(stat -c %u:%g:%a:%h -- "$candidate")" = "$expected_uid:$expected_gid:600:1" ] || return 1
 	[ -z "$(tail -c 1 -- "$candidate")" ] || return 1
@@ -145,7 +152,19 @@ validate_terminal_cutover_transaction() {
 	value="$(awk -F= '$1=="environment_owned_hash"{print $2}' "$candidate")"; if [ "$environment_attempted" = 1 ]; then [[ "$value" =~ ^[a-f0-9]{64}$ ]] || return 1; else [ -z "$value" ] || return 1; fi
 	[ "$(awk -F= '$1=="package_caddy_unit_metadata"{print $2}' "$candidate")" = "$expected_uid:$expected_gid:644" ] || return 1
 	for key in registered_temp_path registered_temp_kind registered_temp_identity; do [ -z "$(awk -F= -v k="$key" '$1==k{print $2}' "$candidate")" ] || return 1; done
-	for key in nft helper caddy_dropin; do flag="created_${key}_dir"; identity="$(awk -F= -v k="created_${key}_dir_identity" '$1==k{print $2}' "$candidate")"; if [ "${!flag}" = 1 ]; then [[ "$identity" =~ ^[0-9]+(:[0-9]+){4}$ ]] || return 1; else [ -z "$identity" ] || return 1; fi; done
+	for key in nft helper caddy_dropin; do
+		flag="created_${key}_dir"; identity="$(awk -F= -v k="created_${key}_dir_identity" '$1==k{print $2}' "$candidate")"
+		if [ "${!flag}" = 0 ]; then [ -z "$identity" ] || return 1
+		elif [ -n "$identity" ]; then [[ "$identity" =~ ^[0-9]+(:[0-9]+){4}$ ]] || return 1
+		elif [ "$state" = rolled-back ]; then
+			case "$key" in
+				nft) [ "$firewall_unit_installed:$nft_config_installed:$firewall_helper_installed:$firewall_identity_installed" = 0:0:0:0 ] && [ ! -e "$nft_config" ] && [ ! -L "$nft_config" ] || return 1 ;;
+				helper) [ "$firewall_unit_installed:$nft_config_installed:$firewall_helper_installed:$firewall_identity_installed" = 0:0:0:0 ] && [ ! -e "$firewall_helper" ] && [ ! -L "$firewall_helper" ] || return 1 ;;
+				caddy_dropin) [ "$caddy_files_installed:$caddy_config_installed:$caddy_dropin_installed" = 0:0:0 ] && [ ! -e "$caddy_dropin" ] && [ ! -L "$caddy_dropin" ] || return 1 ;;
+			esac
+		else return 1
+		fi
+	done
 	[ "$firewall_started" -le "$firewall_attempted" ] && [ "$firewall_attempted" -le "$firewall_reload_attempted" ] || return 1
 	if [ "$firewall_reload_attempted" = 1 ]; then [ "$firewall_unit_installed:$nft_config_installed:$firewall_helper_installed:$firewall_identity_installed" = 1:1:1:1 ] || return 1; fi
 	[ "$nft_config_installed" -le "$firewall_unit_installed" ] && [ "$firewall_helper_installed" -le "$nft_config_installed" ] && [ "$firewall_identity_installed" -le "$firewall_helper_installed" ] || return 1
@@ -158,15 +177,28 @@ validate_terminal_cutover_transaction() {
 	if [ "$state" = completed ]; then [ "$firewall_started:$current_switched:$environment_changed:$control_plane_restarted:$caddy_started" = 1:1:1:1:1 ] || return 1; fi
 	[ -z "$(find -P "$active" -xdev \( ! -uid "$expected_uid" -o ! -gid "$expected_gid" -o -type l \) -print -quit)" ] || return 1
 	[ -z "$(find -P "$active" -xdev -type f ! -links 1 -print -quit)" ] || return 1
-	for entry in "$active"/* "$active"/.[!.]*; do [ -e "$entry" ] || continue; name="${entry##*/}"; case "$name" in backups|snapshot|snapshot.sha256|transaction.ledger) ;; *) return 1 ;; esac; done
+	cmp -s <(printf '%s\0' backups snapshot snapshot.sha256 transaction.ledger | LC_ALL=C sort -z) \
+		<(find -P "$active" -mindepth 1 -maxdepth 1 -printf '%P\0' | LC_ALL=C sort -z) || return 1
 	[ "$(stat -c %a -- "$active/backups")" = 700 ] && [ "$(stat -c %a -- "$active/snapshot")" = 500 ] && [ "$(stat -c %a -- "$active/snapshot.sha256")" = 400 ] || return 1
 	[ -f "$active/snapshot.sha256" ] && [ ! -L "$active/snapshot.sha256" ] || return 1
-	for entry in "$active/backups"/* "$active/backups"/.[!.]*; do [ -e "$entry" ] || continue; [ -f "$entry" ] && [ ! -L "$entry" ] || return 1; name="${entry##*/}"; case "$name:$(stat -c %a -- "$entry")" in environment:600|caddy-config:644|caddy-dropin:644|firewall-unit:644|nft-config:644|firewall-helper:755|firewall-identity:600) ;; *) return 1 ;; esac; done
+	while IFS= read -r -d '' name; do
+		entry="$active/backups/$name"; [ -f "$entry" ] && [ ! -L "$entry" ] || return 1
+		case "$name:$(stat -c %a -- "$entry")" in
+			environment:600) ;;
+			caddy-config:644) [ "$caddy_config_installed" = 1 ] || return 1 ;;
+			caddy-dropin:644) [ "$caddy_dropin_installed" = 1 ] && [ "$created_caddy_dropin_dir" = 0 ] || return 1 ;;
+			firewall-unit:644) [ "$firewall_unit_installed" = 1 ] || return 1 ;;
+			nft-config:644) [ "$nft_config_installed" = 1 ] && [ "$created_nft_dir" = 0 ] || return 1 ;;
+			firewall-helper:755) [ "$firewall_helper_installed" = 1 ] && [ "$created_helper_dir" = 0 ] || return 1 ;;
+			firewall-identity:600) [ "$firewall_identity_installed" = 1 ] || return 1 ;;
+			*) return 1 ;;
+		esac
+	done < <(find -P "$active/backups" -mindepth 1 -maxdepth 1 -printf '%P\0')
 	[ -f "$active/backups/environment" ] && [ ! -L "$active/backups/environment" ] || return 1
 	[ "$(sha256sum "$active/backups/environment" | awk '{print $1}')" = "$(awk -F= '$1=="environment_pre_hash"{print $2}' "$candidate")" ] || return 1
+	cmp -s <(printf '%s\0' Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer autopilot-cockpit-recovery-verify.sh autopilot-cockpit-recovery-smoke.mjs package-caddy.service live-cutover.sh | LC_ALL=C sort -z) \
+		<(find -P "$active/snapshot" -mindepth 1 -maxdepth 1 -printf '%P\0' | LC_ALL=C sort -z) || return 1
 	for name in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer autopilot-cockpit-recovery-verify.sh autopilot-cockpit-recovery-smoke.mjs package-caddy.service live-cutover.sh; do [ -f "$active/snapshot/$name" ] && [ ! -L "$active/snapshot/$name" ] && [ "$(stat -c %a -- "$active/snapshot/$name")" = 400 ] || return 1; done
-	[ "$(find -P "$active/snapshot" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 11 ] || return 1
-	[ -z "$(find -P "$active/snapshot" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ] || return 1
 	[ "$(sha256sum "$active/snapshot/package-caddy.service" | awk '{print $1}')" = "$(awk -F= '$1=="package_caddy_unit_hash"{print $2}' "$candidate")" ] || return 1
 	(cd "$active/snapshot" && sha256sum --check --strict "$active/snapshot.sha256" >/dev/null)
 }
