@@ -31,20 +31,26 @@ function fixture() {
   command("git", ["add", "."], { cwd: checkout }); command("git", ["commit", "-qm", "payload"], { cwd: checkout });
   const sha = command("git", ["rev-parse", "HEAD"], { cwd: checkout }).stdout.trim();
   const authorization = join(root, "etc/autopilot-cockpit/cutover.authorization");
-  const authorizationLines = [
-    "version=autopilot-cockpit-authorization-v1", `sha=${sha}`, `checkout=${checkout}`,
-    "origin=https://example.invalid/autopilot.git", `uid=${process.getuid!()}`, `gid=${process.getgid!()}`,
-    `payload_count=${payloads.length}`,
-    ...payloads.map((name) => `payload.${name}=${createHash("sha256").update(command("git", ["show", `${sha}:ops/cockpit-proxy/${name}`], { cwd: checkout }).stdout).digest("hex")}`),
-  ];
-  const authorizationBody = `${authorizationLines.join("\n")}\n`;
-  writeFileSync(authorization, `${authorizationBody}authorization_id=${createHash("sha256").update(authorizationBody).digest("hex")}\n`, { mode: 0o400 });
-  chmodSync(authorization, 0o400);
+  const refreshAuthorization = (targetSha: string) => {
+    const authorizationLines = [
+      "version=autopilot-cockpit-authorization-v1", `sha=${targetSha}`, `checkout=${checkout}`,
+      "origin=https://example.invalid/autopilot.git", `uid=${process.getuid!()}`, `gid=${process.getgid!()}`,
+      `payload_count=${payloads.length}`,
+      ...payloads.map((name) => `payload.${name}=${createHash("sha256").update(command("git", ["show", `${targetSha}:ops/cockpit-proxy/${name}`], { cwd: checkout }).stdout).digest("hex")}`),
+    ];
+    const authorizationBody = `${authorizationLines.join("\n")}\n`;
+    chmodSync(authorization, 0o600);
+    writeFileSync(authorization, `${authorizationBody}authorization_id=${createHash("sha256").update(authorizationBody).digest("hex")}\n`);
+    chmodSync(authorization, 0o400);
+  };
+  writeFileSync(authorization, "", { mode: 0o600 }); refreshAuthorization(sha);
   const launcher = join(root, "usr/local/sbin/autopilot-cockpit-cutover");
   copyFileSync(join(source, "autopilot-cockpit-trusted-launcher.sh"), launcher); chmodSync(launcher, 0o755);
+  const eventLog = join(base, "events.log"); writeFileSync(eventLog, "");
   writeFileSync(join(base, "enabled"), "disabled\n"); writeFileSync(join(base, "active"), "inactive\n");
   writeFileSync(join(bin, "systemctl"), `#!/usr/bin/env bash
 set -eu
+printf 'systemctl:%s\n' "$1" >> ${JSON.stringify(eventLog)}
 case "$1" in
 is-enabled) cat ${JSON.stringify(join(base, "enabled"))}; [[ "$(cat ${JSON.stringify(join(base, "enabled"))})" == enabled ]] ;;
 is-active) cat ${JSON.stringify(join(base, "active"))}; [[ "$(cat ${JSON.stringify(join(base, "active"))})" == active ]] ;;
@@ -58,11 +64,12 @@ unmask|mask|reset-failed) : ;;
 esac
 `, { mode: 0o755 });
   writeFileSync(join(bin, "mv"), `#!/usr/bin/env bash
+[[ "\${!#}" == *recovery.service ]] && printf 'mv:recovery.service\n' >> ${JSON.stringify(eventLog)}
 if [[ "\${FAIL_ON:-}" == mv && "\${!#}" == *recovery.service ]]; then exit 88; fi
 exec /usr/bin/mv "$@"
 `, { mode: 0o755 });
   const env = { ...process.env, AUTOPILOT_LAUNCHER_TEST_ROOT: root, AUTOPILOT_LAUNCHER_TEST_BIN: bin };
-  return { base, root, checkout, sha, launcher, env, authorization };
+  return { base, root, checkout, sha, launcher, env, authorization, refreshAuthorization, eventLog };
 }
 
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -109,6 +116,33 @@ describe("trusted cockpit cutover launcher", () => {
     expect(recovered.status, `${recovered.stdout}\n${recovered.stderr}`).toBe(0);
     expect(existsSync(payload)).toBe(false);
   });
+
+  it.each([
+    "before-first-ledger",
+    "after-first-ledger",
+    "after-transaction-mkdir",
+    "after-backups-mkdir",
+    "after-first-backup",
+    "after-meta-mkdir",
+    "after-first-meta",
+    "after-first-temp",
+    "after-payload-mkdir",
+    "after-terminal-ledger",
+  ])("recovers a SIGKILL at install initialization boundary %s and permits a subsequent install", (phase) => {
+    const f = fixture();
+    const killed = command(f.launcher, ["--install-watchdog", f.checkout, f.sha], {
+      env: { ...f.env, AUTOPILOT_LAUNCHER_TEST_KILL_INIT: phase },
+    });
+    expect(killed.status, `${killed.stdout}\n${killed.stderr}`).not.toBe(0);
+    const recovered = command(f.launcher, ["--recover-install"], { env: f.env });
+    expect(recovered.status, `${phase}\n${recovered.stdout}\n${recovered.stderr}`).toBe(0);
+    if (phase === "after-terminal-ledger") {
+      expect(existsSync(join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover"))).toBe(true);
+      expect(existsSync(join(f.root, "var/lib/autopilot-cockpit/trusted-payload.manifest"))).toBe(true);
+    }
+    const installed = command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env });
+    expect(installed.status, `${phase}\n${installed.stdout}\n${installed.stderr}`).toBe(0);
+  }, 15_000);
 
   it("preserves a foreign replacement encountered by install recovery", () => {
     const f = fixture(); const worker = join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover");
@@ -171,11 +205,14 @@ describe("trusted cockpit cutover launcher", () => {
     writeFileSync(join(f.checkout, "ops/cockpit-proxy/live-cutover.sh"), `${readFileSync(join(f.checkout, "ops/cockpit-proxy/live-cutover.sh"), "utf8")}\n# revision\n`);
     command("git", ["add", "."], { cwd: f.checkout }); command("git", ["commit", "-qm", "revision"], { cwd: f.checkout });
     const revised = command("git", ["rev-parse", "HEAD"], { cwd: f.checkout }).stdout.trim();
+    f.refreshAuthorization(revised);
     const result = command(f.launcher, ["--install-watchdog", f.checkout, revised], { env: { ...f.env, FAIL_ON: failure } });
     expect(result.status).not.toBe(0);
+    const events = readFileSync(f.eventLog, "utf8");
+    expect(events).toContain(failure === "mv" ? "mv:recovery.service" : `systemctl:${failure === "reload" ? "daemon-reload" : failure}`);
     paths.forEach((path, index) => { expect(readFileSync(path)).toEqual(before[index]); expect(statSync(path).mode & 0o777).toBe(index === 0 ? 0o755 : 0o644); });
     expect(readFileSync(join(f.base, "enabled"), "utf8")).toBe("disabled\n");
     expect(readFileSync(join(f.base, "active"), "utf8")).toBe("inactive\n");
     expect(existsSync(join(f.root, "var/lib/autopilot-cockpit/trusted-payload.manifest"))).toBe(true);
-  });
+  }, 15_000);
 });

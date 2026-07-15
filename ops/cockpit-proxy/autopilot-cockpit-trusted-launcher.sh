@@ -29,6 +29,8 @@ canonical_origin="https://github.com/SirRadek/Autopilot-beta.git"
 cutover_transaction_root="$test_root/var/lib/autopilot-cockpit/transactions"
 install_transaction="$test_root/var/lib/autopilot-cockpit/install-transaction"
 install_ledger="$install_transaction/transaction.ledger"
+install_intent="$test_root/var/lib/autopilot-cockpit/install-transaction.ledger"
+install_stage="$test_root/var/lib/autopilot-cockpit/install-stage"
 
 if [ -z "$test_root" ]; then
 	[ "$EUID" -eq 0 ] || { printf '%s\n' "trusted launcher requires EUID 0" >&2; exit 1; }
@@ -154,8 +156,9 @@ snapshot_from_sha() {
 	checkout="$(readlink -f -- "$checkout")"
 	validate_authorization "$checkout" "$sha" || return 1
 	uid="$authorized_uid"; gid="$authorized_gid"
-	stage="$(mktemp -d "$test_root/var/lib/autopilot-cockpit/.trusted-payload.XXXXXXXX")"
-	chmod 0700 "$stage"; chown "$expected_uid:$expected_gid" "$stage"
+	stage="$install_stage"
+	[ ! -e "$stage" ] && [ ! -L "$stage" ] || return 1
+	mkdir -m 0700 -- "$stage"; chown "$expected_uid:$expected_gid" "$stage"
 	: > "$stage/manifest"
 	for path in "${payload_paths[@]}"; do
 		out="$stage/${path##*/}"
@@ -176,39 +179,177 @@ snapshot_from_sha() {
 object_identity() { stat -Lc %d:%i:%u:%g:%a:%s:%Y:%Z -- "$1"; }
 directory_object_identity() { stat -Lc %d:%i:%u:%g:%a -- "$1"; }
 
-write_install_ledger() {
-	local state="$1" attempting="${2:-}" tmp
-	tmp="$(mktemp -- "$install_transaction/.ledger.XXXXXXXX")"
-	printf 'version=autopilot-cockpit-install-v1\nstate=%s\nattempting=%s\nold_enabled=%s\nold_active=%s\npayload_dir_existed=%s\npayload_dir_identity=%s\n' \
-		"$state" "$attempting" "$install_old_enabled" "$install_old_active" "$payload_dir_existed" "$payload_dir_identity" > "$tmp"
-	chmod 0600 "$tmp"; chown "$expected_uid:$expected_gid" "$tmp"; /usr/bin/mv -T -- "$tmp" "$install_ledger"
+test_kill_install_init() {
+	[ -n "$test_root" ] && [ "${AUTOPILOT_LAUNCHER_TEST_KILL_INIT:-}" = "$1" ] || return 0
+	kill -KILL $$
 }
 
-install_meta_value() { awk -F= -v key="$2" '$1==key {value=substr($0,length(key)+2)} END {print value}' "$install_transaction/meta/$1"; }
+validate_install_intent() {
+	[ -f "$install_intent" ] && [ ! -L "$install_intent" ] && [ "$(stat -c %u:%g:%a -- "$install_intent")" = "$expected_uid:$expected_gid:600" ] || return 1
+	LC_ALL=C awk -F= '
+	BEGIN { n=split("version phase old_enabled old_active payload_dir_existed payload_dir_identity",k," "); for(i=1;i<=n;i++)a[k[i]]=1 }
+	{ if($0 !~ /^[A-Za-z0-9_]+=[A-Za-z0-9:._-]*$/ || !($1 in a) || ++s[$1]!=1) exit 1 }
+	END { if(NR!=n) exit 1; for(x in a)if(s[x]!=1)exit 1 }' "$install_intent" || return 1
+	[ "$(awk -F= '$1=="version"{print $2}' "$install_intent")" = autopilot-cockpit-install-intent-v1 ]
+	[ "$(awk -F= '$1=="phase"{print $2}' "$install_intent")" = initializing ]
+}
+
+validate_install_ledger() {
+	[ -f "$install_ledger" ] && [ ! -L "$install_ledger" ] && [ "$(stat -c %u:%g:%a -- "$install_ledger")" = "$expected_uid:$expected_gid:600" ] || return 1
+	LC_ALL=C awk -F= '
+	BEGIN { n=split("version phase attempting old_enabled old_active payload_dir_existed payload_dir_identity",k," "); for(i=1;i<=n;i++)a[k[i]]=1 }
+	{ if($0 !~ /^[A-Za-z0-9_]+=[A-Za-z0-9:._-]*$/ || !($1 in a) || ++s[$1]!=1) exit 1 }
+	END { if(NR!=n) exit 1; for(x in a)if(s[x]!=1)exit 1 }' "$install_ledger" || return 1
+	[ "$(awk -F= '$1=="version"{print $2}' "$install_ledger")" = autopilot-cockpit-install-v2 ] || return 1
+	case "$(awk -F= '$1=="phase"{print $2}' "$install_ledger")" in initializing|prepared|publishing|systemd|terminal) ;; *) return 1 ;; esac
+}
+
+write_install_ledger() {
+	local phase="$1" attempting="${2:-}" tmp="$install_transaction/.ledger.next"
+	case "$phase" in initializing|prepared|publishing|systemd|terminal) ;; *) return 1 ;; esac
+	[ ! -e "$tmp" ] && [ ! -L "$tmp" ] || return 1
+	(umask 077; printf 'version=autopilot-cockpit-install-v2\nphase=%s\nattempting=%s\nold_enabled=%s\nold_active=%s\npayload_dir_existed=%s\npayload_dir_identity=%s\n' \
+		"$phase" "$attempting" "$install_old_enabled" "$install_old_active" "$payload_dir_existed" "$payload_dir_identity" > "$tmp")
+	chown "$expected_uid:$expected_gid" "$tmp"
+	[ "$(stat -c %a -- "$tmp")" = 600 ] || return 1
+	/usr/bin/mv -T -- "$tmp" "$install_ledger"
+	validate_install_ledger
+	sync -f "$install_ledger"; sync -f "$install_transaction"
+}
+
+write_install_intent() {
+	[ ! -e "$install_intent" ] && [ ! -L "$install_intent" ] || return 1
+	(umask 077; set -o noclobber; printf 'version=autopilot-cockpit-install-intent-v1\nphase=initializing\nold_enabled=%s\nold_active=%s\npayload_dir_existed=%s\npayload_dir_identity=%s\n' \
+		"$install_old_enabled" "$install_old_active" "$payload_dir_existed" "$payload_dir_identity" > "$install_intent")
+	chown "$expected_uid:$expected_gid" "$install_intent"
+	validate_install_intent
+	sync -f "$install_intent"
+	sync -f "$(dirname "$install_intent")"
+}
+
+prepare_install_intent() {
+	install_old_enabled="$(systemctl is-enabled "$timer_unit" 2>/dev/null || :)"; [ -n "$install_old_enabled" ] || install_old_enabled=disabled
+	install_old_active="$(systemctl is-active "$timer_unit" 2>/dev/null || :)"; [ -n "$install_old_active" ] || install_old_active=inactive
+	case "$install_old_enabled" in enabled|disabled|masked|masked-runtime) ;; *) return 1 ;; esac
+	case "$install_old_active" in active|inactive) ;; *) return 1 ;; esac
+	for item in "${managed_paths[@]}" "$manifest"; do
+		if [ -e "$item" ] || [ -L "$item" ]; then verify_installed_payload || { printf '%s\n' "refusing foreign installed watchdog payload" >&2; return 1; }; break; fi
+	done
+	payload_dir_existed=0; payload_dir_identity=""
+	if [ -e "$trusted_payload" ] || [ -L "$trusted_payload" ]; then
+		[ -d "$trusted_payload" ] && [ ! -L "$trusted_payload" ] && [ "$(stat -c %u:%g:%a -- "$trusted_payload")" = "$expected_uid:$expected_gid:755" ] || return 1
+		payload_dir_existed=1; payload_dir_identity="$(directory_object_identity "$trusted_payload")"
+	fi
+	[ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ] && [ ! -e "$install_stage" ] && [ ! -L "$install_stage" ] || return 1
+	test_kill_install_init before-first-ledger
+	write_install_intent
+	test_kill_install_init after-first-ledger
+}
+
+remove_install_stage() {
+	if [ ! -e "$install_stage" ] && [ ! -L "$install_stage" ]; then return 0; fi
+	[ -d "$install_stage" ] && [ ! -L "$install_stage" ] && [ "$(stat -c %u:%g:%a -- "$install_stage")" = "$expected_uid:$expected_gid:700" ] || return 1
+	[ -z "$(find -P "$install_stage" -xdev \( ! -uid "$expected_uid" -o ! -gid "$expected_gid" -o -type l \) -print -quit)" ] || return 1
+	local entry name
+	for entry in "$install_stage"/*; do [ -e "$entry" ] || continue; name="${entry##*/}"; case "$name" in manifest|installed-manifest|live-cutover.sh|Caddyfile|caddy-autopilot.conf|autopilot-cockpit.nft|autopilot-cockpit-firewall.sh|autopilot-cockpit-firewall.service|autopilot-cockpit-cutover-recovery.service|autopilot-cockpit-cutover-recovery.timer|autopilot-cockpit-recovery-verify.sh|autopilot-cockpit-recovery-smoke.mjs) ;; *) return 1 ;; esac; done
+	rm -rf -- "$install_stage"
+}
+
+initializing_transaction_safe() {
+	[ -d "$install_transaction" ] && [ ! -L "$install_transaction" ] && [ "$(stat -c %u:%g:%a -- "$install_transaction")" = "$expected_uid:$expected_gid:700" ] || return 1
+	[ -z "$(find -P "$install_transaction" -xdev \( ! -uid "$expected_uid" -o ! -gid "$expected_gid" \) -print -quit)" ] || return 1
+	[ -z "$(find -P "$install_transaction" -xdev -type l -print -quit)" ] || return 1
+	local entry name
+	for entry in "$install_transaction"/* "$install_transaction"/.[!.]*; do
+		[ -e "$entry" ] || continue
+		name="${entry##*/}"
+		case "$name" in backups|meta|transaction.ledger|.ledger.next) ;; *) return 1 ;; esac
+	done
+	for entry in "$install_transaction/backups"/* "$install_transaction/meta"/*; do
+		[ -e "$entry" ] || continue
+		name="${entry##*/}"; name="${name#.absent-}"
+		case "$name" in live-cutover.sh|autopilot-cockpit-live-cutover|Caddyfile|caddy-autopilot.conf|autopilot-cockpit.nft|autopilot-cockpit-firewall.sh|autopilot-cockpit-firewall.service|autopilot-cockpit-cutover-recovery.service|autopilot-cockpit-cutover-recovery.timer|autopilot-cockpit-recovery-verify.sh|autopilot-cockpit-recovery-smoke.mjs|trusted-payload.manifest) ;; *) return 1 ;; esac
+	done
+}
+
+validate_install_meta() {
+	local meta="$1"
+	[ -f "$meta" ] && [ ! -L "$meta" ] && [ "$(stat -c %u:%g:%a -- "$meta")" = "$expected_uid:$expected_gid:600" ] || return 1
+	LC_ALL=C awk -F= '
+	BEGIN { n=split("path prior_kind prior_identity prior_hash new_hash new_mode new_identity temp_path",k," "); for(i=1;i<=n;i++)a[k[i]]=1 }
+	{ if($0 !~ /^[A-Za-z0-9_]+=[A-Za-z0-9_/.:-]*$/ || !($1 in a) || ++s[$1]!=1) exit 1 }
+	END { if(NR!=n) exit 1; for(x in a)if(s[x]!=1)exit 1 }' "$meta"
+}
+
+install_meta_value() {
+	validate_install_meta "$install_transaction/meta/$1" || return 1
+	awk -F= -v key="$2" '$1==key {print substr($0,length(key)+2)}' "$install_transaction/meta/$1"
+}
+
+write_install_meta() {
+	local key="$1" path="$2" prior_kind="$3" prior_identity="$4" prior_hash="$5" new_hash="$6" new_mode="$7" new_identity="$8" temp_path="$9"
+	local meta="$install_transaction/meta/$key" next="$install_transaction/meta/.$key.next"
+	[ ! -e "$next" ] && [ ! -L "$next" ] || return 1
+	(umask 077; printf 'path=%s\nprior_kind=%s\nprior_identity=%s\nprior_hash=%s\nnew_hash=%s\nnew_mode=%s\nnew_identity=%s\ntemp_path=%s\n' \
+		"$path" "$prior_kind" "$prior_identity" "$prior_hash" "$new_hash" "$new_mode" "$new_identity" "$temp_path" > "$next")
+	chown "$expected_uid:$expected_gid" "$next"; /usr/bin/mv -T -- "$next" "$meta"; validate_install_meta "$meta"
+	sync -f "$meta"; sync -f "$install_transaction/meta"
+}
 
 recover_install_transaction() {
-	local key path prior_kind prior_identity new_identity temp_path backup live_identity failed=0
-	[ -d "$install_transaction" ] && [ ! -L "$install_transaction" ] && [ "$(stat -c %u:%g:%a -- "$install_transaction")" = "$expected_uid:$expected_gid:700" ] || return 1
-	[ -f "$install_ledger" ] && [ ! -L "$install_ledger" ] && [ "$(stat -c %u:%g:%a -- "$install_ledger")" = "$expected_uid:$expected_gid:600" ] || return 1
-	install_old_enabled="$(awk -F= '$1=="old_enabled"{print $2}' "$install_ledger")"; install_old_active="$(awk -F= '$1=="old_active"{print $2}' "$install_ledger")"
-	payload_dir_existed="$(awk -F= '$1=="payload_dir_existed"{print $2}' "$install_ledger")"; payload_dir_identity="$(awk -F= '$1=="payload_dir_identity"{print $2}' "$install_ledger")"
+	local key path prior_kind prior_identity new_identity temp_path backup live_identity new_hash new_mode phase restore_tmp failed=0
+	if [ ! -e "$install_intent" ] && [ ! -L "$install_intent" ] && [ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ]; then [ ! -e "$install_stage" ] && [ ! -L "$install_stage" ]; return; fi
+	validate_install_intent || return 1
+	install_old_enabled="$(awk -F= '$1=="old_enabled"{print $2}' "$install_intent")"; install_old_active="$(awk -F= '$1=="old_active"{print $2}' "$install_intent")"
+	payload_dir_existed="$(awk -F= '$1=="payload_dir_existed"{print $2}' "$install_intent")"; payload_dir_identity="$(awk -F= '$1=="payload_dir_identity"{print $2}' "$install_intent")"
+	case "$install_old_enabled" in enabled|disabled|masked|masked-runtime) ;; *) return 1 ;; esac
+	case "$install_old_active" in active|inactive) ;; *) return 1 ;; esac
+	case "$payload_dir_existed" in 0) [ -z "$payload_dir_identity" ] || return 1 ;; 1) [[ "$payload_dir_identity" =~ ^[0-9]+(:[0-9]+){4}$ ]] || return 1 ;; *) return 1 ;; esac
+	if [ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ]; then remove_install_stage || return 1; rm -f -- "$install_intent"; return 0; fi
+	initializing_transaction_safe || return 1
+	if ! validate_install_ledger; then
+		[ ! -e "$install_ledger" ] && [ ! -L "$install_ledger" ] || return 1
+		remove_install_stage || return 1; rm -rf -- "$install_transaction"; rm -f -- "$install_intent"; return 0
+	fi
+	phase="$(awk -F= '$1=="phase"{print $2}' "$install_ledger")"
+	if [ "$phase" = initializing ]; then remove_install_stage || return 1; rm -rf -- "$install_transaction"; rm -f -- "$install_intent"; return 0; fi
+	if [ -e "$install_transaction/.ledger.next" ] || [ -L "$install_transaction/.ledger.next" ]; then
+		[ -f "$install_transaction/.ledger.next" ] && [ ! -L "$install_transaction/.ledger.next" ] && [ "$(stat -c %u:%g:%a -- "$install_transaction/.ledger.next")" = "$expected_uid:$expected_gid:600" ] || return 1
+		rm -f -- "$install_transaction/.ledger.next"
+	fi
+	if [ "$phase" = terminal ]; then
+		[ "$(awk -F= '$1=="attempting"{print $2}' "$install_ledger")" = installed ] || return 1
+		verify_installed_payload || return 1
+		[ "$(systemctl is-enabled "$timer_unit" 2>/dev/null || :)" = enabled ] || return 1
+		[ "$(systemctl is-active "$timer_unit" 2>/dev/null || :)" = active ] || return 1
+		remove_install_stage || return 1
+		rm -rf -- "$install_transaction"; rm -f -- "$install_intent"
+		return 0
+	fi
 	for meta in "$install_transaction"/meta/*; do
 		[ -f "$meta" ] || continue; key="${meta##*/}"; path="$(install_meta_value "$key" path)"; prior_kind="$(install_meta_value "$key" prior_kind)"
 		prior_identity="$(install_meta_value "$key" prior_identity)"; new_identity="$(install_meta_value "$key" new_identity)"; temp_path="$(install_meta_value "$key" temp_path)"; backup="$install_transaction/backups/$key"
+		new_hash="$(install_meta_value "$key" new_hash)"; new_mode="$(install_meta_value "$key" new_mode)"
+		case "$path" in "$trusted_worker"|"$service"|"$timer"|"$manifest"|"$trusted_payload"/*) ;; *) return 1 ;; esac
+		case "$prior_kind" in file|absent) ;; *) return 1 ;; esac
 		if [ -n "$temp_path" ] && { [ -e "$temp_path" ] || [ -L "$temp_path" ]; }; then
-			[ -n "$new_identity" ] && [ "$(object_identity "$temp_path" 2>/dev/null)" = "$new_identity" ] && rm -f -- "$temp_path" || failed=1
+			if [ -n "$new_identity" ]; then [ "$(object_identity "$temp_path" 2>/dev/null)" = "$new_identity" ] || { failed=1; continue; }
+			else [ -f "$temp_path" ] && [ ! -L "$temp_path" ] && [ "$(stat -c %u:%g:%a -- "$temp_path")" = "$expected_uid:$expected_gid:$new_mode" ] && [ "$(sha256sum "$temp_path" | awk '{print $1}')" = "$new_hash" ] || { failed=1; continue; }; fi
+			rm -f -- "$temp_path" || failed=1
 		fi
 		if [ -e "$path" ] || [ -L "$path" ]; then live_identity="$(object_identity "$path" 2>/dev/null || :)"; else live_identity=absent; fi
 		if [ "$prior_kind" = file ] && [ "$live_identity" = "$prior_identity" ]; then continue
 		elif [ "$prior_kind" = absent ] && [ "$live_identity" = absent ]; then continue
 		elif [ -n "$new_identity" ] && [ "$live_identity" = "$new_identity" ]; then
-			if [ "$prior_kind" = file ]; then tmp_restore="$(mktemp -- "$(dirname "$path")/.install-restore.XXXXXXXX")"; cp -a -- "$backup" "$tmp_restore" || { failed=1; continue; }; [ "$(object_identity "$path")" = "$new_identity" ] && /usr/bin/mv -T -- "$tmp_restore" "$path" || { rm -f "$tmp_restore"; failed=1; }
+			if [ "$prior_kind" = file ]; then restore_tmp="$(dirname "$path")/.autopilot-watchdog-restore-$key"; [ ! -e "$restore_tmp" ] && [ ! -L "$restore_tmp" ] || { failed=1; continue; }; cp -a -- "$backup" "$restore_tmp" || { failed=1; continue; }; [ "$(object_identity "$path")" = "$new_identity" ] && /usr/bin/mv -T -- "$restore_tmp" "$path" || { rm -f "$restore_tmp"; failed=1; }
 			else rm -f -- "$path" || failed=1; fi
 		else failed=1
 		fi
 	done
 	if [ "$payload_dir_existed" = 0 ] && [ -d "$trusted_payload" ] && [ ! -L "$trusted_payload" ]; then
-		[ -n "$payload_dir_identity" ] && [ "$(directory_object_identity "$trusted_payload")" = "$payload_dir_identity" ] && rmdir -- "$trusted_payload" || failed=1
+		[ "$(stat -c %u:%g:%a -- "$trusted_payload")" = "$expected_uid:$expected_gid:755" ] && [ -z "$(find -P "$trusted_payload" -mindepth 1 -maxdepth 1 -print -quit)" ] || failed=1
+		if [ "$failed" = 0 ]; then [ -z "$payload_dir_identity" ] || [ "$(directory_object_identity "$trusted_payload")" = "$payload_dir_identity" ] || failed=1; fi
+		[ "$failed" = 0 ] && rmdir -- "$trusted_payload" || failed=1
 	fi
 	systemctl daemon-reload || failed=1
 	case "$install_old_enabled" in enabled) systemctl unmask "$timer_unit" >/dev/null 2>&1 && systemctl enable "$timer_unit" >/dev/null || failed=1 ;; disabled) systemctl unmask "$timer_unit" >/dev/null 2>&1 || :; systemctl disable "$timer_unit" >/dev/null || failed=1 ;; masked) systemctl mask "$timer_unit" >/dev/null || failed=1 ;; masked-runtime) systemctl mask --runtime "$timer_unit" >/dev/null || failed=1 ;; *) failed=1 ;; esac
@@ -216,50 +357,75 @@ recover_install_transaction() {
 	[ "$(systemctl is-enabled "$timer_unit" 2>/dev/null || :)" = "$install_old_enabled" ] || failed=1
 	[ "$(systemctl is-active "$timer_unit" 2>/dev/null || :)" = "$install_old_active" ] || failed=1
 	[ "$failed" = 0 ] || return 1
-	rm -rf -- "$install_transaction"
+	write_install_ledger terminal recovered || return 1
+	remove_install_stage || return 1
+	rm -rf -- "$install_transaction"; rm -f -- "$install_intent"
 }
 
 publish_install_file() {
-	local source="$1" destination="$2" mode="$3" key="$(basename "$2")" meta="$install_transaction/meta/$(basename "$2")" tmp prior_identity
+	local source="$1" destination="$2" mode="$3" key="$(basename "$2")" tmp prior_identity prior_kind prior_hash new_hash new_identity
 	prior_identity="$(install_meta_value "$key" prior_identity)"
-	if [ "$(install_meta_value "$key" prior_kind)" = file ]; then [ "$(object_identity "$destination")" = "$prior_identity" ] || return 1; else [ ! -e "$destination" ] && [ ! -L "$destination" ] || return 1; fi
-	tmp="$(mktemp -- "$(dirname "$destination")/.autopilot-watchdog.XXXXXXXX")" || return 1
+	prior_kind="$(install_meta_value "$key" prior_kind)"; prior_hash="$(install_meta_value "$key" prior_hash)"; new_hash="$(install_meta_value "$key" new_hash)"
+	if [ "$prior_kind" = file ]; then [ "$(object_identity "$destination")" = "$prior_identity" ] || return 1; else [ ! -e "$destination" ] && [ ! -L "$destination" ] || return 1; fi
+	tmp="$(install_meta_value "$key" temp_path)"; [ "$tmp" = "$(dirname "$destination")/.autopilot-watchdog-install-$key" ] || return 1
+	[ ! -e "$tmp" ] && [ ! -L "$tmp" ] || return 1
+	write_install_ledger publishing "temp-$key"
 	install -o "$expected_uid" -g "$expected_gid" -m "$mode" "$source" "$tmp" || { rm -f "$tmp"; return 1; }
-	printf 'new_identity=%s\ntemp_path=%s\n' "$(object_identity "$tmp")" "$tmp" >> "$meta"
+	if [ "$destination" = "$trusted_worker" ]; then test_kill_install_init after-first-temp; fi
+	new_identity="$(object_identity "$tmp")"
+	write_install_meta "$key" "$destination" "$prior_kind" "$prior_identity" "$prior_hash" "$new_hash" "$mode" "$new_identity" "$tmp"
 	write_install_ledger publishing "$key"
 	mv -T -- "$tmp" "$destination" || return 1
 	if { [ "${AUTOPILOT_LAUNCHER_TEST_KILL_AFTER:-}" = worker ] && [ "$destination" = "$trusted_worker" ]; } || [ "${AUTOPILOT_LAUNCHER_TEST_KILL_AFTER:-}" = "$key" ]; then kill -KILL $$; fi
 }
 
 install_snapshot() {
-	local stage="$1" item source destination mode hash key prior_kind prior_identity prior_hash new_hash
-	install_old_enabled="$(systemctl is-enabled "$timer_unit" 2>/dev/null || :)"; [ -n "$install_old_enabled" ] || install_old_enabled=disabled
-	install_old_active="$(systemctl is-active "$timer_unit" 2>/dev/null || :)"; [ -n "$install_old_active" ] || install_old_active=inactive
-	case "$install_old_enabled" in enabled|disabled|masked|masked-runtime) ;; *) return 1 ;; esac; case "$install_old_active" in active|inactive) ;; *) return 1 ;; esac
-	for item in "${managed_paths[@]}" "$manifest"; do if [ -e "$item" ] || [ -L "$item" ]; then verify_installed_payload || { printf '%s\n' "refusing foreign installed watchdog payload" >&2; return 1; }; break; fi; done
-	payload_dir_existed=0; payload_dir_identity=""
-	if [ -e "$trusted_payload" ] || [ -L "$trusted_payload" ]; then [ -d "$trusted_payload" ] && [ ! -L "$trusted_payload" ] && [ "$(stat -c %u:%g:%a -- "$trusted_payload")" = "$expected_uid:$expected_gid:755" ] || return 1; payload_dir_existed=1; payload_dir_identity="$(directory_object_identity "$trusted_payload")"; fi
-	[ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ] || return 1
-	mkdir -m 0700 -- "$install_transaction"; chown "$expected_uid:$expected_gid" "$install_transaction"; mkdir -m 0700 "$install_transaction/backups" "$install_transaction/meta"
+	local stage="$1" item source destination mode hash key prior_kind prior_identity prior_hash new_hash temp_path first=1
+	validate_install_intent || return 1
+	install_old_enabled="$(awk -F= '$1=="old_enabled"{print $2}' "$install_intent")"; install_old_active="$(awk -F= '$1=="old_active"{print $2}' "$install_intent")"
+	payload_dir_existed="$(awk -F= '$1=="payload_dir_existed"{print $2}' "$install_intent")"; payload_dir_identity="$(awk -F= '$1=="payload_dir_identity"{print $2}' "$install_intent")"
 	awk -v worker="$trusted_worker" -v payload="$trusted_payload" -v service="$service" -v timer="$timer" '{p=$3;sub(/^.*\//,"",p);if($3~/live-cutover/)p=worker;else if($3~/recovery.service/)p=service;else if($3~/recovery.timer/)p=timer;else p=payload "/" p;print $1,$2,p}' "$stage/manifest" > "$stage/installed-manifest"
+	[ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ] || return 1
+	mkdir -m 0700 -- "$install_transaction"; chown "$expected_uid:$expected_gid" "$install_transaction"
+	test_kill_install_init after-transaction-mkdir
+	write_install_ledger initializing transaction-created
+	mkdir -m 0700 -- "$install_transaction/backups"; chown "$expected_uid:$expected_gid" "$install_transaction/backups"
+	write_install_ledger initializing backups-created
+	test_kill_install_init after-backups-mkdir
 	for item in "${managed_paths[@]}" "$manifest"; do
 		key="$(basename "$item")"; prior_kind=absent; prior_identity=""; prior_hash=""
-		if [ -e "$item" ]; then prior_kind=file; prior_identity="$(object_identity "$item")"; prior_hash="$(sha256sum "$item"|awk '{print $1}')"; cp -a "$item" "$install_transaction/backups/$key"; fi
+		write_install_ledger initializing "backup-$key"
+		if [ -e "$item" ]; then prior_kind=file; prior_identity="$(object_identity "$item")"; prior_hash="$(sha256sum "$item"|awk '{print $1}')"; cp -a "$item" "$install_transaction/backups/$key"
+		else (umask 077; : > "$install_transaction/backups/.absent-$key"); fi
+		if [ "$first" = 1 ]; then test_kill_install_init after-first-backup; first=0; fi
+	done
+	mkdir -m 0700 -- "$install_transaction/meta"; chown "$expected_uid:$expected_gid" "$install_transaction/meta"
+	write_install_ledger initializing meta-created
+	test_kill_install_init after-meta-mkdir
+	first=1
+	for item in "${managed_paths[@]}" "$manifest"; do
+		key="$(basename "$item")"; prior_kind=absent; prior_identity=""; prior_hash=""
+		if [ -e "$item" ]; then prior_kind=file; prior_identity="$(object_identity "$item")"; prior_hash="$(sha256sum "$item"|awk '{print $1}')"; fi
 		if [ "$item" = "$manifest" ]; then source="$stage/installed-manifest"; mode=600
 		elif [ "$item" = "$trusted_worker" ]; then source="$stage/live-cutover.sh"; mode=755
 		else source="$stage/$key"; mode="$(awk -v p="$item" '$3==p{print $2}' "$stage/installed-manifest")"; fi
 		new_hash="$(sha256sum "$source"|awk '{print $1}')"
-		printf 'path=%s\nprior_kind=%s\nprior_identity=%s\nprior_hash=%s\nnew_hash=%s\nnew_mode=%s\nnew_identity=\ntemp_path=\n' "$item" "$prior_kind" "$prior_identity" "$prior_hash" "$new_hash" "$mode" > "$install_transaction/meta/$key"
+		temp_path="$(dirname "$item")/.autopilot-watchdog-install-$key"
+		write_install_ledger initializing "meta-$key"
+		write_install_meta "$key" "$item" "$prior_kind" "$prior_identity" "$prior_hash" "$new_hash" "$mode" "" "$temp_path"
+		if [ "$first" = 1 ]; then test_kill_install_init after-first-meta; first=0; fi
 	done
 	write_install_ledger prepared
-	if [ "$payload_dir_existed" = 0 ]; then write_install_ledger publishing payload-dir; install -d -o "$expected_uid" -g "$expected_gid" -m 0755 "$trusted_payload" || { recover_install_transaction; return 1; }; payload_dir_identity="$(directory_object_identity "$trusted_payload")"; write_install_ledger publishing payload-dir-created; fi
+	if [ "$payload_dir_existed" = 0 ]; then write_install_ledger publishing payload-dir; install -d -o "$expected_uid" -g "$expected_gid" -m 0755 "$trusted_payload" || { recover_install_transaction; return 1; }; test_kill_install_init after-payload-mkdir; payload_dir_identity="$(directory_object_identity "$trusted_payload")"; write_install_ledger publishing payload-dir-created; fi
 	while IFS=' ' read -r hash mode item; do source="$stage/${item##*/}"; case "$item" in ops/cockpit-proxy/live-cutover.sh) destination="$trusted_worker" ;; ops/cockpit-proxy/autopilot-cockpit-cutover-recovery.service) destination="$service" ;; ops/cockpit-proxy/autopilot-cockpit-cutover-recovery.timer) destination="$timer" ;; *) destination="$trusted_payload/${item##*/}" ;; esac; publish_install_file "$source" "$destination" "$mode" || { recover_install_transaction; return 1; }; done < "$stage/manifest"
 	publish_install_file "$stage/installed-manifest" "$manifest" 0600 || { recover_install_transaction; return 1; }
 	write_install_ledger systemd daemon-reload; systemctl daemon-reload || { recover_install_transaction; return 1; }
 	write_install_ledger systemd enable; systemctl enable "$timer_unit" >/dev/null || { recover_install_transaction; return 1; }
 	write_install_ledger systemd start; systemctl start "$timer_unit" || { recover_install_transaction; return 1; }
 	[ "$(systemctl is-enabled "$timer_unit")" = enabled ] && [ "$(systemctl is-active "$timer_unit")" = active ] && verify_installed_payload || { recover_install_transaction; return 1; }
-	rm -rf -- "$install_transaction"
+	write_install_ledger terminal installed
+	test_kill_install_init after-terminal-ledger
+	rm -rf -- "$install_transaction"; rm -f -- "$install_intent"
 }
 
 case "${1:-}" in
@@ -276,18 +442,25 @@ case "${1:-}" in
 	--install-watchdog)
 		[ "$#" -eq 3 ] || exit 64
 		acquire_root_transaction_lock
-		if [ -e "$install_transaction" ] || [ -L "$install_transaction" ]; then recover_install_transaction; fi
-		stage="$(snapshot_from_sha "$2" "$3")"; trap 'rm -rf -- "${stage:-}"' EXIT
+		if [ -e "$install_intent" ] || [ -L "$install_intent" ] || [ -e "$install_transaction" ] || [ -L "$install_transaction" ] || [ -e "$install_stage" ] || [ -L "$install_stage" ]; then recover_install_transaction; fi
+		validate_authorization "$(readlink -f -- "$2")" "$3"
+		prepare_install_intent
+		if ! stage="$(snapshot_from_sha "$2" "$3")"; then recover_install_transaction; exit 1; fi
+		trap 'rm -rf -- "${stage:-}"' EXIT
 		install_snapshot "$stage"
 		printf '%s\n' WATCHDOG_READY
 		;;
 	*)
 		[ "$#" -eq 3 ] || exit 64
 		acquire_root_transaction_lock
-		if [ -e "$install_transaction" ] || [ -L "$install_transaction" ]; then recover_install_transaction; fi
-		stage="$(snapshot_from_sha "$1" "$3")"; trap 'rm -rf -- "${stage:-}"' EXIT
+		if [ -e "$install_intent" ] || [ -L "$install_intent" ] || [ -e "$install_transaction" ] || [ -L "$install_transaction" ] || [ -e "$install_stage" ] || [ -L "$install_stage" ]; then recover_install_transaction; fi
+		validate_authorization "$(readlink -f -- "$1")" "$3"
+		prepare_install_intent
+		if ! stage="$(snapshot_from_sha "$1" "$3")"; then recover_install_transaction; exit 1; fi
+		trap 'rm -rf -- "${stage:-}"' EXIT
 		install_snapshot "$stage"
 		rm -rf -- "$stage"; stage=""; trap - EXIT
+		export AUTOPILOT_CUTOVER_LOCK_FD="$root_transaction_lock_fd"
 		exec "$trusted_worker" "$@"
 		;;
 esac

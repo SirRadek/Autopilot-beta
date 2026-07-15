@@ -1,6 +1,7 @@
 import {
   chmodSync,
   chownSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -15,6 +16,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -25,6 +27,13 @@ const stageRelease = join(process.cwd(), "ops", "cockpit-proxy", "stage-release.
 const isolatedAcceptance = join(process.cwd(), "ops", "cockpit-proxy", "isolated-acceptance.sh");
 const hostAcceptance = join(process.cwd(), "ops", "cockpit-proxy", "host-acceptance.sh");
 const liveCutover = join(process.cwd(), "ops", "cockpit-proxy", "live-cutover.sh");
+const trustedLauncher = join(process.cwd(), "ops", "cockpit-proxy", "autopilot-cockpit-trusted-launcher.sh");
+const trustedPayloadNames = [
+  "live-cutover.sh", "Caddyfile", "caddy-autopilot.conf", "autopilot-cockpit.nft",
+  "autopilot-cockpit-firewall.sh", "autopilot-cockpit-firewall.service",
+  "autopilot-cockpit-cutover-recovery.service", "autopilot-cockpit-cutover-recovery.timer",
+  "autopilot-cockpit-recovery-verify.sh", "autopilot-cockpit-recovery-smoke.mjs",
+];
 const node24 = process.env.AUTOPILOT_NODE_BIN ?? process.execPath;
 const tempRoots: string[] = [];
 const alternateGid = process.getgroups?.().find((gid) => gid !== process.getgid?.());
@@ -1183,7 +1192,7 @@ function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; 
 } {
   const { checkout } = makeCheckout();
   mkdirSync(join(checkout, "ops", "cockpit-proxy"), { recursive: true });
-  for (const name of ["Caddyfile", "autopilot-cockpit.nft", "autopilot-cockpit-firewall.service", "autopilot-cockpit-firewall.sh", "caddy-autopilot.conf", "autopilot-cockpit-cutover-recovery.service", "autopilot-cockpit-cutover-recovery.timer", "autopilot-cockpit-recovery-verify.sh", "autopilot-cockpit-recovery-smoke.mjs"]) {
+  for (const name of ["live-cutover.sh", "Caddyfile", "autopilot-cockpit.nft", "autopilot-cockpit-firewall.service", "autopilot-cockpit-firewall.sh", "caddy-autopilot.conf", "autopilot-cockpit-cutover-recovery.service", "autopilot-cockpit-cutover-recovery.timer", "autopilot-cockpit-recovery-verify.sh", "autopilot-cockpit-recovery-smoke.mjs"]) {
     writeFileSync(join(checkout, "ops", "cockpit-proxy", name), readFileSync(join(process.cwd(), "ops", "cockpit-proxy", name)));
   }
   git(checkout, "add", ".");
@@ -1252,7 +1261,7 @@ function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; 
 
   const systemctlBase = join(stubDir, "systemctl-base");
   renameSync(join(stubDir, "systemctl"), systemctlBase);
-  stubExecutable(stubDir, "systemctl", `${log}\nif [[ "$*" == 'is-active autopilot-cockpit-cutover-recovery.timer' ]]; then printf 'active\\n'; exit 0; fi\nexec ${JSON.stringify(systemctlBase)} "$@"`);
+  stubExecutable(stubDir, "systemctl", `${log}\nif [[ "$*" == 'is-active autopilot-cockpit-cutover-recovery.timer' ]]; then printf 'active\\n'; exit 0; fi\nif [[ "$*" == 'is-enabled autopilot-cockpit-cutover-recovery.timer' ]]; then printf 'enabled\\n'; exit 0; fi\nexec ${JSON.stringify(systemctlBase)} "$@"`);
 
   return {
     root, checkout, releaseRoot, sha, envPath, currentPath, evidencePath, caddyConfigPath,
@@ -1287,7 +1296,64 @@ function runCutover(fixture: CutoverFixture, extraEnv: NodeJS.ProcessEnv = {}) {
   });
 }
 
+function provisionTrustedLauncher(fixture: CutoverFixture): { launcher: string; env: NodeJS.ProcessEnv } {
+  if (!git(fixture.checkout, "remote").split("\n").includes("origin")) {
+    git(fixture.checkout, "remote", "add", "origin", "https://example.invalid/autopilot.git");
+  }
+  const launcher = join(fixture.root, "usr", "local", "sbin", "autopilot-cockpit-cutover");
+  mkdirSync(dirname(launcher), { recursive: true });
+  for (const directory of [join(fixture.root, "usr", "local", "libexec"), join(fixture.root, "var", "lib", "autopilot-cockpit"), join(fixture.root, "etc", "systemd", "system")]) chmodSync(directory, 0o755);
+  for (const managed of [
+    join(fixture.root, "usr", "local", "libexec", "autopilot-cockpit-live-cutover"),
+    join(fixture.root, "etc", "systemd", "system", "autopilot-cockpit-cutover-recovery.service"),
+    join(fixture.root, "etc", "systemd", "system", "autopilot-cockpit-cutover-recovery.timer"),
+  ]) rmSync(managed, { force: true });
+  copyFileSync(trustedLauncher, launcher); chmodSync(launcher, 0o755);
+  const authorization = join(fixture.root, "etc", "autopilot-cockpit", "cutover.authorization");
+  mkdirSync(dirname(authorization), { recursive: true });
+  const lines = [
+    "version=autopilot-cockpit-authorization-v1", `sha=${fixture.sha}`, `checkout=${fixture.checkout}`,
+    `origin=${git(fixture.checkout, "remote", "get-url", "origin")}`, `uid=${process.getuid!()}`, `gid=${process.getgid!()}`,
+    `payload_count=${trustedPayloadNames.length}`,
+    ...trustedPayloadNames.map((name) => `payload.${name}=${createHash("sha256").update(readFileSync(join(fixture.checkout, "ops", "cockpit-proxy", name))).digest("hex")}`),
+  ];
+  const body = `${lines.join("\n")}\n`;
+  writeFileSync(authorization, `${body}authorization_id=${createHash("sha256").update(body).digest("hex")}\n`, { mode: 0o400 });
+  chmodSync(authorization, 0o400);
+  return {
+    launcher,
+    env: { ...fixture.env, AUTOPILOT_LAUNCHER_TEST_ROOT: fixture.root, AUTOPILOT_LAUNCHER_TEST_BIN: fixture.stubDir },
+  };
+}
+
 describe("Cockpit transactional live cutover", () => {
+  it("hands its root transaction lock to the real worker without self-deadlocking", () => {
+    const fixture = prepareCutover();
+    const trusted = provisionTrustedLauncher(fixture);
+    const result = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(result.status, `${result.stdout}\n${result.stderr}\n${readFileSync(fixture.stubLog, "utf8")}`).toBe(0);
+    expect(result.stdout).toContain("CUTOVER_WAITING_FOR_HOST_ACCEPTANCE");
+    expect(result.stdout).toContain("CUTOVER_OK");
+  }, 20_000);
+
+  it("keeps concurrent launcher recovery from taking over the live adopted-lock owner", async () => {
+    const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);
+    const owner = spawn(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...trusted.env, AUTOPILOT_CUTOVER_TEST_AUTO_ACK: "0", AUTOPILOT_CUTOVER_TEST_ACK_TIMEOUT: "5" },
+    });
+    const ledger = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active", "transaction.ledger");
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && (!existsSync(ledger) || !readFileSync(ledger, "utf8").includes("state=waiting"))) await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(readFileSync(ledger, "utf8")).toContain("state=waiting");
+    const recovery = spawnSync(trusted.launcher, ["--recover"], { encoding: "utf8", env: trusted.env, timeout: 5_000 });
+    expect(recovery.status, `${recovery.stdout}\n${recovery.stderr}`).toBe(0);
+    expect(recovery.stdout).toContain("RECOVERY_OWNER_ACTIVE");
+    owner.kill("SIGKILL"); await new Promise((resolve) => owner.once("close", resolve));
+    expect(spawnSync(trusted.launcher, ["--recover"], { encoding: "utf8", env: trusted.env, timeout: 15_000 }).status).toBe(0);
+  }, 25_000);
+
   it("starts the owned firewall before Caddy and commits only after an acknowledgement", () => {
     const fixture = prepareCutover();
     const result = runCutover(fixture);
@@ -1595,6 +1661,35 @@ describe("Cockpit transactional live cutover", () => {
     expect(status).not.toBe(0); expect(existsSync(directory)).toBe(false);
     const recovered = spawnSync("bash", [liveCutover, "--recover"], { encoding: "utf8", env: fixture.env });
     expect(recovered.status).toBe(0); expect(recovered.stdout).toContain("ROLLBACK_OK"); expect(existsSync(directory)).toBe(false);
+  }, 15_000);
+
+  it.each([
+    ["nft", (f: ReturnType<typeof prepareCutover>) => join(f.root, "etc", "nftables.d"), {}],
+    ["helper", (f: ReturnType<typeof prepareCutover>) => join(f.root, "usr", "local", "libexec"), { AUTOPILOT_CUTOVER_TEST_FORCE_HELPER_DIR_ABSENT: "1" }],
+    ["caddy-dropin", (f: ReturnType<typeof prepareCutover>) => join(f.root, "etc", "systemd", "system", "caddy.service.d"), {}],
+  ] as const)("recovers an exact empty %s directory after SIGKILL between mkdir and identity persistence", async (phase, directory, extraEnv) => {
+    const fixture = prepareCutover();
+    const child = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...fixture.env, ...extraEnv, AUTOPILOT_CUTOVER_TEST_KILL_MKDIR_GAP: phase },
+    });
+    const status = await new Promise<number | null>((resolve) => child.once("close", resolve));
+    expect(status).not.toBe(0); expect(existsSync(directory(fixture))).toBe(true);
+    const recovered = spawnSync("bash", [liveCutover, "--recover"], { encoding: "utf8", env: fixture.env });
+    expect(recovered.status, `${phase}\n${recovered.stdout}\n${recovered.stderr}`).toBe(0);
+    expect(existsSync(directory(fixture))).toBe(false);
+  }, 15_000);
+
+  it.each(["nonempty", "symlink"])("preserves a %s replacement at an identity-less mkdir recovery boundary", async (kind) => {
+    const fixture = prepareCutover(); const directory = join(fixture.root, "etc", "nftables.d");
+    const child = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...fixture.env, AUTOPILOT_CUTOVER_TEST_KILL_MKDIR_GAP: "nft" },
+    });
+    await new Promise((resolve) => child.once("close", resolve));
+    if (kind === "nonempty") writeFileSync(join(directory, "foreign"), "foreign\n");
+    else { rmSync(directory, { recursive: true }); symlinkSync(join(fixture.root, "tmp"), directory); }
+    const recovered = spawnSync("bash", [liveCutover, "--recover"], { encoding: "utf8", env: fixture.env });
+    expect(recovered.status).not.toBe(0); expect(recovered.stdout).toContain("ROLLBACK_FAILED");
+    expect(existsSync(directory) || lstatSync(directory).isSymbolicLink()).toBe(true);
   }, 15_000);
 
   it.each(["current", "environment"])("preserves a foreign %s replacement and fails rollback", (kind) => {

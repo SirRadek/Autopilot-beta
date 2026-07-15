@@ -86,6 +86,18 @@ lock_held=0
 open_transaction_lock() {
 	[ -d "$transaction_root" ] && [ ! -L "$transaction_root" ] || return 1
 	[ "$(stat -c %u:%g:%a "$transaction_root")" = "$expected_uid:$expected_gid:700" ] || return 1
+	if [ -n "${AUTOPILOT_CUTOVER_LOCK_FD:-}" ]; then
+		[[ "$AUTOPILOT_CUTOVER_LOCK_FD" =~ ^[0-9]+$ ]] || return 1
+		[ -e "/proc/self/fd/$AUTOPILOT_CUTOVER_LOCK_FD" ] || return 1
+		[ "$(readlink -f -- "/proc/self/fd/$AUTOPILOT_CUTOVER_LOCK_FD")" = "$(readlink -f -- "$transaction_root/transaction.lock")" ] || return 1
+		[ "$(stat -Lc %d:%i -- "/proc/self/fd/$AUTOPILOT_CUTOVER_LOCK_FD")" = "$(stat -Lc %d:%i -- "$transaction_root/transaction.lock")" ] || return 1
+		[ "$(stat -c %u:%g:%a -- "$transaction_root/transaction.lock")" = "$expected_uid:$expected_gid:600" ] || return 1
+		transaction_lock_fd="$AUTOPILOT_CUTOVER_LOCK_FD"
+		unset AUTOPILOT_CUTOVER_LOCK_FD
+		flock -n "$transaction_lock_fd" || return 1
+		lock_held=1
+		return 0
+	fi
 	exec {transaction_lock_fd}>"$transaction_root/transaction.lock"
 	if [ "$test_mode" = 0 ]; then chown 0:0 "$transaction_root/transaction.lock"; fi
 	chmod 0600 "$transaction_root/transaction.lock"
@@ -602,9 +614,9 @@ restore_firewall_files() {
 remove_created_directory() {
 	local path="$1" identity="$2"
 	if [ ! -e "$path" ] && [ ! -L "$path" ]; then return 0; fi
-	[ -n "$identity" ] && [ -d "$path" ] && [ ! -L "$path" ] || return 1
+	[ -d "$path" ] && [ ! -L "$path" ] || return 1
 	[ "$(stat -c %u:%g:%a -- "$path")" = "$expected_uid:$expected_gid:755" ] || return 1
-	[ "$(directory_identity "$path")" = "$identity" ] || return 1
+	[ -z "$identity" ] || [ "$(directory_identity "$path")" = "$identity" ] || return 1
 	[ -z "$(find -P "$path" -mindepth 1 -maxdepth 1 -print -quit)" ] || return 1
 	rmdir -- "$path"
 }
@@ -912,8 +924,9 @@ clear_registered_temp
 recovery_checks
 cutover_started=1
 
-if [ ! -d "$(dirname "$nft_config")" ]; then created_nft_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR nft; install -d -m 0755 "$(dirname "$nft_config")"; created_nft_dir_identity="$(directory_identity "$(dirname "$nft_config")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR nft; fi
-if [ ! -d "$(dirname "$firewall_helper")" ]; then created_helper_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR helper; install -d -m 0755 "$(dirname "$firewall_helper")"; created_helper_dir_identity="$(directory_identity "$(dirname "$firewall_helper")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR helper; fi
+if [ "$test_mode" = 1 ] && [ "${AUTOPILOT_CUTOVER_TEST_FORCE_HELPER_DIR_ABSENT:-0}" = 1 ]; then rm -f -- "$recovery_program"; rmdir -- "$(dirname "$firewall_helper")"; fi
+if [ ! -d "$(dirname "$nft_config")" ]; then created_nft_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR nft; install -d -m 0755 "$(dirname "$nft_config")"; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_MKDIR_GAP nft; created_nft_dir_identity="$(directory_identity "$(dirname "$nft_config")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR nft; fi
+if [ ! -d "$(dirname "$firewall_helper")" ]; then created_helper_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR helper; install -d -m 0755 "$(dirname "$firewall_helper")"; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_MKDIR_GAP helper; created_helper_dir_identity="$(directory_identity "$(dirname "$firewall_helper")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR helper; fi
 firewall_files_installed=1
 firewall_unit_installed=1; write_ledger mutating
 tmp_install="$(dirname "$firewall_unit")/.firewall-unit-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/autopilot-cockpit-firewall.service" | awk '{print $1}')"; install -m 0644 "$source_dir/autopilot-cockpit-firewall.service" "$tmp_install"; mv -T "$tmp_install" "$firewall_unit"; clear_registered_temp
@@ -979,7 +992,7 @@ loopback_checks
 fail_after control-plane
 
 install -d -m 0755 "$(dirname "$caddy_config")"
-if [ ! -d "$(dirname "$caddy_dropin")" ]; then created_caddy_dropin_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR caddy-dropin; install -d -m 0755 "$(dirname "$caddy_dropin")"; created_caddy_dropin_dir_identity="$(directory_identity "$(dirname "$caddy_dropin")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR caddy-dropin; fi
+if [ ! -d "$(dirname "$caddy_dropin")" ]; then created_caddy_dropin_dir=1; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_BEFORE_MKDIR caddy-dropin; install -d -m 0755 "$(dirname "$caddy_dropin")"; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_MKDIR_GAP caddy-dropin; created_caddy_dropin_dir_identity="$(directory_identity "$(dirname "$caddy_dropin")")"; write_ledger mutating; test_kill_boundary AUTOPILOT_CUTOVER_TEST_KILL_AFTER_MKDIR caddy-dropin; fi
 caddy_files_installed=1
 caddy_config_installed=1; write_ledger mutating
 tmp_install="$(dirname "$caddy_config")/.caddy-config-$ack_id"; register_temp "$tmp_install" file "$(sha256sum "$source_dir/Caddyfile" | awk '{print $1}')"; install -m 0644 "$source_dir/Caddyfile" "$tmp_install"; mv -T "$tmp_install" "$caddy_config"; clear_registered_temp

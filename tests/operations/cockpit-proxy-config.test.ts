@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -113,5 +114,21 @@ describe("Cockpit production proxy boundary", () => {
     const launcher = readProxyFile("autopilot-cockpit-trusted-launcher.sh");
     expect(launcher).toContain('canonical_checkout="/home/radek/autopilot-beta-proxy-candidate"');
     expect(launcher).toContain('canonical_origin="https://github.com/SirRadek/Autopilot-beta.git"');
+  });
+
+  it("pins and verifies recovery smoke bundle provenance", () => {
+    const script = join(process.cwd(), "scripts", "check-cockpit-recovery-smoke.mjs");
+    const result = spawnSync(process.execPath, [script, "--check"], { encoding: "utf8" });
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    const provenance = JSON.parse(readProxyFile("autopilot-cockpit-recovery-smoke.provenance.json"));
+    expect(provenance).toEqual({
+      version: "autopilot-cockpit-recovery-smoke-v1",
+      source: "scripts/smoke-cockpit-run.ts",
+      output: "ops/cockpit-proxy/autopilot-cockpit-recovery-smoke.mjs",
+      source_sha256: "c63de72541f40d3d8fbaeae5362236f08f4b6d9570a423b1dbc51e4166185fcf",
+      output_sha256: "f9595e0a654aa5eb622a507c99940fd51c74afa9125cd0d3a5c6c480f2e9b7d2",
+      esbuild_version: "0.28.1",
+      flags: ["--bundle", "--platform=node", "--format=esm", "--target=node24", "--minify"],
+    });
   });
 });
