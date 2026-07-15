@@ -14,13 +14,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 const stageRelease = join(process.cwd(), "ops", "cockpit-proxy", "stage-release.sh");
 const isolatedAcceptance = join(process.cwd(), "ops", "cockpit-proxy", "isolated-acceptance.sh");
 const hostAcceptance = join(process.cwd(), "ops", "cockpit-proxy", "host-acceptance.sh");
+const liveCutover = join(process.cwd(), "ops", "cockpit-proxy", "live-cutover.sh");
 const node24 = process.env.AUTOPILOT_NODE_BIN ?? process.execPath;
 const tempRoots: string[] = [];
 const alternateGid = process.getgroups?.().find((gid) => gid !== process.getgid?.());
@@ -1149,4 +1150,217 @@ describe("Cockpit trusted host acceptance", () => {
     expect(result.stdout).not.toContain("HOST_PROXY_ACCEPTANCE_OK");
   });
 
+});
+
+type CutoverFixture = ReturnType<typeof prepareCutover>;
+
+function stubExecutable(directory: string, name: string, source: string): void {
+  const path = join(directory, name);
+  writeFileSync(path, `#!/usr/bin/env bash\nset -Eeuo pipefail\n${source}\n`);
+  chmodSync(path, 0o755);
+}
+
+function prepareCutover(): {
+  root: string;
+  checkout: string;
+  releaseRoot: string;
+  sha: string;
+  envPath: string;
+  currentPath: string;
+  evidencePath: string;
+  previousTarget: string;
+  previousEnvironment: Buffer;
+  stubLog: string;
+  env: NodeJS.ProcessEnv;
+} {
+  const { checkout } = makeCheckout();
+  mkdirSync(join(checkout, "ops", "cockpit-proxy"), { recursive: true });
+  for (const name of ["Caddyfile", "autopilot-cockpit.nft", "autopilot-cockpit-firewall.service", "caddy-autopilot.conf"]) {
+    writeFileSync(join(checkout, "ops", "cockpit-proxy", name), readFileSync(join(process.cwd(), "ops", "cockpit-proxy", name)));
+  }
+  git(checkout, "add", ".");
+  git(checkout, "commit", "-qm", "add reviewed proxy config");
+  const sha = git(checkout, "rev-parse", "HEAD");
+  const releaseRoot = makeReleaseRoot();
+  const fakeNode24 = join(makeTempDir(), "node");
+  writeFileSync(fakeNode24, `#!/usr/bin/env bash\nif [[ "\${1:-}" == --version ]]; then printf 'v24.0.0\\n'; else exec ${JSON.stringify(process.execPath)} "$@"; fi\n`);
+  chmodSync(fakeNode24, 0o755);
+  const staged = runStage(checkout, releaseRoot, fakeNode24);
+  if (staged.status !== 0) throw new Error(`stage fixture failed: ${staged.stdout}\n${staged.stderr}`);
+
+  const root = join(makeTempDir(), "fake-root");
+  mkdirSync(join(root, "run"), { recursive: true });
+  const envPath = join(root, "home", "radek", ".config", "autopilot", "control-plane.env");
+  const currentPath = join(releaseRoot, "current");
+  mkdirSync(dirname(envPath), { recursive: true });
+  const previousEnvironment = Buffer.from("CONTROL_PLANE_TOKEN=secret-do-not-print\nCONTROL_PLANE_SECURE_COOKIES=false\nAUTOPILOT_STATE_DIR=/state\nAUTOPILOT_PROJECTS_DIR=/projects\n");
+  writeFileSync(envPath, previousEnvironment, { mode: 0o600 });
+  chmodSync(envPath, 0o600);
+  const previousTarget = `releases/${"1".repeat(40)}`;
+  mkdirSync(join(releaseRoot, previousTarget), { recursive: true });
+  symlinkSync(previousTarget, currentPath);
+  const evidencePath = join(root, "var", "lib", "autopilot-cockpit", "isolated-acceptance", `${sha}.ok`);
+  mkdirSync(dirname(evidencePath), { recursive: true });
+  writeFileSync(evidencePath, `sha=${sha}\nhost_acceptance=ok\ncleanup=ok\n`, { mode: 0o600 });
+  chmodSync(evidencePath, 0o600);
+  const stubDir = join(makeTempDir(), "bin");
+  mkdirSync(stubDir);
+  const stubLog = join(makeTempDir(), "events.log");
+  writeFileSync(stubLog, "");
+  const log = 'printf "%s\\n" "' + '${0##*/}' + ':$*" >> "$STUB_LOG"';
+  stubExecutable(stubDir, "ss", `${log}\nif [[ "$*" == *":8787"* ]]; then printf 'LISTEN 0 511 127.0.0.1:8787 0.0.0.0:*\\n'; exit 0; fi\ncase "\${STUB_OCCUPIED_PORT:-}" in 8443|8877) [[ "$*" == *":$STUB_OCCUPIED_PORT"* ]] && printf 'LISTEN occupied\\n'; exit 0 ;; esac\nif grep -q '^systemctl:start caddy.service$' "$STUB_LOG"; then case "$*" in *':80'*) printf 'LISTEN 0 511 192.168.122.99:80 0.0.0.0:*\\n' ;; *':443'*) printf 'LISTEN 0 511 192.168.122.99:443 0.0.0.0:*\\n' ;; esac; fi`);
+  stubExecutable(stubDir, "dpkg", `${log}\n[[ "$1" == -s && "$2" == caddy ]] && exit 0\n[[ "$1" == -V && "$2" == caddy ]] && exit 0\nexit 1`);
+  stubExecutable(stubDir, "caddy", `${log}\n[[ "$1" == validate ]]`);
+  stubExecutable(stubDir, "nft", `${log}\nexit 0`);
+  stubExecutable(stubDir, "systemctl", `${log}\nif [[ -n "\${STUB_SYSTEMCTL_FAIL_ON:-}" && "$*" == "$STUB_SYSTEMCTL_FAIL_ON" ]]; then exit 1; fi\ncase "$*" in\n'is-enabled caddy.service') printf 'masked\\n' ;;\n'is-active caddy.service') if grep -q '^systemctl:start caddy.service$' "$STUB_LOG" && ! grep -q '^systemctl:stop caddy.service$' "$STUB_LOG"; then printf 'active\\n'; else printf 'inactive\\n'; exit 3; fi ;;\n'is-active autopilot-control-plane.service') printf 'active\\n' ;;\n'is-active autopilot-control-plane-health.timer') printf 'active\\n' ;;\n'is-active autopilot-state-maintenance.timer') printf 'active\\n' ;;\n'is-active autopilot-cockpit-firewall.service') printf 'active\\n' ;;\n*) exit 0 ;;\nesac`);
+  stubExecutable(stubDir, "curl", `${log}\nout=''; url=''; while (($#)); do case "$1" in --output) out="$2"; shift 2;; http://*) url="$1"; shift;; *) shift;; esac; done\nif [[ "$url" == */ready ]]; then printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$out"; else printf '%s' '{"ok":true}' > "$out"; fi\nprintf 200`);
+  stubExecutable(stubDir, "npm", `${log}\ncase "$*" in\n*ops:backup*) archive="$AUTOPILOT_CUTOVER_TEST_ROOT/backup.apbackup.json"; printf '{}\\n' > "$archive"; printf '{"path":"%s","validation":{"valid":true}}\\n' "$archive" ;;\n*ops:recovery-drill*) printf '{"ok":true,"validation":{"ready":true,"reconciled":true,"errors":[]}}\\n' ;;\n*ops:boundary-check*) printf '{"ok":true}\\n' ;;\n*smoke:cockpit-run*) printf '{"mode":"dry-run","provider_invoked":false,"run_status":"completed"}\\n' ;;\n*) exit 1 ;;\nesac`);
+
+  return {
+    root, checkout, releaseRoot, sha, envPath, currentPath, evidencePath, previousTarget, previousEnvironment, stubLog,
+    env: {
+      ...process.env,
+      PATH: `${stubDir}:${process.env.PATH}`,
+      STUB_LOG: stubLog,
+      AUTOPILOT_CUTOVER_TEST_MODE: "1",
+      AUTOPILOT_CUTOVER_TEST_ROOT: root,
+      AUTOPILOT_CUTOVER_TEST_AUTO_ACK: "1",
+      AUTOPILOT_CUTOVER_TEST_ACK_TIMEOUT: "1",
+      AUTOPILOT_NODE_BIN: fakeNode24,
+    },
+  };
+}
+
+function runCutover(fixture: CutoverFixture, extraEnv: NodeJS.ProcessEnv = {}) {
+  return spawnSync("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+    encoding: "utf8",
+    env: { ...fixture.env, ...extraEnv },
+    timeout: 10_000,
+  });
+}
+
+describe("Cockpit transactional live cutover", () => {
+  it("starts the owned firewall before Caddy and commits only after an acknowledgement", () => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture);
+    if (result.status !== 0) throw new Error(`${result.stdout}\n${result.stderr}\n${readFileSync(fixture.stubLog, "utf8")}`);
+    expect(result.stdout).toContain("CUTOVER_WAITING_FOR_HOST_ACCEPTANCE");
+    expect(result.stdout).toContain("CUTOVER_OK");
+    expect(result.stdout).not.toContain("secret-do-not-print");
+    expect(readlinkSync(fixture.currentPath)).toBe(`releases/${fixture.sha}`);
+    expect(readFileSync(fixture.envPath, "utf8").match(/^CONTROL_PLANE_SECURE_COOKIES=true$/gm)).toHaveLength(1);
+    const events = readFileSync(fixture.stubLog, "utf8");
+    expect(events.indexOf("systemctl:start autopilot-cockpit-firewall.service"))
+      .toBeLessThan(events.indexOf("systemctl:start caddy.service"));
+  });
+
+  it.each(["firewall", "current", "environment", "control-plane", "caddy-files", "caddy"])(
+    "rolls back exact prior bytes and link after failure following %s mutation",
+    (phase) => {
+      const fixture = prepareCutover();
+      const result = runCutover(fixture, { AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: phase });
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toContain("ROLLBACK_OK");
+      expect(readFileSync(fixture.envPath)).toEqual(fixture.previousEnvironment);
+      expect(readlinkSync(fixture.currentPath)).toBe(fixture.previousTarget);
+      const events = readFileSync(fixture.stubLog, "utf8");
+      expect(events).toContain("systemctl:restart autopilot-control-plane.service");
+      expect(events).toContain("npm:--silent run ops:boundary-check");
+      expect(events).toContain("npm:--silent run smoke:cockpit-run -- --dry-run");
+      expect(events).not.toMatch(/nft:delete table (?!inet autopilot_cockpit)/);
+    },
+  );
+
+  it("times out awaiting host acceptance and rolls back", () => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, { AUTOPILOT_CUTOVER_TEST_AUTO_ACK: "0" });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_OK");
+    expect(readFileSync(fixture.envPath)).toEqual(fixture.previousEnvironment);
+    expect(readlinkSync(fixture.currentPath)).toBe(fixture.previousTarget);
+  });
+
+  it("restores the exact package Caddyfile bytes after rollback", () => {
+    const fixture = prepareCutover();
+    const caddyfile = join(fixture.root, "etc", "caddy", "Caddyfile");
+    mkdirSync(dirname(caddyfile), { recursive: true });
+    const packagedBytes = Buffer.from("# untouched package default\n:80 { respond ok }\n");
+    writeFileSync(caddyfile, packagedBytes, { mode: 0o644 });
+    const result = runCutover(fixture, { AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "caddy" });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_OK");
+    expect(readFileSync(caddyfile)).toEqual(packagedBytes);
+  });
+
+  it("accepts a valid random ID through the separate acknowledgement invocation", async () => {
+    const fixture = prepareCutover();
+    const child = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...fixture.env, AUTOPILOT_CUTOVER_TEST_AUTO_ACK: "0", AUTOPILOT_CUTOVER_TEST_ACK_TIMEOUT: "5" },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    const ledger = join(fixture.root, "run", "autopilot-cockpit-cutover", "transaction.ledger");
+    const deadline = Date.now() + 4_000;
+    while (Date.now() < deadline && (!existsSync(ledger) || !readFileSync(ledger, "utf8").includes("state=waiting"))) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(existsSync(ledger)).toBe(true);
+    expect(statSync(ledger).mode & 0o777).toBe(0o600);
+    const ackId = readFileSync(ledger, "utf8").match(/^ack_id=([a-f0-9]{64})$/m)?.[1];
+    expect(ackId).toMatch(/^[a-f0-9]{64}$/);
+    const accepted = spawnSync("bash", [liveCutover, "--accept", ackId!], { encoding: "utf8", env: fixture.env });
+    expect(accepted.status).toBe(0);
+    const status = await new Promise<number | null>((resolve) => child.once("close", resolve));
+    if (status !== 0) throw new Error(`${stdout}\n${stderr}`);
+    expect(stdout).toContain("CUTOVER_OK");
+  }, 10_000);
+
+  it.each([
+    "start autopilot-cockpit-firewall.service",
+    "unmask caddy.service",
+    "enable caddy.service",
+    "start caddy.service",
+  ])("rolls back when systemctl fails during %s", (command) => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, { STUB_SYSTEMCTL_FAIL_ON: command });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("ROLLBACK_OK");
+    expect(readFileSync(fixture.envPath)).toEqual(fixture.previousEnvironment);
+    expect(readlinkSync(fixture.currentPath)).toBe(fixture.previousTarget);
+    const events = readFileSync(fixture.stubLog, "utf8");
+    if (command !== "start autopilot-cockpit-firewall.service") {
+      expect(events).toContain("systemctl:mask caddy.service");
+    }
+  });
+
+  it.each([
+    ["dirty checkout", {}],
+    ["invalid manifest", {}],
+    ["occupied 8443", { STUB_OCCUPIED_PORT: "8443" }],
+    ["occupied 8877", { STUB_OCCUPIED_PORT: "8877" }],
+    ["missing isolated evidence", {}],
+    ["unowned Caddy", {}],
+  ])("refuses %s before the first mutation", (label, extraEnv) => {
+    const fixture = prepareCutover();
+    if (label === "dirty checkout") writeFileSync(join(fixture.checkout, "dirty.txt"), "dirty\n");
+    if (label === "invalid manifest") {
+      const manifest = join(fixture.releaseRoot, "manifests", `${fixture.sha}.sha256`);
+      chmodSync(manifest, 0o644);
+      writeFileSync(manifest, `${"0".repeat(64)}  ./index.html\n`);
+      chmodSync(manifest, 0o444);
+    }
+    if (label === "missing isolated evidence") rmSync(fixture.evidencePath);
+    if (label === "unowned Caddy") {
+      const foreign = join(fixture.root, "etc", "systemd", "system", "caddy.service.d", "autopilot.conf");
+      mkdirSync(dirname(foreign), { recursive: true });
+      writeFileSync(foreign, "foreign\n");
+    }
+    const result = runCutover(fixture, extraEnv);
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(fixture.stubLog, "utf8")).not.toContain("systemctl:start autopilot-cockpit-firewall.service");
+    expect(readFileSync(fixture.envPath)).toEqual(fixture.previousEnvironment);
+    expect(readlinkSync(fixture.currentPath)).toBe(fixture.previousTarget);
+  });
 });
