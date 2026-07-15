@@ -1338,6 +1338,41 @@ describe("Cockpit transactional live cutover", () => {
     expect(result.stdout).toContain("CUTOVER_OK");
   }, 20_000);
 
+  it("lets the real launcher archive its first terminal transaction before a subsequent cutover", () => {
+    const fixture = prepareCutover();
+    const trusted = provisionTrustedLauncher(fixture);
+    const first = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: { ...trusted.env, AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "firewall" }, timeout: 15_000,
+    });
+    expect(first.stdout).toContain("ROLLBACK_OK");
+    const second = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(second.status, `${second.stdout}\n${second.stderr}\n${readFileSync(fixture.stubLog, "utf8")}`).toBe(0);
+    expect(second.stdout).toContain("CUTOVER_WAITING_FOR_HOST_ACCEPTANCE");
+    expect(second.stdout).toContain("CUTOVER_OK");
+  }, 25_000);
+
+  it.each(["nonterminal-ledger", "malformed-ledger", "foreign-worker"])("rejects a %s instead of archiving through the real launcher", (kind) => {
+    const fixture = prepareCutover();
+    const trusted = provisionTrustedLauncher(fixture);
+    const first = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: { ...trusted.env, AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "firewall" }, timeout: 15_000,
+    });
+    expect(first.stdout).toContain("ROLLBACK_OK");
+    const active = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active");
+    const ledger = join(active, "transaction.ledger");
+    if (kind === "nonterminal-ledger") writeFileSync(ledger, readFileSync(ledger, "utf8").replace("state=rolled-back", "state=waiting"), { mode: 0o600 });
+    else if (kind === "malformed-ledger") writeFileSync(ledger, `${readFileSync(ledger, "utf8")}foreign=true\n`, { mode: 0o600 });
+    else writeFileSync(join(fixture.root, "usr", "local", "libexec", "autopilot-cockpit-live-cutover"), "foreign\n", { mode: 0o755 });
+    const second = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(second.status).not.toBe(0);
+    expect(existsSync(active)).toBe(true);
+    expect(existsSync(join(dirname(active), "history"))).toBe(false);
+  }, 25_000);
+
   it("keeps concurrent launcher recovery from taking over the live adopted-lock owner", async () => {
     const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);
     const owner = spawn(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {

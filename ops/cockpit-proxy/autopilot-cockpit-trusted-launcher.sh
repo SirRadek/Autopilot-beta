@@ -30,6 +30,7 @@ cutover_transaction_root="$test_root/var/lib/autopilot-cockpit/transactions"
 install_transaction="$test_root/var/lib/autopilot-cockpit/install-transaction"
 install_ledger="$install_transaction/transaction.ledger"
 install_intent="$test_root/var/lib/autopilot-cockpit/install-transaction.ledger"
+install_intent_next="$test_root/var/lib/autopilot-cockpit/install-transaction.ledger.next"
 install_stage="$test_root/var/lib/autopilot-cockpit/install-stage"
 
 if [ -z "$test_root" ]; then
@@ -67,6 +68,8 @@ managed_paths=(
 )
 
 acquire_root_transaction_lock() {
+	local allow_terminal="${1:-0}"
+	case "$allow_terminal" in 0|1) ;; *) return 1 ;; esac
 	if [ -e "$cutover_transaction_root" ] || [ -L "$cutover_transaction_root" ]; then
 		[ -d "$cutover_transaction_root" ] && [ ! -L "$cutover_transaction_root" ] && [ "$(stat -c %u:%g:%a -- "$cutover_transaction_root")" = "$expected_uid:$expected_gid:700" ] || return 1
 	else
@@ -76,7 +79,11 @@ acquire_root_transaction_lock() {
 	chmod 0600 "$cutover_transaction_root/transaction.lock"; chown "$expected_uid:$expected_gid" "$cutover_transaction_root/transaction.lock"
 	flock -n "$root_transaction_lock_fd" || return 1
 	if [ "${AUTOPILOT_LAUNCHER_TEST_HOLD_LOCK:-0}" = 1 ]; then sleep 1; fi
-	[ ! -e "$cutover_transaction_root/active" ] && [ ! -L "$cutover_transaction_root/active" ]
+	if [ -e "$cutover_transaction_root/active" ] || [ -L "$cutover_transaction_root/active" ]; then
+		[ "$allow_terminal" = 1 ] || return 1
+		verify_installed_payload
+		validate_terminal_cutover_transaction
+	fi
 }
 
 verify_managed_file() {
@@ -97,6 +104,24 @@ verify_installed_payload() {
 		verify_managed_file "$path" "$mode" "$hash" || return 1
 	done < "$manifest"
 	[ "$count" -eq "${#managed_paths[@]}" ] && [ -n "${seen[$trusted_worker]:-}" ] && [ -n "${seen[$service]:-}" ] && [ -n "${seen[$timer]:-}" ]
+}
+
+validate_terminal_cutover_transaction() {
+	local active="$cutover_transaction_root/active" candidate="$cutover_transaction_root/active/transaction.ledger" state sha ack
+	[ -d "$active" ] && [ ! -L "$active" ] && [ "$(stat -c %u:%g:%a -- "$active")" = "$expected_uid:$expected_gid:700" ] || return 1
+	[ -f "$candidate" ] && [ ! -L "$candidate" ] && [ "$(stat -c %u:%g:%a:%h -- "$candidate")" = "$expected_uid:$expected_gid:600:1" ] || return 1
+	[ -z "$(tail -c 1 -- "$candidate")" ] || return 1
+	LC_ALL=C awk -F= '
+	BEGIN {
+		n=split("version state ack_id sha checkout release_root owner_pid owner_starttime boot_id deadline_epoch prior_mask_kind prior_persistent_enable prior_runtime_enable prior_persistent_enable_target prior_runtime_enable_target prior_current_kind prior_current_target environment_pre_identity environment_pre_hash environment_owned_hash package_caddy_unit_hash package_caddy_unit_metadata registered_temp_path registered_temp_kind registered_temp_identity created_nft_dir created_nft_dir_identity created_helper_dir created_helper_dir_identity created_caddy_dropin_dir created_caddy_dropin_dir_identity firewall_unit_installed nft_config_installed firewall_helper_installed firewall_identity_installed firewall_reload_attempted firewall_attempted firewall_started current_attempted current_switched environment_attempted environment_changed control_plane_restarted caddy_files_installed caddy_config_installed caddy_dropin_installed caddy_reload_attempted caddy_unmasked caddy_enabled caddy_attempted caddy_started", keys, " ");
+		for (i=1;i<=n;i++) allowed[keys[i]]=1
+	}
+	{ if ($0 !~ /^[A-Za-z0-9_]+=[A-Za-z0-9_.\/:@-]*$/) exit 10; key=$1; if (!(key in allowed) || ++seen[key] != 1) exit 11 }
+	END { if (NR != n) exit 12; for (key in allowed) if (seen[key] != 1) exit 13 }' "$candidate" || return 1
+	[ "$(awk -F= '$1=="version"{print $2}' "$candidate")" = autopilot-cockpit-cutover-v4 ] || return 1
+	state="$(awk -F= '$1=="state"{print $2}' "$candidate")"; case "$state" in completed|rolled-back) ;; *) return 1 ;; esac
+	sha="$(awk -F= '$1=="sha"{print $2}' "$candidate")"; ack="$(awk -F= '$1=="ack_id"{print $2}' "$candidate")"
+	[[ "$sha" =~ ^[a-f0-9]{40}$ && "$ack" =~ ^[a-f0-9]{64}$ ]]
 }
 
 authorization_value() {
@@ -176,7 +201,7 @@ snapshot_from_sha() {
 	printf '%s\n' "$stage"
 }
 
-object_identity() { stat -Lc %d:%i:%u:%g:%a:%s:%Y:%Z -- "$1"; }
+object_identity() { stat -Lc %d:%i:%u:%g:%a:%s:%Y -- "$1"; }
 directory_object_identity() { stat -Lc %d:%i:%u:%g:%a -- "$1"; }
 
 test_kill_install_init() {
@@ -184,14 +209,31 @@ test_kill_install_init() {
 	kill -KILL $$
 }
 
-validate_install_intent() {
-	[ -f "$install_intent" ] && [ ! -L "$install_intent" ] && [ "$(stat -c %u:%g:%a -- "$install_intent")" = "$expected_uid:$expected_gid:600" ] || return 1
+validate_install_intent_file() {
+	local candidate="$1"
+	[ -f "$candidate" ] && [ ! -L "$candidate" ] && [ "$(stat -c %u:%g:%a -- "$candidate")" = "$expected_uid:$expected_gid:600" ] || return 1
 	LC_ALL=C awk -F= '
 	BEGIN { n=split("version phase old_enabled old_active payload_dir_existed payload_dir_identity",k," "); for(i=1;i<=n;i++)a[k[i]]=1 }
 	{ if($0 !~ /^[A-Za-z0-9_]+=[A-Za-z0-9:._-]*$/ || !($1 in a) || ++s[$1]!=1) exit 1 }
-	END { if(NR!=n) exit 1; for(x in a)if(s[x]!=1)exit 1 }' "$install_intent" || return 1
-	[ "$(awk -F= '$1=="version"{print $2}' "$install_intent")" = autopilot-cockpit-install-intent-v1 ]
-	[ "$(awk -F= '$1=="phase"{print $2}' "$install_intent")" = initializing ]
+	END { if(NR!=n) exit 1; for(x in a)if(s[x]!=1)exit 1 }' "$candidate" || return 1
+	[ "$(awk -F= '$1=="version"{print $2}' "$candidate")" = autopilot-cockpit-install-intent-v1 ]
+	[ "$(awk -F= '$1=="phase"{print $2}' "$candidate")" = initializing ]
+	case "$(awk -F= '$1=="old_enabled"{print $2}' "$candidate")" in enabled|disabled|masked|masked-runtime) ;; *) return 1 ;; esac
+	case "$(awk -F= '$1=="old_active"{print $2}' "$candidate")" in active|inactive) ;; *) return 1 ;; esac
+	local existed identity
+	existed="$(awk -F= '$1=="payload_dir_existed"{print $2}' "$candidate")"; identity="$(awk -F= '$1=="payload_dir_identity"{print $2}' "$candidate")"
+	case "$existed" in 0) [ -z "$identity" ] ;; 1) [[ "$identity" =~ ^[0-9]+(:[0-9]+){4}$ ]] ;; *) return 1 ;; esac
+}
+
+validate_install_intent() { validate_install_intent_file "$install_intent"; }
+
+validate_orphan_install_intent_next() {
+	[ -f "$install_intent_next" ] && [ ! -L "$install_intent_next" ] && [ "$(stat -c %u:%g:%a:%h -- "$install_intent_next")" = "$expected_uid:$expected_gid:600:1" ] || return 1
+	case "$(cat -- "$install_intent_next")" in
+		"") return 0 ;;
+		$'version=autopilot-cockpit-install-intent-v1\nphase=initializing') return 0 ;;
+	esac
+	validate_install_intent_file "$install_intent_next"
 }
 
 validate_install_ledger() {
@@ -218,13 +260,22 @@ write_install_ledger() {
 }
 
 write_install_intent() {
-	[ ! -e "$install_intent" ] && [ ! -L "$install_intent" ] || return 1
-	(umask 077; set -o noclobber; printf 'version=autopilot-cockpit-install-intent-v1\nphase=initializing\nold_enabled=%s\nold_active=%s\npayload_dir_existed=%s\npayload_dir_identity=%s\n' \
-		"$install_old_enabled" "$install_old_active" "$payload_dir_existed" "$payload_dir_identity" > "$install_intent")
-	chown "$expected_uid:$expected_gid" "$install_intent"
-	validate_install_intent
-	sync -f "$install_intent"
+	[ ! -e "$install_intent" ] && [ ! -L "$install_intent" ] && [ ! -e "$install_intent_next" ] && [ ! -L "$install_intent_next" ] || return 1
+	(umask 077; set -o noclobber; : > "$install_intent_next")
+	chown "$expected_uid:$expected_gid" "$install_intent_next"
+	test_kill_install_init after-intent-next-create
+	printf 'version=autopilot-cockpit-install-intent-v1\nphase=initializing\n' > "$install_intent_next"
+	test_kill_install_init after-intent-next-partial-write
+	printf 'old_enabled=%s\nold_active=%s\npayload_dir_existed=%s\npayload_dir_identity=%s\n' \
+		"$install_old_enabled" "$install_old_active" "$payload_dir_existed" "$payload_dir_identity" >> "$install_intent_next"
+	validate_install_intent_file "$install_intent_next"
+	sync -f "$install_intent_next"
+	test_kill_install_init after-intent-next-fsync
+	/usr/bin/mv --no-clobber -T -- "$install_intent_next" "$install_intent"
+	[ ! -e "$install_intent_next" ] && [ ! -L "$install_intent_next" ] && validate_install_intent
+	test_kill_install_init after-intent-publish
 	sync -f "$(dirname "$install_intent")"
+	test_kill_install_init after-intent-parent-fsync
 }
 
 prepare_install_intent() {
@@ -298,6 +349,12 @@ write_install_meta() {
 
 recover_install_transaction() {
 	local key path prior_kind prior_identity new_identity temp_path backup live_identity new_hash new_mode phase restore_tmp failed=0
+	if [ -e "$install_intent_next" ] || [ -L "$install_intent_next" ]; then
+		[ ! -e "$install_intent" ] && [ ! -L "$install_intent" ] && [ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ] && [ ! -e "$install_stage" ] && [ ! -L "$install_stage" ] || return 1
+		validate_orphan_install_intent_next || return 1
+		rm -f -- "$install_intent_next"; sync -f "$(dirname "$install_intent_next")"
+		return 0
+	fi
 	if [ ! -e "$install_intent" ] && [ ! -L "$install_intent" ] && [ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ]; then [ ! -e "$install_stage" ] && [ ! -L "$install_stage" ]; return; fi
 	validate_install_intent || return 1
 	install_old_enabled="$(awk -F= '$1=="old_enabled"{print $2}' "$install_intent")"; install_old_active="$(awk -F= '$1=="old_active"{print $2}' "$install_intent")"
@@ -442,7 +499,7 @@ case "${1:-}" in
 	--install-watchdog)
 		[ "$#" -eq 3 ] || exit 64
 		acquire_root_transaction_lock
-		if [ -e "$install_intent" ] || [ -L "$install_intent" ] || [ -e "$install_transaction" ] || [ -L "$install_transaction" ] || [ -e "$install_stage" ] || [ -L "$install_stage" ]; then recover_install_transaction; fi
+		if [ -e "$install_intent" ] || [ -L "$install_intent" ] || [ -e "$install_intent_next" ] || [ -L "$install_intent_next" ] || [ -e "$install_transaction" ] || [ -L "$install_transaction" ] || [ -e "$install_stage" ] || [ -L "$install_stage" ]; then recover_install_transaction; fi
 		validate_authorization "$(readlink -f -- "$2")" "$3"
 		prepare_install_intent
 		if ! stage="$(snapshot_from_sha "$2" "$3")"; then recover_install_transaction; exit 1; fi
@@ -452,8 +509,8 @@ case "${1:-}" in
 		;;
 	*)
 		[ "$#" -eq 3 ] || exit 64
-		acquire_root_transaction_lock
-		if [ -e "$install_intent" ] || [ -L "$install_intent" ] || [ -e "$install_transaction" ] || [ -L "$install_transaction" ] || [ -e "$install_stage" ] || [ -L "$install_stage" ]; then recover_install_transaction; fi
+		acquire_root_transaction_lock 1
+		if [ -e "$install_intent" ] || [ -L "$install_intent" ] || [ -e "$install_intent_next" ] || [ -L "$install_intent_next" ] || [ -e "$install_transaction" ] || [ -L "$install_transaction" ] || [ -e "$install_stage" ] || [ -L "$install_stage" ]; then recover_install_transaction; fi
 		validate_authorization "$(readlink -f -- "$1")" "$3"
 		prepare_install_intent
 		if ! stage="$(snapshot_from_sha "$1" "$3")"; then recover_install_transaction; exit 1; fi

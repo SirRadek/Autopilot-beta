@@ -1,7 +1,7 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -66,6 +66,7 @@ esac
   writeFileSync(join(bin, "mv"), `#!/usr/bin/env bash
 [[ "\${!#}" == *recovery.service ]] && printf 'mv:recovery.service\n' >> ${JSON.stringify(eventLog)}
 if [[ "\${FAIL_ON:-}" == mv && "\${!#}" == *recovery.service ]]; then exit 88; fi
+if [[ "\${DELAY_WORKER_MV:-0}" == 1 && "\${!#}" == *autopilot-cockpit-live-cutover ]]; then sleep 1.1; fi
 exec /usr/bin/mv "$@"
 `, { mode: 0o755 });
   const env = { ...process.env, AUTOPILOT_LAUNCHER_TEST_ROOT: root, AUTOPILOT_LAUNCHER_TEST_BIN: bin };
@@ -119,6 +120,11 @@ describe("trusted cockpit cutover launcher", () => {
 
   it.each([
     "before-first-ledger",
+    "after-intent-next-create",
+    "after-intent-next-partial-write",
+    "after-intent-next-fsync",
+    "after-intent-publish",
+    "after-intent-parent-fsync",
     "after-first-ledger",
     "after-transaction-mkdir",
     "after-backups-mkdir",
@@ -143,6 +149,25 @@ describe("trusted cockpit cutover launcher", () => {
     const installed = command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env });
     expect(installed.status, `${phase}\n${installed.stdout}\n${installed.stderr}`).toBe(0);
   }, 15_000);
+
+  it.each(["foreign-content", "foreign-valid-schema", "foreign-hardlink", "foreign-symlink"])("rejects and preserves a %s install intent.next orphan", (kind) => {
+    const f = fixture();
+    const next = join(f.root, "var/lib/autopilot-cockpit/install-transaction.ledger.next");
+    if (kind === "foreign-content") writeFileSync(next, "foreign=true\n", { mode: 0o600 });
+    else if (kind === "foreign-valid-schema") writeFileSync(next, "version=autopilot-cockpit-install-intent-v1\nphase=initializing\nold_enabled=foreign\nold_active=inactive\npayload_dir_existed=0\npayload_dir_identity=\n", { mode: 0o600 });
+    else if (kind === "foreign-hardlink") {
+      const foreign = join(f.root, "var/lib/autopilot-cockpit/foreign-intent");
+      writeFileSync(foreign, "version=autopilot-cockpit-install-intent-v1\nphase=initializing\nold_enabled=disabled\nold_active=inactive\npayload_dir_existed=0\npayload_dir_identity=\n", { mode: 0o600 });
+      linkSync(foreign, next);
+    }
+    else symlinkSync(f.authorization, next);
+    const recovered = command(f.launcher, ["--recover-install"], { env: f.env });
+    expect(recovered.status).not.toBe(0);
+    expect(existsSync(next)).toBe(true);
+    if (kind === "foreign-symlink") expect(lstatSync(next).isSymbolicLink()).toBe(true);
+    else if (kind === "foreign-hardlink") expect(lstatSync(next).nlink).toBe(2);
+    else expect(readFileSync(next, "utf8")).toContain(kind === "foreign-content" ? "foreign=true" : "old_enabled=foreign");
+  });
 
   it("preserves a foreign replacement encountered by install recovery", () => {
     const f = fixture(); const worker = join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover");
@@ -206,11 +231,16 @@ describe("trusted cockpit cutover launcher", () => {
     command("git", ["add", "."], { cwd: f.checkout }); command("git", ["commit", "-qm", "revision"], { cwd: f.checkout });
     const revised = command("git", ["rev-parse", "HEAD"], { cwd: f.checkout }).stdout.trim();
     f.refreshAuthorization(revised);
-    const result = command(f.launcher, ["--install-watchdog", f.checkout, revised], { env: { ...f.env, FAIL_ON: failure } });
+    const result = command(f.launcher, ["--install-watchdog", f.checkout, revised], { env: { ...f.env, FAIL_ON: failure, DELAY_WORKER_MV: "1" } });
     expect(result.status).not.toBe(0);
     const events = readFileSync(f.eventLog, "utf8");
     expect(events).toContain(failure === "mv" ? "mv:recovery.service" : `systemctl:${failure === "reload" ? "daemon-reload" : failure}`);
-    paths.forEach((path, index) => { expect(readFileSync(path)).toEqual(before[index]); expect(statSync(path).mode & 0o777).toBe(index === 0 ? 0o755 : 0o644); });
+    paths.forEach((path, index) => {
+      const meta = join(f.root, "var/lib/autopilot-cockpit/install-transaction/meta", basename(path));
+      const diagnostics = existsSync(meta) ? `${result.stdout}\n${result.stderr}\n${readFileSync(meta, "utf8")}` : `${result.stdout}\n${result.stderr}\ntransaction-cleaned`;
+      expect(readFileSync(path), diagnostics).toEqual(before[index]);
+      expect(statSync(path).mode & 0o777).toBe(index === 0 ? 0o755 : 0o644);
+    });
     expect(readFileSync(join(f.base, "enabled"), "utf8")).toBe("disabled\n");
     expect(readFileSync(join(f.base, "active"), "utf8")).toBe("inactive\n");
     expect(existsSync(join(f.root, "var/lib/autopilot-cockpit/trusted-payload.manifest"))).toBe(true);
