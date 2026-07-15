@@ -68,7 +68,7 @@ managed_paths=(
 )
 
 acquire_root_transaction_lock() {
-	local allow_terminal="${1:-0}"
+	local allow_terminal="${1:-0}" expected_checkout="${2:-}" expected_release_root="${3:-}"
 	case "$allow_terminal" in 0|1) ;; *) return 1 ;; esac
 	if [ -e "$cutover_transaction_root" ] || [ -L "$cutover_transaction_root" ]; then
 		[ -d "$cutover_transaction_root" ] && [ ! -L "$cutover_transaction_root" ] && [ "$(stat -c %u:%g:%a -- "$cutover_transaction_root")" = "$expected_uid:$expected_gid:700" ] || return 1
@@ -82,7 +82,7 @@ acquire_root_transaction_lock() {
 	if [ -e "$cutover_transaction_root/active" ] || [ -L "$cutover_transaction_root/active" ]; then
 		[ "$allow_terminal" = 1 ] || return 1
 		verify_installed_payload
-		validate_terminal_cutover_transaction
+		validate_terminal_cutover_transaction "$expected_checkout" "$expected_release_root"
 	fi
 }
 
@@ -107,7 +107,8 @@ verify_installed_payload() {
 }
 
 validate_terminal_cutover_transaction() {
-	local active="$cutover_transaction_root/active" candidate="$cutover_transaction_root/active/transaction.ledger" state sha ack
+	local expected_checkout="$1" expected_release_root="$2" active="$cutover_transaction_root/active" candidate="$cutover_transaction_root/active/transaction.ledger"
+	local state sha ack value flag identity target owner_pid owner_starttime deadline boot_id key entry name env_dev env_ino env_uid env_gid env_mode env_size env_mtime env_ctime
 	[ -d "$active" ] && [ ! -L "$active" ] && [ "$(stat -c %u:%g:%a -- "$active")" = "$expected_uid:$expected_gid:700" ] || return 1
 	[ -f "$candidate" ] && [ ! -L "$candidate" ] && [ "$(stat -c %u:%g:%a:%h -- "$candidate")" = "$expected_uid:$expected_gid:600:1" ] || return 1
 	[ -z "$(tail -c 1 -- "$candidate")" ] || return 1
@@ -121,7 +122,53 @@ validate_terminal_cutover_transaction() {
 	[ "$(awk -F= '$1=="version"{print $2}' "$candidate")" = autopilot-cockpit-cutover-v4 ] || return 1
 	state="$(awk -F= '$1=="state"{print $2}' "$candidate")"; case "$state" in completed|rolled-back) ;; *) return 1 ;; esac
 	sha="$(awk -F= '$1=="sha"{print $2}' "$candidate")"; ack="$(awk -F= '$1=="ack_id"{print $2}' "$candidate")"
-	[[ "$sha" =~ ^[a-f0-9]{40}$ && "$ack" =~ ^[a-f0-9]{64}$ ]]
+	[[ "$sha" =~ ^[a-f0-9]{40}$ && "$ack" =~ ^[a-f0-9]{64}$ ]] || return 1
+	[ "$(awk -F= '$1=="checkout"{print $2}' "$candidate")" = "$expected_checkout" ] && [ "$(awk -F= '$1=="release_root"{print $2}' "$candidate")" = "$expected_release_root" ] || return 1
+	[ "$(realpath -e -- "$expected_checkout")" = "$expected_checkout" ] && [ "$(realpath -e -- "$expected_release_root")" = "$expected_release_root" ] || return 1
+	owner_pid="$(awk -F= '$1=="owner_pid"{print $2}' "$candidate")"; owner_starttime="$(awk -F= '$1=="owner_starttime"{print $2}' "$candidate")"; deadline="$(awk -F= '$1=="deadline_epoch"{print $2}' "$candidate")"
+	[[ "$owner_pid" =~ ^[1-9][0-9]*$ && "$owner_starttime" =~ ^[1-9][0-9]*$ && "$deadline" =~ ^[1-9][0-9]*$ ]] || return 1
+	boot_id="$(awk -F= '$1=="boot_id"{print $2}' "$candidate")"; [[ "$boot_id" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]] || return 1
+	case "$(awk -F= '$1=="prior_mask_kind"{print $2}' "$candidate")" in persistent|runtime) ;; *) return 1 ;; esac
+	for flag in prior_persistent_enable prior_runtime_enable created_nft_dir created_helper_dir created_caddy_dropin_dir firewall_unit_installed nft_config_installed firewall_helper_installed firewall_identity_installed firewall_reload_attempted firewall_attempted firewall_started current_attempted current_switched environment_attempted environment_changed control_plane_restarted caddy_files_installed caddy_config_installed caddy_dropin_installed caddy_reload_attempted caddy_unmasked caddy_enabled caddy_attempted caddy_started; do
+		value="$(awk -F= -v k="$flag" '$1==k{print $2}' "$candidate")"; case "$value" in 0|1) printf -v "$flag" '%s' "$value" ;; *) return 1 ;; esac
+	done
+	for key in persistent runtime; do
+		flag="prior_${key}_enable"; target="$(awk -F= -v k="prior_${key}_enable_target" '$1==k{print $2}' "$candidate")"
+		if [ "${!flag}" = 0 ]; then [ -z "$target" ] || return 1; else [[ "$target" =~ ^(\.\./|/usr/lib/systemd/system/|/lib/systemd/system/)caddy\.service$ ]] || return 1; fi
+	done
+	value="$(awk -F= '$1=="prior_current_kind"{print $2}' "$candidate")"; target="$(awk -F= '$1=="prior_current_target"{print $2}' "$candidate")"
+	case "$value" in '') [ -z "$target" ] || return 1 ;; symlink) [[ "$target" =~ ^releases/[a-f0-9]{40}$ ]] || return 1 ;; *) return 1 ;; esac
+	identity="$(awk -F= '$1=="environment_pre_identity"{print $2}' "$candidate")"; [[ "$identity" =~ ^[0-9]+(:[0-9]+){7}$ ]] || return 1
+	IFS=: read -r env_dev env_ino env_uid env_gid env_mode env_size env_mtime env_ctime <<< "$identity"
+	[ "$env_uid:$env_gid:$env_mode" = "$(stat -c %u:%g -- "$expected_checkout"):600" ] || return 1
+	for key in environment_pre_hash package_caddy_unit_hash; do value="$(awk -F= -v k="$key" '$1==k{print $2}' "$candidate")"; [[ "$value" =~ ^[a-f0-9]{64}$ ]] || return 1; done
+	value="$(awk -F= '$1=="environment_owned_hash"{print $2}' "$candidate")"; if [ "$environment_attempted" = 1 ]; then [[ "$value" =~ ^[a-f0-9]{64}$ ]] || return 1; else [ -z "$value" ] || return 1; fi
+	[ "$(awk -F= '$1=="package_caddy_unit_metadata"{print $2}' "$candidate")" = "$expected_uid:$expected_gid:644" ] || return 1
+	for key in registered_temp_path registered_temp_kind registered_temp_identity; do [ -z "$(awk -F= -v k="$key" '$1==k{print $2}' "$candidate")" ] || return 1; done
+	for key in nft helper caddy_dropin; do flag="created_${key}_dir"; identity="$(awk -F= -v k="created_${key}_dir_identity" '$1==k{print $2}' "$candidate")"; if [ "${!flag}" = 1 ]; then [[ "$identity" =~ ^[0-9]+(:[0-9]+){4}$ ]] || return 1; else [ -z "$identity" ] || return 1; fi; done
+	[ "$firewall_started" -le "$firewall_attempted" ] && [ "$firewall_attempted" -le "$firewall_reload_attempted" ] || return 1
+	if [ "$firewall_reload_attempted" = 1 ]; then [ "$firewall_unit_installed:$nft_config_installed:$firewall_helper_installed:$firewall_identity_installed" = 1:1:1:1 ] || return 1; fi
+	[ "$nft_config_installed" -le "$firewall_unit_installed" ] && [ "$firewall_helper_installed" -le "$nft_config_installed" ] && [ "$firewall_identity_installed" -le "$firewall_helper_installed" ] || return 1
+	[ "$current_switched" -le "$current_attempted" ] && [ "$environment_changed" -le "$environment_attempted" ] && [ "$control_plane_restarted" -le "$environment_changed" ] || return 1
+	[ "$current_attempted" -le "$firewall_started" ] && [ "$environment_attempted" -le "$current_switched" ] && [ "$caddy_files_installed" -le "$control_plane_restarted" ] || return 1
+	[ "$caddy_config_installed" -le "$caddy_files_installed" ] && [ "$caddy_dropin_installed" -le "$caddy_files_installed" ] || return 1
+	[ "$caddy_dropin_installed" -le "$caddy_config_installed" ] || return 1
+	[ "$caddy_started" -le "$caddy_attempted" ] && [ "$caddy_attempted" -le "$caddy_enabled" ] && [ "$caddy_enabled" -le "$caddy_unmasked" ] && [ "$caddy_unmasked" -le "$caddy_reload_attempted" ] || return 1
+	if [ "$caddy_reload_attempted" = 1 ]; then [ "$caddy_config_installed:$caddy_dropin_installed:$control_plane_restarted" = 1:1:1 ] || return 1; fi
+	if [ "$state" = completed ]; then [ "$firewall_started:$current_switched:$environment_changed:$control_plane_restarted:$caddy_started" = 1:1:1:1:1 ] || return 1; fi
+	[ -z "$(find -P "$active" -xdev \( ! -uid "$expected_uid" -o ! -gid "$expected_gid" -o -type l \) -print -quit)" ] || return 1
+	[ -z "$(find -P "$active" -xdev -type f ! -links 1 -print -quit)" ] || return 1
+	for entry in "$active"/* "$active"/.[!.]*; do [ -e "$entry" ] || continue; name="${entry##*/}"; case "$name" in backups|snapshot|snapshot.sha256|transaction.ledger) ;; *) return 1 ;; esac; done
+	[ "$(stat -c %a -- "$active/backups")" = 700 ] && [ "$(stat -c %a -- "$active/snapshot")" = 500 ] && [ "$(stat -c %a -- "$active/snapshot.sha256")" = 400 ] || return 1
+	[ -f "$active/snapshot.sha256" ] && [ ! -L "$active/snapshot.sha256" ] || return 1
+	for entry in "$active/backups"/* "$active/backups"/.[!.]*; do [ -e "$entry" ] || continue; [ -f "$entry" ] && [ ! -L "$entry" ] || return 1; name="${entry##*/}"; case "$name:$(stat -c %a -- "$entry")" in environment:600|caddy-config:644|caddy-dropin:644|firewall-unit:644|nft-config:644|firewall-helper:755|firewall-identity:600) ;; *) return 1 ;; esac; done
+	[ -f "$active/backups/environment" ] && [ ! -L "$active/backups/environment" ] || return 1
+	[ "$(sha256sum "$active/backups/environment" | awk '{print $1}')" = "$(awk -F= '$1=="environment_pre_hash"{print $2}' "$candidate")" ] || return 1
+	for name in Caddyfile autopilot-cockpit.nft autopilot-cockpit-firewall.service autopilot-cockpit-firewall.sh caddy-autopilot.conf autopilot-cockpit-cutover-recovery.service autopilot-cockpit-cutover-recovery.timer autopilot-cockpit-recovery-verify.sh autopilot-cockpit-recovery-smoke.mjs package-caddy.service live-cutover.sh; do [ -f "$active/snapshot/$name" ] && [ ! -L "$active/snapshot/$name" ] && [ "$(stat -c %a -- "$active/snapshot/$name")" = 400 ] || return 1; done
+	[ "$(find -P "$active/snapshot" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 11 ] || return 1
+	[ -z "$(find -P "$active/snapshot" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ] || return 1
+	[ "$(sha256sum "$active/snapshot/package-caddy.service" | awk '{print $1}')" = "$(awk -F= '$1=="package_caddy_unit_hash"{print $2}' "$candidate")" ] || return 1
+	(cd "$active/snapshot" && sha256sum --check --strict "$active/snapshot.sha256" >/dev/null)
 }
 
 authorization_value() {
@@ -201,7 +248,7 @@ snapshot_from_sha() {
 	printf '%s\n' "$stage"
 }
 
-object_identity() { stat -Lc %d:%i:%u:%g:%a:%s:%Y -- "$1"; }
+object_identity() { stat -Lc %d:%i:%u:%g:%a:%s:%Y:%h -- "$1"; }
 directory_object_identity() { stat -Lc %d:%i:%u:%g:%a -- "$1"; }
 
 test_kill_install_init() {
@@ -386,20 +433,24 @@ recover_install_transaction() {
 	for meta in "$install_transaction"/meta/*; do
 		[ -f "$meta" ] || continue; key="${meta##*/}"; path="$(install_meta_value "$key" path)"; prior_kind="$(install_meta_value "$key" prior_kind)"
 		prior_identity="$(install_meta_value "$key" prior_identity)"; new_identity="$(install_meta_value "$key" new_identity)"; temp_path="$(install_meta_value "$key" temp_path)"; backup="$install_transaction/backups/$key"
-		new_hash="$(install_meta_value "$key" new_hash)"; new_mode="$(install_meta_value "$key" new_mode)"
+		prior_hash="$(install_meta_value "$key" prior_hash)"; new_hash="$(install_meta_value "$key" new_hash)"; new_mode="$(install_meta_value "$key" new_mode)"
 		case "$path" in "$trusted_worker"|"$service"|"$timer"|"$manifest"|"$trusted_payload"/*) ;; *) return 1 ;; esac
 		case "$prior_kind" in file|absent) ;; *) return 1 ;; esac
 		if [ -n "$temp_path" ] && { [ -e "$temp_path" ] || [ -L "$temp_path" ]; }; then
-			if [ -n "$new_identity" ]; then [ "$(object_identity "$temp_path" 2>/dev/null)" = "$new_identity" ] || { failed=1; continue; }
+			if [ -n "$new_identity" ]; then [ "$(object_identity "$temp_path" 2>/dev/null)" = "$new_identity" ] && [ "$(sha256sum "$temp_path" | awk '{print $1}')" = "$new_hash" ] || { failed=1; continue; }
 			else [ -f "$temp_path" ] && [ ! -L "$temp_path" ] && [ "$(stat -c %u:%g:%a -- "$temp_path")" = "$expected_uid:$expected_gid:$new_mode" ] && [ "$(sha256sum "$temp_path" | awk '{print $1}')" = "$new_hash" ] || { failed=1; continue; }; fi
-			rm -f -- "$temp_path" || failed=1
+			if [ -n "$new_identity" ]; then [ "$(object_identity "$temp_path" 2>/dev/null)" = "$new_identity" ] && [ "$(sha256sum "$temp_path" | awk '{print $1}')" = "$new_hash" ] && rm -f -- "$temp_path" || failed=1
+			else [ -f "$temp_path" ] && [ ! -L "$temp_path" ] && [ "$(stat -c %u:%g:%a:%h -- "$temp_path")" = "$expected_uid:$expected_gid:$new_mode:1" ] && [ "$(sha256sum "$temp_path" | awk '{print $1}')" = "$new_hash" ] && rm -f -- "$temp_path" || failed=1; fi
 		fi
 		if [ -e "$path" ] || [ -L "$path" ]; then live_identity="$(object_identity "$path" 2>/dev/null || :)"; else live_identity=absent; fi
-		if [ "$prior_kind" = file ] && [ "$live_identity" = "$prior_identity" ]; then continue
+		if [ "$prior_kind" = file ] && [ "$live_identity" = "$prior_identity" ]; then [ "$(sha256sum "$path" | awk '{print $1}')" = "$prior_hash" ] || failed=1; continue
 		elif [ "$prior_kind" = absent ] && [ "$live_identity" = absent ]; then continue
-		elif [ -n "$new_identity" ] && [ "$live_identity" = "$new_identity" ]; then
-			if [ "$prior_kind" = file ]; then restore_tmp="$(dirname "$path")/.autopilot-watchdog-restore-$key"; [ ! -e "$restore_tmp" ] && [ ! -L "$restore_tmp" ] || { failed=1; continue; }; cp -a -- "$backup" "$restore_tmp" || { failed=1; continue; }; [ "$(object_identity "$path")" = "$new_identity" ] && /usr/bin/mv -T -- "$restore_tmp" "$path" || { rm -f "$restore_tmp"; failed=1; }
-			else rm -f -- "$path" || failed=1; fi
+		elif [ -n "$new_identity" ] && [ "$live_identity" = "$new_identity" ] && [ "$(sha256sum "$path" | awk '{print $1}')" = "$new_hash" ]; then
+			if [ "$prior_kind" = file ]; then
+				[ -f "$backup" ] && [ ! -L "$backup" ] && [ "$(sha256sum "$backup" | awk '{print $1}')" = "$prior_hash" ] || { failed=1; continue; }
+				restore_tmp="$(dirname "$path")/.autopilot-watchdog-restore-$key"; [ ! -e "$restore_tmp" ] && [ ! -L "$restore_tmp" ] || { failed=1; continue; }; cp -a -- "$backup" "$restore_tmp" || { failed=1; continue; }
+				[ "$(object_identity "$path")" = "$new_identity" ] && [ "$(sha256sum "$path" | awk '{print $1}')" = "$new_hash" ] && [ "$(sha256sum "$restore_tmp" | awk '{print $1}')" = "$prior_hash" ] && /usr/bin/mv -T -- "$restore_tmp" "$path" || { rm -f "$restore_tmp"; failed=1; }
+			else [ "$(object_identity "$path")" = "$new_identity" ] && [ "$(sha256sum "$path" | awk '{print $1}')" = "$new_hash" ] && rm -f -- "$path" || failed=1; fi
 		else failed=1
 		fi
 	done
@@ -509,7 +560,7 @@ case "${1:-}" in
 		;;
 	*)
 		[ "$#" -eq 3 ] || exit 64
-		acquire_root_transaction_lock 1
+		acquire_root_transaction_lock 1 "$(readlink -f -- "$1")" "$(readlink -f -- "$2")"
 		if [ -e "$install_intent" ] || [ -L "$install_intent" ] || [ -e "$install_intent_next" ] || [ -L "$install_intent_next" ] || [ -e "$install_transaction" ] || [ -L "$install_transaction" ] || [ -e "$install_stage" ] || [ -L "$install_stage" ]; then recover_install_transaction; fi
 		validate_authorization "$(readlink -f -- "$1")" "$3"
 		prepare_install_intent

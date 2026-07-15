@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -176,6 +176,31 @@ describe("trusted cockpit cutover launcher", () => {
     expect(command(f.launcher, ["--recover-install"], { env: f.env }).status).not.toBe(0);
     expect(readFileSync(worker, "utf8")).toBe("foreign\n");
   });
+
+  it.each(["hardlink", "same-size-mutation"])("preserves and rejects a foreign %s of the newly published worker", (kind) => {
+    const f = fixture(); const worker = join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover");
+    command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: { ...f.env, AUTOPILOT_LAUNCHER_TEST_KILL_AFTER: "worker" } });
+    if (kind === "hardlink") linkSync(worker, join(f.base, "foreign-worker-link"));
+    else {
+      const before = readFileSync(worker); const stat = statSync(worker); const mutated = Buffer.from(before); mutated[0] = mutated[0] === 35 ? 36 : 35;
+      writeFileSync(worker, mutated); utimesSync(worker, stat.atime, stat.mtime);
+    }
+    const foreign = readFileSync(worker);
+    expect(command(f.launcher, ["--recover-install"], { env: f.env }).status).not.toBe(0);
+    expect(readFileSync(worker)).toEqual(foreign);
+  });
+
+  it("hash-checks the prior worker branch before accepting an in-place same-size mutation", () => {
+    const f = fixture(); const worker = join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover");
+    expect(command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env }).status).toBe(0);
+    writeFileSync(join(f.checkout, "ops/cockpit-proxy/live-cutover.sh"), `${readFileSync(join(f.checkout, "ops/cockpit-proxy/live-cutover.sh"), "utf8")}\n# revision\n`);
+    command("git", ["add", "."], { cwd: f.checkout }); command("git", ["commit", "-qm", "revision"], { cwd: f.checkout });
+    const revised = command("git", ["rev-parse", "HEAD"], { cwd: f.checkout }).stdout.trim(); f.refreshAuthorization(revised);
+    command(f.launcher, ["--install-watchdog", f.checkout, revised], { env: { ...f.env, AUTOPILOT_LAUNCHER_TEST_KILL_INIT: "after-first-temp" } });
+    const stat = statSync(worker); const mutated = Buffer.from(readFileSync(worker)); mutated[0] = mutated[0] === 35 ? 36 : 35; writeFileSync(worker, mutated); utimesSync(worker, stat.atime, stat.mtime);
+    expect(command(f.launcher, ["--recover-install"], { env: f.env }).status).not.toBe(0);
+    expect(readFileSync(worker)).toEqual(mutated);
+  }, 15_000);
   it("requires a pre-provisioned authorization record", () => {
     const f = fixture(); unlinkSync(f.authorization);
     expect(command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env }).status).not.toBe(0);
@@ -237,7 +262,11 @@ describe("trusted cockpit cutover launcher", () => {
     expect(events).toContain(failure === "mv" ? "mv:recovery.service" : `systemctl:${failure === "reload" ? "daemon-reload" : failure}`);
     paths.forEach((path, index) => {
       const meta = join(f.root, "var/lib/autopilot-cockpit/install-transaction/meta", basename(path));
-      const diagnostics = existsSync(meta) ? `${result.stdout}\n${result.stderr}\n${readFileSync(meta, "utf8")}` : `${result.stdout}\n${result.stderr}\ntransaction-cleaned`;
+      const backup = join(f.root, "var/lib/autopilot-cockpit/install-transaction/backups", basename(path));
+      const liveIdentity = command("stat", ["-Lc", "%d:%i:%u:%g:%a:%s:%Y:%h", path]).stdout.trim();
+      const liveHash = createHash("sha256").update(readFileSync(path)).digest("hex");
+      const backupHash = existsSync(backup) ? createHash("sha256").update(readFileSync(backup)).digest("hex") : "absent";
+      const diagnostics = existsSync(meta) ? `${result.stdout}\n${result.stderr}\n${readFileSync(meta, "utf8")}live_identity=${liveIdentity}\nlive_hash=${liveHash}\nbackup_hash=${backupHash}` : `${result.stdout}\n${result.stderr}\ntransaction-cleaned`;
       expect(readFileSync(path), diagnostics).toEqual(before[index]);
       expect(statSync(path).mode & 0o777).toBe(index === 0 ? 0o755 : 0o644);
     });

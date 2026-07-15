@@ -3,6 +3,7 @@ import {
   chownSync,
   copyFileSync,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -1365,6 +1366,40 @@ describe("Cockpit transactional live cutover", () => {
     if (kind === "nonterminal-ledger") writeFileSync(ledger, readFileSync(ledger, "utf8").replace("state=rolled-back", "state=waiting"), { mode: 0o600 });
     else if (kind === "malformed-ledger") writeFileSync(ledger, `${readFileSync(ledger, "utf8")}foreign=true\n`, { mode: 0o600 });
     else writeFileSync(join(fixture.root, "usr", "local", "libexec", "autopilot-cockpit-live-cutover"), "foreign\n", { mode: 0o755 });
+    const second = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: trusted.env, timeout: 15_000,
+    });
+    expect(second.status).not.toBe(0);
+    expect(existsSync(active)).toBe(true);
+    expect(existsSync(join(dirname(active), "history"))).toBe(false);
+  }, 25_000);
+
+  it.each([
+    "invalid-bool", "invalid-enum", "invalid-owner", "invalid-deadline", "invalid-boot-id",
+    "unsafe-path", "invalid-hash", "invalid-identity", "inconsistent-flags",
+    "unexpected-file", "hidden-file", "hardlinked-file", "symlinked-file",
+  ])("rejects terminal transaction semantic/tree corruption %s before launcher archival", (kind) => {
+    const fixture = prepareCutover(); const trusted = provisionTrustedLauncher(fixture);
+    const first = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      encoding: "utf8", env: { ...trusted.env, AUTOPILOT_CUTOVER_TEST_FAIL_AFTER: "firewall" }, timeout: 15_000,
+    });
+    expect(first.stdout).toContain("ROLLBACK_OK");
+    const active = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active");
+    const ledger = join(active, "transaction.ledger");
+    const replace = (key: string, value: string) => writeFileSync(ledger, readFileSync(ledger, "utf8").replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`), { mode: 0o600 });
+    if (kind === "invalid-bool") replace("firewall_started", "2");
+    else if (kind === "invalid-enum") replace("prior_mask_kind", "foreign");
+    else if (kind === "invalid-owner") replace("owner_pid", "0");
+    else if (kind === "invalid-deadline") replace("deadline_epoch", "0");
+    else if (kind === "invalid-boot-id") replace("boot_id", "not-a-boot-id");
+    else if (kind === "unsafe-path") replace("checkout", `${fixture.checkout}/../foreign`);
+    else if (kind === "invalid-hash") replace("package_caddy_unit_hash", "g".repeat(64));
+    else if (kind === "invalid-identity") replace("environment_pre_identity", "1:2");
+    else if (kind === "inconsistent-flags") { replace("firewall_started", "1"); replace("firewall_attempted", "0"); }
+    else if (kind === "unexpected-file") writeFileSync(join(active, "foreign"), "foreign\n", { mode: 0o600 });
+    else if (kind === "hidden-file") writeFileSync(join(active, ".foreign"), "foreign\n", { mode: 0o600 });
+    else if (kind === "hardlinked-file") linkSync(join(active, "backups", "environment"), join(active, "backups", "firewall-identity"));
+    else symlinkSync("environment", join(active, "backups", "firewall-identity"));
     const second = spawnSync(trusted.launcher, [fixture.checkout, fixture.releaseRoot, fixture.sha], {
       encoding: "utf8", env: trusted.env, timeout: 15_000,
     });
