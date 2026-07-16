@@ -98,6 +98,39 @@ Confirm whether the failure is execution, authentication, quota probe, model ava
 evidence. Do not auto-switch mid-task. Close or pause the affected session, preserve correlation IDs,
 and let the owner select another fresh allowed route.
 
+## Personal Codex Efficiency Profile
+
+The personal profile removes only the exact `service_tier = "fast"` line and disables the reviewed
+skill set from `ops/codex-efficiency/default-skill-profile.json`. It does not edit the configured
+model or reasoning effort.
+
+Always inspect the read-only plan first with Node 24:
+
+```bash
+PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
+  node scripts/codex-efficiency-profile.mjs plan --home /home/radek/.codex
+```
+
+Apply only after the owner reviews the hashes, disabled-skill count, and backup destination:
+
+```bash
+PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
+  node scripts/codex-efficiency-profile.mjs apply --home /home/radek/.codex
+```
+
+The apply writes a mode-0600 backup and hash metadata, uses an atomic compare-and-swap update, and
+reports `restart_required: true`. Start a fresh Codex session before evaluating the reduced catalog.
+Rollback also uses compare-and-swap and refuses a live config changed after apply:
+
+```bash
+PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
+  node scripts/codex-efficiency-profile.mjs rollback --home /home/radek/.codex \
+  --backup /home/radek/.codex/config.toml.autopilot-efficiency-<timestamp>.bak
+```
+
+Do not bypass `codex_version_unavailable`, `codex_version_too_old`, ambiguous/missing skill paths,
+ownership checks, symlink checks, duplicate Fast lines, existing profile markers, or CAS mismatch.
+
 ## State Lock
 
 For `state_lock_timeout`, check service and maintenance processes. Never delete a lock based only on
