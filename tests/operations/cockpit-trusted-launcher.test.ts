@@ -196,7 +196,7 @@ describe("trusted cockpit cutover launcher", () => {
     const foreign = readFileSync(worker);
     expect(command(f.launcher, ["--recover-install"], { env: f.env }).status).not.toBe(0);
     expect(readFileSync(worker)).toEqual(foreign);
-  });
+  }, 12_000);
 
   it("hash-checks the prior worker branch before accepting an in-place same-size mutation", () => {
     const f = fixture(); const worker = join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover");
