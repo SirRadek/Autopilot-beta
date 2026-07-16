@@ -1,4 +1,10 @@
 import { execFileSync } from "node:child_process";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -10,6 +16,7 @@ import {
   type EfficiencyReportV1,
 } from "../../src/data/delivery-system/efficiencyReport";
 import type { RolloutEfficiencyEstimate } from "../../src/data/delivery-system/codexRolloutEfficiency";
+import { runCodexEfficiencyCli } from "../../scripts/codex-efficiency-report";
 
 describe("Codex efficiency reporting", () => {
   it("requires matched sample sizes and a 30 percent median reduction", () => {
@@ -137,6 +144,137 @@ describe("Codex efficiency reporting", () => {
     expect(report.samples.completed).toBe(5);
     expect(() => assertAggregateOnly(report)).not.toThrow();
     expect(output).not.toContain("private prompt");
+  });
+
+  it.each([
+    ["without a map argument", []],
+    ["when the explicit map file is unavailable", ["--work-units", "missing-work-units.json"]],
+  ])("returns insufficient evidence %s", (_label, mapArgs) => {
+    const report = runCodexEfficiencyCli(
+      [
+        "report",
+        "--sessions",
+        "tests/fixtures/codex-efficiency",
+        ...mapArgs,
+        "--since",
+        "7d",
+        "--json",
+      ],
+      new Date("2026-07-16T00:00:00.000Z"),
+    ) as EfficiencyReportV1;
+
+    expect(report).toMatchObject({
+      coverage: "insufficient_evidence",
+      samples: { ordinary: 0, high_risk: 0, completed: 0 },
+    });
+  });
+
+  it("compares an immutable baseline record and preserves insufficient evidence", () => {
+    const root = mkdtempSync(join(tmpdir(), "codex-efficiency-compare-"));
+    try {
+      const baselinePath = join(root, "baseline.json");
+      const candidatePath = join(root, "candidate.json");
+      writeFileSync(
+        baselinePath,
+        JSON.stringify({
+          ...reportFixture({ ordinary: 0, highRisk: 0 }),
+          schema_version: "autopilot-codex-efficiency-baseline-v1",
+          method: "replay-aware-positive-counter-delta",
+          limitations: [
+            "explicit historical source-to-work-unit map unavailable",
+            "forked rollout counters are not provider billing records",
+            "provider-authoritative telemetry unavailable",
+          ],
+          routing: {
+            mode: "shadow_only",
+            recommended_model: null,
+            recommended_reasoning_effort: null,
+          },
+          acceptance: {
+            status: "insufficient_evidence",
+            median_reduction_pct: null,
+            reasons: [
+              "historical_work_unit_map_unavailable",
+              "minimum_sample_not_met",
+            ],
+          },
+        }),
+      );
+      writeFileSync(
+        candidatePath,
+        JSON.stringify(reportFixture({ ordinary: 0, highRisk: 0 })),
+      );
+
+      expect(
+        runCodexEfficiencyCli([
+          "compare",
+          "--baseline",
+          baselinePath,
+          "--candidate",
+          candidatePath,
+          "--json",
+        ]),
+      ).toMatchObject({
+        status: "insufficient_evidence",
+        ordinary_samples: 0,
+        high_risk_samples: 0,
+        reasons: ["minimum_sample_not_met"],
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["unknown fields", { operator_note: "private data" }],
+    ["unapproved limitation values", { limitations: ["private data"] }],
+  ])("rejects baseline records with %s", (_label, extra) => {
+    const root = mkdtempSync(join(tmpdir(), "codex-efficiency-invalid-"));
+    try {
+      const baselinePath = join(root, "baseline.json");
+      const candidatePath = join(root, "candidate.json");
+      writeFileSync(
+        baselinePath,
+        JSON.stringify({
+          ...reportFixture({ ordinary: 0, highRisk: 0 }),
+          schema_version: "autopilot-codex-efficiency-baseline-v1",
+          method: "replay-aware-positive-counter-delta",
+          limitations: [
+            "explicit historical source-to-work-unit map unavailable",
+            "forked rollout counters are not provider billing records",
+            "provider-authoritative telemetry unavailable",
+          ],
+          routing: {
+            mode: "shadow_only",
+            recommended_model: null,
+            recommended_reasoning_effort: null,
+          },
+          acceptance: {
+            status: "insufficient_evidence",
+            median_reduction_pct: null,
+            reasons: [
+              "historical_work_unit_map_unavailable",
+              "minimum_sample_not_met",
+            ],
+          },
+          ...extra,
+        }),
+      );
+      writeFileSync(candidatePath, JSON.stringify(reportFixture()));
+
+      expect(() =>
+        runCodexEfficiencyCli([
+          "compare",
+          "--baseline",
+          baselinePath,
+          "--candidate",
+          candidatePath,
+          "--json",
+        ]),
+      ).toThrow(/invalid_efficiency_report/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import {
   closeSync,
   existsSync,
@@ -38,13 +37,11 @@ function requireNode24() {
   }
 }
 
-function requireCodexVersion() {
+async function requireCodexVersion() {
   let output;
   try {
-    output = execFileSync("codex", ["--version"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"]
-    }).trim();
+    const { readCodexVersion } = await import("../src/data/delivery-system/codexVersionProbe.mjs");
+    output = readCodexVersion();
   } catch {
     fail("codex_version_unavailable");
   }
@@ -360,10 +357,10 @@ function rollbackProfile(home, backup, codexVersion) {
   };
 }
 
-function main() {
+async function main() {
   requireNode24();
   const args = parseArgs(process.argv.slice(2));
-  const codexVersion = requireCodexVersion();
+  const codexVersion = await requireCodexVersion();
   const manifest = loadManifest();
 
   if (args.command === "rollback") {
@@ -390,7 +387,7 @@ function main() {
 }
 
 try {
-  console.log(JSON.stringify(main(), null, 2));
+  console.log(JSON.stringify(await main(), null, 2));
 } catch (error) {
   const code = error && typeof error === "object" && "code" in error ? error.code : "profile_failed";
   console.error(JSON.stringify({ ok: false, error: code }));

@@ -41,6 +41,17 @@ afterEach(() => {
 });
 
 describe("Codex efficiency profile", () => {
+  it("loads the Codex version probe only after the Node 24 gate", () => {
+    const text = readFileSync(profileScript, "utf8");
+
+    expect(text).not.toMatch(
+      /^import .*codexVersionProbe/m,
+    );
+    expect(text.indexOf("requireNode24();")).toBeLessThan(
+      text.indexOf("const codexVersion = await requireCodexVersion();"),
+    );
+  });
+
   it("plans removal of Fast without changing model or reasoning", () => {
     const home = fakeHome();
     const before = readFileSync(join(home, "config.toml"), "utf8");

@@ -1,0 +1,86 @@
+{
+  "schema_version": "autopilot-codex-efficiency-baseline-v1",
+  "generated_at": "2026-07-16T10:15:00.000Z",
+  "window": {
+    "since": "2026-07-10T00:00:00.000Z",
+    "until": "2026-07-15T23:59:59.999Z"
+  },
+  "coverage": "insufficient_evidence",
+  "contains_raw_content": false,
+  "method": "replay-aware-positive-counter-delta",
+  "limitations": [
+    "explicit historical source-to-work-unit map unavailable",
+    "forked rollout counters are not provider billing records",
+    "provider-authoritative telemetry unavailable"
+  ],
+  "samples": {
+    "ordinary": 0,
+    "high_risk": 0,
+    "completed": 0
+  },
+  "tokens": {
+    "median_per_completed": 0,
+    "cached_input": 0,
+    "uncached_input": 0,
+    "output": 0,
+    "reasoning_output": 0
+  },
+  "context": {
+    "input_p50": 0,
+    "input_p90": 0
+  },
+  "orchestration": {
+    "model_calls": 0,
+    "tool_calls": 0,
+    "poll_calls": 0,
+    "subagent_calls": 0,
+    "compactions": 0,
+    "total_wall_ms": null
+  },
+  "quality": {
+    "first_pass_acceptance_pct": 0,
+    "escaped_critical": 0,
+    "escaped_high": 0,
+    "retry_exhausted": 0,
+    "incomplete": 0
+  },
+  "classes": {
+    "deterministic_check": {
+      "completed": 0,
+      "median_tokens": null
+    },
+    "mechanical_change": {
+      "completed": 0,
+      "median_tokens": null
+    },
+    "bounded_implementation": {
+      "completed": 0,
+      "median_tokens": null
+    },
+    "research_or_design": {
+      "completed": 0,
+      "median_tokens": null
+    },
+    "review": {
+      "completed": 0,
+      "median_tokens": null
+    },
+    "high_risk": {
+      "completed": 0,
+      "median_tokens": null
+    }
+  },
+  "routing": {
+    "mode": "shadow_only",
+    "recommended_model": null,
+    "recommended_reasoning_effort": null
+  },
+  "acceptance": {
+    "status": "insufficient_evidence",
+    "median_reduction_pct": null,
+    "reasons": [
+      "historical_work_unit_map_unavailable",
+      "minimum_sample_not_met"
+    ]
+  }
+}

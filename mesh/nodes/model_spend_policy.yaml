@@ -50,6 +50,8 @@ related_files:
   - src/data/delivery-system/modelPolicy.ts
   - src/data/delivery-system/toolInventory.ts
   - docs/autopilot/delivery-system-model-policy.md
+  - docs/operations/codex-efficiency-runbook.md
+  - docs/autopilot/codex-efficiency-baseline-2026-07-15.json
 required_checks:
   - provider_availability_verified
   - provider_run_status_recorded
@@ -77,6 +79,8 @@ required_checks:
   - choose_smallest_safe_model_class
   - disclose_model_choice_when_risk_affects_delivery
   - keep_frontier_for_reasoning
+  - keep_efficiency_recommendations_null
+  - keep_efficiency_routing_shadow_only
 stop_conditions:
   - provider_availability_unverified
   - provider_run_failed_without_blocked_state
@@ -103,6 +107,7 @@ stop_conditions:
   - model_changed_without_eval_evidence
   - reasoning_effort_increased_without_failure_pattern
   - model_choice_affects_risk_without_disclosure
+  - efficiency_routing_activated_before_acceptance
 must_not_assume:
   - Do not make DeepSeek, Qwen, Gemini, OpenAI, Claude, or any single provider mandatory.
   - Do not route around a failed provider run by silently switching model class without a blocked state or owner decision.
@@ -114,6 +119,8 @@ must_not_assume:
   - Do not treat DeepSeek web chat login as API credit, CLI access, or a stable headless worker loop.
   - Do not route routine worker loops to a cloud model by default.
   - Do not adopt advisory technology claims without Context7 or official-docs verification.
+  - Keep recommended_model and recommended_reasoning_effort null during stage one.
+  - Do not activate model or reasoning routing from an insufficient_evidence report.
 objective:
   - Keep model selection provider-neutral and cost-aware.
   - Separate deterministic/local, free-cloud advisory, subscription CLI, subscription-interactive, API-credit, and self-hosted lanes.
@@ -123,3 +130,4 @@ objective:
   - "Use the advisory hierarchy: local evidence over model output; Claude Code subscription high-trust review over Gemini; Gemini over Qwen or DeepSeek drafts."
   - Pair Gemini brainstorming with Context7 or official-docs verification for current technical claims.
   - Escalate only when risk, ambiguity, or review value justifies it.
+  - Keep Codex efficiency routing shadow-only until non-inferiority and minimum samples are verified.

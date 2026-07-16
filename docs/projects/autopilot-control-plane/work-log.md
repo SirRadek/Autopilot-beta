@@ -3261,3 +3261,35 @@ Next operational milestone:
 
 - Keep the rollback checkout and recovery points through production same-origin TLS proxy acceptance.
 - Design and verify the production Cockpit proxy/deployment before enabling any provider one at a time.
+
+## 2026-07-16 Codex Efficiency Initial Baseline Review
+
+Date: 2026-07-16
+Request or trigger: complete Task 9 of the approved Codex efficiency foundation
+plan without claiming savings before the required matched sample exists.
+Mode: WRITE_ALLOWED for aggregate reporting, documentation, deterministic gates,
+and baseline repair. No provider call, routing activation, or model/reasoning
+change was authorized.
+
+Baseline outcome:
+
+- Node `v24.18.0` and the reduced personal skill profile were observed in a new
+  session; 200 skills are disabled, the Fast tier is absent, and the configured
+  model/reasoning remain unchanged.
+- Historical rollout files exist, but no verified explicit historical
+  source-to-work-unit map exists. The initial immutable baseline therefore
+  records zero comparable samples and `insufficient_evidence`.
+- The baseline contains aggregates only and keeps `recommended_model` and
+  `recommended_reasoning_effort` null with routing shadow-only.
+- No 30 percent saving or stage-one acceptance is claimed. Collection continues
+  through ordinary work; work must not be manufactured to reach 20 ordinary and
+  5 high-risk samples.
+
+Baseline review repairs:
+
+- Regenerated `vendor-manifest.json` for the efficiency modules added in Tasks
+  2-5.
+- Rebuilt the deterministic Cockpit recovery smoke bundle after Task 6 changed a
+  bundled dependency.
+- Moved the Task 8 Codex version process probe into the governed delivery-system
+  lane so the whole-repository dispatch boundary remains intact.

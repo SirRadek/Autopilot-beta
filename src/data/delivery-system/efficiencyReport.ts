@@ -17,7 +17,9 @@ export interface WorkUnitRecord {
 }
 
 export interface EfficiencyReportV1 {
-  readonly schema_version: "autopilot-codex-efficiency-report-v1";
+  readonly schema_version:
+    | "autopilot-codex-efficiency-report-v1"
+    | "autopilot-codex-efficiency-baseline-v1";
   readonly generated_at: string;
   readonly window: {
     readonly since: string;

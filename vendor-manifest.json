@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 130,
+  "file_count": 135,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -730,6 +730,31 @@
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "9b58d9996322ef3a6f98f85b6a534b90b2ac9e117fbd5d6dc0bfdae5d31f8ca1",
       "patched_by": "auditC"
+    },
+    {
+      "source_path": "src/data/delivery-system/codexRolloutEfficiency.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "22288a7d0b457953c6c1d9b9dd17a82f07cddb4631269f5f1329afaa912c885c"
+    },
+    {
+      "source_path": "src/data/delivery-system/codexVersionProbe.mjs",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "d94057321563e47bf0f137f472b754ef7f2f13f3908df3e1b2293b9d9a1e0328"
+    },
+    {
+      "source_path": "src/data/delivery-system/efficiencyPolicy.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "86a27e7e0bdadb18dd9727fd726a97a692c9bec2c69f634a1f8ecaecadec4231"
+    },
+    {
+      "source_path": "src/data/delivery-system/efficiencyReport.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "6f2cdc8b1cef712df8f15b0da1ec926725177ca1d62323fe8fe656ac824af717"
+    },
+    {
+      "source_path": "src/data/delivery-system/efficiencyTelemetry.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "49ddd9dd83c135c7bba2dfed92cb619119aa3c64be6ff599a17ec0406a45ab60"
     },
     {
       "source_path": "src/data/delivery-system/fallbackChains.ts",

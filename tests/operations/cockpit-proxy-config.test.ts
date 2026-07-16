@@ -126,7 +126,7 @@ describe("Cockpit production proxy boundary", () => {
       source: "scripts/smoke-cockpit-run.ts",
       output: "ops/cockpit-proxy/autopilot-cockpit-recovery-smoke.mjs",
       source_sha256: "c63de72541f40d3d8fbaeae5362236f08f4b6d9570a423b1dbc51e4166185fcf",
-      output_sha256: "f9595e0a654aa5eb622a507c99940fd51c74afa9125cd0d3a5c6c480f2e9b7d2",
+      output_sha256: "f18c5031a1a40f3f07b5b2e060d83d1a9f022c25cee0ec63b54997a3482d8a3a",
       esbuild_version: "0.28.1",
       flags: ["--bundle", "--platform=node", "--format=esm", "--target=node24", "--minify"],
     });
