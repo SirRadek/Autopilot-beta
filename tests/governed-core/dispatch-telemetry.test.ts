@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeHandoffId } from "../../src/data/delivery-system/checkCompletionMatrix";
+import { EFFICIENCY_TELEMETRY_PATH } from "../../src/data/delivery-system/sessionState";
 import { buildAgentPacket, loadDecisionMeshFromRoot } from "../../src/lib/decision-mesh";
 import {
   buildDispatchDecisionRecord,
@@ -102,6 +103,62 @@ describe("dispatch decision telemetry", () => {
       provenance_verified: true
     });
     expect(mocks.runCliWorker).not.toHaveBeenCalled();
+  });
+
+  it("records started and completed shadow-only efficiency events without recommendations", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "governed-efficiency-"));
+    mocks.runCliWorker.mockResolvedValue({
+      workerRunId: "worker-1",
+      handoffId: makeHandoffId("hp-20260630-governed-dispatch"),
+      vendor: "codex_cli",
+      model: "gpt-5.6-sol",
+      exitCode: 0,
+      rawOutput: "private worker output",
+      outcome: "success",
+      errorReason: null,
+      failure_signals: []
+    });
+
+    await dispatchHandoff(
+      baseHandoff({
+        vendor: "codex_cli",
+        model: "gpt-5.6-sol",
+        efficiency: {
+          work_unit: {
+            work_unit_id: "wu-dispatch-1",
+            class: "bounded_implementation",
+            risk: "ordinary"
+          },
+          actual_reasoning_effort: "medium"
+        }
+      }),
+      stateDir,
+      { reservationOwner: "caller" }
+    );
+
+    const fileName = EFFICIENCY_TELEMETRY_PATH.split(/[\\/]/).at(-1) ?? "";
+    const records = readFileSync(join(stateDir, fileName), "utf8")
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.status)).toEqual(["started", "completed"]);
+    expect(records[0]).toMatchObject({
+      schema_version: "v1",
+      work_unit_id: "wu-dispatch-1",
+      work_unit_class: "bounded_implementation",
+      risk: "ordinary",
+      actual_model: "gpt-5.6-sol",
+      actual_reasoning_effort: "medium",
+      recommended_model: null,
+      recommended_reasoning_effort: null,
+      routing_mode: "shadow_only",
+      total_attempts: 1,
+      attempt_delta_recorded: false
+    });
+    expect(JSON.stringify(records)).not.toContain("private worker output");
+    expect(JSON.stringify(records)).not.toContain(task);
   });
 });
 

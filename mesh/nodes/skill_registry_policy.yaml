@@ -18,6 +18,8 @@ related_agents:
 related_files:
   - src/data/delivery-system/toolInventory.ts
   - docs/autopilot/skill-registry.json
+  - ops/codex-efficiency/default-skill-profile.json
+  - scripts/codex-efficiency-profile.mjs
   - prompt-library/
 required_checks:
   - skill_registry_loaded

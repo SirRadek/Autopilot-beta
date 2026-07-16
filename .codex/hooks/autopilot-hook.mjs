@@ -884,6 +884,27 @@ function handlePreToolUse(input) {
     : null;
 }
 
+function shouldQueueInvestigator({ failed, flags, recentFailureCount }) {
+  if (!failed) {
+    return false;
+  }
+
+  if (
+    flags.some((flag) =>
+      [
+        "remote_mutation",
+        "secret_like_input",
+        "credential_surface",
+        "destructive_command"
+      ].includes(flag)
+    )
+  ) {
+    return true;
+  }
+
+  return recentFailureCount >= 2;
+}
+
 async function handlePostToolUse(input) {
   const flags = collectFlags(getToolText(input));
   const failed = responseLooksFailed(input.tool_response);
@@ -924,7 +945,16 @@ async function handlePostToolUse(input) {
     );
   }
 
-  if (failed) {
+  const recentFailureCount = failed
+    ? readRecentTurnEvents(input).filter((entry) => entry.result === "failed").length + 1
+    : 0;
+  if (
+    shouldQueueInvestigator({
+      failed,
+      flags,
+      recentFailureCount
+    })
+  ) {
     const investigationRecorded = recordInvestigation(input, flags);
     if (investigationRecorded) {
       messages.push(
@@ -976,7 +1006,7 @@ function handlePostCompact(input) {
   return {
     continue: true,
     systemMessage:
-      "Autopilot compaction completed. Re-read AGENTS.md and obtain a fresh relevant mesh packet before further edits."
+      "Autopilot compaction completed. Read the saved continuity pointer and only the AGENTS.md section or mesh must_read entries needed for the active work unit."
   };
 }
 
@@ -1068,7 +1098,8 @@ export async function handleHook(input) {
 }
 
 export const hookTestInternals = {
-  createSupervisorAlert
+  createSupervisorAlert,
+  shouldQueueInvestigator
 };
 
 function readStdin() {

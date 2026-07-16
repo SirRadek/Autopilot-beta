@@ -1,0 +1,4 @@
+{"timestamp":"2026-07-10T13:00:00.000Z","type":"session_meta","payload":{"session_id":"compact-session","thread_source":"root"}}
+{"timestamp":"2026-07-10T13:00:01.000Z","type":"turn_context","payload":{"turn_id":"turn-compact"}}
+{"timestamp":"2026-07-10T13:00:02.000Z","type":"event_msg","payload":{"type":"context_compacted","message":"private compacted summary"}}
+{"timestamp":"2026-07-10T13:00:03.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"cached_input_tokens":5,"output_tokens":2,"reasoning_output_tokens":1}}}}

@@ -1,0 +1,36 @@
+{
+  "version": "autopilot-cockpit-trusted-bootstrap-v1",
+  "authority": "independent-vm-image-root-channel",
+  "canonical_checkout": "/home/radek/autopilot-beta-proxy-candidate",
+  "canonical_origin": "https://github.com/SirRadek/Autopilot-beta.git",
+  "launcher": {
+    "path": "/usr/local/sbin/autopilot-cockpit-cutover",
+    "uid": 0,
+    "gid": 0,
+    "mode": "0755"
+  },
+  "authorization": {
+    "path": "/etc/autopilot-cockpit/cutover.authorization",
+    "uid": 0,
+    "gid": 0,
+    "mode": "0400",
+    "schema": "autopilot-cockpit-authorization-v1",
+    "digest": "sha256",
+    "binds": [
+      "sha",
+      "checkout",
+      "origin",
+      "uid",
+      "gid",
+      "payload_count",
+      "payload_hashes"
+    ],
+    "authorization_id": "sha256-of-all-preceding-record-lines-with-final-newline"
+  },
+  "privileged_checkout_execution": false,
+  "prohibited": [
+    "sudo-checkout-script",
+    "sudo-npm",
+    "sudo-bash-from-checkout"
+  ]
+}

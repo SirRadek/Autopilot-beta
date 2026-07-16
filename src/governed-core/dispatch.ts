@@ -8,6 +8,12 @@ import {
   type CliWorkerResult,
   runCliWorker
 } from "../data/delivery-system/cliWorker";
+import {
+  appendEfficiencyTelemetryEventBestEffort,
+  buildEfficiencyTelemetryEvent,
+  type EfficiencyTelemetryEventV1
+} from "../data/delivery-system/efficiencyTelemetry";
+import type { WorkUnitDescriptor } from "../data/delivery-system/efficiencyPolicy";
 import { DISPATCH_DECISION_TELEMETRY_PATH } from "../data/delivery-system/sessionState";
 import type { EvalRecordSummary } from "../data/delivery-system/modelOutputEvaluation";
 import {
@@ -74,6 +80,10 @@ export type GovernedHandoff = CliWorkerInput & {
   readonly task_package_hash?: string;
   readonly prep_provenance?: BuildPrepProvenance;
   readonly routing?: SupervisorRoutingContext;
+  readonly efficiency?: {
+    readonly work_unit: WorkUnitDescriptor;
+    readonly actual_reasoning_effort: string | null;
+  };
 };
 
 export type DispatchResult =
@@ -228,7 +238,20 @@ export async function dispatchHandoff(
 
   const workerInput = toCliWorkerInput(handoff);
   if (options.reservationOwner === "caller") {
-    const result = await runCliWorker(workerInput, stateDir);
+    recordEfficiencyStatus(handoff, stateDir, "started", workerInput.model ?? null);
+    let result: Awaited<ReturnType<typeof runCliWorker>>;
+    try {
+      result = await runCliWorker(workerInput, stateDir);
+    } catch (error) {
+      recordEfficiencyStatus(handoff, stateDir, "failed", workerInput.model ?? null);
+      throw error;
+    }
+    recordEfficiencyStatus(
+      handoff,
+      stateDir,
+      workerSucceeded(result) ? "completed" : "failed",
+      result.model
+    );
     recordDispatchDecision(handoff, stateDir, { decision: "dispatched", refusalReason: null, tierId });
     return { ...result, refused: false, tier_id: tierId, provenance_verified: true };
   }
@@ -259,9 +282,11 @@ export async function dispatchHandoff(
   }
 
   let result: Awaited<ReturnType<typeof runCliWorker>>;
+  recordEfficiencyStatus(handoff, stateDir, "started", workerInput.model ?? null);
   try {
     result = await runCliWorker(workerInput, stateDir);
   } catch (error) {
+    recordEfficiencyStatus(handoff, stateDir, "failed", workerInput.model ?? null);
     gateway.release(reservation);
     throw error;
   }
@@ -272,6 +297,7 @@ export async function dispatchHandoff(
     });
   } catch (error) {
     if (error instanceof TokenGatewayError && result.errorReason === null) {
+      recordEfficiencyStatus(handoff, stateDir, "failed", result.model);
       return {
         ...result,
         errorReason: error.code,
@@ -281,6 +307,12 @@ export async function dispatchHandoff(
       };
     }
   }
+  recordEfficiencyStatus(
+    handoff,
+    stateDir,
+    workerSucceeded(result) ? "completed" : "failed",
+    result.model
+  );
   recordDispatchDecision(handoff, stateDir, {
     decision: "dispatched",
     refusalReason: null,
@@ -383,6 +415,7 @@ function toCliWorkerInput(handoff: GovernedHandoff): CliWorkerInput {
     ...(handoff.timeoutMs !== undefined ? { timeoutMs: handoff.timeoutMs } : {}),
     ...(handoff.outputSchemaPath !== undefined ? { outputSchemaPath: handoff.outputSchemaPath } : {}),
     ...(handoff.maxPromptChars !== undefined ? { maxPromptChars: handoff.maxPromptChars } : {}),
+    supervisorOwnsRetry: true,
     lockSource: VERIFIED_LOCK_SOURCE
   };
 }
@@ -396,6 +429,9 @@ function recordDispatchDecision(
     readonly tierId: string | null;
   }
 ): void {
+  if (input.decision === "refused") {
+    recordEfficiencyStatus(handoff, stateDir, "refused", handoff.model ?? null);
+  }
   appendDispatchDecisionRecordBestEffort(buildDispatchDecisionRecord({
     recordedAt: new Date().toISOString(),
     handoff,
@@ -403,6 +439,30 @@ function recordDispatchDecision(
     decision: input.decision,
     refusalReason: input.refusalReason
   }), stateDir);
+}
+
+function recordEfficiencyStatus(
+  handoff: GovernedHandoff,
+  stateDir: string,
+  status: EfficiencyTelemetryEventV1["status"],
+  actualModel: string | null
+): void {
+  if (handoff.efficiency === undefined) return;
+  appendEfficiencyTelemetryEventBestEffort(
+    stateDir,
+    buildEfficiencyTelemetryEvent({
+      recordedAt: new Date().toISOString(),
+      workUnit: handoff.efficiency.work_unit,
+      handoffId: handoff.handoffId as string,
+      actualModel,
+      actualReasoningEffort: handoff.efficiency.actual_reasoning_effort,
+      status
+    })
+  );
+}
+
+function workerSucceeded(result: Awaited<ReturnType<typeof runCliWorker>>): boolean {
+  return result.exitCode === 0 && result.errorReason === null;
 }
 
 function appendDispatchDecisionRecordBestEffort(record: DispatchDecisionRecord, stateDir: string): void {

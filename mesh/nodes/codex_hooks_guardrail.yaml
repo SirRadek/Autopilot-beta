@@ -26,6 +26,7 @@ related_agents:
   - memory
 related_files:
   - .codex/hooks.json
+  - .codex/hooks/autopilot-hook.d.mts
   - .codex/hooks/autopilot-hook.mjs
   - docs/autopilot/codex-hooks-operating-model.md
 required_checks:

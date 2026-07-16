@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
@@ -28,6 +29,7 @@ export interface SupervisorTask {
   readonly run_started_at: string | null;
   readonly blocked_reason: string | null;
   readonly last_error: string | null;
+  readonly attempt_delta_hash: string | null;
   readonly dependency_ids: readonly string[];
   readonly requires_approval: boolean;
   readonly approval_granted: boolean;
@@ -108,7 +110,7 @@ export class SupervisorQueue {
     if (this.state.tasks.length >= this.maxTasks) throw new Error("supervisor_queue_full");
     const now = input.now ?? new Date().toISOString();
     assertSupervisorTimestamp(now);
-    const maxAttempts = boundedIntegerInput(input.maxAttempts, 3, 1, MAX_ATTEMPTS);
+    const maxAttempts = boundedIntegerInput(input.maxAttempts, 2, 1, MAX_ATTEMPTS);
     const timeoutMs = boundedIntegerInput(input.timeoutMs, DEFAULT_TIMEOUT_MS, 1_000, Number.MAX_SAFE_INTEGER);
     const dependencyIds = [...new Set(input.dependencyIds ?? [])].slice(0, MAX_DEPENDENCIES);
     const dependencyGraph = [...this.state.tasks, { task_id: input.taskId, dependency_ids: dependencyIds }];
@@ -136,6 +138,7 @@ export class SupervisorQueue {
       run_started_at: null,
       blocked_reason: input.requiresApproval === true && input.approvalGranted !== true ? "approval_required" : null,
       last_error: null,
+      attempt_delta_hash: null,
       dependency_ids: dependencyIds,
       requires_approval: input.requiresApproval === true,
       approval_granted: input.approvalGranted === true
@@ -169,22 +172,44 @@ export class SupervisorQueue {
     return this.transition(taskId, "completed", now, { run_started_at: null, blocked_reason: null });
   }
 
-  fail(taskId: string, reason: string, now = new Date().toISOString()): SupervisorTask {
+  fail(
+    taskId: string,
+    reason: string,
+    now = new Date().toISOString(),
+    options: { readonly attemptDelta?: string } = {}
+  ): SupervisorTask {
     assertSupervisorTimestamp(now);
     const task = this.require(taskId);
     if (task.status !== "running") throw new Error("task_not_running");
-    if (task.attempt < task.max_attempts) return this.retry(taskId, reason, now);
+    if (task.attempt < task.max_attempts) {
+      return this.retry(taskId, reason, now, options);
+    }
     return this.transition(taskId, "failed", now, { run_started_at: null, last_error: bounded(reason) });
   }
 
-  retry(taskId: string, reason = "retry_requested", now = new Date().toISOString()): SupervisorTask {
+  retry(
+    taskId: string,
+    reason = "retry_requested",
+    now = new Date().toISOString(),
+    options: { readonly attemptDelta?: string } = {}
+  ): SupervisorTask {
     assertSupervisorTimestamp(now);
     const task = this.require(taskId);
     if (task.status !== "running" && task.status !== "failed") throw new Error("task_not_retryable");
     if (task.attempt >= task.max_attempts) return this.transition(taskId, "failed", now, { run_started_at: null, last_error: bounded(reason) });
+    const attemptDelta = options.attemptDelta?.trim();
+    if (!attemptDelta) throw new Error("attempt_delta_missing");
     const delay = Math.min(this.maxRetryDelayMs, this.baseRetryDelayMs * 2 ** Math.max(0, task.attempt - 1));
     const next = new Date(Date.parse(now) + delay).toISOString();
-    return this.replace({ ...task, status: "queued", run_started_at: null, updated_at: now, next_attempt_at: next, last_error: bounded(reason) });
+    return this.replace({
+      ...task,
+      status: "queued",
+      run_started_at: null,
+      updated_at: now,
+      next_attempt_at: next,
+      last_error: bounded(reason),
+      attempt_delta_hash: hashAttemptDelta(attemptDelta)
+    });
   }
 
   cancel(taskId: string, reason = "cancelled", now = new Date().toISOString()): SupervisorTask {
@@ -208,7 +233,7 @@ export class SupervisorQueue {
       if (task.status !== "running" || task.run_started_at === null || Date.parse(task.run_started_at) + task.timeout_ms > at) return task;
       return task.attempt >= task.max_attempts
         ? { ...task, status: "failed" as const, run_started_at: null, updated_at: now, last_error: "timeout" }
-        : this.requeue(task, "timeout", now);
+        : this.requeue(task, "timeout", now, "retry_after_timeout");
     });
     if (changed.some((task, index) => task !== this.state.tasks[index])) this.publish({ ...this.state, tasks: changed });
   }
@@ -218,11 +243,20 @@ export class SupervisorQueue {
     if (task.status !== "running") throw new Error("task_not_running");
     try {
       const result = await dispatch(task.handoff, stateDir);
-      if (result.refused) this.fail(taskId, result.reason);
+      if (result.refused) {
+        this.fail(taskId, result.reason, new Date().toISOString(), {
+          attemptDelta: `retry_after_refusal:${result.reason}`
+        });
+      }
       else this.complete(taskId);
       return result;
     } catch (error) {
-      this.fail(taskId, error instanceof Error ? error.message : "dispatch_failed");
+      this.fail(
+        taskId,
+        error instanceof Error ? error.message : "dispatch_failed",
+        new Date().toISOString(),
+        { attemptDelta: "retry_after_dispatch_exception" }
+      );
       throw error;
     }
   }
@@ -237,12 +271,25 @@ export class SupervisorQueue {
 
   private recoveredTask(task: SupervisorTask, now: string): SupervisorTask {
     if (task.attempt >= task.max_attempts) return { ...task, status: "failed", run_started_at: null, updated_at: now, last_error: "recovered_attempt_limit" };
-    return this.requeue(task, "recovered_after_restart", now);
+    return this.requeue(task, "recovered_after_restart", now, "retry_after_process_restart");
   }
 
-  private requeue(task: SupervisorTask, reason: string, now: string): SupervisorTask {
+  private requeue(
+    task: SupervisorTask,
+    reason: string,
+    now: string,
+    attemptDelta: string
+  ): SupervisorTask {
     const delay = Math.min(this.maxRetryDelayMs, this.baseRetryDelayMs * 2 ** Math.max(0, task.attempt - 1));
-    return { ...task, status: "queued", run_started_at: null, updated_at: now, next_attempt_at: new Date(Date.parse(now) + delay).toISOString(), last_error: reason };
+    return {
+      ...task,
+      status: "queued",
+      run_started_at: null,
+      updated_at: now,
+      next_attempt_at: new Date(Date.parse(now) + delay).toISOString(),
+      last_error: reason,
+      attempt_delta_hash: hashAttemptDelta(attemptDelta)
+    };
   }
 
   private dependenciesComplete(task: SupervisorTask): boolean {
@@ -285,13 +332,23 @@ export class SupervisorQueue {
 
 function bounded(value: string): string { return value.slice(0, MAX_ERROR_CHARS); }
 
+function hashAttemptDelta(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
 function readSupervisorState(path: string, maxTasks: number, maxPromptChars: number): SupervisorState {
   try {
     const file = readManagedStateTextFile(path, { maxBytes: MAX_SUPERVISOR_STATE_BYTES });
     if (file.status === "missing") return { schema_version: "v1", tasks: [] };
     const parsed: unknown = JSON.parse(file.text);
     if (!isSupervisorState(parsed, maxTasks, maxPromptChars)) throw new Error("invalid_supervisor_state");
-    return parsed;
+    return {
+      ...parsed,
+      tasks: parsed.tasks.map((task) => ({
+        ...task,
+        attempt_delta_hash: task.attempt_delta_hash ?? null
+      }))
+    };
   } catch {
     throw new Error("invalid_supervisor_state");
   }
@@ -321,6 +378,7 @@ function isSupervisorState(value: unknown, maxTasks: number, maxPromptChars: num
       (task.run_started_at === null || isValidTimestamp(task.run_started_at)) &&
       (task.blocked_reason === null || typeof task.blocked_reason === "string") &&
       (task.last_error === null || typeof task.last_error === "string" && task.last_error.length <= MAX_ERROR_CHARS) &&
+      (task.attempt_delta_hash === undefined || task.attempt_delta_hash === null || typeof task.attempt_delta_hash === "string" && /^[a-f0-9]{64}$/.test(task.attempt_delta_hash)) &&
       isUniqueNonEmptyStringArray(task.dependency_ids, MAX_DEPENDENCIES) &&
       typeof task.requires_approval === "boolean" && typeof task.approval_granted === "boolean" &&
       task.handoff_ref.handoff_id === task.handoff.handoffId &&

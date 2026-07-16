@@ -416,3 +416,16 @@ Update this file when any of these change:
 - `/autopilot` route or typed registry implementation
 - Decision Mesh schemas, MCP tools, generated artifact, or mesh usage rules
 - privacy, external disclosure, or remote mutation policy
+
+## Codex efficiency stage-one boundary
+
+The control plane now has an aggregate-only Codex efficiency measurement seam.
+Replay-aware rollout counters are joined only through an explicit source-to-work-unit
+map. Missing mapping or counters yields `insufficient_evidence`; historical
+conversation content is not used to infer work units.
+
+Stage one does not activate routing. The fields `recommended_model` and
+`recommended_reasoning_effort` remain `null`, routing is shadow-only, and the
+configured provider, model, reasoning effort, and high-risk review standard stay
+unchanged. A separate routing design may start only after the matched 20 ordinary
+and 5 high-risk acceptance sample passes the quality and context gates.

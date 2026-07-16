@@ -58,6 +58,7 @@ describe("pre-push hook", () => {
         NPM_LOG: npmLog,
         VENDOR_CHECK_EXIT: "37",
         AUTOPILOT_HOOK_BASE_REF: "HEAD^",
+        AUTOPILOT_NODE_BIN: process.execPath,
       },
       input: `refs/heads/test ${head} refs/heads/test ${zeroSha}\n`,
     });

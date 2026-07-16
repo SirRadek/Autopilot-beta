@@ -52,6 +52,37 @@ function expectRoundTrip(stateDir: string, queue: SupervisorQueue): void {
 }
 
 describe("SupervisorQueue", () => {
+  it("defaults ordinary supervisor work to two total attempts", () => {
+    const q = queue();
+    const queued = q.enqueue({
+      taskId: "a",
+      handoff: handoff("hp-a"),
+      now: "2026-07-12T00:00:00.000Z"
+    });
+
+    expect(queued.max_attempts).toBe(2);
+  });
+
+  it("requires a material delta before attempt two and persists only its hash", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-delta-"));
+    const q = new SupervisorQueue({ stateDir });
+    const at = "2026-07-12T00:00:00.000Z";
+    const later = "2026-07-12T00:00:01.000Z";
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: at });
+    q.claim(at);
+
+    expect(() =>
+      q.retry("a", "same input", later, { attemptDelta: "" })
+    ).toThrow("attempt_delta_missing");
+
+    const retried = q.retry("a", "same input", later, {
+      attemptDelta: "retry after classified transient empty output"
+    });
+    expect(retried.attempt_delta_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(readFileSync(join(stateDir, "supervisor-queue.json"), "utf8"))
+      .not.toContain("retry after classified transient empty output");
+  });
+
   it("inspects the exact next claimable task without consuming an attempt", () => {
     const q = queue();
     q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
@@ -83,7 +114,12 @@ describe("SupervisorQueue", () => {
     const q = queue();
     q.enqueue({ taskId: "a", handoff: handoff("hp-a"), maxAttempts: 3, now: "2026-07-12T00:00:00.000Z" });
     q.claim("2026-07-12T00:00:00.000Z");
-    const retry = q.fail("a", "provider unavailable", "2026-07-12T00:00:01.000Z");
+    const retry = q.fail(
+      "a",
+      "provider unavailable",
+      "2026-07-12T00:00:01.000Z",
+      { attemptDelta: "retry after provider availability failure" }
+    );
     expect(retry.status).toBe("queued");
     expect(retry.last_error).toBe("provider unavailable");
     q.cancel("a", "owner stopped", "2026-07-12T00:00:02.000Z");
@@ -183,7 +219,7 @@ describe("SupervisorQueue", () => {
     expectRoundTrip(stateDir, q);
     q.claim(at);
     expectRoundTrip(stateDir, q);
-    q.retry("approved", "retry", at);
+    q.retry("approved", "retry", at, { attemptDelta: "round-trip retry" });
     expectRoundTrip(stateDir, q);
     q.claim(at);
     q.complete("approved", at);

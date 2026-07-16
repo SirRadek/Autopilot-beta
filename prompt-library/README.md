@@ -72,6 +72,12 @@ Use `prompt.schema.json` as the contract for future automation.
 Use `source-catalog.json` as the machine-readable catalog of allowed source
 IDs; `source-catalog.md` remains the human-readable source policy.
 
+Current `draft` and `candidate` prompts require explicit selection and remain
+advisory. A future automatic consumer must use the validator's
+`automaticPromptIds` output, which contains only `adopted` entries; it must
+never scan Markdown files directly. `approved` records are reviewed but remain
+explicit-use until deliberately promoted to `adopted`.
+
 ## Operating Rules
 
 - Keep prompts model-specific when provider behavior differs.

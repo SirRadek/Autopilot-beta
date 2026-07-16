@@ -18,7 +18,14 @@ related_agents:
   - qa
   - memory
 related_files:
+  - src/data/delivery-system/codexRolloutEfficiency.ts
   - src/data/delivery-system/contextEconomy.ts
+  - src/data/delivery-system/efficiencyPolicy.ts
+  - src/data/delivery-system/efficiencyReport.ts
+  - src/data/delivery-system/codexVersionProbe.mjs
+  - scripts/codex-efficiency-report.ts
+  - docs/operations/codex-efficiency-runbook.md
+  - docs/autopilot/codex-efficiency-baseline-2026-07-15.json
   - AGENTS.md
   - GEMINI.md
 required_checks:
@@ -26,13 +33,19 @@ required_checks:
   - prefer_agent_packet
   - avoid_full_repo_dump
   - summarize_before_restart
+  - require_explicit_work_unit_map
+  - keep_efficiency_routing_shadow_only
 stop_conditions:
   - full_repo_dump_requested_without_reason
   - long_unstructured_session
   - repeated_project_explanation
+  - efficiency_savings_claimed_without_minimum_sample
 must_not_assume:
   - Do not treat a long chat as reliable source of truth.
   - Do not load unrelated project files by default.
+  - Do not infer historical work-unit classes from conversation content.
+  - Keep recommended_model and recommended_reasoning_effort null during stage one.
 objective:
   - Use the smallest sufficient context for the active task.
   - Compress or restart sessions when context becomes noisy.
+  - Keep Codex efficiency routing shadow-only until the matched acceptance gate passes.

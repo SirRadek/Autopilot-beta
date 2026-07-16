@@ -419,6 +419,8 @@ export interface CliWorkerInput {
   readonly maxPromptChars?: number;
   /** Optional adapter-supplied generation settings recorded for model tuning. */
   readonly generationSettings?: ModelGenerationSettings;
+  /** When true, the supervisor owns the total retry budget. */
+  readonly supervisorOwnsRetry?: boolean;
 }
 
 export interface CliWorkerResult {
@@ -647,6 +649,9 @@ export async function runCliWorker(
         ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
         ...(input.images !== undefined ? { images: input.images } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+        ...(input.supervisorOwnsRetry !== undefined
+          ? { supervisorOwnsRetry: input.supervisorOwnsRetry }
+          : {}),
         ...promptLimitOptions
       });
       exitCode = result.exitCode;

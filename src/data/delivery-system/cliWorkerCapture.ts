@@ -923,6 +923,8 @@ export interface CodexCaptureOptions {
   readonly maxPromptChars?: number;
   /** Retries on a transient empty-output exit (default 1; timeouts are never retried). */
   readonly retries?: number;
+  /** When true, the supervisor owns the retry budget and capture runs exactly once. */
+  readonly supervisorOwnsRetry?: boolean;
 }
 
 export interface ClaudeCaptureOptions {
@@ -1005,7 +1007,7 @@ export async function captureCodexResponse(
   // codex sometimes exits non-zero with an EMPTY -o on a transient sandbox/exec hiccup — the
   // exact failure that needed manual reruns this session. Retry once, bounded, with a fresh
   // output file; a timeout is never retried (it would just time out again).
-  const maxAttempts = Math.max(1, (opts.retries ?? 1) + 1);
+  const maxAttempts = resolveCodexMaxAttempts(opts);
   const startedAt = Date.now();
   let result!: ReturnType<typeof spawnSync>;
   let outputFile = "";
@@ -1083,6 +1085,14 @@ export async function captureCodexResponse(
       if (!completed || path !== outputFile) unlinkCaptureFileBestEffort(path);
     }
   }
+}
+
+export function resolveCodexMaxAttempts(
+  opts: Pick<CodexCaptureOptions, "retries" | "supervisorOwnsRetry">
+): number {
+  return opts.supervisorOwnsRetry === true
+    ? 1
+    : Math.max(1, (opts.retries ?? 1) + 1);
 }
 
 export async function captureOpenRouterResponse(

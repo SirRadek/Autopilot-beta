@@ -1,0 +1,12 @@
+[Unit]
+Description=Autopilot Cockpit host-only firewall boundary
+Before=caddy.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/autopilot-cockpit-firewall start
+ExecStop=/usr/local/libexec/autopilot-cockpit-firewall stop
+
+[Install]
+WantedBy=multi-user.target

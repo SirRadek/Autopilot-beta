@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { EXPENSIVE_LANES } from "../src/data/delivery-system/routingModes";
 import {
   CLI_CALL_TELEMETRY_PATH,
-  DISPATCH_DECISION_TELEMETRY_PATH
+  DISPATCH_DECISION_TELEMETRY_PATH,
+  EFFICIENCY_TELEMETRY_PATH
 } from "../src/data/delivery-system/sessionState";
 import {
   aggregateCliCallTelemetryIntoBudget,
@@ -58,10 +59,25 @@ export interface DispatchDecisionSummary {
   readonly cheap_lane_dispatched_pct: number | null;
 }
 
+export interface EfficiencyEventSummary {
+  readonly total: number;
+  readonly parse_errors: number;
+  readonly excluded_out_of_window_or_invalid: number;
+  readonly coverage: "observed" | "insufficient_evidence";
+  readonly by_work_unit_class: Record<string, number>;
+  readonly by_status: Record<string, number>;
+  readonly by_model: Record<string, number>;
+  readonly by_reasoning_effort: Record<string, number>;
+  readonly total_attempts: number;
+  readonly attempt_deltas_recorded: number;
+  readonly recommendations_present: number;
+}
+
 export interface TelemetrySummary {
   readonly since: string;
   readonly vendor_calls: VendorCallSummary;
   readonly dispatch_decisions: DispatchDecisionSummary;
+  readonly efficiency_events: EfficiencyEventSummary;
 }
 
 export function parseTelemetryJsonl(text: string): ParsedTelemetryJsonl {
@@ -289,9 +305,66 @@ export function summarizeDispatchDecisions(
   };
 }
 
+export function summarizeEfficiencyEvents(
+  records: readonly unknown[],
+  nowMs: number,
+  sinceMs: number
+): EfficiencyEventSummary {
+  const byWorkUnitClass: Record<string, number> = {};
+  const byStatus: Record<string, number> = {};
+  const byModel: Record<string, number> = {};
+  const byReasoningEffort: Record<string, number> = {};
+  let total = 0;
+  let excluded = 0;
+  let totalAttempts = 0;
+  let attemptDeltasRecorded = 0;
+  let recommendationsPresent = 0;
+
+  for (const record of records) {
+    if (!isRecord(record) || !withinSince(record.recorded_at, nowMs, sinceMs)) {
+      excluded += 1;
+      continue;
+    }
+
+    total += 1;
+    increment(byWorkUnitClass, stringBucket(record.work_unit_class, "unknown"));
+    increment(byStatus, stringBucket(record.status, "unknown"));
+    increment(byModel, stringBucket(record.actual_model, "unknown"));
+    increment(
+      byReasoningEffort,
+      stringBucket(record.actual_reasoning_effort, "unknown")
+    );
+    totalAttempts += numberBucket(record.total_attempts);
+    if (record.attempt_delta_recorded === true) attemptDeltasRecorded += 1;
+    if (
+      (record.recommended_model !== null &&
+        record.recommended_model !== undefined) ||
+      (record.recommended_reasoning_effort !== null &&
+        record.recommended_reasoning_effort !== undefined)
+    ) {
+      recommendationsPresent += 1;
+    }
+  }
+
+  return {
+    total,
+    parse_errors: 0,
+    excluded_out_of_window_or_invalid: excluded,
+    coverage: total === 0 ? "insufficient_evidence" : "observed",
+    by_work_unit_class: byWorkUnitClass,
+    by_status: byStatus,
+    by_model: byModel,
+    by_reasoning_effort: byReasoningEffort,
+    total_attempts: totalAttempts,
+    attempt_deltas_recorded: attemptDeltasRecorded,
+    recommendations_present: recommendationsPresent
+  };
+}
+
 export function buildTelemetrySummary(input: {
   readonly vendorCallsText: string;
   readonly dispatchDecisionsText: string;
+  readonly efficiencyEventsText?: string;
   readonly now?: string | Date;
   readonly since: string;
 }): TelemetrySummary {
@@ -304,8 +377,10 @@ export function buildTelemetrySummary(input: {
 
   const vendorCalls = parseTelemetryJsonl(input.vendorCallsText);
   const dispatchDecisions = parseTelemetryJsonl(input.dispatchDecisionsText);
+  const efficiencyEvents = parseTelemetryJsonl(input.efficiencyEventsText ?? "");
   const vendorCallSummary = summarizeVendorCalls(vendorCalls.records, nowMs, sinceMs);
   const dispatchDecisionSummary = summarizeDispatchDecisions(dispatchDecisions.records, nowMs, sinceMs);
+  const efficiencyEventSummary = summarizeEfficiencyEvents(efficiencyEvents.records, nowMs, sinceMs);
 
   return {
     since: input.since,
@@ -316,6 +391,10 @@ export function buildTelemetrySummary(input: {
     dispatch_decisions: {
       ...dispatchDecisionSummary,
       parse_errors: dispatchDecisions.parse_errors
+    },
+    efficiency_events: {
+      ...efficiencyEventSummary,
+      parse_errors: efficiencyEvents.parse_errors
     }
   };
 }
@@ -332,7 +411,12 @@ function formatTelemetrySummary(summary: TelemetrySummary): string {
     `Dispatch decisions: total=${summary.dispatch_decisions.total} parse_errors=${summary.dispatch_decisions.parse_errors} excluded=${summary.dispatch_decisions.excluded_out_of_window_or_invalid} dispatched=${summary.dispatch_decisions.dispatched} refused=${summary.dispatch_decisions.refused} cheap_lane_dispatched_pct=${summary.dispatch_decisions.cheap_lane_dispatched_pct ?? "null"}`,
     `  by_refusal_reason: ${formatCountMap(summary.dispatch_decisions.by_refusal_reason)}`,
     `  by_routing_mode: ${formatCountMap(summary.dispatch_decisions.by_routing_mode)}`,
-    `  by_resolved_lane: ${formatCountMap(summary.dispatch_decisions.by_resolved_lane)}`
+    `  by_resolved_lane: ${formatCountMap(summary.dispatch_decisions.by_resolved_lane)}`,
+    `Efficiency events: total=${summary.efficiency_events.total} parse_errors=${summary.efficiency_events.parse_errors} excluded=${summary.efficiency_events.excluded_out_of_window_or_invalid} coverage=${summary.efficiency_events.coverage} attempts=${summary.efficiency_events.total_attempts} deltas=${summary.efficiency_events.attempt_deltas_recorded} recommendations=${summary.efficiency_events.recommendations_present}`,
+    `  by_work_unit_class: ${formatCountMap(summary.efficiency_events.by_work_unit_class)}`,
+    `  by_status: ${formatCountMap(summary.efficiency_events.by_status)}`,
+    `  by_model: ${formatCountMap(summary.efficiency_events.by_model)}`,
+    `  by_reasoning_effort: ${formatCountMap(summary.efficiency_events.by_reasoning_effort)}`
   ].join("\n");
 }
 
@@ -475,6 +559,7 @@ if (invokedFile === currentFile) {
     const summary = buildTelemetrySummary({
       vendorCallsText: readTextIfExists(join(args.root, CLI_CALL_TELEMETRY_PATH)),
       dispatchDecisionsText: readTextIfExists(join(args.root, DISPATCH_DECISION_TELEMETRY_PATH)),
+      efficiencyEventsText: readTextIfExists(join(args.root, EFFICIENCY_TELEMETRY_PATH)),
       since: args.since
     });
 

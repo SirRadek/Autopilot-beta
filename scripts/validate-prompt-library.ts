@@ -11,10 +11,18 @@ export interface PromptLibraryValidationIssue {
   readonly message: string;
 }
 
+export interface PromptLibraryEntrySummary {
+  readonly id: string;
+  readonly status: string;
+  readonly file: string;
+}
+
 export interface PromptLibraryValidationReport {
   readonly ok: boolean;
   readonly checkedFiles: readonly string[];
   readonly checkedPromptFiles: readonly string[];
+  readonly entries: readonly PromptLibraryEntrySummary[];
+  readonly automaticPromptIds: readonly string[];
   readonly errors: readonly PromptLibraryValidationIssue[];
 }
 
@@ -32,6 +40,7 @@ export function validatePromptLibrary(repoRoot = process.cwd()): PromptLibraryVa
     toRepoPath(repoRoot, file)
   );
   const checkedPromptFiles: string[] = [];
+  const entries: PromptLibraryEntrySummary[] = [];
   const errors: PromptLibraryValidationIssue[] = [];
 
   if (!existsSync(promptLibraryRoot)) {
@@ -39,6 +48,8 @@ export function validatePromptLibrary(repoRoot = process.cwd()): PromptLibraryVa
       ok: false,
       checkedFiles,
       checkedPromptFiles,
+      entries,
+      automaticPromptIds: [],
       errors: [{ file: PROMPT_LIBRARY_ROOT, message: "Prompt library directory does not exist." }]
     };
   }
@@ -68,17 +79,40 @@ export function validatePromptLibrary(repoRoot = process.cwd()): PromptLibraryVa
       continue;
     }
 
-    for (const issue of validateJsonSchema(frontmatter, promptSchema)) {
+    const schemaIssues = validateJsonSchema(frontmatter, promptSchema);
+    for (const issue of schemaIssues) {
       errors.push({ file: repoPath, message: `${issue.path}: ${issue.message}` });
     }
 
+    const errorsBeforeSourceValidation = errors.length;
     validatePromptSources(frontmatter, knownSourceIds, repoPath, errors);
+
+    if (
+      schemaIssues.length === 0 &&
+      errors.length === errorsBeforeSourceValidation &&
+      isRecord(frontmatter) &&
+      typeof frontmatter.id === "string" &&
+      typeof frontmatter.status === "string"
+    ) {
+      entries.push({
+        id: frontmatter.id,
+        status: frontmatter.status,
+        file: repoPath
+      });
+    }
   }
+
+  entries.sort((left, right) => left.file.localeCompare(right.file) || left.id.localeCompare(right.id));
 
   return {
     ok: errors.length === 0,
     checkedFiles: [...new Set(checkedFiles)].sort(),
     checkedPromptFiles,
+    entries,
+    automaticPromptIds: entries
+      .filter((entry) => entry.status === "adopted")
+      .map((entry) => entry.id)
+      .sort(),
     errors
   };
 }

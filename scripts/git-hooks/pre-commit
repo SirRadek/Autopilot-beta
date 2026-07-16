@@ -5,6 +5,7 @@ HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "$HOOK_DIR/lib.sh"
 
 autopilot_cd_root
+"${AUTOPILOT_NODE_BIN:-/usr/bin/node}" "$root/scripts/lib/require-node24.mjs"
 
 autopilot_run_npm "running fast mesh related_files ratchet" run mesh:gate:ci
 

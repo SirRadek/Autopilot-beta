@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldRetryCodex } from "../../src/data/delivery-system/cliWorkerCapture";
+import {
+  resolveCodexMaxAttempts,
+  shouldRetryCodex
+} from "../../src/data/delivery-system/cliWorkerCapture";
 
 describe("shouldRetryCodex", () => {
+  it("does not multiply capture retries under supervisor ownership", () => {
+    expect(resolveCodexMaxAttempts({ retries: 1, supervisorOwnsRetry: true })).toBe(1);
+    expect(resolveCodexMaxAttempts({ retries: 1, supervisorOwnsRetry: false })).toBe(2);
+  });
+
   it.each([
     {
       name: "retries empty output when the attempt did not time out and attempts remain",

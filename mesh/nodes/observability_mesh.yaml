@@ -41,6 +41,7 @@ related_agents:
   - seo_performance
   - security
 related_files:
+  - scripts/telemetry-summary.ts
   - docs/autopilot/delivery-system-connector-snapshots.md
   - docs/projects/<project-slug>/architecture.md
   - docs/projects/<project-slug>/work-log.md

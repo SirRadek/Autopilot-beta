@@ -5,6 +5,7 @@ import {
   parseSinceDuration,
   parseTelemetryJsonl,
   summarizeDispatchDecisions,
+  summarizeEfficiencyEvents,
   summarizeVendorCalls,
   withinSince
 } from "../../scripts/telemetry-summary";
@@ -189,6 +190,7 @@ describe("telemetry summary reader", () => {
     const summary = buildTelemetrySummary({
       vendorCallsText: `${JSON.stringify(vendorCall({ vendor: "codex_cli", provider: "openai_gpt" }))}\n`,
       dispatchDecisionsText: `${JSON.stringify(dispatchDecision({ decision: "dispatched", resolved_lane: "agy_fast" }))}\n`,
+      efficiencyEventsText: `${JSON.stringify(efficiencyEvent())}\n`,
       now: NOW,
       since: "24h"
     });
@@ -196,16 +198,50 @@ describe("telemetry summary reader", () => {
     expect(summary.since).toBe("24h");
     expect(summary.vendor_calls.total).toBe(1);
     expect(summary.dispatch_decisions.total).toBe(1);
+    expect(summary.efficiency_events.total).toBe(1);
+    expect(summary.efficiency_events.recommendations_present).toBe(0);
 
     const emptySummary = buildTelemetrySummary({
       vendorCallsText: "",
       dispatchDecisionsText: "",
+      efficiencyEventsText: "",
       now: NOW,
       since: "7d"
     });
 
     expect(emptySummary.vendor_calls.total).toBe(0);
     expect(emptySummary.dispatch_decisions.total).toBe(0);
+    expect(emptySummary.efficiency_events.coverage).toBe("insufficient_evidence");
+  });
+
+  it("summarizes work-unit observations without activating recommendations", () => {
+    const summary = summarizeEfficiencyEvents(
+      [
+        efficiencyEvent(),
+        efficiencyEvent({
+          status: "completed",
+          actual_model: "gpt-5.6-sol",
+          actual_reasoning_effort: "medium"
+        }),
+        efficiencyEvent({ recorded_at: OUT_OF_WINDOW })
+      ],
+      NOW_MS,
+      parseSinceDuration("7d")
+    );
+
+    expect(summary).toEqual({
+      total: 2,
+      parse_errors: 0,
+      excluded_out_of_window_or_invalid: 1,
+      coverage: "observed",
+      by_work_unit_class: { bounded_implementation: 2 },
+      by_status: { started: 1, completed: 1 },
+      by_model: { "gpt-5.6-sol": 2 },
+      by_reasoning_effort: { medium: 2 },
+      total_attempts: 2,
+      attempt_deltas_recorded: 0,
+      recommendations_present: 0
+    });
   });
 });
 
@@ -230,6 +266,21 @@ function dispatchDecision(overrides: Record<string, unknown> = {}): Record<strin
     resolved_lane: "agy_fast",
     decision: "dispatched",
     refusal_reason: null,
+    ...overrides
+  };
+}
+
+function efficiencyEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    recorded_at: WITHIN_WINDOW,
+    work_unit_class: "bounded_implementation",
+    status: "started",
+    actual_model: "gpt-5.6-sol",
+    actual_reasoning_effort: "medium",
+    recommended_model: null,
+    recommended_reasoning_effort: null,
+    total_attempts: 1,
+    attempt_delta_recorded: false,
     ...overrides
   };
 }

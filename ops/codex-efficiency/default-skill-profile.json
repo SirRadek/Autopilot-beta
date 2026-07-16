@@ -1,0 +1,29 @@
+{
+  "version": "autopilot-codex-efficiency-profile-v1",
+  "remove_exact_service_tier": "service_tier = \"fast\"",
+  "disable_plugin_prefixes": [
+    "atlassian-rovo",
+    "base44",
+    "canva",
+    "cloudflare",
+    "creative-production",
+    "data-analytics",
+    "build-web-data-visualization",
+    "figma",
+    "google-drive",
+    "hugging-face",
+    "investment-banking",
+    "linear",
+    "nvidia",
+    "openai-templates",
+    "public-equity-investing",
+    "remotion",
+    "sales",
+    "sharepoint",
+    "teams"
+  ],
+  "disable_exact_skills": [
+    "superpowers/using-superpowers/SKILL.md",
+    "superpowers/brainstorming/SKILL.md"
+  ]
+}
