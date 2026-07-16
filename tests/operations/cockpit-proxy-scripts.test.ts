@@ -1966,7 +1966,10 @@ describe("Cockpit transactional live cutover", () => {
       mkdirSync(dirname(foreign), { recursive: true });
       writeFileSync(foreign, "foreign\n");
     }
-    if (label === "modified Caddy package mode") writeFileSync(fixture.caddyConfigPath, "package\n", { mode: 0o666 });
+    if (label === "modified Caddy package mode") {
+      writeFileSync(fixture.caddyConfigPath, "package\n");
+      chmodSync(fixture.caddyConfigPath, 0o666);
+    }
     const result = runCutover(fixture, extraEnv);
     expect(result.status).not.toBe(0);
     expect(readFileSync(fixture.stubLog, "utf8")).not.toContain("systemctl:start autopilot-cockpit-firewall.service");

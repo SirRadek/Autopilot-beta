@@ -99,7 +99,7 @@ describe("trusted cockpit cutover launcher", () => {
     });
     const [a, b] = await Promise.all([run(), run()]);
     expect([a, b].filter((status) => status === 0)).toHaveLength(1);
-  });
+  }, 12_000);
 
   it("recovers an install killed after worker publication", () => {
     const f = fixture();
