@@ -19,6 +19,7 @@ related_agents:
   - memory
 related_files:
   - src/data/delivery-system/contextEconomy.ts
+  - src/data/delivery-system/efficiencyPolicy.ts
   - AGENTS.md
   - GEMINI.md
 required_checks:
