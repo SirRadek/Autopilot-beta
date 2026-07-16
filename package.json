@@ -2,8 +2,12 @@
   "name": "autopilot-beta",
   "version": "0.0.0",
   "private": true,
-  "engines": { "node": ">=24 <25" },
-  "workspaces": ["cockpit"],
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "cockpit"
+  ],
   "type": "module",
   "description": "Clean-install beta of the autopilot product-design-os floor (vendored from autopilot@<base-sha>). Separate product line; no shared git history with canonical.",
   "scripts": {
@@ -68,34 +72,42 @@
     "governed-core:ipc": "tsx src/governed-core/ipc-server.ts",
     "mesh:gate:ci": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --baseline mesh/related-files-baseline.json --prior mesh/related-files-snapshot.json",
     "mesh:snapshot:regen": "tsx src/lib/mesh-tools/related-files-status-cli.ts --root . --nodes-subdir mesh/nodes --regen-snapshot mesh/related-files-snapshot.json",
-    "mesh:changed": "tsx src/lib/mesh-tools/changed-files-capabilities-cli.ts"
-    ,"cockpit:dev": "npm --prefix cockpit run dev"
-    ,"cockpit:build": "npm --prefix cockpit run build"
-    ,"cockpit:test": "npm --prefix cockpit run test"
-    ,"browser:qa": "tsx scripts/browser-qa.ts"
-    ,"browser:qa:proxy": "playwright test --config playwright.proxy.config.ts"
-    ,"smoke:cockpit-run": "tsx scripts/smoke-cockpit-run.ts"
+    "mesh:changed": "tsx src/lib/mesh-tools/changed-files-capabilities-cli.ts",
+    "cockpit:dev": "npm --prefix cockpit run dev",
+    "precockpit:build": "node scripts/lib/require-node24.mjs",
+    "cockpit:build": "npm --prefix cockpit run build",
+    "precockpit:test": "node scripts/lib/require-node24.mjs",
+    "cockpit:test": "npm --prefix cockpit run test",
+    "browser:qa": "tsx scripts/browser-qa.ts",
+    "browser:qa:proxy": "playwright test --config playwright.proxy.config.ts",
+    "smoke:cockpit-run": "tsx scripts/smoke-cockpit-run.ts",
+    "runtime:check": "node scripts/lib/require-node24.mjs",
+    "preinstall": "node scripts/lib/require-node24.mjs",
+    "preprepare": "node scripts/lib/require-node24.mjs",
+    "pretypecheck": "node scripts/lib/require-node24.mjs",
+    "pretest": "node scripts/lib/require-node24.mjs",
+    "preverify": "node scripts/lib/require-node24.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "pngjs": "^7.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "vite": "^7.0.0",
     "yaml": "^2.9.0",
-    "zod": "^4.4.3",
-    "@modelcontextprotocol/sdk": "^1.29.0"
-    ,"react": "^19.1.0"
-    ,"react-dom": "^19.1.0"
-    ,"vite": "^7.0.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@types/node": "25.9.3",
     "@types/pngjs": "^6.0.5",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
     "axe-core": "^4.12.1",
     "node-html-parser": "^8.0.3",
     "node-pty": "^1.1.0",
     "tsx": "^4.22.4",
     "typescript": "6.0.3",
     "vitest": "4.1.8"
-    ,"@types/react": "^19.1.0"
-    ,"@types/react-dom": "^19.1.0"
   }
 }

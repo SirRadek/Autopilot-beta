@@ -3,6 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { requireNode24 } from "../lib/require-node24.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const hooksPath = "scripts/git-hooks";
 const absoluteHooksPath = resolve(root, hooksPath).replaceAll("\\", "/");
@@ -15,6 +17,8 @@ function git(args) {
     stdio: ["ignore", "pipe", "pipe"]
   });
 }
+
+requireNode24();
 
 if (git(["rev-parse", "--git-dir"]).status !== 0) {
   console.log("[autopilot:hooks] no Git repository found; skipping hook install");

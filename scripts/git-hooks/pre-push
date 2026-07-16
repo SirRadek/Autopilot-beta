@@ -5,6 +5,7 @@ HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "$HOOK_DIR/lib.sh"
 
 autopilot_cd_root
+"${AUTOPILOT_NODE_BIN:-/usr/bin/node}" "$root/scripts/lib/require-node24.mjs"
 
 base_ref="${AUTOPILOT_HOOK_BASE_REF:-origin/main}"
 saw_update=0
