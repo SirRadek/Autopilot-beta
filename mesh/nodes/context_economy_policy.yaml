@@ -21,6 +21,8 @@ related_files:
   - src/data/delivery-system/codexRolloutEfficiency.ts
   - src/data/delivery-system/contextEconomy.ts
   - src/data/delivery-system/efficiencyPolicy.ts
+  - src/data/delivery-system/efficiencyReport.ts
+  - scripts/codex-efficiency-report.ts
   - AGENTS.md
   - GEMINI.md
 required_checks:

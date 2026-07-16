@@ -1,0 +1,77 @@
+{
+  "schema_version": "autopilot-codex-work-unit-map-v1",
+  "work_units": [
+    {
+      "source": "root.jsonl",
+      "descriptor": {
+        "work_unit_id": "wu-root",
+        "class": "bounded_implementation",
+        "risk": "ordinary"
+      },
+      "status": "completed",
+      "first_pass_accepted": true,
+      "escaped_severity": null,
+      "retry_exhausted": false
+    },
+    {
+      "source": "fork-with-replay.jsonl",
+      "descriptor": {
+        "work_unit_id": "wu-fork",
+        "class": "review",
+        "risk": "ordinary"
+      },
+      "status": "completed",
+      "first_pass_accepted": true,
+      "escaped_severity": null,
+      "retry_exhausted": false
+    },
+    {
+      "source": "resumed-counter-reset.jsonl",
+      "descriptor": {
+        "work_unit_id": "wu-resume",
+        "class": "bounded_implementation",
+        "risk": "ordinary"
+      },
+      "status": "completed",
+      "first_pass_accepted": false,
+      "escaped_severity": "lower",
+      "retry_exhausted": false
+    },
+    {
+      "source": "compaction.jsonl",
+      "descriptor": {
+        "work_unit_id": "wu-compact",
+        "class": "research_or_design",
+        "risk": "ordinary"
+      },
+      "status": "completed",
+      "first_pass_accepted": true,
+      "escaped_severity": null,
+      "retry_exhausted": false
+    },
+    {
+      "source": "truncated.jsonl",
+      "descriptor": {
+        "work_unit_id": "wu-truncated",
+        "class": "high_risk",
+        "risk": "high"
+      },
+      "status": "completed",
+      "first_pass_accepted": true,
+      "escaped_severity": null,
+      "retry_exhausted": false
+    },
+    {
+      "source": "missing-counters.jsonl",
+      "descriptor": {
+        "work_unit_id": "wu-missing",
+        "class": "deterministic_check",
+        "risk": "ordinary"
+      },
+      "status": "incomplete",
+      "first_pass_accepted": false,
+      "escaped_severity": null,
+      "retry_exhausted": true
+    }
+  ]
+}

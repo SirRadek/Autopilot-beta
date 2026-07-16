@@ -87,6 +87,8 @@
     "pretypecheck": "node scripts/lib/require-node24.mjs",
     "pretest": "node scripts/lib/require-node24.mjs",
     "preverify": "node scripts/lib/require-node24.mjs"
+    ,"efficiency:report": "tsx scripts/codex-efficiency-report.ts report"
+    ,"efficiency:compare": "tsx scripts/codex-efficiency-report.ts compare"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
