@@ -415,6 +415,7 @@ function toCliWorkerInput(handoff: GovernedHandoff): CliWorkerInput {
     ...(handoff.timeoutMs !== undefined ? { timeoutMs: handoff.timeoutMs } : {}),
     ...(handoff.outputSchemaPath !== undefined ? { outputSchemaPath: handoff.outputSchemaPath } : {}),
     ...(handoff.maxPromptChars !== undefined ? { maxPromptChars: handoff.maxPromptChars } : {}),
+    supervisorOwnsRetry: true,
     lockSource: VERIFIED_LOCK_SOURCE
   };
 }

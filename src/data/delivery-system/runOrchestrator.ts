@@ -32,7 +32,12 @@ interface Supervisor {
   peekClaimable(now: string): SupervisorTaskView | null;
   claim(now: string): SupervisorTaskView | null;
   complete(taskId: string, now?: string): unknown;
-  fail(taskId: string, reason: string, now?: string): { readonly status?: string };
+  fail(
+    taskId: string,
+    reason: string,
+    now?: string,
+    options?: { readonly attemptDelta?: string }
+  ): { readonly status?: string };
   cancel(taskId: string, reason?: string, now?: string): unknown;
   snapshot?(): readonly SupervisorTaskView[];
 }
@@ -220,7 +225,11 @@ export function createRunOrchestrator(options: {
     let retryQueued = false;
     if (cancelled) options.supervisor.cancel(taskId, "run_cancelled", now());
     else if (failed) {
-      const outcome = options.supervisor.fail(taskId, result.errorReason ?? `worker_exit_${result.exitCode}`, now());
+      const failureReason =
+        result.errorReason ?? `worker_exit_${result.exitCode}`;
+      const outcome = options.supervisor.fail(taskId, failureReason, now(), {
+        attemptDelta: `retry_after_worker_failure:${failureReason}`
+      });
       retryQueued = outcome.status === "queued";
     }
     if (cumulativeOutputTokens > run.current.output_token_allowance || cumulativeInputTokens + cumulativeOutputTokens > run.current.estimated_tokens) {
