@@ -1,0 +1,3 @@
+{"timestamp":"2026-07-10T15:00:00.000Z","type":"session_meta","payload":{"session_id":"missing-session","thread_source":"root"}}
+{"timestamp":"2026-07-10T15:00:01.000Z","type":"turn_context","payload":{"turn_id":"turn-missing"}}
+{"timestamp":"2026-07-10T15:00:02.000Z","type":"response_item","payload":{"type":"message","content":"private response"}}

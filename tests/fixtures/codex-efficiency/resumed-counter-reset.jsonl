@@ -1,0 +1,6 @@
+{"timestamp":"2026-07-10T12:00:00.000Z","type":"session_meta","payload":{"session_id":"resume-session","thread_source":"resume"}}
+{"timestamp":"2026-07-10T12:00:00.500Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":200,"cached_input_tokens":150,"output_tokens":20,"reasoning_output_tokens":8}}}}
+{"timestamp":"2026-07-10T12:00:01.000Z","type":"turn_context","payload":{"turn_id":"turn-resume"}}
+{"timestamp":"2026-07-10T12:00:02.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":220,"cached_input_tokens":165,"output_tokens":22,"reasoning_output_tokens":9}}}}
+{"timestamp":"2026-07-10T12:00:03.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":5,"cached_input_tokens":4,"output_tokens":1,"reasoning_output_tokens":0}}}}
+{"timestamp":"2026-07-10T12:00:04.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":15,"cached_input_tokens":10,"output_tokens":3,"reasoning_output_tokens":1}}}}

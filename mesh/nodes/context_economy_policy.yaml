@@ -18,6 +18,7 @@ related_agents:
   - qa
   - memory
 related_files:
+  - src/data/delivery-system/codexRolloutEfficiency.ts
   - src/data/delivery-system/contextEconomy.ts
   - src/data/delivery-system/efficiencyPolicy.ts
   - AGENTS.md

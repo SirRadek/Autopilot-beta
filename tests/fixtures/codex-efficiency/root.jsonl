@@ -1,0 +1,6 @@
+{"timestamp":"2026-07-10T10:00:00.000Z","type":"session_meta","payload":{"session_id":"root-session","thread_source":"root"}}
+{"timestamp":"2026-07-10T10:00:01.000Z","type":"turn_context","payload":{"turn_id":"turn-1"}}
+{"timestamp":"2026-07-10T10:00:01.500Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":20,"cached_input_tokens":15,"output_tokens":3,"reasoning_output_tokens":1}}}}
+{"timestamp":"2026-07-10T10:00:02.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"private command"}}
+{"timestamp":"2026-07-10T10:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"wait_agent","arguments":"private wait"}}
+{"timestamp":"2026-07-10T10:00:03.500Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":50,"cached_input_tokens":35,"output_tokens":8,"reasoning_output_tokens":3}}}}
