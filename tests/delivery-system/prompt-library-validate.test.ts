@@ -25,6 +25,30 @@ describe("prompt-library validator", () => {
     expect(report.errors).toEqual([]);
   });
 
+  it.each(["candidate", "draft"])("never exposes %s prompts as automatic defaults", (status) => {
+    const root = createPromptLibraryFixture();
+    writePrompt(root, `01-gpt/${status}.md`, validFrontmatter().replace("status: draft", `status: ${status}`));
+
+    const report = validatePromptLibrary(root);
+
+    expect(report.ok).toBe(true);
+    expect(report.entries).toContainEqual(
+      expect.objectContaining({
+        file: `prompt-library/01-gpt/${status}.md`,
+        id: "valid-prompt",
+        status
+      })
+    );
+    expect(report.automaticPromptIds).not.toContain("valid-prompt");
+  });
+
+  it("exposes only adopted prompts to a future automatic consumer", () => {
+    const root = createPromptLibraryFixture();
+    writePrompt(root, "01-gpt/adopted.md", validFrontmatter().replace("status: draft", "status: adopted"));
+
+    expect(validatePromptLibrary(root).automaticPromptIds).toEqual(["valid-prompt"]);
+  });
+
   it("rejects a prompt missing a required frontmatter field", () => {
     const root = createPromptLibraryFixture();
     writePrompt(root, "01-gpt/missing-required.md", validFrontmatter().replace("last_reviewed: 2026-07-04\n", ""));

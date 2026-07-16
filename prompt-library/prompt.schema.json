@@ -57,7 +57,7 @@
     },
     "status": {
       "type": "string",
-      "enum": ["draft", "candidate", "approved", "deprecated"]
+      "enum": ["draft", "candidate", "approved", "adopted", "deprecated"]
     },
     "last_reviewed": {
       "type": "string",
