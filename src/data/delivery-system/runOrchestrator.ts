@@ -91,7 +91,15 @@ export function createRunOrchestrator(options: {
       task,
       agent,
       packet_hash: computePacketHash(packet),
-      required_checks: packet.required_checks
+      required_checks: packet.required_checks,
+      efficiency: {
+        work_unit: {
+          work_unit_id: run.current.run_id,
+          class: "bounded_implementation",
+          risk: "ordinary"
+        },
+        actual_reasoning_effort: null
+      }
     };
   }
 
