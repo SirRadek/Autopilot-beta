@@ -31,6 +31,21 @@ At a 150k input-context estimate, write a bounded checkpoint containing only
 accepted state, evidence pointers, blockers, and the next action. Continue in a
 fresh session when the work cannot remain below that soft limit.
 
+## Plan token range
+
+Every non-trivial plan must include an `estimated_token_range` before execution.
+The estimate records integer `lower_bound` and `upper_bound` totals, a
+`phase_breakdown`, and explicit `assumptions` about retries, reviews, tool output,
+and expected context reuse. The range is an analytical planning estimate, not a
+provider bill, quota, or acceptance result.
+
+At completion, record `actual_tokens` from reliable aggregate telemetry when it
+is available and compare it with the planned range. If reliable telemetry is not
+available, set `actual_tokens` to `unavailable`; do not invent a measurement. A
+range overrun is reported with its cause and informs the next estimate. This
+planning field does not activate routing, change the provider or model, or alter
+reasoning effort or high-risk review.
+
 ## Reporting
 
 The collector reads historical rollout files but emits aggregates only. Reports

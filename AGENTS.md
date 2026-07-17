@@ -14,6 +14,8 @@
 - Classify the work unit before delegation: deterministic, mechanical, bounded implementation, research/design, review, or high risk.
 - Ordinary work: at most two direct independent subagents, depth one, two total attempts, one review and one targeted re-review.
 - Attempt two requires a concrete input or strategy delta.
+- Every non-trivial plan records `estimated_token_range` with `lower_bound`, `upper_bound`, `phase_breakdown`, and explicit `assumptions`; it is an estimate, not a billing claim.
+- At completion, record `actual_tokens` when reliable telemetry is available and compare it with the planned range; otherwise mark the actual as unavailable.
 - At 150k input-context estimate, write a bounded checkpoint and continue in a fresh session.
 - High-risk overrides record the trigger, expected assurance, and stopping condition.
 

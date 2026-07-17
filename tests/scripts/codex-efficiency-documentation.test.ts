@@ -83,4 +83,26 @@ describe("Codex efficiency operating baseline", () => {
       "must not be used as the stage-one acceptance comparator",
     );
   });
+
+  it("requires token ranges alongside non-trivial plans without activating routing", () => {
+    const guidance = readFileSync("AGENTS.md", "utf8");
+    const runbook = readFileSync(
+      "docs/operations/codex-efficiency-runbook.md",
+      "utf8",
+    );
+
+    for (const required of [
+      "estimated_token_range",
+      "lower_bound",
+      "upper_bound",
+      "phase_breakdown",
+      "assumptions",
+      "actual_tokens",
+    ]) {
+      expect(guidance).toContain(required);
+      expect(runbook).toContain(required);
+    }
+
+    expect(runbook).toContain("does not activate routing");
+  });
 });
