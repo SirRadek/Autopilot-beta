@@ -45,7 +45,7 @@ export interface ReviewMemoryPacket {
 
 const SHA_PATTERN = /^[a-f0-9]{40}$/;
 const INVARIANT_HEADING_PATTERN =
-  /^###\s+([A-Z][A-Z0-9]*-[0-9]{2})\s+—\s+/gm;
+  /^#{2,3}\s+([A-Z][A-Z0-9]*-[0-9]{2})\s+—\s+/gm;
 const CHECK_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const DELTA_REQUIREMENTS = [
   "review_only_declared_delta",

@@ -32,7 +32,7 @@ Generate a packet with relevant memory:
 
 ```bash
 PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
-  npm run review:packet -- \
+  npm run --silent review:packet -- \
   --root /path/to/project \
   --base <last-reviewed-commit> \
   --head <fixed-head> \
@@ -45,7 +45,7 @@ When no durable memory applies, make that decision explicit:
 
 ```bash
 PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
-  npm run review:packet -- \
+  npm run --silent review:packet -- \
   --root /path/to/project \
   --base <last-reviewed-commit> \
   --head <fixed-head> \
@@ -65,7 +65,7 @@ Before release, generate a packet that selects every discovered memory file:
 
 ```bash
 PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
-  npm run review:packet -- \
+  npm run --silent review:packet -- \
   --root /path/to/project \
   --base <branch-base> \
   --head <release-head> \

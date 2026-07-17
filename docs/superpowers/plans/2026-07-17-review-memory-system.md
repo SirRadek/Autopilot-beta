@@ -279,7 +279,7 @@ git commit -m "feat: add durable review memory packets"
 
 **Interfaces:**
 - Consumes: `extractReviewMemoryDocument` and `buildReviewMemoryPacket` from Task 1.
-- Produces: `npm run review:packet -- --root <project> --base <ref> --head <ref> --mode delta|release ...`.
+- Produces: `npm run --silent review:packet -- --root <project> --base <ref> --head <ref> --mode delta|release ...`.
 - Produces: one JSON packet on stdout and diagnostics on stderr; exits nonzero without partial JSON on invalid input.
 
 - [ ] **Step 1: Write RED CLI tests**
@@ -443,7 +443,7 @@ Run:
 
 ```bash
 PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
-  npm run review:packet -- \
+  npm run --silent review:packet -- \
   --root /home/radek/whitesur-desktop-profile/.worktrees/implement-profile \
   --base 8716f14 \
   --head 13ff889 \
@@ -463,7 +463,7 @@ Run:
 
 ```bash
 PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
-  npm run review:packet -- \
+  npm run --silent review:packet -- \
   --root /home/radek/whitesur-desktop-profile/.worktrees/implement-profile \
   --base 9b94f66 \
   --head ee0afcb \

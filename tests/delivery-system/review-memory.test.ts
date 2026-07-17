@@ -24,6 +24,21 @@ describe("review memory", () => {
     expect(managed.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("accepts invariant headings directly below the document title", () => {
+    const document = extractReviewMemoryDocument(
+      "docs/superpowers/review-memory/ui.md",
+      [
+        "# UI Control Review Memory",
+        "",
+        "## UI-01 — Explicit completion",
+        "",
+        "## UI-02 — Stable search target",
+      ].join("\n"),
+    );
+
+    expect(document.invariant_ids).toEqual(["UI-01", "UI-02"]);
+  });
+
   it("builds a delta packet with only explicitly selected memory", () => {
     const packet = buildReviewMemoryPacket({
       mode: "delta",
