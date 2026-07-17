@@ -2,17 +2,16 @@ import { spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
-  readFileSync,
-  readdirSync,
   realpathSync,
   statSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
   buildReviewMemoryPacket,
   extractReviewMemoryDocument,
+  normalizeReviewRepositoryPath,
   type ReviewMemoryDecision,
   type ReviewMode,
   type ReviewTestEvidence,
@@ -133,8 +132,16 @@ function resolveProjectRoot(value: string): string {
 }
 
 function git(root: string, args: readonly string[], errorCode: string): string {
+  return gitBuffer(root, args, errorCode).toString("utf8");
+}
+
+function gitBuffer(
+  root: string,
+  args: readonly string[],
+  errorCode: string,
+): Buffer {
   const result = spawnSync("git", ["-C", root, ...args], {
-    encoding: "utf8",
+    encoding: "buffer",
     shell: false,
     maxBuffer: 2 * 1024 * 1024,
   });
@@ -153,39 +160,119 @@ function resolveCommit(root: string, ref: string): string {
 }
 
 function changedFiles(root: string, base: string, head: string): string[] {
-  return git(
-    root,
-    ["diff", "--name-only", "--diff-filter=ACMR", `${base}..${head}`, "--"],
-    "git_diff_failed",
-  )
-    .split(/\r?\n/)
-    .filter(Boolean);
+  return splitNul(
+    gitBuffer(
+      root,
+      [
+        "diff",
+        "--name-only",
+        "-z",
+        `${base}..${head}`,
+        "--",
+      ],
+      "git_diff_failed",
+    ),
+  );
 }
 
-function discoverMemoryDocuments(root: string) {
-  const memoryDirectory = join(root, "docs", "superpowers", "review-memory");
-  if (!existsSync(memoryDirectory)) fail("review_memory_directory_missing");
-  const directoryEntry = lstatSync(memoryDirectory);
-  if (directoryEntry.isSymbolicLink() || !directoryEntry.isDirectory()) {
+interface GitTreeEntry {
+  readonly mode: string;
+  readonly type: string;
+  readonly objectId: string;
+  readonly path: string;
+}
+
+function splitNul(output: Buffer): string[] {
+  const decoded = output.toString("utf8");
+  if (decoded.includes("\uFFFD")) fail("git_path_encoding_invalid");
+  return decoded.split("\0").filter(Boolean);
+}
+
+function parseTreeEntries(output: Buffer): GitTreeEntry[] {
+  return splitNul(output).map((record) => {
+    const match = /^([0-9]{6}) ([a-z]+) ([a-f0-9]{40,64})\t([\s\S]+)$/.exec(
+      record,
+    );
+    if (match === null) fail("git_tree_invalid");
+    return {
+      mode: match[1] as string,
+      type: match[2] as string,
+      objectId: match[3] as string,
+      path: match[4] as string,
+    };
+  });
+}
+
+function treeEntries(
+  root: string,
+  head: string,
+  path: string,
+  recursive = false,
+): GitTreeEntry[] {
+  return parseTreeEntries(
+    gitBuffer(
+      root,
+      ["ls-tree", "-z", ...(recursive ? ["-r"] : []), head, "--", path],
+      "git_tree_failed",
+    ),
+  );
+}
+
+function isRegularBlob(entry: GitTreeEntry): boolean {
+  return (
+    entry.type === "blob" &&
+    (entry.mode === "100644" || entry.mode === "100755")
+  );
+}
+
+function discoverMemoryDocuments(root: string, head: string) {
+  const directoryPath = "docs/superpowers/review-memory";
+  const directory = treeEntries(root, head, directoryPath).find(
+    (entry) => entry.path === directoryPath,
+  );
+  if (directory === undefined) fail("review_memory_directory_missing");
+  if (directory.type !== "tree" || directory.mode !== "040000") {
     fail("review_memory_directory_not_regular");
   }
 
-  const names = readdirSync(memoryDirectory)
-    .filter((name) => name.endsWith(".md"))
-    .sort();
-  if (names.length === 0) fail("review_memory_documents_required");
+  const prefix = `${directoryPath}/`;
+  const entries = treeEntries(root, head, directoryPath, true)
+    .filter(
+      (entry) =>
+        entry.path.startsWith(prefix) &&
+        !entry.path.slice(prefix.length).includes("/") &&
+        entry.path.endsWith(".md"),
+    )
+    .sort((left, right) => left.path.localeCompare(right.path));
+  if (entries.length === 0) fail("review_memory_documents_required");
 
-  return names.map((name) => {
-    const path = join(memoryDirectory, name);
-    const entry = lstatSync(path);
-    if (entry.isSymbolicLink() || !entry.isFile() || entry.nlink !== 1) {
-      fail("review_memory_file_not_regular");
-    }
+  return entries.map((entry) => {
+    if (!isRegularBlob(entry)) fail("review_memory_file_not_regular");
     return extractReviewMemoryDocument(
-      relative(root, path).replaceAll("\\", "/"),
-      readFileSync(path, "utf8"),
+      entry.path,
+      git(
+        root,
+        ["cat-file", "blob", entry.objectId],
+        "review_memory_blob_read_failed",
+      ),
     );
   });
+}
+
+function verifyEvidenceSources(
+  root: string,
+  head: string,
+  evidence: readonly ReviewTestEvidence[],
+): void {
+  for (const item of evidence) {
+    if (item.source_path === null) continue;
+    const exact = treeEntries(root, head, item.source_path).find(
+      (entry) => entry.path === item.source_path,
+    );
+    if (exact === undefined || !isRegularBlob(exact)) {
+      fail("review_check_source_missing");
+    }
+  }
 }
 
 function parseCheck(value: string): ReviewTestEvidence {
@@ -198,7 +285,10 @@ function parseCheck(value: string): ReviewTestEvidence {
   return {
     check_id: checkId as string,
     status,
-    source_path: sourcePath ? sourcePath : null,
+    source_path: sourcePath
+      ? normalizeReviewRepositoryPath(sourcePath)
+      : null,
+    attestation: "self_reported",
   };
 }
 
@@ -224,14 +314,16 @@ export function runReviewMemoryPacketCli(
     const root = resolveProjectRoot(args.root);
     const baseSha = resolveCommit(root, args.base);
     const headSha = resolveCommit(root, args.head);
+    const evidence = args.checks.map(parseCheck);
+    verifyEvidenceSources(root, headSha, evidence);
     const packet = buildReviewMemoryPacket({
       mode: args.mode,
       base_sha: baseSha,
       head_sha: headSha,
       changed_files: changedFiles(root, baseSha, headSha),
-      documents: discoverMemoryDocuments(root),
+      documents: discoverMemoryDocuments(root, headSha),
       memory_decision: memoryDecision(args),
-      test_evidence: args.checks.map(parseCheck),
+      test_evidence: evidence,
     });
     io.writeOut(`${JSON.stringify(packet, null, 2)}\n`);
     return 0;

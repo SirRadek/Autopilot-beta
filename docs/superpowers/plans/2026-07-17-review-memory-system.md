@@ -468,7 +468,7 @@ PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH
   --base 9b94f66 \
   --head ee0afcb \
   --mode release \
-  --check full-suite:passed:control-center/tests \
+  --check full-suite:passed:control-center/tests/ui/test_window_models.py \
   > /tmp/whitesur-review-memory-release.json
 ```
 
@@ -494,6 +494,24 @@ The reviewer receives this plan, the branch base/head, the bounded diff, focused
 - [ ] **Step 5: Record actual token evidence and commit final fixes**
 
 Record `actual_tokens` only when reliable aggregate telemetry is available; otherwise record `unavailable`. Commit any reviewed fixes with a narrow subject and no packet files from `/tmp`.
+
+### Post-review hardening amendment
+
+The independent fixed-diff review supersedes the earlier low-level CLI details
+with these stricter requirements:
+
+- read memory documents from regular blobs in the resolved `head` Git tree,
+  never from the mutable worktree;
+- parse all changed paths, including deletions, with `git diff --name-only -z`
+  and fail closed on path encodings or control characters the packet schema
+  cannot represent safely;
+- require at least one passed `self_reported` evidence record for selected delta
+  and release packets, and verify each non-null source path is a regular file in
+  the declared head tree;
+- accept only the privacy-safe no-memory reason codes `docs_only`,
+  `non_behavioral_metadata`, and `memory_not_applicable`; and
+- accept invariant headings at `##` or `###`, retaining inherited WhiteSur
+  compatibility.
 
 ---
 

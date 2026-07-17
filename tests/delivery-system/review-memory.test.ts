@@ -52,6 +52,7 @@ describe("review memory", () => {
           check_id: "focused-state",
           status: "passed",
           source_path: "tests/state.test.ts",
+          attestation: "self_reported",
         },
       ],
     });
@@ -76,6 +77,54 @@ describe("review memory", () => {
         test_evidence: [],
       }),
     ).toThrow("review_memory_reason_required");
+
+    expect(() =>
+      buildReviewMemoryPacket({
+        mode: "delta",
+        base_sha: base,
+        head_sha: head,
+        changed_files: ["README.md"],
+        documents: [managed, ui],
+        memory_decision: {
+          kind: "none",
+          reason: "Copied source: const secret = process.env.TOKEN",
+        },
+        test_evidence: [],
+      }),
+    ).toThrow("invalid_review_memory_reason_code");
+  });
+
+  it("requires passed self-reported evidence for selected and release reviews", () => {
+    expect(() =>
+      buildReviewMemoryPacket({
+        mode: "delta",
+        base_sha: base,
+        head_sha: head,
+        changed_files: ["src/state.ts"],
+        documents: [managed, ui],
+        memory_decision: { kind: "selected", invariant_ids: ["MM-01"] },
+        test_evidence: [],
+      }),
+    ).toThrow("review_passed_evidence_required");
+
+    expect(() =>
+      buildReviewMemoryPacket({
+        mode: "release",
+        base_sha: base,
+        head_sha: head,
+        changed_files: ["src/state.ts"],
+        documents: [managed, ui],
+        memory_decision: { kind: "release_all" },
+        test_evidence: [
+          {
+            check_id: "full-suite",
+            status: "failed",
+            source_path: null,
+            attestation: "self_reported",
+          },
+        ],
+      }),
+    ).toThrow("review_passed_evidence_required");
   });
 
   it("fails closed on unknown or duplicate invariant IDs", () => {
@@ -108,7 +157,12 @@ describe("review memory", () => {
       documents: [managed, ui],
       memory_decision: { kind: "release_all" },
       test_evidence: [
-        { check_id: "full-suite", status: "passed", source_path: null },
+        {
+          check_id: "full-suite",
+          status: "passed",
+          source_path: null,
+          attestation: "self_reported",
+        },
       ],
     });
     expect(packet.memory_files).toHaveLength(2);

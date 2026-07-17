@@ -17,6 +17,7 @@ export interface ReviewTestEvidence {
   readonly check_id: string;
   readonly status: ReviewCheckStatus;
   readonly source_path: string | null;
+  readonly attestation: "self_reported";
 }
 
 export interface ReviewMemoryPacketInput {
@@ -47,6 +48,11 @@ const SHA_PATTERN = /^[a-f0-9]{40}$/;
 const INVARIANT_HEADING_PATTERN =
   /^#{2,3}\s+([A-Z][A-Z0-9]*-[0-9]{2})\s+—\s+/gm;
 const CHECK_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
+const NO_MEMORY_REASON_CODES = new Set([
+  "docs_only",
+  "memory_not_applicable",
+  "non_behavioral_metadata",
+]);
 const DELTA_REQUIREMENTS = [
   "review_only_declared_delta",
   "use_selected_memory_as_durable_context",
@@ -73,7 +79,7 @@ function unique(values: readonly string[], errorCode: string): readonly string[]
   return values;
 }
 
-function normalizeRepositoryPath(value: string): string {
+export function normalizeReviewRepositoryPath(value: string): string {
   if (
     value.length === 0 ||
     value !== value.trim() ||
@@ -84,7 +90,7 @@ function normalizeRepositoryPath(value: string): string {
     fail("invalid_review_path");
   }
 
-  const normalized = value.replaceAll("\\", "/");
+  const normalized = value;
   const segments = normalized.split("/");
   if (
     segments.some(
@@ -102,7 +108,7 @@ function validateSha(value: string, label: "base" | "head"): string {
 }
 
 function validateDocument(document: ReviewMemoryDocument): ReviewMemoryDocument {
-  const path = normalizeRepositoryPath(document.path);
+  const path = normalizeReviewRepositoryPath(document.path);
   if (!/^[a-f0-9]{64}$/.test(document.sha256)) {
     fail("invalid_review_memory_digest");
   }
@@ -130,13 +136,17 @@ function validateEvidence(
   if (!["passed", "failed", "not_run"].includes(evidence.status)) {
     fail("invalid_review_check_status");
   }
+  if (evidence.attestation !== "self_reported") {
+    fail("invalid_review_check_attestation");
+  }
   return {
     check_id: evidence.check_id,
     status: evidence.status,
     source_path:
       evidence.source_path === null
         ? null
-        : normalizeRepositoryPath(evidence.source_path),
+        : normalizeReviewRepositoryPath(evidence.source_path),
+    attestation: "self_reported",
   };
 }
 
@@ -150,11 +160,11 @@ export function extractReviewMemoryDocument(
   );
   unique(invariantIds, "duplicate_review_invariant");
   if (invariantIds.length === 0) {
-    fail(`review_memory_invariants_missing:${normalizeRepositoryPath(path)}`);
+    fail(`review_memory_invariants_missing:${normalizeReviewRepositoryPath(path)}`);
   }
 
   return {
-    path: normalizeRepositoryPath(path),
+    path: normalizeReviewRepositoryPath(path),
     sha256: createHash("sha256").update(markdown, "utf8").digest("hex"),
     invariant_ids: invariantIds,
   };
@@ -171,7 +181,7 @@ export function buildReviewMemoryPacket(
   }
 
   const changedFiles = unique(
-    input.changed_files.map(normalizeRepositoryPath),
+    input.changed_files.map(normalizeReviewRepositoryPath),
     "duplicate_review_changed_file",
   );
   if (changedFiles.length === 0) fail("review_changed_files_required");
@@ -199,7 +209,6 @@ export function buildReviewMemoryPacket(
     testEvidence.map((evidence) => evidence.check_id),
     "duplicate_review_check_id",
   );
-
   let memoryFiles: readonly ReviewMemoryDocument[];
   let affectedInvariantIds: readonly string[];
   let noMemoryReason: string | null = null;
@@ -236,14 +245,24 @@ export function buildReviewMemoryPacket(
     affectedInvariantIds = selected;
   } else if (input.memory_decision.kind === "none") {
     const reason = input.memory_decision.reason.trim();
-    if (reason.length === 0 || reason.length > 240) {
+    if (reason.length === 0) {
       fail("review_memory_reason_required");
+    }
+    if (!NO_MEMORY_REASON_CODES.has(reason)) {
+      fail("invalid_review_memory_reason_code");
     }
     memoryFiles = [];
     affectedInvariantIds = [];
     noMemoryReason = reason;
   } else {
     fail("delta_review_cannot_select_all_memory");
+  }
+
+  if (
+    (input.mode === "release" || input.memory_decision.kind === "selected") &&
+    !testEvidence.some((evidence) => evidence.status === "passed")
+  ) {
+    fail("review_passed_evidence_required");
   }
 
   return {

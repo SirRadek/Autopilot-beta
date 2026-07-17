@@ -64,6 +64,9 @@ describe("review memory packet CLI", () => {
         path: "docs/superpowers/review-memory/managed.md",
       }),
     ]);
+    expect(packet.test_evidence).toEqual([
+      expect.objectContaining({ attestation: "self_reported" }),
+    ]);
     expect(result.stdout).not.toContain("PRIVATE-SOURCE-CONTENT");
     expect(result.stdout).not.toContain("base commit secret message");
   });
@@ -106,15 +109,190 @@ describe("review memory packet CLI", () => {
       "--mode",
       "delta",
       "--no-memory-reason",
-      "Only repository prose changed.",
+      "docs_only",
     ]);
 
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       affected_invariant_ids: [],
       memory_files: [],
-      no_memory_reason: "Only repository prose changed.",
+      no_memory_reason: "docs_only",
     });
+  });
+
+  it("binds memory content to the declared head instead of the worktree", () => {
+    const repo = createRepository();
+    writeFileSync(
+      join(repo.root, "docs/superpowers/review-memory/managed.md"),
+      "# Leaked worktree memory\n\n### LEAK-01 — Must not appear\n",
+    );
+
+    const result = runCli([
+      "--root",
+      repo.root,
+      "--base",
+      repo.baseSha,
+      "--head",
+      repo.headSha,
+      "--mode",
+      "delta",
+      "--affected",
+      "MM-01",
+      "--check",
+      "focused-state:passed:tests/state.test.ts",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("LEAK-01");
+    expect(result.stdout).toContain("MM-01");
+  });
+
+  it("does not follow a symlinked worktree ancestor", () => {
+    const repo = createRepository();
+    const outside = mkdtempSync(join(tmpdir(), "review-memory-outside-"));
+    tempRoots.push(outside);
+    writeFileSync(join(outside, "leak.md"), "### LEAK-01 — Outside\n");
+    rmSync(join(repo.root, "docs"), { recursive: true });
+    symlinkSync(outside, join(repo.root, "docs"), "dir");
+
+    const result = runCli([
+      "--root",
+      repo.root,
+      "--base",
+      repo.baseSha,
+      "--head",
+      repo.headSha,
+      "--mode",
+      "delta",
+      "--affected",
+      "MM-01",
+      "--check",
+      "focused-state:passed:tests/state.test.ts",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("LEAK-01");
+  });
+
+  it("requires passed evidence and verifies its source at head", () => {
+    const repo = createRepository();
+    const withoutEvidence = runCli([
+      "--root",
+      repo.root,
+      "--base",
+      repo.baseSha,
+      "--head",
+      repo.headSha,
+      "--mode",
+      "release",
+    ]);
+    expect(withoutEvidence.status).toBe(1);
+    expect(withoutEvidence.stderr).toContain(
+      "review_memory_packet_error:review_passed_evidence_required",
+    );
+
+    writeFileSync(join(repo.root, "tests/worktree-only.test.ts"), "// not committed\n");
+    const missingSource = runCli([
+      "--root",
+      repo.root,
+      "--base",
+      repo.baseSha,
+      "--head",
+      repo.headSha,
+      "--mode",
+      "release",
+      "--check",
+      "full-suite:passed:tests/worktree-only.test.ts",
+    ]);
+    expect(missingSource.status).toBe(1);
+    expect(missingSource.stderr).toContain(
+      "review_memory_packet_error:review_check_source_missing",
+    );
+  });
+
+  it("preserves unusual Git paths using NUL-delimited parsing", () => {
+    const repo = createRepository();
+    const unusual = ["src/tab\tname.ts", 'src/quote"name.ts', "src/back\\slash.ts"];
+    for (const path of unusual) writeFileSync(join(repo.root, path), "// unusual\n");
+    git(repo.root, ["add", "."]);
+    git(repo.root, ["commit", "-q", "-m", "unusual paths"]);
+    const headSha = git(repo.root, ["rev-parse", "HEAD"]).trim();
+
+    const result = runCli([
+      "--root",
+      repo.root,
+      "--base",
+      repo.headSha,
+      "--head",
+      headSha,
+      "--mode",
+      "delta",
+      "--affected",
+      "MM-01",
+      "--check",
+      "focused-state:passed:tests/state.test.ts",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect((JSON.parse(result.stdout) as { changed_files: string[] }).changed_files).toEqual(
+      unusual.sort(),
+    );
+  });
+
+  it("fails closed on a newline in a Git path without splitting it", () => {
+    const repo = createRepository();
+    writeFileSync(join(repo.root, "src/line\nbreak.ts"), "// unusual\n");
+    git(repo.root, ["add", "."]);
+    git(repo.root, ["commit", "-q", "-m", "newline path"]);
+    const headSha = git(repo.root, ["rev-parse", "HEAD"]).trim();
+
+    const result = runCli([
+      "--root",
+      repo.root,
+      "--base",
+      repo.headSha,
+      "--head",
+      headSha,
+      "--mode",
+      "delta",
+      "--affected",
+      "MM-01",
+      "--check",
+      "focused-state:passed:tests/state.test.ts",
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "review_memory_packet_error:invalid_review_path",
+    );
+  });
+
+  it("keeps deleted paths inside the fixed-diff boundary", () => {
+    const repo = createRepository();
+    unlinkSync(join(repo.root, "src/state.ts"));
+    git(repo.root, ["add", "-A"]);
+    git(repo.root, ["commit", "-q", "-m", "delete state"]);
+    const headSha = git(repo.root, ["rev-parse", "HEAD"]).trim();
+
+    const result = runCli([
+      "--root",
+      repo.root,
+      "--base",
+      repo.headSha,
+      "--head",
+      headSha,
+      "--mode",
+      "delta",
+      "--affected",
+      "MM-01",
+      "--check",
+      "focused-state:passed:tests/state.test.ts",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect((JSON.parse(result.stdout) as { changed_files: string[] }).changed_files).toEqual([
+      "src/state.ts",
+    ]);
   });
 
   it.each([
@@ -161,6 +339,9 @@ describe("review memory packet CLI", () => {
     );
     unlinkSync(uiPath);
     symlinkSync("managed.md", uiPath);
+    git(repo.root, ["add", "-A"]);
+    git(repo.root, ["commit", "-q", "-m", "symlink memory"]);
+    const symlinkHead = git(repo.root, ["rev-parse", "HEAD"]).trim();
 
     const result = runCli([
       "--root",
@@ -168,9 +349,11 @@ describe("review memory packet CLI", () => {
       "--base",
       repo.baseSha,
       "--head",
-      repo.headSha,
+      symlinkHead,
       "--mode",
       "release",
+      "--check",
+      "full-suite:passed:tests/state.test.ts",
     ]);
 
     expect(result.status).toBe(1);
