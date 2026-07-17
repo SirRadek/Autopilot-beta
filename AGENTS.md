@@ -29,6 +29,11 @@
 - Before completion run the narrow tests, typecheck, required repository gates, and `git diff --check`.
 - Report actual commands and results; missing evidence is not success.
 
+## Review memory
+- For a focused delta, provide base/head, affected invariant IDs or a bounded no-memory reason, and focused RED/GREEN evidence; follow `docs/operations/review-memory-runbook.md`.
+- A targeted re-review reads only the fixed delta and selected durable review memory. A complete branch review still runs before release.
+- Every confirmed new finding requires a regression test and a new or amended invariant before closure.
+
 ## Documentation
 - Update architecture/work logs only when their governed behavior changes.
 - Detailed policy lives in `docs/autopilot/` and `mesh/nodes/`; do not duplicate it in prompts or handoffs.
