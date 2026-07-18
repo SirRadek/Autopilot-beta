@@ -22,8 +22,11 @@ related_files:
   - src/data/delivery-system/contextEconomy.ts
   - src/data/delivery-system/efficiencyPolicy.ts
   - src/data/delivery-system/efficiencyReport.ts
+  - src/data/delivery-system/reviewMemory.ts
   - src/data/delivery-system/codexVersionProbe.mjs
   - scripts/codex-efficiency-report.ts
+  - scripts/review-memory-packet.ts
+  - docs/operations/review-memory-runbook.md
   - docs/operations/codex-efficiency-runbook.md
   - docs/autopilot/codex-efficiency-baseline-2026-07-15.json
   - AGENTS.md
