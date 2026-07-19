@@ -328,6 +328,7 @@ caddyfile="$isolated_runtime/Caddyfile"
 cat > "$caddyfile" <<EOF
 {
 	admin 127.0.0.1:2020
+	auto_https disable_redirects
 }
 https://autopilot.local:8443 {
 	bind 192.168.122.99

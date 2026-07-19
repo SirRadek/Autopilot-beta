@@ -669,6 +669,7 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(readFileSync(join(prepared.runtime, "control-plane.env"), "utf8"))
       .toContain("CONTROL_PLANE_SECURE_COOKIES=true");
     const isolatedCaddyfile = readFileSync(join(prepared.runtime, "Caddyfile"), "utf8");
+    expect(isolatedCaddyfile).toContain("auto_https disable_redirects");
     expect(isolatedCaddyfile).toContain("@api path /auth /auth/*");
     expect(isolatedCaddyfile).not.toMatch(/@api path .*\/health/);
     expect(readFileSync(join(prepared.runtime, "autopilot-caddy-root.crt"), "utf8"))
