@@ -341,21 +341,23 @@ https://autopilot.local:8443 {
 		Referrer-Policy "no-referrer"
 		Strict-Transport-Security "max-age=300"
 	}
-	@api path /auth /auth/* /status /status/* /sessions /sessions/* /approvals /approvals/* /workers /workers/* /providers /providers/* /projects /projects/* /runs /runs/* /incidents /incidents/* /observability /observability/*
-	handle @api {
-		header Cache-Control "no-store"
-		reverse_proxy 127.0.0.1:8877
+	route {
+		@api path /auth /auth/* /status /status/* /sessions /sessions/* /approvals /approvals/* /workers /workers/* /providers /providers/* /projects /projects/* /runs /runs/* /incidents /incidents/* /observability /observability/*
+		handle @api {
+			header Cache-Control "no-store"
+			reverse_proxy 127.0.0.1:8877
+		}
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@document not path /assets/*
+		header @document Cache-Control "no-cache"
+		@spa {
+			method GET HEAD
+			not file
+		}
+		rewrite @spa /index.html
+		file_server
 	}
-	@assets path /assets/*
-	header @assets Cache-Control "public, max-age=31536000, immutable"
-	@document not path /assets/*
-	header @document Cache-Control "no-cache"
-	@spa {
-		method GET HEAD
-		not file
-	}
-	rewrite @spa /index.html
-	file_server
 }
 EOF
 chown "$caddy_uid:$caddy_gid" "$caddyfile"
