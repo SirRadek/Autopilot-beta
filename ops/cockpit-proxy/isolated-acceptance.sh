@@ -358,8 +358,16 @@ https://autopilot.local:8443 {
 EOF
 chown "$caddy_uid:$caddy_gid" "$caddyfile"
 chmod 0640 "$caddyfile"
-XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/caddy-config" \
-	caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
+if [ "$test_mode" = 1 ]; then
+	setpriv --reuid "$caddy_uid" --regid "$caddy_gid" --clear-groups -- \
+		env XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/caddy-config" \
+		caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
+else
+	/usr/bin/setpriv --reuid "$caddy_uid" --regid "$caddy_gid" --clear-groups -- \
+		/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+		XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/caddy-config" \
+		/usr/bin/caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
+fi
 
 nft_identity="autopilot-isolated:$ownership_nonce"
 nft -f - <<EOF

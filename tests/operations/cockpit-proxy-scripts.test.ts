@@ -508,6 +508,14 @@ exit 0
 printf 'caddy %s\\n' "$*" >> "$STUB_LOG"
 [[ "\${STUB_CADDY_VALIDATE_FAIL:-0}" != 1 ]]
 `);
+  writeExecutable(join(bin, "setpriv"), `
+printf 'setpriv %s\\n' "$*" >> "$STUB_LOG"
+while (($#)); do
+  [[ "$1" == -- ]] && { shift; break; }
+  shift
+done
+exec "$@"
+`);
   writeExecutable(join(bin, "systemctl"), `
 printf 'systemctl %s\\n' "$*" >> "$STUB_LOG"
 if [[ "\${1:-}" == show ]]; then
@@ -650,6 +658,7 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain("isolated-test-token");
     expect(`${result.stdout}${result.stderr}`).not.toContain("PRIVATE KEY");
     const log = readFileSync(prepared.stubs.log, "utf8");
+    expect(log).toMatch(/^setpriv --reuid \d+ --regid \d+ --clear-groups -- .*caddy validate /m);
     expect(log.indexOf("nft add table inet autopilot_cockpit_isolated"))
       .toBeLessThan(log.indexOf("systemd-run --unit=autopilot-cockpit-isolated-proxy"));
     expect(log).not.toContain("systemctl stop");
