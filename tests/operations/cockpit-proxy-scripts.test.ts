@@ -499,7 +499,7 @@ if [[ "$*" == "-j list table inet autopilot_cockpit_isolated" ]]; then
   if [[ "\${STUB_FOREIGN_REPLACEMENT:-}" == nft ]] || [[ "\${STUB_POST_START_REPLACEMENT:-}" == nft && "$post_started" == 1 ]] || \
     [[ "\${STUB_POST_START_REPLACEMENT:-}" == nft-late && "$nft_checks" -ge 2 ]]; then nonce="$(printf '%064d' 8)"; fi
   comment="autopilot-isolated:$nonce"
-  printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit_isolated","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit_isolated","chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":8443}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"
+  printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit_isolated","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit_isolated","chain":"input","expr":[{"match":{"op":"!=","left":{"meta":{"key":"iifname"}},"right":"lo"}},{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":8443}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"
   exit 0
 fi
 exit 0
@@ -659,6 +659,7 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain("PRIVATE KEY");
     const log = readFileSync(prepared.stubs.log, "utf8");
     expect(log).toMatch(/^setpriv --reuid \d+ --regid \d+ --clear-groups -- .*caddy validate /m);
+    expect(log).toContain('add rule inet autopilot_cockpit_isolated input iifname != "lo" tcp dport 8443 ip saddr != 192.168.122.1 drop');
     expect(log.indexOf("nft add table inet autopilot_cockpit_isolated"))
       .toBeLessThan(log.indexOf("systemd-run --unit=autopilot-cockpit-isolated-proxy"));
     expect(log).not.toContain("systemctl stop");

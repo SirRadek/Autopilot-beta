@@ -109,6 +109,7 @@ const chain = entries.filter((e) => e.chain?.family === "inet" && e.chain?.table
 const rule = entries.filter((e) => e.rule?.family === "inet" && e.rule?.table === process.env.NFT_TABLE_NAME && e.rule?.chain === "input");
 if (table.length !== 1 || chain.length !== 1 || rule.length !== 1) process.exit(1);
 const expectedExpr = [
+  { match: { op: "!=", left: { meta: { key: "iifname" } }, right: "lo" } },
   { match: { op: "==", left: { payload: { protocol: "tcp", field: "dport" } }, right: 8443 } },
   { match: { op: "!=", left: { payload: { protocol: "ip", field: "saddr" } }, right: "192.168.122.1" } },
   { drop: null },
@@ -374,7 +375,7 @@ nft_identity="autopilot-isolated:$ownership_nonce"
 nft -f - <<EOF
 add table inet $table_name { comment "$nft_identity"; }
 add chain inet $table_name input { type filter hook input priority -10; policy accept; comment "$nft_identity"; }
-add rule inet $table_name input tcp dport 8443 ip saddr != 192.168.122.1 drop comment "$nft_identity"
+add rule inet $table_name input iifname != "lo" tcp dport 8443 ip saddr != 192.168.122.1 drop comment "$nft_identity"
 EOF
 nft_created=1
 
