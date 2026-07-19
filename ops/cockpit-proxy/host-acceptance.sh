@@ -39,7 +39,7 @@ cleanup() {
 	local status=$?
 	trap - EXIT INT TERM
 	set +e
-	unset token TOKEN_TO_ENCODE
+	unset token TOKEN_TO_ENCODE spki_sha256 AUTOPILOT_PROXY_TEST_SPKI_SHA256
 	rm -rf -- "$work"
 	exit "$status"
 }
@@ -209,7 +209,21 @@ require_status "$status" 200 logout
 status="$(request logged-out GET "$base_url/auth/session" --cookie "$cookie_jar")"
 require_status "$status" 401 logged-out
 
-AUTOPILOT_PROXY_TEST_TOKEN="$token" timeout --signal=TERM --kill-after="$playwright_kill_after" "$playwright_timeout" npx --no-install playwright test --config playwright.proxy.config.ts
-unset token TOKEN_TO_ENCODE
+spki_sha256="$(timeout --signal=TERM --kill-after="$openssl_kill_after" "$openssl_timeout" bash -c '
+	set -o pipefail
+	openssl s_client -connect "$1" -servername autopilot.local -verify_return_error -verify_hostname autopilot.local </dev/null 2>/dev/null \
+		| openssl x509 -pubkey -noout \
+		| openssl pkey -pubin -outform DER \
+		| openssl dgst -sha256 -binary \
+		| openssl base64 -A
+' _ "autopilot.local:$tls_port")"
+[[ "$spki_sha256" =~ ^[A-Za-z0-9+/]{43}=$ ]] || {
+	printf '%s\n' "failed to derive the trusted proxy certificate SPKI pin" >&2
+	exit 1
+}
+
+AUTOPILOT_PROXY_TEST_TOKEN="$token" AUTOPILOT_PROXY_TEST_SPKI_SHA256="$spki_sha256" \
+	timeout --signal=TERM --kill-after="$playwright_kill_after" "$playwright_timeout" npx --no-install playwright test --config playwright.proxy.config.ts --output "$work/playwright-results"
+unset token TOKEN_TO_ENCODE spki_sha256 AUTOPILOT_PROXY_TEST_SPKI_SHA256
 
 printf '%s\n' "HOST_PROXY_ACCEPTANCE_OK"

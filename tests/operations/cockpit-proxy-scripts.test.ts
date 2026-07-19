@@ -957,6 +957,9 @@ describe("Cockpit isolated proxy acceptance", () => {
     const spec = readFileSync(join(process.cwd(), "tests", "browser-proxy", "cockpit-proxy.spec.ts"), "utf8");
 
     expect(config).toContain("ignoreHTTPSErrors: false");
+    expect(config).toContain("AUTOPILOT_PROXY_TEST_SPKI_SHA256");
+    expect(config).toContain("--ignore-certificate-errors-spki-list=");
+    expect(config).not.toMatch(/[`"']--ignore-certificate-errors[`"']/);
     expect(config).toMatch(/trace:\s*["']off["']/);
     expect(config).toMatch(/video:\s*["']off["']/);
     expect(config).toMatch(/screenshot:\s*["']off["']/);
@@ -980,11 +983,32 @@ function runHostAcceptance(extraEnv: NodeJS.ProcessEnv = {}) {
   writeExecutable(join(bin, "openssl"), `
 printf 'openssl %s\\n' "$*" >> "$STUB_LOG"
 if [[ "\${1:-}" == s_client ]]; then printf '%s\\n' 'test certificate'; fi
-if [[ "\${1:-}" == x509 ]]; then cat >/dev/null; fi
+if [[ "\${1:-}" == x509 ]]; then
+  cat >/dev/null
+  [[ "$*" != *-pubkey* ]] || printf '%s\\n' '-----BEGIN PUBLIC KEY-----' 'test-public-key' '-----END PUBLIC KEY-----'
+elif [[ "\${1:-}" == pkey ]]; then
+  cat >/dev/null; printf 'test-public-key-der'
+elif [[ "\${1:-}" == dgst ]]; then
+  cat >/dev/null; printf 'test-public-key-digest'
+elif [[ "\${1:-}" == base64 ]]; then
+  cat >/dev/null; printf '%s' "\${STUB_SPKI_VALUE:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}"
+fi
 `);
   writeExecutable(join(bin, "npx"), `
 [[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
+[[ "\${AUTOPILOT_PROXY_TEST_SPKI_SHA256:-}" == AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= ]]
 [[ "\${1:-}" == --no-install ]]
+output=
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == --output ]]; then output="$2"; shift 2; else shift; fi
+done
+[[ "$output" == /*/playwright-results ]]
+printf 'playwright-output %s\n' "$output" >> "$STUB_LOG"
+if [[ "\${STUB_NPX_FAIL_WITH_ARTIFACT:-0}" == 1 ]]; then
+  mkdir -p "$output"
+  printf '%s' "$AUTOPILOT_PROXY_TEST_TOKEN" > "$output/error-context.md"
+  exit 1
+fi
 if [[ "\${STUB_NPX_IGNORE_TERM:-0}" == 1 ]]; then trap '' TERM; while :; do :; done; fi
 printf 'playwright trusted-origin\\n' >> "$STUB_LOG"
 `);
@@ -1091,16 +1115,22 @@ describe("Cockpit trusted host acceptance", () => {
     expect(source).toContain("openssl s_client");
     expect(source).toContain("-verify_return_error");
     expect(source).toContain("-checkhost autopilot.local");
+    expect(source).toContain("openssl x509 -pubkey -noout");
+    expect(source).toContain("openssl pkey -pubin -outform DER");
+    expect(source).toContain("openssl dgst -sha256 -binary");
+    expect(source).toContain("-verify_hostname autopilot.local");
+    expect(source).toContain("AUTOPILOT_PROXY_TEST_SPKI_SHA256");
     expect(source).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
     expect(source).not.toMatch(/set\s+-[^\n]*x/);
     expect(source).toContain("HOST_PROXY_ACCEPTANCE_OK");
     expect(source).toContain("--connect-timeout 2");
     expect(source).toContain("--max-time 5");
     expect(source).toContain("npx --no-install playwright");
+    expect(source).toContain('--output "$work/playwright-results"');
     const isolatedSource = readFileSync(isolatedAcceptance, "utf8");
     const timeoutWrappers = `${source}\n${isolatedSource}`.split("\n")
       .filter((line) => /\btimeout\b/.test(line) && !line.includes("--connect-timeout"));
-    expect(timeoutWrappers).toHaveLength(7);
+    expect(timeoutWrappers).toHaveLength(8);
     expect(timeoutWrappers.every((line) => /timeout --signal=TERM --kill-after=/.test(line))).toBe(true);
   });
 
@@ -1115,6 +1145,10 @@ describe("Cockpit trusted host acceptance", () => {
     expect(commands).toContain("openssl s_client");
     expect(commands).toContain("-verify_return_error");
     expect(commands).toContain("openssl x509 -noout -checkhost autopilot.local");
+    expect(commands).toContain("openssl x509 -pubkey -noout");
+    expect(commands).toContain("openssl pkey -pubin -outform DER");
+    expect(commands).toContain("openssl dgst -sha256 -binary");
+    expect(commands).toContain("openssl base64 -A");
     expect(commands).toContain("cookie-mode 600");
     expect(commands).toContain("playwright trusted-origin");
     expect(commands).toContain("evil-referer.headers");
@@ -1126,6 +1160,23 @@ describe("Cockpit trusted host acceptance", () => {
     const { result } = runHostAcceptance({ STUB_UNSUPPORTED_STATUS: "404" });
 
     expect(result.status).toBe(0);
+  });
+
+  it("rejects a malformed browser SPKI pin before Playwright starts", () => {
+    const { result, log } = runHostAcceptance({ STUB_SPKI_VALUE: "invalid" });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("failed to derive the trusted proxy certificate SPKI pin");
+    expect(readFileSync(log, "utf8")).not.toContain("playwright trusted-origin");
+  });
+
+  it("cleans Playwright failure artifacts that could contain the token", () => {
+    const { result, log } = runHostAcceptance({ STUB_NPX_FAIL_WITH_ARTIFACT: "1" });
+
+    expect(result.status).not.toBe(0);
+    const output = readFileSync(log, "utf8").match(/^playwright-output (.+)$/m)?.[1];
+    expect(output).toBeTruthy();
+    expect(existsSync(output!)).toBe(false);
   });
 
   it.each([
