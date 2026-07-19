@@ -114,7 +114,10 @@ for lookalike in authentic statusx sessionsx approvalsx workersx providersx proj
 	require_header "$work/lookalike-$lookalike.headers" Cache-Control "no-cache"
 done
 status="$(request unsupported POST "$base_url/authentic")"
-require_status "$status" 405 unsupported
+case "$status" in
+	404|405) ;;
+	*) printf 'unexpected HTTP status for unsupported: %s\n' "$status" >&2; exit 1 ;;
+esac
 require_header "$work/unsupported.headers" Cache-Control "no-cache"
 if grep -Eiq '^content-type:[[:space:]]*application/json([[:space:]]*;|[[:space:]]|\r)*$' "$work/unsupported.headers"; then
 	printf '%s\n' "unsupported static lookalike returned API-shaped content" >&2

@@ -1021,12 +1021,13 @@ case "$name" in
     printf '%s\\n' 'HTTP/2 401' 'Cache-Control: no-store' > "$headers"
     printf unauthorized > "$body"; printf 401 ;;
   unsupported)
+    unsupported_status="\${STUB_UNSUPPORTED_STATUS:-405}"
     if [[ "\${STUB_UNSUPPORTED_API_SHAPED:-0}" == 1 ]]; then
-      printf '%s\\n' 'HTTP/2 405' 'Cache-Control: no-store' 'Content-Type: application/json' > "$headers"
+      printf '%s\\n' "HTTP/2 $unsupported_status" 'Cache-Control: no-store' 'Content-Type: application/json' > "$headers"
     else
-      printf '%s\\n' 'HTTP/2 405' 'Cache-Control: no-cache' 'Content-Type: text/plain; charset=utf-8' > "$headers"
+      printf '%s\\n' "HTTP/2 $unsupported_status" 'Cache-Control: no-cache' 'Content-Type: text/plain; charset=utf-8' > "$headers"
     fi
-    printf method > "$body"; printf 405 ;;
+    printf method > "$body"; printf '%s' "$unsupported_status" ;;
   login)
     case "\${STUB_COOKIE_VARIANT:-valid}" in
       valid) cookie='autopilot_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; HttpOnly; SameSite=Lax; Path=/; Secure' ;;
@@ -1119,6 +1120,12 @@ describe("Cockpit trusted host acceptance", () => {
     expect(commands).toContain("evil-referer.headers");
     expect(commands).not.toContain("behavioral-secret");
     expect(commands).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
+  });
+
+  it("accepts a non-API 404 for an unsupported static lookalike POST", () => {
+    const { result } = runHostAcceptance({ STUB_UNSUPPORTED_STATUS: "404" });
+
+    expect(result.status).toBe(0);
   });
 
   it.each([
