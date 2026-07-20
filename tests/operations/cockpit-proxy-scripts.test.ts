@@ -1339,6 +1339,14 @@ function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; 
   stubExecutable(stubDir, "curl", `${log}\nout=''; url=''; while (($#)); do case "$1" in --output) out="$2"; shift 2;; http://*) url="$1"; shift;; *) shift;; esac; done\nif [[ "$url" == */ready ]]; then printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$out"; else printf '%s' '{"ok":true}' > "$out"; fi\nprintf 200`);
   stubExecutable(stubDir, "npm", `${log}\n[[ "\${STUB_NPM_REQUIRE_BOUNDARY:-0}" != 1 || "\${AUTOPILOT_PRIVDROP_ACTIVE:-0}" == 1 ]] || exit 96\n[[ -z "\${MALICIOUS_ROOT_MARKER:-}" ]] || exit 97\nprintf 'npm-boundary:uid=%s:user=%s:path=%s:cwd=%s\\n' "$(id -u)" "\${USER:-}" "\${PATH:-}" "$(pwd -P)" >> "$STUB_LOG"\ncase "$*" in\n*ops:backup*) archive="$AUTOPILOT_CUTOVER_TEST_ROOT/backup.apbackup.json"; printf '{}\\n' > "$archive"; printf '{"path":"%s","validation":{"valid":true}}\\n' "$archive" ;;\n*ops:recovery-drill*) printf '{"ok":true,"validation":{"ready":true,"reconciled":true,"errors":[]}}\\n' ;;\n*ops:boundary-check*) printf '{"ok":true}\\n' ;;\n*smoke:cockpit-run*) printf '{"mode":"dry-run","provider_invoked":false,"run_status":"completed"}\\n' ;;\n*) exit 1 ;;\nesac`);
 
+  const systemctlMaskedBase = join(stubDir, "systemctl-masked-base");
+  renameSync(join(stubDir, "systemctl"), systemctlMaskedBase);
+  stubExecutable(
+    stubDir,
+    "systemctl",
+    `if [[ "$*" == 'is-enabled caddy.service' ]]; then ${JSON.stringify(systemctlMaskedBase)} "$@"; exit 1; fi\nexec ${JSON.stringify(systemctlMaskedBase)} "$@"`,
+  );
+
   const systemctlBase = join(stubDir, "systemctl-base");
   renameSync(join(stubDir, "systemctl"), systemctlBase);
   stubExecutable(stubDir, "systemctl", `${log}\nif [[ "$*" == 'is-active autopilot-cockpit-cutover-recovery.timer' ]]; then printf 'active\\n'; exit 0; fi\nif [[ "$*" == 'is-enabled autopilot-cockpit-cutover-recovery.timer' ]]; then printf 'enabled\\n'; exit 0; fi\nexec ${JSON.stringify(systemctlBase)} "$@"`);
