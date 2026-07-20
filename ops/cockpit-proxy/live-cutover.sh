@@ -885,7 +885,12 @@ done
 [ -f "$recovery_program" ] && [ ! -L "$recovery_program" ] && [ "$(stat -c %u:%g:%a "$recovery_program")" = "$expected_uid:$expected_gid:755" ] && cmp -s "$0" "$recovery_program"
 [ -f "$recovery_service" ] && [ ! -L "$recovery_service" ] && [ "$(stat -c %u:%g:%a "$recovery_service")" = "$expected_uid:$expected_gid:644" ] && cmp -s <(project_git show "$accepted_sha:ops/cockpit-proxy/autopilot-cockpit-cutover-recovery.service") "$recovery_service"
 [ -f "$recovery_timer" ] && [ ! -L "$recovery_timer" ] && [ "$(stat -c %u:%g:%a "$recovery_timer")" = "$expected_uid:$expected_gid:644" ] && cmp -s <(project_git show "$accepted_sha:ops/cockpit-proxy/autopilot-cockpit-cutover-recovery.timer") "$recovery_timer"
-safe_owned_symlink "$recovery_timer_enable" && [ "$(readlink "$recovery_timer_enable")" = ../autopilot-cockpit-cutover-recovery.timer ]
+safe_owned_symlink "$recovery_timer_enable"
+recovery_timer_enable_target="$(readlink "$recovery_timer_enable")"
+case "$recovery_timer_enable_target" in
+	../autopilot-cockpit-cutover-recovery.timer|"$root/etc/systemd/system/autopilot-cockpit-cutover-recovery.timer") ;;
+	*) exit 1 ;;
+esac
 require_active autopilot-cockpit-cutover-recovery.timer
 safe_regular "$evidence" && [ "$(stat -c %a -- "$evidence")" = 600 ]
 [ "$(cat "$evidence")" = "sha=$accepted_sha

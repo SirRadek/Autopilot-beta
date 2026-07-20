@@ -1252,7 +1252,7 @@ function stubExecutable(directory: string, name: string, source: string): void {
   chmodSync(path, 0o755);
 }
 
-function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; runtimeMask?: boolean } = {}): {
+function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; runtimeMask?: boolean; relativeRecoveryTimerTarget?: boolean } = {}): {
   root: string;
   checkout: string;
   releaseRoot: string;
@@ -1322,7 +1322,12 @@ function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; 
     writeFileSync(join(root, "etc", "systemd", "system", name), readFileSync(join(process.cwd(), "ops", "cockpit-proxy", name)), { mode: 0o644 });
   }
   mkdirSync(join(root, "etc", "systemd", "system", "timers.target.wants"), { recursive: true });
-  symlinkSync("../autopilot-cockpit-cutover-recovery.timer", join(root, "etc", "systemd", "system", "timers.target.wants", "autopilot-cockpit-cutover-recovery.timer"));
+  symlinkSync(
+    options.relativeRecoveryTimerTarget
+      ? "../autopilot-cockpit-cutover-recovery.timer"
+      : join(root, "etc", "systemd", "system", "autopilot-cockpit-cutover-recovery.timer"),
+    join(root, "etc", "systemd", "system", "timers.target.wants", "autopilot-cockpit-cutover-recovery.timer"),
+  );
   const maskPath = options.runtimeMask ? runtimeMaskPath : persistentMaskPath;
   mkdirSync(join(root, "etc", "systemd", "system"), { recursive: true });
   mkdirSync(dirname(maskPath), { recursive: true });
@@ -1621,6 +1626,13 @@ describe("Cockpit transactional live cutover", () => {
     ]) expect(ledger).toContain(field);
   });
 
+  it("accepts the root-owned relative watchdog timer link", () => {
+    const fixture = prepareCutover({ relativeRecoveryTimerTarget: true });
+    const result = runCutover(fixture);
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("CUTOVER_OK");
+  });
+
   it.each(["firewall", "current", "environment", "control-plane", "caddy-files", "caddy"])(
     "rolls back exact prior bytes and link after failure following %s mutation",
     (phase) => {
@@ -1668,7 +1680,7 @@ describe("Cockpit transactional live cutover", () => {
     expect(result.stdout).toContain("ROLLBACK_OK");
     expect(readFileSync(fixture.envPath)).toEqual(fixture.previousEnvironment);
     expect(readlinkSync(fixture.currentPath)).toBe(fixture.previousTarget);
-  });
+  }, 10_000);
 
   it("restores the exact package Caddyfile bytes after rollback", () => {
     const fixture = prepareCutover();
