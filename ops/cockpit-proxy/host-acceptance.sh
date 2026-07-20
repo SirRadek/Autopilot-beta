@@ -6,18 +6,37 @@ unset CURL_CA_BUNDLE SSL_CERT_FILE SSL_CERT_DIR
 
 base_url="${AUTOPILOT_PROXY_BASE_URL:-}"
 token_command="${AUTOPILOT_PROXY_TOKEN_COMMAND:-}"
+ca_cert="${AUTOPILOT_PROXY_CA_CERT:-}"
 case "$base_url" in
 	https://autopilot.local) tls_port=443 ;;
 	https://autopilot.local:8443) tls_port=8443 ;;
 	*) printf '%s\n' "AUTOPILOT_PROXY_BASE_URL must be an approved Autopilot HTTPS origin" >&2; exit 1 ;;
 esac
 [ -n "$token_command" ] || { printf '%s\n' "AUTOPILOT_PROXY_TOKEN_COMMAND is required" >&2; exit 1; }
+[ -n "$ca_cert" ] || { printf '%s\n' "AUTOPILOT_PROXY_CA_CERT is required" >&2; exit 1; }
+[[ "$ca_cert" == /* ]] && [ -f "$ca_cert" ] && [ ! -L "$ca_cert" ] || {
+	printf '%s\n' "AUTOPILOT_PROXY_CA_CERT must be an absolute regular non-symlink file" >&2
+	exit 1
+}
 
 test_mode="${AUTOPILOT_PROXY_TEST_MODE:-0}"
 case "$test_mode" in
 	0|1) ;;
 	*) exit 1 ;;
 esac
+certutil_bin=/usr/bin/certutil
+if [ "$test_mode" = 1 ]; then
+	certutil_bin="${AUTOPILOT_PROXY_TEST_CERTUTIL_BIN:-$certutil_bin}"
+fi
+[[ "$certutil_bin" == /* ]] && [ -f "$certutil_bin" ] && [ ! -L "$certutil_bin" ] && [ -x "$certutil_bin" ] || {
+	printf '%s\n' "certutil must be an absolute executable regular non-symlink file" >&2
+	exit 1
+}
+playwright_browsers_path="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+[[ "$playwright_browsers_path" == /* ]] && [ -d "$playwright_browsers_path" ] && [ ! -L "$playwright_browsers_path" ] || {
+	printf '%s\n' "PLAYWRIGHT_BROWSERS_PATH must be an absolute regular directory" >&2
+	exit 1
+}
 openssl_timeout=5s
 openssl_kill_after=2s
 token_timeout=30s
@@ -39,7 +58,7 @@ cleanup() {
 	local status=$?
 	trap - EXIT INT TERM
 	set +e
-	unset token TOKEN_TO_ENCODE spki_sha256 AUTOPILOT_PROXY_TEST_SPKI_SHA256
+	unset token TOKEN_TO_ENCODE
 	rm -rf -- "$work"
 	exit "$status"
 }
@@ -50,7 +69,7 @@ cookie_jar="$work/cookie.jar"
 chmod 600 "$cookie_jar"
 
 timeout --signal=TERM --kill-after="$openssl_kill_after" "$openssl_timeout" openssl s_client -connect "autopilot.local:$tls_port" -servername autopilot.local \
-	-verify_return_error </dev/null 2>/dev/null \
+	-verify_return_error -CAfile "$ca_cert" </dev/null 2>/dev/null \
 	| timeout --signal=TERM --kill-after="$openssl_kill_after" "$openssl_timeout" openssl x509 -noout -checkhost autopilot.local >/dev/null
 
 request() {
@@ -209,21 +228,18 @@ require_status "$status" 200 logout
 status="$(request logged-out GET "$base_url/auth/session" --cookie "$cookie_jar")"
 require_status "$status" 401 logged-out
 
-spki_sha256="$(timeout --signal=TERM --kill-after="$openssl_kill_after" "$openssl_timeout" bash -c '
-	set -o pipefail
-	openssl s_client -connect "$1" -servername autopilot.local -verify_return_error -verify_hostname autopilot.local </dev/null 2>/dev/null \
-		| openssl x509 -pubkey -noout \
-		| openssl pkey -pubin -outform DER \
-		| openssl dgst -sha256 -binary \
-		| openssl base64 -A
-' _ "autopilot.local:$tls_port")"
-[[ "$spki_sha256" =~ ^[A-Za-z0-9+/]{43}=$ ]] || {
-	printf '%s\n' "failed to derive the trusted proxy certificate SPKI pin" >&2
-	exit 1
-}
+browser_home="$work/browser-home"
+nss_db="$browser_home/.local/share/pki/nssdb"
+install -d -m 0700 "$nss_db"
+HOME="$browser_home" timeout --signal=TERM --kill-after="$openssl_kill_after" "$openssl_timeout" bash -c '
+	set -Eeuo pipefail
+	"$1" -d "sql:$2" -N --empty-password
+	"$1" -d "sql:$2" -A -t "C,," -n autopilot-caddy-root -i "$3"
+	"$1" -d "sql:$2" -L -n autopilot-caddy-root >/dev/null
+' _ "$certutil_bin" "$nss_db" "$ca_cert"
 
-AUTOPILOT_PROXY_TEST_TOKEN="$token" AUTOPILOT_PROXY_TEST_SPKI_SHA256="$spki_sha256" \
+HOME="$browser_home" PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers_path" AUTOPILOT_PROXY_TEST_TOKEN="$token" \
 	timeout --signal=TERM --kill-after="$playwright_kill_after" "$playwright_timeout" npx --no-install playwright test --config playwright.proxy.config.ts --output "$work/playwright-results"
-unset token TOKEN_TO_ENCODE spki_sha256 AUTOPILOT_PROXY_TEST_SPKI_SHA256
+unset token TOKEN_TO_ENCODE
 
 printf '%s\n' "HOST_PROXY_ACCEPTANCE_OK"

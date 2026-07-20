@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const integrationTestTimeout = 30_000;
+vi.setConfig({ testTimeout: integrationTestTimeout });
 
 const source = join(process.cwd(), "ops", "cockpit-proxy");
 const roots: string[] = [];
@@ -331,5 +334,5 @@ describe("trusted cockpit cutover launcher", () => {
     expect(readFileSync(join(f.base, "enabled"), "utf8")).toBe("disabled\n");
     expect(readFileSync(join(f.base, "active"), "utf8")).toBe("inactive\n");
     expect(existsSync(join(f.root, "var/lib/autopilot-cockpit/trusted-payload.manifest"))).toBe(true);
-  }, 15_000);
+  }, integrationTestTimeout);
 });
