@@ -31,6 +31,9 @@ checkout_uid=""
 checkout_gid=""
 environment_uid=""
 environment_gid=""
+environment_mode=""
+environment_size=""
+environment_mtime=""
 
 under_root() {
 	local value="$1"
@@ -273,6 +276,12 @@ transaction_backups_valid() {
 		case "$name:$(stat -c %a "$entry")" in environment:600|caddy-config:644|caddy-dropin:644|firewall-unit:644|nft-config:644|firewall-helper:755|firewall-identity:600) ;; *) return 1 ;; esac
 	done
 	(cd "$transaction_dir/backups" && sha256sum --check --strict "$transaction_dir/backups.sha256" >/dev/null)
+}
+
+load_environment_pre_metadata() {
+	local environment_device environment_inode environment_ctime
+	IFS=: read -r environment_device environment_inode environment_uid environment_gid environment_mode environment_size environment_mtime environment_ctime <<< "$environment_pre_identity"
+	[[ "$environment_device:$environment_inode:$environment_uid:$environment_gid:$environment_mode:$environment_size:$environment_mtime:$environment_ctime" =~ ^[0-9]+(:[0-9]+){7}$ ]]
 }
 
 if [ "${1:-}" = "--accept" ]; then
@@ -731,10 +740,10 @@ rollback() {
 	if [ "$firewall_safe" = 1 ] && [ "$created_nft_dir" = 1 ]; then remove_created_directory "$(dirname "$nft_config")" "$created_nft_dir_identity" || rollback_failed=1; fi
 	if [ "$firewall_safe" = 1 ] && [ "$created_helper_dir" = 1 ]; then remove_created_directory "$(dirname "$firewall_helper")" "$created_helper_dir_identity" || rollback_failed=1; fi
 	if [ "$environment_attempted" = 1 ]; then
-		if [ -f "$environment" ] && [ ! -L "$environment" ] && cmp -s "$transaction_dir/backups/environment" "$environment" && [ "$(stat -c %u:%g:%a:%s:%Y "$transaction_dir/backups/environment")" = "$(stat -c %u:%g:%a:%s:%Y "$environment")" ]; then :
+		if [ -f "$environment" ] && [ ! -L "$environment" ] && cmp -s "$transaction_dir/backups/environment" "$environment" && [ "$(stat -c %u:%g:%a:%s:%Y "$environment")" = "$environment_uid:$environment_gid:$environment_mode:$environment_size:$environment_mtime" ]; then :
 		elif [ -f "$environment" ] && [ ! -L "$environment" ] && [ "$(sha256sum "$environment" | awk '{print $1}')" = "$environment_owned_hash" ]; then
 			tmp_restore="$(dirname "$environment")/.restore-env-$ack_id"
-			if ! { register_temp "$tmp_restore" file "$(sha256sum "$transaction_dir/backups/environment" | awk '{print $1}')" rolling-back && cp -a "$transaction_dir/backups/environment" "$tmp_restore" && mv -T "$tmp_restore" "$environment" && clear_registered_temp rolling-back; }; then rollback_failed=1; live_state_safe=0; fi
+			if ! { register_temp "$tmp_restore" file "$(sha256sum "$transaction_dir/backups/environment" | awk '{print $1}')" rolling-back && cp -a "$transaction_dir/backups/environment" "$tmp_restore" && chown "$environment_uid:$environment_gid" "$tmp_restore" && [ "$(stat -c %u:%g:%a:%s:%Y "$tmp_restore")" = "$environment_uid:$environment_gid:$environment_mode:$environment_size:$environment_mtime" ] && mv -T "$tmp_restore" "$environment" && clear_registered_temp rolling-back; }; then rollback_failed=1; live_state_safe=0; fi
 		else rollback_failed=1; live_state_safe=0; fi
 	fi
 	if [ "$current_attempted" = 1 ]; then
@@ -806,6 +815,7 @@ if [ "$recover_mode" = 1 ]; then
 	environment_pre_identity="$(ledger_value environment_pre_identity)"
 	environment_pre_hash="$(ledger_value environment_pre_hash)"
 	[[ "$environment_pre_identity" =~ ^[0-9]+(:[0-9]+){7}$ && "$environment_pre_hash" =~ ^[a-f0-9]{64}$ ]] || exit 1
+	load_environment_pre_metadata || exit 1
 	environment_owned_hash="$(ledger_value environment_owned_hash)"
 	package_caddy_unit_hash="$(ledger_value package_caddy_unit_hash)"
 	package_caddy_unit_metadata="$(ledger_value package_caddy_unit_metadata)"
@@ -866,6 +876,7 @@ if [ "$test_mode" = 0 ]; then [ "$environment_uid" = "$(id -u radek)" ] && [ "$e
 validate_secure_cookie_environment "$environment"
 environment_pre_identity="$(stat -Lc %d:%i:%u:%g:%a:%s:%Y:%Z -- "$environment")"
 environment_pre_hash="$(sha256sum -- "$environment" | awk '{print $1}')"
+load_environment_pre_metadata
 loopback_checks
 require_active autopilot-control-plane.service
 require_active autopilot-control-plane-health.timer
@@ -948,9 +959,10 @@ runtime_created=1
 mkdir -m 0700 -- "$transaction_dir/backups"
 cp -a "$environment" "$transaction_dir/backups/environment"
 chmod 0600 "$transaction_dir/backups/environment"
+chown "$expected_uid:$expected_gid" "$transaction_dir/backups/environment"
 validate_secure_cookie_environment "$transaction_dir/backups/environment"
 [ "$(sha256sum -- "$transaction_dir/backups/environment" | awk '{print $1}')" = "$environment_pre_hash" ]
-[ "$(stat -Lc %u:%g:%a:%s:%Y -- "$transaction_dir/backups/environment")" = "$(stat -Lc %u:%g:%a:%s:%Y -- "$environment")" ]
+[ "$(stat -Lc %u:%g:%a:%s:%Y -- "$transaction_dir/backups/environment")" = "$expected_uid:$expected_gid:$environment_mode:$environment_size:$environment_mtime" ]
 for item in "caddy-config:$caddy_config" "caddy-dropin:$caddy_dropin" "firewall-unit:$firewall_unit" "nft-config:$nft_config" "firewall-helper:$firewall_helper" "firewall-identity:$firewall_identity"; do
 	name="${item%%:*}"; path="${item#*:}"
 	if [ -e "$path" ]; then [ -f "$path" ] && [ ! -L "$path" ] || exit 1; cp -a "$path" "$transaction_dir/backups/$name"; fi
