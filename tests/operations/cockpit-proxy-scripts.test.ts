@@ -499,7 +499,7 @@ if [[ "$*" == "-j list table inet autopilot_cockpit_isolated" ]]; then
   if [[ "\${STUB_FOREIGN_REPLACEMENT:-}" == nft ]] || [[ "\${STUB_POST_START_REPLACEMENT:-}" == nft && "$post_started" == 1 ]] || \
     [[ "\${STUB_POST_START_REPLACEMENT:-}" == nft-late && "$nft_checks" -ge 2 ]]; then nonce="$(printf '%064d' 8)"; fi
   comment="autopilot-isolated:$nonce"
-  printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit_isolated","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit_isolated","chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":8443}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"
+  printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit_isolated","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit_isolated","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit_isolated","chain":"input","expr":[{"match":{"op":"!=","left":{"meta":{"key":"iifname"}},"right":"lo"}},{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":8443}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"
   exit 0
 fi
 exit 0
@@ -507,6 +507,14 @@ exit 0
   writeExecutable(join(bin, "caddy"), `
 printf 'caddy %s\\n' "$*" >> "$STUB_LOG"
 [[ "\${STUB_CADDY_VALIDATE_FAIL:-0}" != 1 ]]
+`);
+  writeExecutable(join(bin, "setpriv"), `
+printf 'setpriv %s\\n' "$*" >> "$STUB_LOG"
+while (($#)); do
+  [[ "$1" == -- ]] && { shift; break; }
+  shift
+done
+exec "$@"
 `);
   writeExecutable(join(bin, "systemctl"), `
 printf 'systemctl %s\\n' "$*" >> "$STUB_LOG"
@@ -650,6 +658,8 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain("isolated-test-token");
     expect(`${result.stdout}${result.stderr}`).not.toContain("PRIVATE KEY");
     const log = readFileSync(prepared.stubs.log, "utf8");
+    expect(log).toMatch(/^setpriv --reuid \d+ --regid \d+ --clear-groups -- .*caddy validate /m);
+    expect(log).toContain('add rule inet autopilot_cockpit_isolated input iifname != "lo" tcp dport 8443 ip saddr != 192.168.122.1 drop');
     expect(log.indexOf("nft add table inet autopilot_cockpit_isolated"))
       .toBeLessThan(log.indexOf("systemd-run --unit=autopilot-cockpit-isolated-proxy"));
     expect(log).not.toContain("systemctl stop");
@@ -660,6 +670,8 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(readFileSync(join(prepared.runtime, "control-plane.env"), "utf8"))
       .toContain("CONTROL_PLANE_SECURE_COOKIES=true");
     const isolatedCaddyfile = readFileSync(join(prepared.runtime, "Caddyfile"), "utf8");
+    expect(isolatedCaddyfile).toContain("auto_https disable_redirects");
+    expect(isolatedCaddyfile).toContain("\n\troute {\n");
     expect(isolatedCaddyfile).toContain("@api path /auth /auth/*");
     expect(isolatedCaddyfile).not.toMatch(/@api path .*\/health/);
     expect(readFileSync(join(prepared.runtime, "autopilot-caddy-root.crt"), "utf8"))
@@ -945,6 +957,9 @@ describe("Cockpit isolated proxy acceptance", () => {
     const spec = readFileSync(join(process.cwd(), "tests", "browser-proxy", "cockpit-proxy.spec.ts"), "utf8");
 
     expect(config).toContain("ignoreHTTPSErrors: false");
+    expect(config).not.toContain("AUTOPILOT_PROXY_TEST_SPKI_SHA256");
+    expect(config).not.toContain("--ignore-certificate-errors-spki-list=");
+    expect(config).not.toMatch(/[`"']--ignore-certificate-errors[`"']/);
     expect(config).toMatch(/trace:\s*["']off["']/);
     expect(config).toMatch(/video:\s*["']off["']/);
     expect(config).toMatch(/screenshot:\s*["']off["']/);
@@ -962,17 +977,51 @@ function runHostAcceptance(extraEnv: NodeJS.ProcessEnv = {}) {
   const bin = join(root, "bin");
   const log = join(root, "host.log");
   const home = join(root, "home");
+  const browserCache = join(root, "browser-cache");
+  const caCert = join(root, "autopilot-caddy-root.crt");
   mkdirSync(bin);
   mkdirSync(home);
+  mkdirSync(browserCache);
+  writeFileSync(caCert, "test CA\n");
   writeFileSync(join(home, ".curlrc"), "--insecure\n--proxy https://evil.example\n");
   writeExecutable(join(bin, "openssl"), `
 printf 'openssl %s\\n' "$*" >> "$STUB_LOG"
 if [[ "\${1:-}" == s_client ]]; then printf '%s\\n' 'test certificate'; fi
-if [[ "\${1:-}" == x509 ]]; then cat >/dev/null; fi
+if [[ "\${1:-}" == x509 ]]; then
+  cat >/dev/null
+  [[ "$*" != *-pubkey* ]] || printf '%s\\n' '-----BEGIN PUBLIC KEY-----' 'test-public-key' '-----END PUBLIC KEY-----'
+fi
+`);
+  writeExecutable(join(bin, "certutil"), `
+printf 'certutil HOME=%s %s\n' "$HOME" "$*" >> "$STUB_LOG"
+[[ "$HOME" == */browser-home ]]
+[[ "$*" == *'-d sql:'* ]]
+if [[ "$*" == *' -N --empty-password'* ]]; then
+  mkdir -p "\${HOME}/.local/share/pki/nssdb"
+  : > "\${HOME}/.local/share/pki/nssdb/cert9.db"
+elif [[ "$*" == *' -A '* ]]; then
+  [[ "$*" == *'-t C,,'* && "$*" == *'-n autopilot-caddy-root'* && "$*" == *'-i '*autopilot-caddy-root.crt* ]]
+elif [[ "$*" == *' -L '* ]]; then
+  [[ "$*" == *'-n autopilot-caddy-root'* ]]
+fi
 `);
   writeExecutable(join(bin, "npx"), `
 [[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
+[[ -z "\${AUTOPILOT_PROXY_TEST_SPKI_SHA256:-}" ]]
+[[ "$HOME" == */browser-home ]]
+[[ "\${PLAYWRIGHT_BROWSERS_PATH:-}" == */browser-cache ]]
 [[ "\${1:-}" == --no-install ]]
+output=
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == --output ]]; then output="$2"; shift 2; else shift; fi
+done
+[[ "$output" == /*/playwright-results ]]
+printf 'playwright-output %s\n' "$output" >> "$STUB_LOG"
+if [[ "\${STUB_NPX_FAIL_WITH_ARTIFACT:-0}" == 1 ]]; then
+  mkdir -p "$output"
+  printf '%s' "$AUTOPILOT_PROXY_TEST_TOKEN" > "$output/error-context.md"
+  exit 1
+fi
 if [[ "\${STUB_NPX_IGNORE_TERM:-0}" == 1 ]]; then trap '' TERM; while :; do :; done; fi
 printf 'playwright trusted-origin\\n' >> "$STUB_LOG"
 `);
@@ -1009,12 +1058,13 @@ case "$name" in
     printf '%s\\n' 'HTTP/2 401' 'Cache-Control: no-store' > "$headers"
     printf unauthorized > "$body"; printf 401 ;;
   unsupported)
+    unsupported_status="\${STUB_UNSUPPORTED_STATUS:-405}"
     if [[ "\${STUB_UNSUPPORTED_API_SHAPED:-0}" == 1 ]]; then
-      printf '%s\\n' 'HTTP/2 405' 'Cache-Control: no-store' 'Content-Type: application/json' > "$headers"
+      printf '%s\\n' "HTTP/2 $unsupported_status" 'Cache-Control: no-store' 'Content-Type: application/json' > "$headers"
     else
-      printf '%s\\n' 'HTTP/2 405' 'Cache-Control: no-cache' 'Content-Type: text/plain; charset=utf-8' > "$headers"
+      printf '%s\\n' "HTTP/2 $unsupported_status" 'Cache-Control: no-cache' 'Content-Type: text/plain; charset=utf-8' > "$headers"
     fi
-    printf method > "$body"; printf 405 ;;
+    printf method > "$body"; printf '%s' "$unsupported_status" ;;
   login)
     case "\${STUB_COOKIE_VARIANT:-valid}" in
       valid) cookie='autopilot_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; HttpOnly; SameSite=Lax; Path=/; Secure' ;;
@@ -1060,8 +1110,12 @@ esac
       CURL_CA_BUNDLE: join(root, "evil-ca.pem"),
       SSL_CERT_FILE: join(root, "evil-cert.pem"),
       SSL_CERT_DIR: join(root, "evil-certs"),
+      PLAYWRIGHT_BROWSERS_PATH: browserCache,
       AUTOPILOT_PROXY_BASE_URL: "https://autopilot.local:8443",
+      AUTOPILOT_PROXY_CA_CERT: caCert,
       AUTOPILOT_PROXY_TOKEN_COMMAND: extraEnv.TEST_TOKEN_COMMAND ?? "printf %s behavioral-secret",
+      AUTOPILOT_PROXY_TEST_MODE: "1",
+      AUTOPILOT_PROXY_TEST_CERTUTIL_BIN: join(bin, "certutil"),
     },
   });
   return { result, log };
@@ -1078,16 +1132,23 @@ describe("Cockpit trusted host acceptance", () => {
     expect(source).toContain("openssl s_client");
     expect(source).toContain("-verify_return_error");
     expect(source).toContain("-checkhost autopilot.local");
+    expect(source).toContain("AUTOPILOT_PROXY_CA_CERT");
+    expect(source).toContain("certutil");
+    expect(source).toContain("-N --empty-password");
+    expect(source).toContain('-A -t "C,," -n autopilot-caddy-root');
+    expect(source).toContain('HOME="$browser_home"');
+    expect(source).not.toContain("AUTOPILOT_PROXY_TEST_SPKI_SHA256");
     expect(source).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
     expect(source).not.toMatch(/set\s+-[^\n]*x/);
     expect(source).toContain("HOST_PROXY_ACCEPTANCE_OK");
     expect(source).toContain("--connect-timeout 2");
     expect(source).toContain("--max-time 5");
     expect(source).toContain("npx --no-install playwright");
+    expect(source).toContain('--output "$work/playwright-results"');
     const isolatedSource = readFileSync(isolatedAcceptance, "utf8");
     const timeoutWrappers = `${source}\n${isolatedSource}`.split("\n")
       .filter((line) => /\btimeout\b/.test(line) && !line.includes("--connect-timeout"));
-    expect(timeoutWrappers).toHaveLength(7);
+    expect(timeoutWrappers).toHaveLength(8);
     expect(timeoutWrappers.every((line) => /timeout --signal=TERM --kill-after=/.test(line))).toBe(true);
   });
 
@@ -1102,11 +1163,29 @@ describe("Cockpit trusted host acceptance", () => {
     expect(commands).toContain("openssl s_client");
     expect(commands).toContain("-verify_return_error");
     expect(commands).toContain("openssl x509 -noout -checkhost autopilot.local");
+    expect(commands).toContain("certutil HOME=");
+    expect(commands).toContain("-N --empty-password");
+    expect(commands).toContain("-A -t C,, -n autopilot-caddy-root");
     expect(commands).toContain("cookie-mode 600");
     expect(commands).toContain("playwright trusted-origin");
     expect(commands).toContain("evil-referer.headers");
     expect(commands).not.toContain("behavioral-secret");
     expect(commands).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
+  });
+
+  it("accepts a non-API 404 for an unsupported static lookalike POST", () => {
+    const { result } = runHostAcceptance({ STUB_UNSUPPORTED_STATUS: "404" });
+
+    expect(result.status).toBe(0);
+  });
+
+  it("cleans Playwright failure artifacts that could contain the token", () => {
+    const { result, log } = runHostAcceptance({ STUB_NPX_FAIL_WITH_ARTIFACT: "1" });
+
+    expect(result.status).not.toBe(0);
+    const output = readFileSync(log, "utf8").match(/^playwright-output (.+)$/m)?.[1];
+    expect(output).toBeTruthy();
+    expect(existsSync(output!)).toBe(false);
   });
 
   it.each([

@@ -109,6 +109,7 @@ const chain = entries.filter((e) => e.chain?.family === "inet" && e.chain?.table
 const rule = entries.filter((e) => e.rule?.family === "inet" && e.rule?.table === process.env.NFT_TABLE_NAME && e.rule?.chain === "input");
 if (table.length !== 1 || chain.length !== 1 || rule.length !== 1) process.exit(1);
 const expectedExpr = [
+  { match: { op: "!=", left: { meta: { key: "iifname" } }, right: "lo" } },
   { match: { op: "==", left: { payload: { protocol: "tcp", field: "dport" } }, right: 8443 } },
   { match: { op: "!=", left: { payload: { protocol: "ip", field: "saddr" } }, right: "192.168.122.1" } },
   { drop: null },
@@ -328,6 +329,7 @@ caddyfile="$isolated_runtime/Caddyfile"
 cat > "$caddyfile" <<EOF
 {
 	admin 127.0.0.1:2020
+	auto_https disable_redirects
 }
 https://autopilot.local:8443 {
 	bind 192.168.122.99
@@ -339,33 +341,43 @@ https://autopilot.local:8443 {
 		Referrer-Policy "no-referrer"
 		Strict-Transport-Security "max-age=300"
 	}
-	@api path /auth /auth/* /status /status/* /sessions /sessions/* /approvals /approvals/* /workers /workers/* /providers /providers/* /projects /projects/* /runs /runs/* /incidents /incidents/* /observability /observability/*
-	handle @api {
-		header Cache-Control "no-store"
-		reverse_proxy 127.0.0.1:8877
+	route {
+		@api path /auth /auth/* /status /status/* /sessions /sessions/* /approvals /approvals/* /workers /workers/* /providers /providers/* /projects /projects/* /runs /runs/* /incidents /incidents/* /observability /observability/*
+		handle @api {
+			header Cache-Control "no-store"
+			reverse_proxy 127.0.0.1:8877
+		}
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@document not path /assets/*
+		header @document Cache-Control "no-cache"
+		@spa {
+			method GET HEAD
+			not file
+		}
+		rewrite @spa /index.html
+		file_server
 	}
-	@assets path /assets/*
-	header @assets Cache-Control "public, max-age=31536000, immutable"
-	@document not path /assets/*
-	header @document Cache-Control "no-cache"
-	@spa {
-		method GET HEAD
-		not file
-	}
-	rewrite @spa /index.html
-	file_server
 }
 EOF
 chown "$caddy_uid:$caddy_gid" "$caddyfile"
 chmod 0640 "$caddyfile"
-XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/caddy-config" \
-	caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
+if [ "$test_mode" = 1 ]; then
+	setpriv --reuid "$caddy_uid" --regid "$caddy_gid" --clear-groups -- \
+		env XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/caddy-config" \
+		caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
+else
+	/usr/bin/setpriv --reuid "$caddy_uid" --regid "$caddy_gid" --clear-groups -- \
+		/usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+		XDG_DATA_HOME="$isolated_runtime/caddy-data" XDG_CONFIG_HOME="$isolated_runtime/caddy-config" \
+		/usr/bin/caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null
+fi
 
 nft_identity="autopilot-isolated:$ownership_nonce"
 nft -f - <<EOF
 add table inet $table_name { comment "$nft_identity"; }
 add chain inet $table_name input { type filter hook input priority -10; policy accept; comment "$nft_identity"; }
-add rule inet $table_name input tcp dport 8443 ip saddr != 192.168.122.1 drop comment "$nft_identity"
+add rule inet $table_name input iifname != "lo" tcp dport 8443 ip saddr != 192.168.122.1 drop comment "$nft_identity"
 EOF
 nft_created=1
 

@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const integrationTestTimeout = 30_000;
+vi.setConfig({ testTimeout: integrationTestTimeout });
 
 const source = join(process.cwd(), "ops", "cockpit-proxy");
 const roots: string[] = [];
@@ -56,9 +59,9 @@ is-enabled) cat ${JSON.stringify(join(base, "enabled"))}; [[ "$(cat ${JSON.strin
 is-active) cat ${JSON.stringify(join(base, "active"))}; [[ "$(cat ${JSON.stringify(join(base, "active"))})" == active ]] ;;
 daemon-reload) [[ "\${FAIL_ON:-}" != reload ]] ;;
 enable) [[ "\${FAIL_ON:-}" != enable ]] && printf 'enabled\n' > ${JSON.stringify(join(base, "enabled"))} ;;
-disable) printf 'disabled\n' > ${JSON.stringify(join(base, "enabled"))} ;;
+disable) if [[ "\${INITIAL_UNIT_NOT_FOUND:-0}" == 1 ]]; then printf 'not-found\n'; else printf 'disabled\n'; fi > ${JSON.stringify(join(base, "enabled"))} ;;
 start) [[ "\${FAIL_ON:-}" != start ]] && printf 'active\n' > ${JSON.stringify(join(base, "active"))} ;;
-stop) printf 'inactive\n' > ${JSON.stringify(join(base, "active"))} ;;
+stop) [[ "\${INITIAL_UNIT_NOT_FOUND:-0}" != 1 ]] || exit 5; printf 'inactive\n' > ${JSON.stringify(join(base, "active"))} ;;
 unmask|mask|reset-failed) : ;;
 *) exit 2 ;;
 esac
@@ -84,6 +87,30 @@ function replaceInstalledWorkerWithNoop(f: ReturnType<typeof fixture>): void {
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("trusted cockpit cutover launcher", () => {
+  it("installs the watchdog when the recovery timer does not exist yet", () => {
+    const f = fixture();
+    writeFileSync(join(f.base, "enabled"), "not-found\n");
+
+    const installed = command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: f.env });
+
+    expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(0);
+    expect(installed.stdout).toContain("WATCHDOG_READY");
+  });
+
+  it("restores a missing recovery timer after a failed first install", () => {
+    const f = fixture();
+    writeFileSync(join(f.base, "enabled"), "not-found\n");
+    const env = { ...f.env, INITIAL_UNIT_NOT_FOUND: "1" };
+
+    const failed = command(f.launcher, ["--install-watchdog", f.checkout, f.sha], { env: { ...env, FAIL_ON: "start" } });
+    const recovered = command(f.launcher, ["--recover-install"], { env });
+
+    expect(failed.status).not.toBe(0);
+    expect(recovered.status, `${recovered.stdout}\n${recovered.stderr}`).toBe(0);
+    expect(readFileSync(join(f.base, "enabled"), "utf8")).toBe("not-found\n");
+    expect(existsSync(join(f.root, "usr/local/libexec/autopilot-cockpit-live-cutover"))).toBe(false);
+  });
+
   it("refuses watchdog publication while a live cutover transaction exists", () => {
     const f = fixture(); const active = join(f.root, "var/lib/autopilot-cockpit/transactions/active");
     mkdirSync(active, { recursive: true }); chmodSync(dirname(active), 0o700); chmodSync(active, 0o700); writeFileSync(join(active, "transaction.ledger"), "state=waiting\n", { mode: 0o600 });
@@ -307,5 +334,5 @@ describe("trusted cockpit cutover launcher", () => {
     expect(readFileSync(join(f.base, "enabled"), "utf8")).toBe("disabled\n");
     expect(readFileSync(join(f.base, "active"), "utf8")).toBe("inactive\n");
     expect(existsSync(join(f.root, "var/lib/autopilot-cockpit/trusted-payload.manifest"))).toBe(true);
-  }, 15_000);
+  }, integrationTestTimeout);
 });

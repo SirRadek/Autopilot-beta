@@ -324,7 +324,7 @@ validate_install_intent_file() {
 	END { if(NR!=n) exit 1; for(x in a)if(s[x]!=1)exit 1 }' "$candidate" || return 1
 	[ "$(awk -F= '$1=="version"{print $2}' "$candidate")" = autopilot-cockpit-install-intent-v1 ]
 	[ "$(awk -F= '$1=="phase"{print $2}' "$candidate")" = initializing ]
-	case "$(awk -F= '$1=="old_enabled"{print $2}' "$candidate")" in enabled|disabled|masked|masked-runtime) ;; *) return 1 ;; esac
+	case "$(awk -F= '$1=="old_enabled"{print $2}' "$candidate")" in enabled|disabled|masked|masked-runtime|not-found) ;; *) return 1 ;; esac
 	case "$(awk -F= '$1=="old_active"{print $2}' "$candidate")" in active|inactive) ;; *) return 1 ;; esac
 	local existed identity
 	existed="$(awk -F= '$1=="payload_dir_existed"{print $2}' "$candidate")"; identity="$(awk -F= '$1=="payload_dir_identity"{print $2}' "$candidate")"
@@ -387,7 +387,7 @@ write_install_intent() {
 prepare_install_intent() {
 	install_old_enabled="$(systemctl is-enabled "$timer_unit" 2>/dev/null || :)"; [ -n "$install_old_enabled" ] || install_old_enabled=disabled
 	install_old_active="$(systemctl is-active "$timer_unit" 2>/dev/null || :)"; [ -n "$install_old_active" ] || install_old_active=inactive
-	case "$install_old_enabled" in enabled|disabled|masked|masked-runtime) ;; *) return 1 ;; esac
+	case "$install_old_enabled" in enabled|disabled|masked|masked-runtime|not-found) ;; *) return 1 ;; esac
 	case "$install_old_active" in active|inactive) ;; *) return 1 ;; esac
 	for item in "${managed_paths[@]}" "$manifest"; do
 		if [ -e "$item" ] || [ -L "$item" ]; then verify_installed_payload || { printf '%s\n' "refusing foreign installed watchdog payload" >&2; return 1; }; break; fi
@@ -465,7 +465,7 @@ recover_install_transaction() {
 	validate_install_intent || return 1
 	install_old_enabled="$(awk -F= '$1=="old_enabled"{print $2}' "$install_intent")"; install_old_active="$(awk -F= '$1=="old_active"{print $2}' "$install_intent")"
 	payload_dir_existed="$(awk -F= '$1=="payload_dir_existed"{print $2}' "$install_intent")"; payload_dir_identity="$(awk -F= '$1=="payload_dir_identity"{print $2}' "$install_intent")"
-	case "$install_old_enabled" in enabled|disabled|masked|masked-runtime) ;; *) return 1 ;; esac
+	case "$install_old_enabled" in enabled|disabled|masked|masked-runtime|not-found) ;; *) return 1 ;; esac
 	case "$install_old_active" in active|inactive) ;; *) return 1 ;; esac
 	case "$payload_dir_existed" in 0) [ -z "$payload_dir_identity" ] || return 1 ;; 1) [[ "$payload_dir_identity" =~ ^[0-9]+(:[0-9]+){4}$ ]] || return 1 ;; *) return 1 ;; esac
 	if [ ! -e "$install_transaction" ] && [ ! -L "$install_transaction" ]; then remove_install_stage || return 1; rm -f -- "$install_intent"; return 0; fi
@@ -519,8 +519,8 @@ recover_install_transaction() {
 		[ "$failed" = 0 ] && rmdir -- "$trusted_payload" || failed=1
 	fi
 	systemctl daemon-reload || failed=1
-	case "$install_old_enabled" in enabled) systemctl unmask "$timer_unit" >/dev/null 2>&1 && systemctl enable "$timer_unit" >/dev/null || failed=1 ;; disabled) systemctl unmask "$timer_unit" >/dev/null 2>&1 || :; systemctl disable "$timer_unit" >/dev/null || failed=1 ;; masked) systemctl mask "$timer_unit" >/dev/null || failed=1 ;; masked-runtime) systemctl mask --runtime "$timer_unit" >/dev/null || failed=1 ;; *) failed=1 ;; esac
-	case "$install_old_active" in active) systemctl start "$timer_unit" || failed=1 ;; inactive) systemctl stop "$timer_unit" || failed=1 ;; *) failed=1 ;; esac
+	case "$install_old_enabled" in enabled) systemctl unmask "$timer_unit" >/dev/null 2>&1 && systemctl enable "$timer_unit" >/dev/null || failed=1 ;; disabled) systemctl unmask "$timer_unit" >/dev/null 2>&1 || :; systemctl disable "$timer_unit" >/dev/null || failed=1 ;; masked) systemctl mask "$timer_unit" >/dev/null || failed=1 ;; masked-runtime) systemctl mask --runtime "$timer_unit" >/dev/null || failed=1 ;; not-found) systemctl unmask "$timer_unit" >/dev/null 2>&1 || :; systemctl disable "$timer_unit" >/dev/null 2>&1 || : ;; *) failed=1 ;; esac
+	case "$install_old_active" in active) systemctl start "$timer_unit" || failed=1 ;; inactive) if [ "$install_old_enabled" = not-found ]; then systemctl stop "$timer_unit" >/dev/null 2>&1 || :; else systemctl stop "$timer_unit" || failed=1; fi ;; *) failed=1 ;; esac
 	[ "$(systemctl is-enabled "$timer_unit" 2>/dev/null || :)" = "$install_old_enabled" ] || failed=1
 	[ "$(systemctl is-active "$timer_unit" 2>/dev/null || :)" = "$install_old_active" ] || failed=1
 	[ "$failed" = 0 ] || return 1

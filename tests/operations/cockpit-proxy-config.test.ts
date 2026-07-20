@@ -23,12 +23,15 @@ describe("Cockpit production proxy boundary", () => {
     expect(caddy).toContain("tls internal");
     expect(caddy).toContain("reverse_proxy 127.0.0.1:8787");
     expect(caddy).toContain("root * /srv/autopilot-cockpit/current");
+    expect(caddy).toContain("\n\troute {\n");
     expect(caddy).toContain("Strict-Transport-Security \"max-age=300\"");
     expect(caddy).not.toMatch(/0\.0\.0\.0|on_demand|cors|log\s*\{/i);
     for (const root of ["auth", "status", "sessions", "approvals", "workers", "providers", "projects", "runs", "incidents", "observability"]) {
       expect(caddy).toContain(`/${root} /${root}/*`);
     }
     expect(caddy).not.toContain("/auth*");
+    expect(caddy.indexOf("handle @api")).toBeLessThan(caddy.indexOf("rewrite @spa /index.html"));
+    expect(caddy.indexOf("rewrite @spa /index.html")).toBeLessThan(caddy.indexOf("file_server"));
     expect(nft).toContain("table inet autopilot_cockpit");
     expect(nft).toContain("__AUTOPILOT_COCKPIT_NONCE__");
     expect(nft).toContain("tcp dport { 80, 443 } ip saddr != 192.168.122.1 drop");
