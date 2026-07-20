@@ -871,8 +871,9 @@ require_active autopilot-control-plane.service
 require_active autopilot-control-plane-health.timer
 require_active autopilot-state-maintenance.timer
 short_command dpkg -s caddy >/dev/null
-caddy_enable_state="$(short_command systemctl is-enabled caddy.service 2>/dev/null)"
-case "$caddy_enable_state" in masked|masked-runtime) ;; *) exit 1 ;; esac
+inspect_command short_command systemctl is-enabled caddy.service
+caddy_enable_state="$inspection_output"
+case "$inspection_rc:$caddy_enable_state" in 1:masked|1:masked-runtime) ;; *) exit 1 ;; esac
 inspect_command short_command systemctl is-active caddy.service
 if [ "$inspection_rc" -ne 3 ] || { [ "$inspection_output" != inactive ] && [ "$inspection_output" != failed ]; }; then exit 1; fi
 inspect_command short_command dpkg -V caddy
