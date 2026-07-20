@@ -1884,6 +1884,34 @@ describe("Cockpit transactional live cutover", () => {
     expect(second.stdout).toContain("RECOVERY_NOT_NEEDED");
   }, 15_000);
 
+  it.runIf(alternateGid !== undefined)("root-owns transaction backups and restores the EnvironmentFile owner during crash recovery", async () => {
+    const fixture = prepareCutover();
+    chownSync(fixture.envPath, process.getuid!(), alternateGid!);
+    const before = statSync(fixture.envPath);
+    const child = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
+      env: { ...fixture.env, AUTOPILOT_CUTOVER_TEST_PAUSE_AFTER: "environment" },
+    });
+    const active = join(fixture.root, "var", "lib", "autopilot-cockpit", "transactions", "active");
+    const ledger = join(active, "transaction.ledger");
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && (!existsSync(ledger) || !readFileSync(ledger, "utf8").includes("environment_changed=1"))) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(existsSync(ledger)).toBe(true);
+    expect(statSync(join(active, "backups", "environment")).gid).toBe(process.getgid!());
+    child.kill("SIGKILL");
+    await new Promise((resolve) => child.once("close", resolve));
+
+    const recovered = spawnSync("bash", [liveCutover, "--recover"], { encoding: "utf8", env: fixture.env });
+
+    expect(recovered.status, `${recovered.stdout}\n${recovered.stderr}`).toBe(0);
+    expect(recovered.stdout).toContain("ROLLBACK_OK");
+    expect(readFileSync(fixture.envPath)).toEqual(fixture.previousEnvironment);
+    expect(statSync(fixture.envPath).uid).toBe(before.uid);
+    expect(statSync(fixture.envPath).gid).toBe(before.gid);
+    expect(statSync(fixture.envPath).mode & 0o777).toBe(before.mode & 0o777);
+  }, 15_000);
+
   it("reconciles current_attempted as a no-op when publication never happened and prior current was absent", async () => {
     const fixture = prepareCutover(); rmSync(fixture.currentPath);
     const child = spawn("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
