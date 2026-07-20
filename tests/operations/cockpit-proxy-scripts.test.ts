@@ -1334,10 +1334,10 @@ function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; 
   stubExecutable(stubDir, "dpkg", `${log}\n[[ "$1" == -s && "$2" == caddy ]] && exit 0\nif [[ "$1" == -V && "$2" == caddy ]]; then [[ "\${STUB_DPKG_VERIFY_ERROR:-0}" == 1 ]] && exit 2; [[ "\${STUB_DPKG_VERIFY_OUTPUT:-0}" == 1 ]] && printf '??5?????? c /etc/caddy/Caddyfile\\n'; exit 0; fi\nexit 1`);
   stubExecutable(stubDir, "caddy", `${log}\n[[ "$1" == validate ]]`);
   stubExecutable(stubDir, "systemd-run", `${log}\nexit 0`);
-  stubExecutable(stubDir, "nft", `${log}\nstate="$STUB_NFT_STATE"\nif [[ "$*" == --check* ]]; then [[ "\${STUB_NFT_CHECK_ERROR:-0}" == 1 ]] && exit 1; exit 0; fi\nif [[ "$*" == '-j list tables' ]]; then [[ "\${STUB_NFT_INSPECTION_ERROR:-0}" == 1 ]] && exit 2; if [[ "\${STUB_NFT_EXISTING:-0}" == 1 || -f "$state" ]]; then printf '%s' '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit"}}]}'; else printf '%s' '{"nftables":[]}'; fi; exit 0; fi\nif [[ "$*" == '-j list table inet autopilot_cockpit' ]]; then nonce="$(cat "$state" 2>/dev/null || true)"; comment="autopilot-cockpit:$nonce"; [[ "$nonce" == foreign ]] && comment=foreign; printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit","chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":{"set":[80,443]}}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"; exit 0; fi\nexit 0`);
+  stubExecutable(stubDir, "nft", `${log}\nstate="$STUB_NFT_STATE"\nif [[ "$*" == --check* ]]; then [[ "\${STUB_NFT_CHECK_ERROR:-0}" == 1 ]] && exit 1; if [[ -n "\${STUB_SWAP_CHECKOUT:-}" && ! -e "\${STUB_SWAP_CHECKOUT}.original" ]]; then mv -- "$STUB_SWAP_CHECKOUT" "\${STUB_SWAP_CHECKOUT}.original"; mkdir -- "$STUB_SWAP_CHECKOUT"; fi; exit 0; fi\nif [[ "$*" == '-j list tables' ]]; then [[ "\${STUB_NFT_INSPECTION_ERROR:-0}" == 1 ]] && exit 2; if [[ "\${STUB_NFT_EXISTING:-0}" == 1 || -f "$state" ]]; then printf '%s' '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit"}}]}'; else printf '%s' '{"nftables":[]}'; fi; exit 0; fi\nif [[ "$*" == '-j list table inet autopilot_cockpit' ]]; then nonce="$(cat "$state" 2>/dev/null || true)"; comment="autopilot-cockpit:$nonce"; [[ "$nonce" == foreign ]] && comment=foreign; printf '{"nftables":[{"table":{"family":"inet","name":"autopilot_cockpit","comment":"%s"}},{"chain":{"family":"inet","table":"autopilot_cockpit","name":"input","type":"filter","hook":"input","prio":-10,"policy":"accept","comment":"%s"}},{"rule":{"family":"inet","table":"autopilot_cockpit","chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":{"set":[80,443]}}},{"match":{"op":"!=","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.122.1"}},{"drop":null}],"comment":"%s"}}]}' "$comment" "$comment" "$comment"; exit 0; fi\nexit 0`);
   stubExecutable(stubDir, "systemctl", `${log}\nif [[ -n "\${STUB_SYSTEMCTL_FAIL_ON:-}" && "$*" == "$STUB_SYSTEMCTL_FAIL_ON" && "$*" != 'start autopilot-cockpit-firewall.service' ]]; then exit 1; fi\nif [[ "$*" == 'start autopilot-cockpit-firewall.service' ]]; then [[ "\${STUB_FIREWALL_FAIL_BEFORE_NFT:-0}" == 1 ]] && exit 1; cat "$STUB_FIREWALL_IDENTITY" > "$STUB_NFT_STATE"; fi\nif [[ "$*" == 'restart autopilot-control-plane.service' ]]; then case "\${STUB_REPLACE_ON_CONTROL_RESTART:-}" in current) rm -f "$STUB_CURRENT_PATH"; ln -s 'releases/2222222222222222222222222222222222222222' "$STUB_CURRENT_PATH"; exit 1;; environment) printf 'FOREIGN=1\\n' > "$STUB_ENV_PATH"; exit 1;; esac; fi\nif [[ "$*" == 'stop caddy.service' && "\${STUB_FOREIGN_NFT_DURING_ROLLBACK:-0}" == 1 ]]; then printf 'foreign\\n' > "$STUB_NFT_STATE"; fi\nif [[ "$*" == 'stop autopilot-cockpit-firewall.service' && -f "$STUB_NFT_STATE" ]]; then rm -f "$STUB_NFT_STATE"; fi\nif [[ -n "\${STUB_SYSTEMCTL_FAIL_ON:-}" && "$*" == "$STUB_SYSTEMCTL_FAIL_ON" ]]; then exit 1; fi\ncase "$*" in\n'is-enabled caddy.service') if [[ "\${STUB_RUNTIME_MASK:-0}" == 1 ]]; then printf 'masked-runtime\\n'; else printf 'masked\\n'; fi ;;\n'is-active caddy.service') [[ "\${STUB_CADDY_INSPECTION_ERROR:-0}" == 1 ]] && exit 1; if grep -q '^systemctl:start caddy.service$' "$STUB_LOG" && ! grep -q '^systemctl:stop caddy.service$' "$STUB_LOG"; then if [[ "\${STUB_FOREIGN_CADDY_BEFORE_ROLLBACK:-0}" == 1 ]]; then printf 'foreign\\n' > "$STUB_CADDY_CONFIG"; exit 1; fi; case "\${STUB_REPLACE_CADDY_IDENTITY:-}" in dropin) printf 'foreign\\n' > "$STUB_CADDY_DROPIN";; unit) printf 'foreign\\n' > "$STUB_CADDY_PACKAGE_UNIT";; esac; printf 'active\\n'; else printf 'inactive\\n'; exit 3; fi ;;\n'is-active autopilot-control-plane.service') printf 'active\\n' ;;\n'is-active autopilot-control-plane-health.timer') printf 'active\\n' ;;\n'is-active autopilot-state-maintenance.timer') printf 'active\\n' ;;\n'is-active autopilot-cockpit-firewall.service') if grep -q '^systemctl:stop autopilot-cockpit-firewall.service$' "$STUB_LOG" && [[ ! -f "$STUB_NFT_STATE" ]]; then printf 'inactive\\n'; exit 3; else printf 'active\\n'; fi ;;\n*) exit 0 ;;\nesac`);
   stubExecutable(stubDir, "curl", `${log}\nout=''; url=''; while (($#)); do case "$1" in --output) out="$2"; shift 2;; http://*) url="$1"; shift;; *) shift;; esac; done\nif [[ "$url" == */ready ]]; then printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$out"; else printf '%s' '{"ok":true}' > "$out"; fi\nprintf 200`);
-  stubExecutable(stubDir, "npm", `${log}\n[[ "\${STUB_NPM_REQUIRE_BOUNDARY:-0}" != 1 || "\${AUTOPILOT_PRIVDROP_ACTIVE:-0}" == 1 ]] || exit 96\n[[ -z "\${MALICIOUS_ROOT_MARKER:-}" ]] || exit 97\nprintf 'npm-boundary:uid=%s:user=%s:path=%s\\n' "$(id -u)" "\${USER:-}" "\${PATH:-}" >> "$STUB_LOG"\ncase "$*" in\n*ops:backup*) archive="$AUTOPILOT_CUTOVER_TEST_ROOT/backup.apbackup.json"; printf '{}\\n' > "$archive"; printf '{"path":"%s","validation":{"valid":true}}\\n' "$archive" ;;\n*ops:recovery-drill*) printf '{"ok":true,"validation":{"ready":true,"reconciled":true,"errors":[]}}\\n' ;;\n*ops:boundary-check*) printf '{"ok":true}\\n' ;;\n*smoke:cockpit-run*) printf '{"mode":"dry-run","provider_invoked":false,"run_status":"completed"}\\n' ;;\n*) exit 1 ;;\nesac`);
+  stubExecutable(stubDir, "npm", `${log}\n[[ "\${STUB_NPM_REQUIRE_BOUNDARY:-0}" != 1 || "\${AUTOPILOT_PRIVDROP_ACTIVE:-0}" == 1 ]] || exit 96\n[[ -z "\${MALICIOUS_ROOT_MARKER:-}" ]] || exit 97\nprintf 'npm-boundary:uid=%s:user=%s:path=%s:cwd=%s\\n' "$(id -u)" "\${USER:-}" "\${PATH:-}" "$(pwd -P)" >> "$STUB_LOG"\ncase "$*" in\n*ops:backup*) archive="$AUTOPILOT_CUTOVER_TEST_ROOT/backup.apbackup.json"; printf '{}\\n' > "$archive"; printf '{"path":"%s","validation":{"valid":true}}\\n' "$archive" ;;\n*ops:recovery-drill*) printf '{"ok":true,"validation":{"ready":true,"reconciled":true,"errors":[]}}\\n' ;;\n*ops:boundary-check*) printf '{"ok":true}\\n' ;;\n*smoke:cockpit-run*) printf '{"mode":"dry-run","provider_invoked":false,"run_status":"completed"}\\n' ;;\n*) exit 1 ;;\nesac`);
 
   const systemctlBase = join(stubDir, "systemctl-base");
   renameSync(join(stubDir, "systemctl"), systemctlBase);
@@ -1368,10 +1368,11 @@ function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; 
   };
 }
 
-function runCutover(fixture: CutoverFixture, extraEnv: NodeJS.ProcessEnv = {}) {
+function runCutover(fixture: CutoverFixture, extraEnv: NodeJS.ProcessEnv = {}, cwd?: string) {
   return spawnSync("bash", [liveCutover, fixture.checkout, fixture.releaseRoot, fixture.sha], {
     encoding: "utf8",
     env: { ...fixture.env, ...extraEnv },
+    cwd,
     timeout: 10_000,
   });
 }
@@ -1407,6 +1408,25 @@ function provisionTrustedLauncher(fixture: CutoverFixture): { launcher: string; 
 }
 
 describe("Cockpit transactional live cutover", () => {
+  it("runs every npm recovery gate from the validated checkout instead of the caller cwd", () => {
+    const fixture = prepareCutover();
+    const foreignCwd = makeTempDir();
+    const result = runCutover(fixture, {}, foreignCwd);
+    expect(result.status, `${result.stdout}\n${result.stderr}\n${readFileSync(fixture.stubLog, "utf8")}`).toBe(0);
+    const boundaries = readFileSync(fixture.stubLog, "utf8").split("\n").filter((line) => line.startsWith("npm-boundary:"));
+    expect(boundaries).toHaveLength(2);
+    for (const boundary of boundaries) expect(boundary).toContain(`:cwd=${fixture.checkout}`);
+  });
+
+  it("fails closed if the validated checkout path changes before an npm recovery gate", () => {
+    const fixture = prepareCutover();
+    const result = runCutover(fixture, { STUB_SWAP_CHECKOUT: fixture.checkout }, fixture.checkout);
+    expect(result.status).not.toBe(0);
+    const events = readFileSync(fixture.stubLog, "utf8");
+    expect(events).not.toContain("npm-boundary:");
+    expect(existsSync(join(fixture.root, "etc", "systemd", "system", "autopilot-cockpit-firewall.service"))).toBe(false);
+  });
+
   it("hands its root transaction lock to the real worker without self-deadlocking", () => {
     const fixture = prepareCutover();
     const trusted = provisionTrustedLauncher(fixture);

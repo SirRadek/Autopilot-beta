@@ -45,27 +45,39 @@ long_command() {
 	timeout --signal=TERM --kill-after=10s 180s "$@"
 }
 
+checkout_identity_valid() {
+	[ -n "${checkout_handle:-}" ] && [ -n "${checkout_identity:-}" ] || return 1
+	[ "$(stat -Lc %d:%i:%u:%g:%a -- "$checkout_handle")" = "$checkout_identity" ] || return 1
+	[ "$(stat -Lc %d:%i:%u:%g:%a -- "$checkout")" = "$checkout_identity" ]
+}
+
 project_long() {
-	local setpriv_bin=/usr/bin/setpriv env_bin=/usr/bin/env npm_bin=/usr/bin/npm project_path=/usr/bin:/bin
+	local setpriv_bin=/usr/bin/setpriv env_bin=/usr/bin/env npm_bin=/usr/bin/npm project_path=/usr/bin:/bin status
 	if [ "$test_mode" = 1 ]; then
 		setpriv_bin="$(command -v setpriv)"; env_bin="$(command -v env)"; npm_bin="$(command -v npm)"
 		project_path="$(dirname "$npm_bin"):/usr/bin:/bin"
 	fi
+	checkout_identity_valid || return 1
 	if [ "$test_mode" = 1 ]; then
-		long_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" npm_config_prefix="$checkout" AUTOPILOT_PRIVDROP_ACTIVE=1 STUB_LOG="$STUB_LOG" AUTOPILOT_CUTOVER_TEST_ROOT="$root" "$npm_bin" --silent "$@"
+		if long_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -C "$checkout_handle" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" AUTOPILOT_PRIVDROP_ACTIVE=1 STUB_LOG="$STUB_LOG" AUTOPILOT_CUTOVER_TEST_ROOT="$root" "$npm_bin" --silent "$@"; then status=0; else status=$?; fi
 	else
-		long_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" npm_config_prefix="$checkout" /usr/bin/npm --silent "$@"
+		if long_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -C "$checkout_handle" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" /usr/bin/npm --silent "$@"; then status=0; else status=$?; fi
 	fi
+	checkout_identity_valid || return 1
+	return "$status"
 }
 
 project_git() {
-	local setpriv_bin=/usr/bin/setpriv env_bin=/usr/bin/env git_bin=/usr/bin/git project_path=/usr/bin:/bin
+	local setpriv_bin=/usr/bin/setpriv env_bin=/usr/bin/env git_bin=/usr/bin/git project_path=/usr/bin:/bin status
 	if [ "$test_mode" = 1 ]; then setpriv_bin="$(command -v setpriv)"; env_bin="$(command -v env)"; git_bin="$(command -v git)"; project_path="$(dirname "$git_bin"):/usr/bin:/bin"; fi
+	checkout_identity_valid || return 1
 	if [ "$test_mode" = 1 ]; then
-		short_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" AUTOPILOT_PRIVDROP_ACTIVE=1 STUB_LOG="$STUB_LOG" "$git_bin" -C "$checkout" "$@"
+		if short_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" AUTOPILOT_PRIVDROP_ACTIVE=1 STUB_LOG="$STUB_LOG" "$git_bin" -C "$checkout_handle" "$@"; then status=0; else status=$?; fi
 	else
-		short_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" /usr/bin/git -C "$checkout" "$@"
+		if short_command "$setpriv_bin" --reuid "$checkout_uid" --regid "$checkout_gid" --clear-groups -- "$env_bin" -i HOME=/home/radek USER=radek LOGNAME=radek SHELL=/bin/bash PATH="$project_path" /usr/bin/git -C "$checkout_handle" "$@"; then status=0; else status=$?; fi
 	fi
+	checkout_identity_valid || return 1
+	return "$status"
 }
 
 proc_starttime() {
@@ -368,6 +380,10 @@ if [ "$recover_mode" = 0 ]; then
 	if [ "$test_mode" = 0 ]; then
 		[ "$checkout_uid" = "$(id -u radek)" ] && [ "$checkout_gid" = "$(id -g radek)" ] || exit 1
 	fi
+	exec {checkout_fd}<"$checkout"
+	checkout_handle="/proc/self/fd/$checkout_fd"
+	checkout_identity="$(stat -Lc %d:%i:%u:%g:%a -- "$checkout")"
+	checkout_identity_valid
 fi
 if [ "$test_mode" = 1 ]; then node_bin="${AUTOPILOT_NODE_BIN:-/usr/bin/node}"; else node_bin=/usr/bin/node; fi
 
