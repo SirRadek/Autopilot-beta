@@ -335,10 +335,13 @@ describe("control plane governed run API", () => {
     expect(await invalidPromotion.json()).toEqual({ error: "invalid_run_draft" });
   });
 
-  it("defaults only omitted profile fields", async () => {
+  it("requires an explicit profile on create and defaults only the reasoning effort", async () => {
     const api = await governedApi();
     const { profile, requested_reasoning_effort, ...withoutProfileFields } = draft as Record<string, unknown>;
-    const created = await (await api.call("POST", "/runs", withoutProfileFields)).json() as { current: { profile: string; requested_reasoning_effort: unknown } };
+    const missingProfile = await api.call("POST", "/runs", withoutProfileFields);
+    expect(missingProfile.status).toBe(400);
+    expect(await missingProfile.json()).toEqual({ error: "run_profile_required" });
+    const created = await (await api.call("POST", "/runs", { ...withoutProfileFields, profile: "dev" })).json() as { current: { profile: string; requested_reasoning_effort: unknown } };
     expect(created.current.profile).toBe("dev");
     expect(created.current.requested_reasoning_effort).toBeNull();
   });
@@ -761,7 +764,7 @@ describe("control plane provider endpoints", () => {
     const init = { headers: { authorization: "Bearer secret" } };
     const models = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, init)).json() as { models: Array<{ model_id: string }> };
     const health = await (await fetch(`http://127.0.0.1:${address.port}/providers/health`, init)).json() as { providers: Array<{ freshness: string }> };
-    expect(models.models).toEqual([{ model_id: "model-a", providers: ["codex_cli"], available: true, health: ["healthy"] }]);
+    expect(models.models).toEqual([{ model_id: "model-a", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low", "medium", "high", "xhigh"] }]);
     expect(health.providers[0]?.freshness).toBe("fresh");
   });
 });
