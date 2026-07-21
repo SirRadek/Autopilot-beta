@@ -20,6 +20,16 @@ describe("ProviderPane", () => {
   it("renders provider, availability, health and model update metadata", () => { const { host, root } = mount(<ProviderPane quotas={[]} models={models} health={health} />); expect(host.textContent).toContain("openrouter_api"); expect(host.textContent).toContain("Available"); expect(host.textContent).toContain("healthy"); expect(host.textContent).toContain("2026-07-11T10:01:00.000Z"); expect(host.textContent).toContain("Fetched"); expect(host.textContent).toContain("Next poll"); act(() => root.unmount()); host.remove(); });
   it("renders unavailable provider health without leaking error details", () => { const { host, root } = mount(<ProviderPane quotas={[]} health={{ providers: [{ provider: "codex_cli", health: "unavailable", freshness: "unavailable", fetched_at: "", next_poll_at: null, error_code: "credential-failure" }] }} />); expect(host.textContent).toContain("unavailable"); expect(host.textContent).not.toContain("credential-failure"); act(() => root.unmount()); host.remove(); });
   it("supports provider tabs", () => { const calls: string[] = []; const { host, root } = mount(<ProviderPane quotas={[quota, { ...quota, provider: "claude_cli" }]} onSelectProvider={(provider) => calls.push(provider)} selectedProvider="openrouter_api" />); const button = [...host.querySelectorAll("button")].find((item) => item.textContent === "claude_cli") as HTMLButtonElement; act(() => button.click()); expect(calls).toEqual(["claude_cli"]); act(() => root.unmount()); host.remove(); });
+  it("keeps a present selection and safely falls back when it disappears on refresh", () => {
+    const codex = { ...quota, provider: "codex_cli" };
+    const kept = mount(<ProviderPane quotas={[quota, codex]} selectedProvider="codex_cli" />);
+    expect(kept.host.querySelector(".provider-heading h3")?.textContent).toBe("codex_cli");
+    act(() => kept.root.unmount()); kept.host.remove();
+    // codex_cli is no longer polled; a stale selection must not blank or crash the pane.
+    const vanished = mount(<ProviderPane quotas={[quota]} selectedProvider="codex_cli" />);
+    expect(vanished.host.querySelector(".provider-heading h3")?.textContent).toBe("openrouter_api");
+    act(() => vanished.root.unmount()); vanished.host.remove();
+  });
   it("has no axe violations", async () => { const { host, root } = mount(<ProviderPane quotas={[quota]} />); const result = await axe.run(host, { rules: { "color-contrast": { enabled: false } } }); expect(result.violations).toEqual([]); act(() => root.unmount()); host.remove(); });
   it("formats null windows as unavailable", () => { expect(formatQuotaWindow({ limit: null, used: 1, remaining: null, resets_at: null })).toBe("Unavailable"); });
 });

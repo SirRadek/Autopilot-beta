@@ -22,9 +22,10 @@ export function App() {
   return <AuthenticatedCockpit client={client} />;
 }
 
-function AuthenticatedCockpit({ client }: { readonly client: ReturnType<typeof createControlPlaneClient> }) {
+export function AuthenticatedCockpit({ client }: { readonly client: ReturnType<typeof createControlPlaneClient> }) {
   const data = useCockpitData(client);
   const [route, setRoute] = useRouteState();
+  const [budgetProvider, setBudgetProvider] = useState<string>();
   const selectedSession = data.sessions.find((session) => session.session_id === route.sessionId);
   const selectedRun = data.runs.find((run) => run.current.run_id === route.runId) ?? data.runs[0];
   const runTimeline = useRunTimeline(client, selectedRun?.worker_run_id ?? undefined);
@@ -40,6 +41,6 @@ function AuthenticatedCockpit({ client }: { readonly client: ReturnType<typeof c
     approvalPane={<ApprovalPane approvals={data.approvals} error={data.errors.approvals?.message} onApprove={async (approval) => { await client.decideApproval(approval.approval_id, "approved"); await data.refresh(); }} onReject={async (approval, reason) => { await client.decideApproval(approval.approval_id, "rejected", reason); await data.refresh(); }} />}
     operationsPane={<p aria-live="polite">{data.loading ? "Connecting to Control Plane…" : data.refreshing ? "Refreshing…" : data.errors.status ? `Status unavailable: ${data.errors.status.message}` : `${data.status?.telemetry.calls ?? 0} worker calls · ${data.status?.telemetry.total_tokens ?? 0} tokens`}</p>}
     workersPane={<WorkerPane workers={data.workers} error={data.errors.workers?.message} />}
-    providersPane={<ProviderPane quotas={data.quotas} models={data.models} health={data.health} />}
+    providersPane={<ProviderPane quotas={data.quotas} models={data.models} health={data.health} selectedProvider={budgetProvider} onSelectProvider={setBudgetProvider} />}
     />;
 }

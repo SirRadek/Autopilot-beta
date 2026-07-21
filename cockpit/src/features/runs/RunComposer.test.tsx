@@ -59,6 +59,20 @@ describe("RunComposer", () => {
     act(() => root.unmount()); host.remove();
   });
 
+  it("prepares a fresh, healthy selected route when an unrelated provider is unavailable", () => {
+    // Mirrors production: the control plane only aggregates catalog freshness to
+    // "unavailable" because a sibling provider (claude_cli) is unavailable, yet the
+    // selected route (codex_cli) is fresh and healthy. Server-side isRunRouteEligible
+    // scopes eligibility to the selected provider, so the composer must not block it.
+    const unavailableSibling: ProviderQuota = { ...quota, provider: "claude_cli", health: "unavailable", freshness: "unavailable", models: [] };
+    const { host, root } = mount({ quotas: [quota, unavailableSibling], models: { ...models, freshness: "unavailable" } });
+    change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
+    expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).value).toBe("codex_cli");
+    expect(host.textContent).not.toContain("Data poskytovatele nejsou aktuální");
+    expect(button(host, "Připravit běh").disabled).toBe(false);
+    act(() => root.unmount()); host.remove();
+  });
+
   it("invalidates shown approval when any draft field changes", async () => {
     const { host, root } = mount(); change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
     await act(async () => button(host, "Připravit běh").click());

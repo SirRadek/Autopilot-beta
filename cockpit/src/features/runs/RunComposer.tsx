@@ -21,7 +21,11 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
     if (!quotas.some((candidate) => candidate.provider === provider)) setProvider(quotas[0]?.provider ?? "");
   }, [enabledProjects, projectId, provider, quotas]);
   const quota = quotas.find((candidate) => candidate.provider === provider);
-  const routeFresh = quota?.freshness === "fresh" && models?.freshness === "fresh" && quota.health !== "unavailable";
+  // Eligibility is scoped to the SELECTED route, matching the control plane's
+  // isRunRouteEligible. The aggregate provider-models freshness must not gate a
+  // fresh, healthy provider: one stale/unavailable sibling provider would otherwise
+  // disable preparation for every route in production.
+  const routeFresh = quota?.freshness === "fresh" && quota.health !== "unavailable";
   const availableModels = useMemo(() => {
     const catalog = (models?.models ?? []).filter((model) => model.providers.includes(provider) && model.available && !model.health.includes("unavailable"));
     return (quota?.models ?? []).filter((model) => model.available && model.health !== "unavailable" && catalog.some((candidate) => candidate.model_id === model.model_id));
