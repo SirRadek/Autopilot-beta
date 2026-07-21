@@ -63,7 +63,7 @@
   "ops/systemd/autopilot-control-plane.service": "57ffe0da17a70c564cc09c1fd2c220b2eb06770d",
   "ops/systemd/autopilot-state-maintenance.service": "c429669937f11077dab3388b83479f9040a96710",
   "docs/operations/state-and-recovery.md": "4c15131036bd476f9ca4fc893f3581cc98e29c7f",
-  "docs/operations/service-runbook.md": "4fecfd5172d3fe45a3675d88ea6278399c4a21cb",
+  "docs/operations/service-runbook.md": "320d2d9f19aaa5264e2564b725f932cb077cf0d1",
   "docs/operations/troubleshooting.md": "53660a6ea5c7d12de5ddcf5d2c0a4c568dbcbc09",
   "src/data/delivery-system/dependencyFreshness.ts": "4f5edbdf1db9789aad615b1b94ef477b33cbfc25",
   "src/data/delivery-system/checkCompletionMatrix.ts": "d76155f8136933432446b2f49448ecf640e2cc52",

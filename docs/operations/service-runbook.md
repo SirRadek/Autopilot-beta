@@ -85,6 +85,57 @@ configuration or managed core state is not safe for work.
 5. Stop the service, atomically switch the checkout, run `npm ci`, and copy changed units.
 6. Start and repeat acceptance. Retain the previous checkout and backup.
 
+## Cockpit static release update (second and later)
+
+The first production proxy cutover uses `ops/cockpit-proxy/live-cutover.sh`, which is deliberately
+initial-only: it refuses unless Caddy is masked/inactive and the firewall is absent. Once the proxy is
+live (Caddy active/enabled, firewall active, `CONTROL_PLANE_SECURE_COOKIES=true`,
+`current -> releases/<sha>`), advance the static Cockpit to a newly staged release with the follow-on
+operator instead. It never re-runs the initial cutover.
+
+The follow-on operator (`ops/cockpit-proxy/release-update.sh`) executes **only** from the fixed,
+root-owned trusted path `/usr/local/libexec/autopilot-cockpit-release-update`; run as root it refuses
+any other `$0`. `bash ops/cockpit-proxy/release-update.sh …` is therefore not a supported production
+invocation — the worker is published by the image-provisioning root channel and then invoked from its
+installed path. `sudo npm` and sudo'd checkout scripts remain prohibited (see
+`ops/cockpit-proxy/trusted-bootstrap-contract.json`); running the installed, root-owned,
+integrity-verified worker under `sudo` is the trusted path itself, not a checkout script.
+
+0. **Install/refresh the worker (provisioning root channel, once per reviewed SHA).** From the image
+   provisioning root channel — not via `sudo npm` — run
+   `npm run ops:cockpit-proxy:release-update:install` (equivalently `bash
+   ops/cockpit-proxy/install-release-update.sh`). It integrity-pins the worker bytes against
+   `ops/cockpit-proxy/release-update.provenance.json` and atomically installs
+   `/usr/local/libexec/autopilot-cockpit-release-update` as `root:root 0755`, printing
+   `RELEASE_UPDATE_WORKER_INSTALLED <sha256>` (or `…_ALREADY_INSTALLED` when current). It refuses to
+   install worker bytes that do not match the pinned provenance.
+1. Build the candidate from one exact clean SHA on `origin` with Node 24 and stage it immutably with
+   `npm run ops:cockpit-proxy:stage -- <checkout> /srv/autopilot-cockpit`.
+2. As root, invoke the installed trusted worker:
+   `sudo /usr/local/libexec/autopilot-cockpit-release-update <checkout> /srv/autopilot-cockpit <sha>`.
+   The worker fails closed on every SHA/checkout/origin/ownership/symlink/manifest/current-release/
+   service/firewall/Caddy/port invariant (the manifest check binds the served release to the checkout
+   `cockpit/dist` bytes, not just entry names), then makes its **only** production change: atomically
+   replacing the root-owned `current` symlink. Because Caddy resolves that symlink per request, no
+   Caddy reload, config, firewall, environment, or Control Plane change occurs, and managed state
+   content, provider, model, and reasoning boundaries are untouched. Preflight does write one additive
+   artifact — a fresh backup archive under `~/.local/state/autopilot/backups` captured as a recovery
+   point (managed state itself is not modified). If `current` already targets the accepted SHA it
+   reports `RELEASE_UPDATE_ALREADY_CURRENT` and exits without mutating.
+3. On `RELEASE_UPDATE_WAITING_FOR_HOST_ACCEPTANCE ACK_ID=<id>`, run the host acceptance suite
+   (`ops/cockpit-proxy/host-acceptance.sh`) from Victus against `https://autopilot.local`. If it
+   passes within the window, acknowledge with
+   `sudo /usr/local/libexec/autopilot-cockpit-release-update --accept <id>`; the worker then prints
+   `RELEASE_UPDATE_OK`.
+4. Any failed check, a timed-out or absent acknowledgement, or an interruption automatically restores
+   the previous `current` symlink (`ROLLBACK_OK`) and retains the failed candidate under its SHA. A
+   rollback finalizes its journal even under repeated `Ctrl-C`/stop signals. A transaction interrupted
+   before acknowledgement is reconciled with
+   `sudo /usr/local/libexec/autopilot-cockpit-release-update --recover` (restoration refuses, reporting
+   `ROLLBACK_FAILED`, if the prior release directory is missing or a symlink).
+
+Design authority: [Production Cockpit TLS Proxy Design](../superpowers/specs/2026-07-14-production-cockpit-tls-proxy-design.md).
+
 ## Rollback
 
 Stop the service, restore the retained checkout revision, restore its reviewed unit files, and start.
