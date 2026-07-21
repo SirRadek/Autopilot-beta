@@ -11,6 +11,7 @@ import { AppShell } from "./AppShell";
 import { useRouteState } from "./routeState";
 import { useCockpitData, useRunTimeline } from "./useCockpitData";
 import { LoginForm } from "../features/auth/LoginForm";
+import { EnvironmentProvider } from "./environment";
 
 export function App() {
   const client = useMemo(() => createControlPlaneClient(), []);
@@ -23,8 +24,8 @@ export function App() {
 }
 
 export function AuthenticatedCockpit({ client }: { readonly client: ReturnType<typeof createControlPlaneClient> }) {
-  const data = useCockpitData(client);
   const [route, setRoute] = useRouteState();
+  const data = useCockpitData(client, route.environment);
   const [budgetProvider, setBudgetProvider] = useState<string>();
   const selectedSession = data.sessions.find((session) => session.session_id === route.sessionId);
   const selectedRun = data.runs.find((run) => run.current.run_id === route.runId) ?? data.runs[0];
@@ -32,8 +33,8 @@ export function AuthenticatedCockpit({ client }: { readonly client: ReturnType<t
   const registryProject = data.projects.find((project) => project.project_id === (selectedRun?.current.project_id ?? route.projectId));
   const selectedProject = selectedSession ? { id: selectedSession.cwd, name: selectedSession.cwd } : registryProject ? { id: registryProject.project_id, name: registryProject.name } : route.projectId ? { id: route.projectId, name: route.projectId } : undefined;
   const chooseSession = (session: (typeof data.sessions)[number]) => setRoute({ ...route, projectId: session.cwd, sessionId: session.session_id });
-  return <AppShell selectedProject={selectedProject} selectedSession={selectedSession ? { id: selectedSession.session_id, name: selectedSession.name ?? selectedSession.session_id, status: selectedSession.status === "active" ? "running" : "completed", agent: selectedSession.agent_command } : undefined}
-    runWorkspace={<><RunComposer projects={data.projects} quotas={data.quotas} models={data.models} onPrepare={async (input) => { const run = await client.prepareRun(input); setRoute({ projectId: run.current.project_id, runId: run.current.run_id }); await data.refresh(); return run; }} onApprove={async (runId, revision) => { const run = await client.approveRun(runId, revision, "cockpit-operator"); setRoute({ projectId: run.current.project_id, runId }); await data.refresh(); return run; }} />{data.runs.length ? <section className="run-picker" aria-label="Běhy"><h2>Běhy</h2>{data.runs.slice(0, 50).map((run) => <button type="button" key={run.current.run_id} aria-pressed={run.current.run_id === selectedRun?.current.run_id} onClick={() => setRoute({ projectId: run.current.project_id, runId: run.current.run_id })}>{run.current.run_id} · {run.status}</button>)}</section> : null}</>}
+  return <EnvironmentProvider environment={route.environment}><AppShell environment={route.environment} onEnvironmentChange={(environment) => setRoute({ ...route, environment, runId: undefined })} selectedProject={selectedProject} selectedSession={selectedSession ? { id: selectedSession.session_id, name: selectedSession.name ?? selectedSession.session_id, status: selectedSession.status === "active" ? "running" : "completed", agent: selectedSession.agent_command } : undefined}
+    runWorkspace={<><RunComposer projects={data.projects} quotas={data.quotas} models={data.models} onPrepare={async (input) => { if (route.environment !== "dev") throw new Error("promotion_packet_required"); const run = await client.createDevRun(input); setRoute({ ...route, projectId: run.current.project_id, runId: run.current.run_id }); await data.refresh(); return run; }} onApprove={async (runId, revision) => { const run = await client.approveRun(runId, revision, "cockpit-operator"); setRoute({ ...route, projectId: run.current.project_id, runId }); await data.refresh(); return run; }} />{data.runs.length ? <section className="run-picker" aria-label="Běhy"><h2>Běhy</h2>{data.runs.slice(0, 50).map((run) => <button type="button" key={run.current.run_id} aria-pressed={run.current.run_id === selectedRun?.current.run_id} onClick={() => setRoute({ ...route, projectId: run.current.project_id, runId: run.current.run_id })}>{run.current.run_id} · {run.status}</button>)}</section> : null}</>}
     runInspector={<>{runTimeline.error ? <p role="alert">Časová osa není dostupná: {runTimeline.error.message}</p> : null}<RunInspector run={selectedRun} timeline={runTimeline.data} /></>}
     incidentPane={<IncidentPane incidents={data.incidents} onAcknowledge={async (id) => { await client.acknowledgeIncident(id, "cockpit-operator"); await data.refresh(); }} onPrepareRepairPacket={(id) => { const incident = data.incidents.find((item) => item.incident_id === id); return client.prepareRepairPacket(id, { expected: incident?.impact ?? "Governed run completes without an internal incident", actual: incident?.summary ?? "Internal incident recorded" }); }} />}
     projectsPane={data.errors.sessions ? <p role="alert">Sessions unavailable: {data.errors.sessions.message}</p> : null}
@@ -42,5 +43,5 @@ export function AuthenticatedCockpit({ client }: { readonly client: ReturnType<t
     operationsPane={<p aria-live="polite">{data.loading ? "Connecting to Control Plane…" : data.refreshing ? "Refreshing…" : data.errors.status ? `Status unavailable: ${data.errors.status.message}` : `${data.status?.telemetry.calls ?? 0} worker calls · ${data.status?.telemetry.total_tokens ?? 0} tokens`}</p>}
     workersPane={<WorkerPane workers={data.workers} error={data.errors.workers?.message} />}
     providersPane={<ProviderPane quotas={data.quotas} models={data.models} health={data.health} selectedProvider={budgetProvider} onSelectProvider={setBudgetProvider} />}
-    />;
+    /></EnvironmentProvider>;
 }

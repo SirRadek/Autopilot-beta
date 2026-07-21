@@ -1,4 +1,4 @@
-import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectEntry, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftInput, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
 
 export class ControlPlaneApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "ControlPlaneApiError"; }
@@ -24,8 +24,17 @@ export interface ControlPlaneClient {
   decideApproval(id: string, decision: "approved" | "rejected", reason?: string): Promise<ApprovalRecord>;
   getProjects(): Promise<readonly ProjectEntry[]>;
   getRuns(status?: RunStatus): Promise<readonly RunRecord[]>;
+  listRuns(profile: RunProfile): Promise<readonly RunRecord[]>;
   getRun(id: string): Promise<RunRecord>;
-  prepareRun(input: RunDraftInput): Promise<RunRecord>;
+  /** @deprecated Use createDevRun; this compatibility alias is DEV-only. */
+  prepareRun(input: RunDraftBody): Promise<RunRecord>;
+  createDevRun(body: RunDraftBody): Promise<RunRecord>;
+  createProdDraft(packetId: string, verificationRef: string, body: RunDraftBody): Promise<RunRecord>;
+  promoteRun(runId: string, body: PromotionDraftInput): Promise<PromotionPacket>;
+  listPromotions(): Promise<readonly PromotionPacket[]>;
+  approvePromotion(packetId: string, body: Pick<PromotionApproval, "approver" | "review_ref">): Promise<PromotionPacket>;
+  recordPromotionVerification(packetId: string, evidenceRef: string): Promise<PromotionPacket>;
+  markPromotionPublished(packetId: string, evidence: PromotionPublishEvidence): Promise<PromotionPacket>;
   reviseRun(id: string, revision: number, input: RunDraftInput): Promise<RunRecord>;
   approveRun(id: string, revision: number, operator: string): Promise<RunRecord>;
   cancelRun(id: string): Promise<RunRecord>;
@@ -76,8 +85,16 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
     decideApproval: (id, decision, reason) => request<ApprovalRecord>(`/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, ...(reason === undefined ? {} : { reason }) }) }),
     getProjects: () => request<readonly ProjectEntry[]>("/projects"),
     getRuns: (status) => request<readonly RunRecord[]>(`/runs${status === undefined ? "" : `?status=${encodeURIComponent(status)}`}`),
+    listRuns: (profile) => request<readonly RunRecord[]>(`/runs?profile=${encodeURIComponent(profile)}`),
     getRun: (id) => request<RunRecord>(`/runs/${encodeURIComponent(id)}`),
-    prepareRun: (input) => request<RunRecord>("/runs", jsonPost(input)),
+    prepareRun: (input) => request<RunRecord>("/runs", jsonPost({ ...input, profile: "dev", promotion_packet_id: null })),
+    createDevRun: (body) => request<RunRecord>("/runs", jsonPost({ ...body, profile: "dev", promotion_packet_id: null })),
+    createProdDraft: (packetId, verificationRef, body) => request<RunRecord>("/runs", jsonPost({ ...body, profile: "prod", promotion_packet_id: packetId, full_verification_ref: verificationRef })),
+    promoteRun: (runId, body) => request<PromotionPacket>(`/runs/${encodeURIComponent(runId)}/promote`, jsonPost(body)),
+    listPromotions: async () => (await request<{ readonly packets: readonly PromotionPacket[] }>("/promotions")).packets,
+    approvePromotion: (packetId, body) => request<PromotionPacket>(`/promotions/${encodeURIComponent(packetId)}/approve`, jsonPost(body)),
+    recordPromotionVerification: (packetId, evidenceRef) => request<PromotionPacket>(`/promotions/${encodeURIComponent(packetId)}/record-verification`, jsonPost({ full_verification_ref: evidenceRef })),
+    markPromotionPublished: (packetId, evidence) => request<PromotionPacket>(`/promotions/${encodeURIComponent(packetId)}/mark-published`, jsonPost(evidence)),
     reviseRun: (id, revision, input) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/revisions`, jsonPost({ ...input, revision })),
     approveRun: (id, revision, operator) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/approve`, jsonPost({ revision, operator })),
     cancelRun: (id) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/cancel`, jsonPost({})),

@@ -68,9 +68,19 @@ describe("ControlPlaneClient", () => {
       "http://cp/runs/run%2F1/revisions", "http://cp/runs/run%2F1/approve", "http://cp/runs/run%2F1/cancel",
       "http://cp/incidents", "http://cp/incidents/incident%2F1/acknowledge", "http://cp/incidents/incident%2F1/repair-packet"
     ]);
-    expect(JSON.parse(fetcher.mock.calls[3]?.[1]?.body as string)).toEqual(draft);
+    expect(JSON.parse(fetcher.mock.calls[3]?.[1]?.body as string)).toEqual({ ...draft, profile: "dev", promotion_packet_id: null });
     expect(JSON.parse(fetcher.mock.calls[4]?.[1]?.body as string)).toEqual({ ...draft, revision: 3 });
     expect(JSON.parse(fetcher.mock.calls[5]?.[1]?.body as string)).toEqual({ revision: 3, operator: "owner" });
     expect(fetcher.mock.calls.every(([, init]) => init.credentials === "include")).toBe(true);
+  });
+
+  it("keeps the legacy prepareRun alias DEV-only and exposes the explicit PROD draft path", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ current: {} }), { status: 200 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+    const body = { project_id: "autopilot-beta", prompt: "Inspect", provider: "codex_cli" as const, model: "gpt-5", estimated_tokens: 9_000, requested_artifacts: ["text" as const] };
+    await client.prepareRun({ ...body, profile: "prod", promotion_packet_id: "forged" } as never);
+    await client.createProdDraft("packet-1", "verify-1", body);
+    expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string)).toEqual({ ...body, profile: "dev", promotion_packet_id: null });
+    expect(JSON.parse(fetcher.mock.calls[1]?.[1]?.body as string)).toEqual({ ...body, profile: "prod", promotion_packet_id: "packet-1", full_verification_ref: "verify-1" });
   });
 });
