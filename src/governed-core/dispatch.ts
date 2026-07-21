@@ -83,8 +83,7 @@ export type GovernedHandoff = CliWorkerInput & {
   readonly routing?: SupervisorRoutingContext;
   readonly efficiency?: {
     readonly work_unit: WorkUnitDescriptor;
-    /** Present on profile-aware run handoffs; optional until legacy public callers migrate. */
-    readonly profile?: StoredRunProfile;
+    readonly profile: StoredRunProfile;
     readonly actual_reasoning_effort: string | null;
   };
 };
@@ -459,6 +458,7 @@ function recordEfficiencyStatus(
       handoffId: handoff.handoffId as string,
       actualModel,
       actualReasoningEffort: handoff.efficiency.actual_reasoning_effort,
+      profile: handoff.efficiency.profile,
       status
     })
   );

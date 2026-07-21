@@ -129,6 +129,7 @@ describe("dispatch decision telemetry", () => {
             class: "bounded_implementation",
             risk: "ordinary"
           },
+          profile: "prod",
           actual_reasoning_effort: "medium"
         }
       }),
@@ -144,6 +145,15 @@ describe("dispatch decision telemetry", () => {
 
     expect(records).toHaveLength(2);
     expect(records.map((record) => record.status)).toEqual(["started", "completed"]);
+    for (const record of records) {
+      expect(record).toMatchObject({
+        profile: "prod",
+        actual_reasoning_effort: "medium",
+        recommended_model: null,
+        recommended_reasoning_effort: null,
+        routing_mode: "shadow_only"
+      });
+    }
     expect(records[0]).toMatchObject({
       schema_version: "v1",
       work_unit_id: "wu-dispatch-1",
@@ -151,6 +161,7 @@ describe("dispatch decision telemetry", () => {
       risk: "ordinary",
       actual_model: "gpt-5.6-sol",
       actual_reasoning_effort: "medium",
+      profile: "prod",
       recommended_model: null,
       recommended_reasoning_effort: null,
       routing_mode: "shadow_only",
@@ -159,6 +170,42 @@ describe("dispatch decision telemetry", () => {
     });
     expect(JSON.stringify(records)).not.toContain("private worker output");
     expect(JSON.stringify(records)).not.toContain(task);
+  });
+
+  it("records the applied profile and reasoning on refused efficiency events", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "governed-efficiency-refused-"));
+
+    await dispatchHandoff(
+      baseHandoff({
+        vendor: "codex_cli",
+        routing_mode: "idea",
+        model: "gpt-5.6-sol",
+        efficiency: {
+          work_unit: {
+            work_unit_id: "wu-dispatch-refused",
+            class: "review",
+            risk: "high"
+          },
+          profile: "prod",
+          actual_reasoning_effort: "xhigh"
+        }
+      }),
+      stateDir
+    );
+
+    const fileName = EFFICIENCY_TELEMETRY_PATH.split(/[\\/]/).at(-1) ?? "";
+    const record = JSON.parse(
+      readFileSync(join(stateDir, fileName), "utf8").trim()
+    ) as Record<string, unknown>;
+
+    expect(record).toMatchObject({
+      status: "refused",
+      profile: "prod",
+      actual_reasoning_effort: "xhigh",
+      recommended_model: null,
+      recommended_reasoning_effort: null,
+      routing_mode: "shadow_only"
+    });
   });
 });
 
