@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ControlPlaneClient } from "../api/controlPlaneClient";
-import type { ProviderQuota } from "../types/controlPlane";
+import type { PromotionPacket, ProviderQuota, RunRecord } from "../types/controlPlane";
 import { AuthenticatedCockpit } from "./App";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,6 +29,11 @@ function fakeClient(overrides: Partial<ControlPlaneClient> = {}): ControlPlaneCl
     decideApproval: vi.fn(), ...overrides,
   } as ControlPlaneClient;
 }
+
+const completedDevRun: RunRecord = {
+  schema_version: "v1", current: { run_id: "run-dev-1", revision: 2, project_id: "autopilot-beta", prompt: "Publish showcase", provider: "codex_cli", model: "gpt-5", estimated_tokens: 100, input_token_bound: 200, output_token_allowance: 200, requested_artifacts: ["text"], prompt_review_acknowledged: true, profile: "dev", requested_reasoning_effort: "high", promotion_packet_id: null, created_at: now }, revisions: [], status: "completed", approved_revision: 2, approved_by: "owner", approved_at: now, supervisor_task_id: null, worker_run_id: "worker-1", terminal_reason: null, token_reservation: null, reservation_status: "settled", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: now,
+};
+const verifiedPacket: PromotionPacket = { schema_version: "v1", packet_id: "packet-1", source_run_id: "run-dev-1", source_revision: 2, intent: "Publish", artifact_hash: "a".repeat(64), artifact_ref: "run:run-dev-1@2", diff_summary: "showcase", tests: ["npm test"], risks: [], approvals: [{ approver: "owner", approved_at: now, review_ref: "review://packet-1" }], prod_run_id: null, full_verification_ref: "verify://packet-1", release_acceptance_ref: null, rollback_ref: null, status: "approved", created_at: now, updated_at: now };
 
 async function mount(client: ControlPlaneClient) {
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
@@ -62,5 +67,21 @@ describe("AuthenticatedCockpit provider budget", () => {
     await act(async () => { await Promise.resolve(); });
     expect(activeProvider(budgetPane(host))).toBe("codex_cli");
     act(() => root.unmount()); host.remove();
+  });
+});
+
+describe("AuthenticatedCockpit promotion wiring", () => {
+  it("prepares only a linked PROD draft from owner-approved verified evidence", async () => {
+    window.history.replaceState(null, "", "/?environment=prod");
+    const prodDraft = { ...completedDevRun, current: { ...completedDevRun.current, run_id: "run-prod-1", revision: 1, profile: "prod" as const, promotion_packet_id: "packet-1" }, status: "draft" as const, worker_run_id: null };
+    const source = fakeClient({ listRuns: vi.fn().mockResolvedValue([]), listPromotions: vi.fn().mockResolvedValue([verifiedPacket]), getRun: vi.fn().mockResolvedValue(completedDevRun), createProdDraft: vi.fn().mockResolvedValue(prodDraft), approveRun: vi.fn(), markPromotionPublished: vi.fn() });
+    const { host, root } = await mount(source);
+    const prepare = [...host.querySelectorAll("button")].find((item) => item.textContent === "Připravit PROD draft") as HTMLButtonElement;
+    expect(prepare).toBeDefined();
+    await act(async () => prepare.click());
+    expect(source.createProdDraft).toHaveBeenCalledWith("packet-1", "verify://packet-1", expect.objectContaining({ provider: "codex_cli", model: "gpt-5", requested_reasoning_effort: "high" }));
+    expect(source.approveRun).not.toHaveBeenCalled();
+    expect(source.markPromotionPublished).not.toHaveBeenCalled();
+    act(() => root.unmount()); host.remove(); window.history.replaceState(null, "", "/");
   });
 });

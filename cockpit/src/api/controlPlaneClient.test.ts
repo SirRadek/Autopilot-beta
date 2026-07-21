@@ -83,4 +83,12 @@ describe("ControlPlaneClient", () => {
     expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string)).toEqual({ ...body, profile: "dev", promotion_packet_id: null });
     expect(JSON.parse(fetcher.mock.calls[1]?.[1]?.body as string)).toEqual({ ...body, profile: "prod", promotion_packet_id: "packet-1", full_verification_ref: "verify-1" });
   });
+
+  it("uses the explicit reject endpoint without publishing", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ status: "rejected" }), { status: 200 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+    await client.rejectPromotion("packet/1");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("http://cp/promotions/packet%2F1/reject");
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe("POST");
+  });
 });

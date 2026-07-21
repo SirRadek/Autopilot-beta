@@ -33,6 +33,7 @@ export interface ControlPlaneClient {
   promoteRun(runId: string, body: PromotionDraftInput): Promise<PromotionPacket>;
   listPromotions(): Promise<readonly PromotionPacket[]>;
   approvePromotion(packetId: string, body: Pick<PromotionApproval, "approver" | "review_ref">): Promise<PromotionPacket>;
+  rejectPromotion(packetId: string): Promise<PromotionPacket>;
   recordPromotionVerification(packetId: string, evidenceRef: string): Promise<PromotionPacket>;
   markPromotionPublished(packetId: string, evidence: PromotionPublishEvidence): Promise<PromotionPacket>;
   reviseRun(id: string, revision: number, input: RunDraftInput): Promise<RunRecord>;
@@ -93,6 +94,7 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
     promoteRun: (runId, body) => request<PromotionPacket>(`/runs/${encodeURIComponent(runId)}/promote`, jsonPost(body)),
     listPromotions: async () => (await request<{ readonly packets: readonly PromotionPacket[] }>("/promotions")).packets,
     approvePromotion: (packetId, body) => request<PromotionPacket>(`/promotions/${encodeURIComponent(packetId)}/approve`, jsonPost(body)),
+    rejectPromotion: (packetId) => request<PromotionPacket>(`/promotions/${encodeURIComponent(packetId)}/reject`, jsonPost({})),
     recordPromotionVerification: (packetId, evidenceRef) => request<PromotionPacket>(`/promotions/${encodeURIComponent(packetId)}/record-verification`, jsonPost({ full_verification_ref: evidenceRef })),
     markPromotionPublished: (packetId, evidence) => request<PromotionPacket>(`/promotions/${encodeURIComponent(packetId)}/mark-published`, jsonPost(evidence)),
     reviseRun: (id, revision, input) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/revisions`, jsonPost({ ...input, revision })),

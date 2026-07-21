@@ -11,7 +11,7 @@ const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient
   getStatus: vi.fn().mockResolvedValue({ sessions: { total: 1, active: 1, closed: 0 }, approvals: { total: 0, pending: 0, approved: 0, rejected: 0 }, telemetry: { calls: 2, successful: 2, total_tokens: 10 } }),
   getSessions: vi.fn().mockResolvedValue([]), getApprovals: vi.fn().mockResolvedValue([]), getWorkers: vi.fn().mockResolvedValue([]),
   getProjects: vi.fn().mockResolvedValue([]), getRuns: vi.fn().mockResolvedValue([]), listRuns: vi.fn().mockResolvedValue([]), getRun: vi.fn(), prepareRun: vi.fn(), createDevRun: vi.fn(), createProdDraft: vi.fn(), promoteRun: vi.fn(), reviseRun: vi.fn(), approveRun: vi.fn(), cancelRun: vi.fn(),
-  listPromotions: vi.fn().mockResolvedValue([]), approvePromotion: vi.fn(), recordPromotionVerification: vi.fn(), markPromotionPublished: vi.fn(),
+  listPromotions: vi.fn().mockResolvedValue([]), approvePromotion: vi.fn(), rejectPromotion: vi.fn(), recordPromotionVerification: vi.fn(), markPromotionPublished: vi.fn(),
   getIncidents: vi.fn().mockResolvedValue([]), acknowledgeIncident: vi.fn(), prepareRepairPacket: vi.fn(),
   getObservabilitySummary: vi.fn().mockResolvedValue({ events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }), getObservabilityTimeline: vi.fn().mockResolvedValue({ summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 0, max_lines_per_file: 0, max_events: 100, truncated: false } }),
   createSession: vi.fn(), mutateSession: vi.fn(),
