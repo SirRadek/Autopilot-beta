@@ -23,6 +23,7 @@ related_files:
   - src/data/delivery-system/cliWorker.ts
   - src/data/delivery-system/cliWorkerCapture.ts
   - src/data/delivery-system/efficiencyTelemetry.ts
+  - src/data/delivery-system/executionProfile.ts
   - src/data/delivery-system/managedStateFile.ts
   - src/data/delivery-system/openRouterLedgerMigration.ts
   - src/data/delivery-system/operationalIncidents.ts

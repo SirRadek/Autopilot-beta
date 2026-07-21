@@ -38,7 +38,9 @@ const input = {
   provider: "codex_cli" as const,
   model: null,
   estimated_tokens: 20_000,
-  requested_artifacts: ["text"] as const
+  requested_artifacts: ["text"] as const,
+  profile: "dev" as const,
+  requested_reasoning_effort: null
 };
 
 function stateDir(): string {

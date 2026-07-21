@@ -9,6 +9,7 @@ import { isProjectConfigurationError, readProjectRegistry, resolveEnabledProject
 import { isRunRouteEligible } from "../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { readRunStore, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
+import type { RunProfile, RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
 import { assertRunPromptPolicy, canonicalRunTokenBudget } from "../src/data/delivery-system/runPromptPolicy";
@@ -135,7 +136,13 @@ function draftInput(body: Record<string, unknown>): RunDraftInput {
   const estimated = body.estimated_tokens === undefined ? canonicalRunTokenBudget(body.prompt) : body.estimated_tokens;
   try { assertRunPromptPolicy(body.prompt, body.prompt_review_acknowledged === true); } catch (error) { throw new HttpError(400, error instanceof Error ? error.message : "invalid_run_draft"); }
   if (!Number.isSafeInteger(estimated)) throw new HttpError(400, "invalid_run_draft");
-  return { project_id: body.project_id, prompt: body.prompt, provider: body.provider as RunProvider, model: body.model, estimated_tokens: estimated as number, requested_artifacts: body.requested_artifacts as RunDraftInput["requested_artifacts"], prompt_review_acknowledged: body.prompt_review_acknowledged === true };
+  if (body.profile !== undefined && body.profile !== "dev" && body.profile !== "prod") throw new HttpError(400, "invalid_run_draft");
+  const profile: RunProfile = body.profile === undefined ? "dev" : body.profile;
+  if (body.requested_reasoning_effort !== undefined && body.requested_reasoning_effort !== null && typeof body.requested_reasoning_effort !== "string") throw new HttpError(400, "invalid_run_draft");
+  const requestedReasoningEffort: RunReasoningEffort | null = body.requested_reasoning_effort === undefined ? null : (body.requested_reasoning_effort as RunReasoningEffort | null);
+  if (body.promotion_packet_id !== undefined && body.promotion_packet_id !== null && typeof body.promotion_packet_id !== "string") throw new HttpError(400, "invalid_run_draft");
+  const promotionPacketId: string | null | undefined = body.promotion_packet_id as string | null | undefined;
+  return { project_id: body.project_id, prompt: body.prompt, provider: body.provider as RunProvider, model: body.model, estimated_tokens: estimated as number, requested_artifacts: body.requested_artifacts as RunDraftInput["requested_artifacts"], prompt_review_acknowledged: body.prompt_review_acknowledged === true, profile, requested_reasoning_effort: requestedReasoningEffort, ...(promotionPacketId === undefined ? {} : { promotion_packet_id: promotionPacketId }) };
 }
 
 function repairInput(body: Record<string, unknown>) {
@@ -182,6 +189,6 @@ function routeAvailable(stateDir: string, provider: string, model: string | null
   return isRunRouteEligible(stateDir, provider, model, new Date().toISOString());
 }
 function sameDraftInput(draft: RunDraft, input: RunDraftInput): boolean {
-  return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, prompt_review_acknowledged: draft.prompt_review_acknowledged }, { ...input, estimated_tokens: canonicalRunTokenBudget(input.prompt), prompt_review_acknowledged: input.prompt_review_acknowledged === true });
+  return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, prompt_review_acknowledged: draft.prompt_review_acknowledged, profile: draft.profile, requested_reasoning_effort: draft.requested_reasoning_effort, promotion_packet_id: draft.promotion_packet_id }, { project_id: input.project_id, prompt: input.prompt, provider: input.provider, model: input.model, estimated_tokens: canonicalRunTokenBudget(input.prompt), requested_artifacts: input.requested_artifacts, prompt_review_acknowledged: input.prompt_review_acknowledged === true, profile: input.profile, requested_reasoning_effort: input.requested_reasoning_effort, promotion_packet_id: input.promotion_packet_id ?? null });
 }
 function json(response: ServerResponse, value: unknown, status = 200): true { response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); response.end(JSON.stringify(value, null, 2)); return true; }
