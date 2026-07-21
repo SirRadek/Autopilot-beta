@@ -1,0 +1,66 @@
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
+
+import type { ControlPlaneClient } from "../api/controlPlaneClient";
+import type { ProviderQuota } from "../types/controlPlane";
+import { AuthenticatedCockpit } from "./App";
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const now = "2026-07-21T10:00:00.000Z";
+function providerQuota(provider: string): ProviderQuota {
+  return { provider, source: "cli", fetched_at: now, observed_at: now, five_hour: { limit: 1000, used: 0, remaining: 1000, resets_at: null }, weekly: { limit: 5000, used: 0, remaining: 5000, resets_at: null }, api_spend: null, currency: null, models: [], health: "healthy", error_code: null, freshness: "fresh", next_poll_at: null };
+}
+
+function fakeClient(overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient {
+  return {
+    getAuthSession: vi.fn().mockResolvedValue({ authenticated: true }), login: vi.fn(), logout: vi.fn(),
+    getStatus: vi.fn().mockResolvedValue({ sessions: { total: 0, active: 0, closed: 0 }, approvals: { total: 0, pending: 0, approved: 0, rejected: 0 }, telemetry: { calls: 0, successful: 0, total_tokens: 0 } }),
+    getSessions: vi.fn().mockResolvedValue([]), getApprovals: vi.fn().mockResolvedValue([]), getWorkers: vi.fn().mockResolvedValue([]),
+    getProjects: vi.fn().mockResolvedValue([]), getRuns: vi.fn().mockResolvedValue([]), getRun: vi.fn(), prepareRun: vi.fn(), reviseRun: vi.fn(), approveRun: vi.fn(), cancelRun: vi.fn(),
+    getIncidents: vi.fn().mockResolvedValue([]), acknowledgeIncident: vi.fn(), prepareRepairPacket: vi.fn(),
+    getObservabilitySummary: vi.fn().mockResolvedValue({ events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }),
+    getObservabilityTimeline: vi.fn().mockResolvedValue({ summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 0, max_lines_per_file: 0, max_events: 100, truncated: false } }),
+    createSession: vi.fn(), mutateSession: vi.fn(),
+    getProviderQuotas: vi.fn().mockResolvedValue({ providers: [providerQuota("claude_cli"), providerQuota("codex_cli")] }),
+    getProviderModels: vi.fn().mockResolvedValue({ freshness: "fresh", fetched_at: now, next_poll_at: null, models: [] }),
+    getProviderHealth: vi.fn().mockResolvedValue({ providers: [] }),
+    decideApproval: vi.fn(), ...overrides,
+  } as ControlPlaneClient;
+}
+
+async function mount(client: ControlPlaneClient) {
+  const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+  await act(async () => { root.render(<AuthenticatedCockpit client={client} />); });
+  await act(async () => { await Promise.resolve(); });
+  return { host, root };
+}
+
+function budgetPane(host: HTMLElement): HTMLElement { return host.querySelector('[aria-label="Provider Budget"]') as HTMLElement; }
+function providerTab(scope: HTMLElement, id: string): HTMLButtonElement { return [...scope.querySelectorAll(".provider-tabs button")].find((item) => item.textContent === id) as HTMLButtonElement; }
+function activeProvider(scope: HTMLElement): string | undefined { return scope.querySelector(".provider-heading h3")?.textContent ?? undefined; }
+
+describe("AuthenticatedCockpit provider budget", () => {
+  it("switches the viewed provider budget when a provider tab is clicked", async () => {
+    const { host, root } = await mount(fakeClient());
+    const pane = budgetPane(host);
+    expect(activeProvider(pane)).toBe("claude_cli");
+    act(() => providerTab(pane, "codex_cli").click());
+    expect(activeProvider(budgetPane(host))).toBe("codex_cli");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("preserves the operator's chosen budget provider across a data refresh", async () => {
+    const { host, root } = await mount(fakeClient());
+    act(() => providerTab(budgetPane(host), "codex_cli").click());
+    expect(activeProvider(budgetPane(host))).toBe("codex_cli");
+    // A cockpit data refresh delivers fresh quota arrays (new identities). The
+    // operator's budget selection lives in App state and must not silently reset
+    // to the first provider when the data reloads.
+    await act(async () => { root.render(<AuthenticatedCockpit client={fakeClient()} />); });
+    await act(async () => { await Promise.resolve(); });
+    expect(activeProvider(budgetPane(host))).toBe("codex_cli");
+    act(() => root.unmount()); host.remove();
+  });
+});
