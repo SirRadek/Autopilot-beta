@@ -34,14 +34,7 @@ export type CommandExecutor = (
 export function resolveVerificationPlan(input: VerificationPlanInput): VerificationPlan {
   const mode = resolveVerificationMode(input.profile, input.risk);
   if (mode === "full_fail_closed") {
-    return {
-      mode,
-      commands: [
-        { file: "npm", args: ["run", "verify"] },
-        { file: "npm", args: ["run", "cockpit:test"] },
-        { file: "npm", args: ["run", "browser:qa"] },
-      ],
-    };
+    return fullVerificationPlan();
   }
 
   const files = [...new Set(input.changedFiles)].sort();
@@ -49,6 +42,7 @@ export function resolveVerificationPlan(input: VerificationPlanInput): Verificat
   if (files.some(hasUnsupportedPathCharacter)) {
     throw new Error("verification_change_path_unsupported");
   }
+  if (files.some((path) => !isMappedPath(path))) return fullVerificationPlan();
 
   const commands: PlannedCommand[] = [
     { file: "npm", args: ["run", "runtime:check"] },
@@ -85,8 +79,6 @@ export function resolveVerificationPlan(input: VerificationPlanInput): Verificat
   if (files.some((path) => path.startsWith("docs/") || path === "README.md")) {
     commands.push({ file: "npm", args: ["run", "docs:links"] });
   }
-  if (commands.length === 3) throw new Error("verification_scope_unmapped");
-
   return { mode, commands };
 }
 
@@ -108,7 +100,7 @@ export function parseGitPorcelain(output: Buffer): readonly string[] {
       throw new Error("verification_git_porcelain_malformed");
     }
     const status = record.slice(0, 2);
-    if (!/^[ MADRCU?!]{2}$/u.test(status) || status === "  ") {
+    if (!/^[ MTADRCU?!]{2}$/u.test(status) || status === "  ") {
       throw new Error("verification_git_porcelain_malformed");
     }
     const path = record.slice(3);
@@ -171,6 +163,29 @@ export function runVerifyScopeCli(argv: readonly string[]): VerificationPlan {
 
 function hasUnsupportedPathCharacter(path: string): boolean {
   return path.length === 0 || /[\s\u0000-\u001f\u007f]/u.test(path);
+}
+
+function isMappedPath(path: string): boolean {
+  return (
+    path.startsWith("src/data/delivery-system/") ||
+    path.startsWith("tests/delivery-system/") ||
+    path.startsWith("scripts/") ||
+    path.startsWith("tests/scripts/") ||
+    path.startsWith("cockpit/") ||
+    path.startsWith("docs/") ||
+    path === "README.md"
+  );
+}
+
+function fullVerificationPlan(): VerificationPlan {
+  return {
+    mode: "full_fail_closed",
+    commands: [
+      { file: "npm", args: ["run", "verify"] },
+      { file: "npm", args: ["run", "cockpit:test"] },
+      { file: "npm", args: ["run", "browser:qa"] },
+    ],
+  };
 }
 
 function executeFile(

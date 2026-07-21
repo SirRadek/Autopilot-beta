@@ -56,14 +56,21 @@ describe("verify-scope", () => {
     ).toThrow("verification_change_set_required");
   });
 
-  it("fails closed for an unmapped ordinary dev path", () => {
-    expect(() =>
-      resolveVerificationPlan({
-        profile: "dev",
-        risk: "ordinary",
-        changedFiles: ["unmapped/file.txt"],
-      }),
-    ).toThrow("verification_scope_unmapped");
+  it("falls back to full fail-closed verification for any unmapped path", () => {
+    const plan = resolveVerificationPlan({
+      profile: "dev",
+      risk: "ordinary",
+      changedFiles: ["scripts/verify-scope.ts", "unmapped/file.txt"],
+    });
+
+    expect(plan).toEqual({
+      mode: "full_fail_closed",
+      commands: [
+        { file: "npm", args: ["run", "verify"] },
+        { file: "npm", args: ["run", "cockpit:test"] },
+        { file: "npm", args: ["run", "browser:qa"] },
+      ],
+    });
   });
 
   it.each(["docs/has space.md", "scripts/has\tcontrol.ts", "cockpit/has\ncontrol.ts", "src/a\0b.ts"])(
@@ -115,6 +122,10 @@ describe("verify-scope", () => {
     expect(() => parseGitPorcelain(Buffer.from("ZZ file.ts\0"))).toThrow(
       "verification_git_porcelain_malformed",
     );
+  });
+
+  it("accepts a tracked type-change porcelain status", () => {
+    expect(parseGitPorcelain(Buffer.from(" T tracked.ts\0"))).toEqual(["tracked.ts"]);
   });
 
   it("stops after the first failed structured command", () => {
