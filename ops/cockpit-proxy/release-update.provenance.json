@@ -1,0 +1,10 @@
+{
+  "version": "autopilot-cockpit-release-update-installer-v1",
+  "worker": "ops/cockpit-proxy/release-update.sh",
+  "installer": "ops/cockpit-proxy/install-release-update.sh",
+  "target": "/usr/local/libexec/autopilot-cockpit-release-update",
+  "target_uid": 0,
+  "target_gid": 0,
+  "target_mode": "0755",
+  "worker_sha256": "aaec5a6523def18ad4f1e487761314679062158f2cc43050533027002aa40fe9"
+}
