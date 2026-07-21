@@ -584,22 +584,44 @@ for(const n of ["configuration","managed_state","project_registry","supervisor",
  if(b?.components?.[n]?.status!=="ready"||b.components[n].error_code!==null)process.exit(1);'
 }
 
-loopback_checks() {
+http_readiness_checks() {
 	local work health_status ready_status checks_parent
 	checks_parent=/tmp
 	if [ -d "$runtime" ] && [ ! -L "$runtime" ]; then checks_parent="$runtime"; fi
-	work="$(mktemp -d -- "$checks_parent/.autopilot-cutover-checks.XXXXXXXXXX")"
-	health_status="$(short_command curl --disable --noproxy '*' --silent --show-error --connect-timeout 2 --max-time 5 --output "$work/health.json" --write-out '%{http_code}' http://127.0.0.1:8787/health)"
-	[ "$health_status" = 200 ]
-	HEALTH_JSON_PATH="$work/health.json" "$node_bin" -e 'const b=JSON.parse(require("fs").readFileSync(process.env.HEALTH_JSON_PATH));if(b?.ok!==true)process.exit(1)'
-	ready_status="$(short_command curl --disable --noproxy '*' --silent --show-error --connect-timeout 2 --max-time 5 --output "$work/ready.json" --write-out '%{http_code}' http://127.0.0.1:8787/ready)"
-	[ "$ready_status" = 200 ] && validate_ready_file "$work/ready.json"
-	local listener
-	listener="$(short_command ss -H -ltn "sport = :8787")"
-	[ "$(printf '%s\n' "$listener" | sed '/^$/d' | wc -l)" -eq 1 ]
-	[[ "$listener" == *"127.0.0.1:8787"* ]]
-	[[ "$listener" != *"0.0.0.0:8787"* && "$listener" != *"[::]:8787"* ]]
+	work="$(mktemp -d -- "$checks_parent/.autopilot-cutover-checks.XXXXXXXXXX")" || return 1
+	case "$work" in "$checks_parent"/.autopilot-cutover-checks.*) ;; *) return 1 ;; esac
+	[ -d "$work" ] && [ ! -L "$work" ] && [ "$(stat -c %u:%g:%a -- "$work")" = "$expected_uid:$expected_gid:700" ] || return 1
+	if ! health_status="$(short_command curl --disable --noproxy '*' --silent --show-error --connect-timeout 1 --max-time 2 --output "$work/health.json" --write-out '%{http_code}' http://127.0.0.1:8787/health)" || [ "$health_status" != 200 ]; then rm -rf -- "$work"; return 1; fi
+	if ! HEALTH_JSON_PATH="$work/health.json" "$node_bin" -e 'const b=JSON.parse(require("fs").readFileSync(process.env.HEALTH_JSON_PATH));if(b?.ok!==true)process.exit(1)'; then rm -rf -- "$work"; return 1; fi
+	if ! ready_status="$(short_command curl --disable --noproxy '*' --silent --show-error --connect-timeout 1 --max-time 2 --output "$work/ready.json" --write-out '%{http_code}' http://127.0.0.1:8787/ready)" || [ "$ready_status" != 200 ] || ! validate_ready_file "$work/ready.json"; then rm -rf -- "$work"; return 1; fi
 	rm -rf -- "$work"
+}
+
+loopback_listener_check() {
+	local listener
+	listener="$(timeout --signal=TERM --kill-after=2s 5s ss -H -ltn "sport = :8787")" || return 1
+	[ "$(printf '%s\n' "$listener" | sed '/^$/d' | wc -l)" -eq 1 ] || return 1
+	[[ "$listener" == *"127.0.0.1:8787"* ]] || return 1
+	[[ "$listener" != *"0.0.0.0:8787"* && "$listener" != *"[::]:8787"* ]] || return 1
+}
+
+loopback_checks() {
+	http_readiness_checks && loopback_listener_check
+}
+
+wait_for_loopback_checks() {
+	local attempt=0 deadline=$((SECONDS + 45)) delay=1
+	if [ "$test_mode" = 1 ]; then delay=0.01; fi
+	while (( attempt < 15 && SECONDS < deadline )); do
+		attempt=$((attempt + 1))
+		if http_readiness_checks; then
+			if loopback_listener_check; then return 0; fi
+			return 1
+		fi
+		(( attempt < 15 && SECONDS < deadline )) || break
+		sleep "$delay"
+	done
+	return 1
 }
 
 recovery_checks() {
@@ -618,19 +640,19 @@ recovery_checks() {
 }
 
 rollback_verification() {
-	loopback_checks
+	wait_for_loopback_checks || return 1
 	if [ "$recover_mode" = 1 ]; then
-		AUTOPILOT_CUTOVER_TEST_BIN="${AUTOPILOT_CUTOVER_TEST_BIN:-}" bash "$source_dir/autopilot-cockpit-recovery-verify.sh" "$environment" "$(under_root /home/radek/autopilot-beta)" >/dev/null
-		return
+		AUTOPILOT_CUTOVER_TEST_BIN="${AUTOPILOT_CUTOVER_TEST_BIN:-}" bash "$source_dir/autopilot-cockpit-recovery-verify.sh" "$environment" "$(under_root /home/radek/autopilot-beta)" >/dev/null || return 1
+		return 0
 	fi
 	local state_dir projects_dir
-	state_dir="$(sed -n 's/^AUTOPILOT_STATE_DIR=//p' "$environment")"
-	projects_dir="$(sed -n 's/^AUTOPILOT_PROJECTS_DIR=//p' "$environment")"
+	state_dir="$(sed -n 's/^AUTOPILOT_STATE_DIR=//p' "$environment")" || return 1
+	projects_dir="$(sed -n 's/^AUTOPILOT_PROJECTS_DIR=//p' "$environment")" || return 1
 	if [ "$test_mode" = 1 ]; then state_dir="$(under_root "$state_dir")"; projects_dir="$(under_root "$projects_dir")"; fi
-	project_long run ops:boundary-check -- "$checkout" "$state_dir" "$projects_dir" >/dev/null
+	project_long run ops:boundary-check -- "$checkout" "$state_dir" "$projects_dir" >/dev/null || return 1
 	local smoke
-	smoke="$(project_long run smoke:cockpit-run -- --dry-run)"
-	SMOKE_JSON="$smoke" "$node_bin" -e 'const b=JSON.parse(process.env.SMOKE_JSON);if(b?.provider_invoked!==false||b?.run_status!=="completed")process.exit(1)'
+	smoke="$(project_long run smoke:cockpit-run -- --dry-run)" || return 1
+	SMOKE_JSON="$smoke" "$node_bin" -e 'const b=JSON.parse(process.env.SMOKE_JSON);if(b?.provider_invoked!==false||b?.run_status!=="completed")process.exit(1)' || return 1
 }
 
 restore_one() {
@@ -1060,7 +1082,7 @@ test_pause_after environment
 
 short_command systemctl restart autopilot-control-plane.service
 control_plane_restarted=1; write_ledger mutating
-loopback_checks
+wait_for_loopback_checks
 fail_after control-plane
 
 install -d -m 0755 "$(dirname "$caddy_config")"
