@@ -4,13 +4,14 @@ import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQ
 import { isRunRouteEligible } from "./runRouteEligibility";
 import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
-import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
+import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import type { TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens } from "./runPromptPolicy";
 import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { computePacketHash } from "../../governed-core/dispatch";
 import { buildAgentPacket, loadDecisionMeshFromRoot } from "../../lib/decision-mesh";
+import { assertNoSilentRouteChange, classifyWorkUnitForProfile, type RouteSnapshot } from "./executionProfile";
 
 interface Gateway {
   reserve(input: TokenReservationRequest): TokenReservation;
@@ -84,6 +85,10 @@ export function createRunOrchestrator(options: {
     const task = `Execute approved run ${run.current.run_id} revision ${run.current.revision}`;
     const agent = "worker";
     const packet = buildAgentPacket(loadDecisionMeshFromRoot(process.cwd()), { task, agent, token_budget: run.current.estimated_tokens });
+    const storedProfile = resolveRunProfile(run);
+    const executionProfile = storedProfile === "legacy" ? "prod" : storedProfile;
+    const workUnit = classifyWorkUnitForProfile(executionProfile, false);
+    const reasoningEffort = resolveLegacyRequestedReasoning(run);
     return {
       handoffId: `run-handoff-${run.current.run_id}-${run.current.revision}` as GovernedHandoff["handoffId"],
       sessionId: run.current.run_id,
@@ -100,11 +105,13 @@ export function createRunOrchestrator(options: {
       efficiency: {
         work_unit: {
           work_unit_id: run.current.run_id,
-          class: "bounded_implementation",
-          risk: "ordinary"
+          class: workUnit.class,
+          risk: workUnit.risk
         },
-        actual_reasoning_effort: null
-      }
+        profile: storedProfile,
+        actual_reasoning_effort: reasoningEffort
+      },
+      ...(reasoningEffort === null ? {} : { generationSettings: { reasoning_effort: reasoningEffort } })
     };
   }
 
@@ -301,6 +308,7 @@ export function createRunOrchestrator(options: {
       const claimableTaskId = claimable.task_id ?? claimable.taskId;
       if (claimableTaskId === undefined) throw new Error("invalid_supervisor_task");
       const claimableRun = bindingForTask(claimableTaskId);
+      assertTaskRoute(claimableRun, claimable);
       try {
         resolveEnabledProject(options.stateDir, claimableRun.current.project_id, registryOptions);
       } catch (error) {
@@ -314,6 +322,7 @@ export function createRunOrchestrator(options: {
     if (taskId === undefined) throw new Error("invalid_supervisor_task");
     let run = bindingForTask(taskId);
     if (run.provider_result !== null) return finishProviderResult(taskId, run, reconstructedResult(run));
+    assertTaskRoute(run, task);
     if (run.status === "queued") run = transitionRun(options.stateDir, run.current.run_id, "running", now());
     let result: DispatchResult;
     try {
@@ -367,7 +376,14 @@ export function createRunOrchestrator(options: {
     return transitionRun(options.stateDir, runId, "cancelled", now());
   }
 
-  return { prepareRun, approveAndQueueRun, runSupervisorOnce, cancelRun };
+  return { prepareRun, approveAndQueueRun, runSupervisorOnce, cancelRun, handoffForRun: (runId: string) => handoffFor(record(runId)) };
+}
+
+function assertTaskRoute(run: RunRecord, task: SupervisorTaskView): void {
+  assertNoSilentRouteChange(
+    { provider: run.current.provider, model: run.current.model, reasoning: resolveLegacyRequestedReasoning(run) },
+    { provider: task.handoff.vendor, model: task.handoff.model ?? null, reasoning: (task.handoff.generationSettings?.reasoning_effort ?? null) as RouteSnapshot["reasoning"] }
+  );
 }
 
 function sanitizeDispatchResult(result: DispatchResult): DispatchResult {

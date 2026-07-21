@@ -16,6 +16,7 @@ import {
 import type { WorkUnitDescriptor } from "../data/delivery-system/efficiencyPolicy";
 import { DISPATCH_DECISION_TELEMETRY_PATH } from "../data/delivery-system/sessionState";
 import type { EvalRecordSummary } from "../data/delivery-system/modelOutputEvaluation";
+import type { StoredRunProfile } from "../data/delivery-system/executionProfile";
 import {
   buildSupervisorRoutingDecision,
   type ModelPolicyLayer,
@@ -82,6 +83,8 @@ export type GovernedHandoff = CliWorkerInput & {
   readonly routing?: SupervisorRoutingContext;
   readonly efficiency?: {
     readonly work_unit: WorkUnitDescriptor;
+    /** Present on profile-aware run handoffs; optional until legacy public callers migrate. */
+    readonly profile?: StoredRunProfile;
     readonly actual_reasoning_effort: string | null;
   };
 };

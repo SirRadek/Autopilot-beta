@@ -14,6 +14,33 @@ import { platform } from "node:process";
 
 import { contextWidthSpecs } from "./tokenEfficiency";
 import { appendStateFile } from "./stateMaintenanceLock";
+import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "./executionProfile";
+
+// ─── Adapter argv safety ──────────────────────────────────────────────────────
+
+const CONTROL_CHAR_PATTERN = /[\x00-\x1f\x7f-\x9f]/;
+
+/**
+ * Guards every model/effort value that reaches a vendor argv array. Rejects empty values,
+ * any whitespace, control characters, and values that look like a CLI flag
+ * (leading "-") so a caller-supplied string can never masquerade as an extra/duplicate flag.
+ */
+function assertArgvSafeValue(label: string, value: string): void {
+  if (value.length === 0) throw new Error(`invalid_${label}: value must not be empty`);
+  if (/\s/.test(value)) throw new Error(`invalid_${label}: value must not contain whitespace`);
+  if (CONTROL_CHAR_PATTERN.test(value)) throw new Error(`invalid_${label}: value must not contain control characters`);
+  if (value.startsWith("-")) throw new Error(`invalid_${label}: value must not resemble a CLI flag`);
+}
+
+/** Vendor keys line up 1:1 with `SUPPORTED_REASONING_EFFORTS` from executionProfile.ts. */
+function assertReasoningEffortAllowed(vendor: keyof typeof SUPPORTED_REASONING_EFFORTS, effort: string | undefined): void {
+  if (effort === undefined) return;
+  assertArgvSafeValue("reasoning_effort", effort);
+  const supported: readonly RunReasoningEffort[] = SUPPORTED_REASONING_EFFORTS[vendor];
+  if (!supported.includes(effort as RunReasoningEffort)) {
+    throw new Error(`unsupported_reasoning_effort: ${vendor} does not support "${effort}"`);
+  }
+}
 
 // ─── ANSI stripping ───────────────────────────────────────────────────────────
 
@@ -63,6 +90,8 @@ export function extractJsonFromPtyOutput(clean: string): unknown {
 
 export interface AgyCaptureOptions {
   readonly model?: string;
+  /** Owner-selected, adapter-enforced reasoning effort. Unsupported values refuse before spawn. */
+  readonly effort?: string;
   readonly cwd?: string;
   /** Extra directories to grant the worker (agy --add-dir) — real repo/data access. */
   readonly addDirs?: readonly string[];
@@ -721,6 +750,7 @@ export function buildCodexBashCommand(
   codexPath: string,
   opts: {
     readonly model?: string;
+    readonly effort?: string;
     readonly outputSchemaPath?: string;
     readonly images?: readonly string[];
     readonly codexMode?: CodexDispatchMode;
@@ -728,14 +758,15 @@ export function buildCodexBashCommand(
   outFile: string,
   promptFile: string
 ): string {
-  const dispatchArgs = buildCodexConfigArgs(opts.codexMode);
+  if (opts.model !== undefined) assertArgvSafeValue("model", opts.model);
+  const dispatchArgs = buildCodexConfigArgs(opts.codexMode, opts.effort);
   const parts = [
     shq(codexPath),
     "exec",
     ...dispatchArgs
   ];
   if (opts.outputSchemaPath) parts.push("--output-schema", shq(opts.outputSchemaPath.replace(/\\/g, "/")));
-  if (opts.model) parts.push("-m", shq(opts.model));
+  if (opts.model) parts.push("--model", shq(opts.model));
   for (const img of opts.images ?? []) parts.push("-i", shq(img.replace(/\\/g, "/")));
   parts.push("-o", shq(outFile.replace(/\\/g, "/")), "-", "<", shq(promptFile.replace(/\\/g, "/")));
   return parts.join(" ");
@@ -769,7 +800,7 @@ export function resolveCodexDispatchConfig(mode: CodexDispatchMode | undefined):
   }
 }
 
-export function buildCodexConfigArgs(mode: CodexDispatchMode | undefined): string[] {
+export function buildCodexConfigArgs(mode: CodexDispatchMode | undefined, effort?: string): string[] {
   const config = resolveCodexDispatchConfig(mode);
   const args = [
     "-c",
@@ -780,6 +811,11 @@ export function buildCodexConfigArgs(mode: CodexDispatchMode | undefined): strin
 
   if (config.webSearch !== undefined) {
     args.push("-c", `tools.web_search=${config.webSearch ? "true" : "false"}`);
+  }
+
+  if (effort !== undefined) {
+    assertReasoningEffortAllowed("codex_cli", effort);
+    args.push("-c", `model_reasoning_effort="${effort}"`);
   }
 
   return args;
@@ -806,6 +842,8 @@ function killProcessTree(pid: number | undefined): void {
  */
 export function buildAgyArgs(prompt: string, opts: AgyCaptureOptions = {}): string[] {
   assertPromptWithinLimit(prompt, opts);
+  if (opts.model !== undefined) assertArgvSafeValue("model", opts.model);
+  assertReasoningEffortAllowed("agy_cli", opts.effort);
 
   // Grant real repo/data access: each extra dir + each image's containing dir.
   const accessDirs = [
@@ -820,6 +858,7 @@ export function buildAgyArgs(prompt: string, opts: AgyCaptureOptions = {}): stri
     prompt,
     ...(opts.dangerouslySkipPermissions === true ? ["--dangerously-skip-permissions"] : ["--sandbox"]),
     ...(opts.model ? ["--model", opts.model] : []),
+    ...(opts.effort ? ["--effort", opts.effort] : []),
     ...accessDirs.flatMap((dir) => ["--add-dir", dir])
   ];
 }
@@ -912,6 +951,8 @@ function emitAgyProcessEvent(
 
 export interface CodexCaptureOptions {
   readonly model?: string;
+  /** Owner-selected, adapter-enforced reasoning effort. Unsupported values refuse before spawn. */
+  readonly effort?: string;
   readonly outputSchemaPath?: string;
   readonly codexMode?: CodexDispatchMode;
   readonly cwd?: string;
@@ -928,6 +969,9 @@ export interface CodexCaptureOptions {
 }
 
 export interface ClaudeCaptureOptions {
+  readonly model?: string;
+  /** Owner-selected, adapter-enforced reasoning effort. Unsupported values refuse before spawn. */
+  readonly effort?: string;
   readonly cwd?: string;
   readonly timeoutMs?: number;
   readonly maxPromptChars?: number;
@@ -941,13 +985,11 @@ export interface ClaudeCaptureResult {
   readonly timedOut: boolean;
 }
 
-export async function captureClaudeResponse(
-  prompt: string,
-  opts: ClaudeCaptureOptions = {}
-): Promise<ClaudeCaptureResult> {
-  assertPromptWithinLimit(prompt, opts);
-  const startedAt = Date.now();
-  const result = spawnSync("claude", [
+/** Pure exact argv builder: `--model`/`--effort` are appended only when supplied, never a fallback flag. */
+export function buildClaudeArgs(prompt: string, opts: { readonly model?: string; readonly effort?: string } = {}): string[] {
+  if (opts.model !== undefined) assertArgvSafeValue("model", opts.model);
+  assertReasoningEffortAllowed("claude_cli", opts.effort);
+  return [
     "-p",
     prompt,
     "--output-format",
@@ -955,8 +997,23 @@ export async function captureClaudeResponse(
     "--permission-mode",
     "plan",
     "--tools",
-    ""
-  ], {
+    "",
+    ...(opts.model !== undefined ? ["--model", opts.model] : []),
+    ...(opts.effort !== undefined ? ["--effort", opts.effort] : [])
+  ];
+}
+
+export async function captureClaudeResponse(
+  prompt: string,
+  opts: ClaudeCaptureOptions = {}
+): Promise<ClaudeCaptureResult> {
+  assertPromptWithinLimit(prompt, opts);
+  const args = buildClaudeArgs(prompt, {
+    ...(opts.model !== undefined ? { model: opts.model } : {}),
+    ...(opts.effort !== undefined ? { effort: opts.effort } : {})
+  });
+  const startedAt = Date.now();
+  const result = spawnSync("claude", args, {
     encoding: "utf8",
     cwd: opts.cwd ?? process.cwd(),
     timeout: opts.timeoutMs ?? 120000,
@@ -983,6 +1040,28 @@ export interface CodexCaptureResult {
   readonly attempts: number;
 }
 
+/** Pure exact argv builder for the POSIX `codex exec` path: `--model`/`-c model_reasoning_effort` are appended only when supplied, never a fallback flag. */
+export function buildCodexExecArgs(
+  opts: {
+    readonly model?: string;
+    readonly effort?: string;
+    readonly codexMode?: CodexDispatchMode;
+    readonly outputSchemaPath?: string;
+    readonly images?: readonly string[];
+  },
+  outputFile: string
+): string[] {
+  if (opts.model !== undefined) assertArgvSafeValue("model", opts.model);
+  const schemaArgs = opts.outputSchemaPath ? ["--output-schema", opts.outputSchemaPath] : [];
+  return [
+    "exec",
+    ...buildCodexConfigArgs(opts.codexMode, opts.effort),
+    ...schemaArgs, "-o", outputFile,
+    ...(opts.model ? ["--model", opts.model] : []),
+    ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
+  ];
+}
+
 export async function captureCodexResponse(
   prompt: string,
   opts: CodexCaptureOptions = {}
@@ -994,9 +1073,6 @@ export async function captureCodexResponse(
 
   const outputDir = join(tmpdir(), "autopilot-codex-captures");
   mkdirSync(outputDir, { recursive: true });
-  const schemaArgs = opts.outputSchemaPath
-    ? ["--output-schema", opts.outputSchemaPath]
-    : [];
 
   const { codexPath, bashPath } = resolveCodexCommand();
 
@@ -1035,13 +1111,7 @@ export async function captureCodexResponse(
         });
       } else {
         // POSIX: direct spawnSync with stdin input (dispatch sandbox + never-approve forced)
-        result = spawnSync("codex", [
-          "exec",
-          ...buildCodexConfigArgs(opts.codexMode),
-          ...schemaArgs, "-o", outputFile,
-          ...(opts.model ? ["-m", opts.model] : []),
-          ...(opts.images ?? []).flatMap((img) => ["-i", img]), "-"
-        ], {
+        result = spawnSync("codex", buildCodexExecArgs(opts, outputFile), {
           input: prompt,
           encoding: "utf8",
           cwd: opts.cwd ?? process.cwd(),

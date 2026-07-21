@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,6 +9,8 @@ import {
   classifyCliWorkerOutcome,
   estimateCliWorkerTokens,
   isWorkerLockStale,
+  runCliWorker,
+  type CliWorkerInput,
   type WorkerLockRecord
 } from "../../src/data/delivery-system/cliWorker";
 import {
@@ -379,11 +381,10 @@ describe("CLI worker exec containment", () => {
     expect(cmd).toContain("-c approval_policy=never");
   });
 
-  it("shq-escapes caller-supplied codex values so they cannot inject a command", () => {
+  it("rejects caller-supplied codex model values that could inject a command", () => {
     const evil = `m'; rm -rf ~ #`;
-    const cmd = buildCodexBashCommand("codex", { model: evil }, "/tmp/o.json", "/tmp/p.txt");
-    // the model reaches the command line ONLY as a fully-escaped single-quoted token
-    expect(cmd).toContain(`-m ${shq(evil)}`);
+    expect(() => buildCodexBashCommand("codex", { model: evil }, "/tmp/o.json", "/tmp/p.txt"))
+      .toThrow("invalid_model");
     expect(shq(evil)).toBe(`'m'\\''; rm -rf ~ #'`);
   });
 
@@ -442,5 +443,70 @@ describe("CLI worker exec containment", () => {
       vi.doUnmock("node:fs");
       vi.restoreAllMocks();
     }
+  });
+});
+
+// AF6 — capability-tuple enforcement: an owner-selected reasoning effort unsupported by the
+// selected adapter must refuse before any lock, telemetry, or provider side effect exists.
+describe("CLI worker capability-tuple enforcement", () => {
+  function baseInput(overrides: Partial<CliWorkerInput> = {}): CliWorkerInput {
+    return {
+      handoffId: "hp-effort-guard" as CliWorkerInput["handoffId"],
+      vendor: "agy_cli",
+      prompt: "ping",
+      parentSessionHash: "session-hash",
+      parentTurnHash: "turn-hash",
+      ...overrides
+    };
+  }
+
+  it("refuses an unsupported vendor/reasoning-effort tuple before any lock or telemetry side effect", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "autopilot-cli-worker-effort-guard-"));
+
+    await expect(runCliWorker(baseInput({
+      vendor: "agy_cli",
+      generationSettings: { reasoning_effort: "xhigh" }
+    }), stateDir)).rejects.toThrow("unsupported_reasoning_effort");
+
+    expect(existsSync(join(stateDir, "worker.lock"))).toBe(false);
+    expect(existsSync(join(stateDir, "cli-call-telemetry.jsonl"))).toBe(false);
+  });
+
+  it("refuses any non-null OpenRouter reasoning effort before any side effect", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "autopilot-cli-worker-effort-guard-"));
+
+    await expect(runCliWorker(baseInput({
+      vendor: "openrouter_api",
+      openrouterMode: "qwen3_code_draft",
+      taskPacketRef: "packet-1",
+      generationSettings: { reasoning_effort: "low" }
+    }), stateDir)).rejects.toThrow("unsupported_reasoning_effort");
+
+    expect(existsSync(join(stateDir, "worker.lock"))).toBe(false);
+    expect(existsSync(join(stateDir, "cli-call-telemetry.jsonl"))).toBe(false);
+  });
+
+  it("refuses an invalid model before every worker side effect", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "autopilot-cli-worker-model-guard-"));
+
+    await expect(runCliWorker(baseInput({
+      vendor: "claude_cli",
+      model: "opus latest",
+      generationSettings: { reasoning_effort: "high" }
+    }), stateDir)).rejects.toThrow("invalid_model");
+
+    expect(readdirSync(stateDir)).toEqual([]);
+  });
+
+  it("refuses a C1 control character in the model before every worker side effect", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "autopilot-cli-worker-model-guard-"));
+
+    await expect(runCliWorker(baseInput({
+      vendor: "claude_cli",
+      model: "opus\u0085latest",
+      generationSettings: { reasoning_effort: "high" }
+    }), stateDir)).rejects.toThrow("invalid_model");
+
+    expect(readdirSync(stateDir)).toEqual([]);
   });
 });
