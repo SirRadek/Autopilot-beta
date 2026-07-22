@@ -4,7 +4,7 @@ import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQ
 import { isRunRouteEligible } from "./runRouteEligibility";
 import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
-import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, canonicalPromptCommitment, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createGroupRunDraft, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
+import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, canonicalPromptCommitment, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createGroupRunDraft, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, settleRunReservation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import type { OrchestrationGroupSpec, TokenGroupReservation, TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens } from "./runPromptPolicy";
 import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
@@ -332,8 +332,9 @@ export function createRunOrchestrator(options: {
     }
     if (!cancelled && !failed && (task === undefined || task.status === "running")) options.supervisor.complete(taskId, now());
     if (run.reservation_status === "active") {
-      options.tokenGateway.settle(reservation, { inputTokens: cumulativeInputTokens, outputTokens: cumulativeOutputTokens });
-      run = markRunReservationTerminal(options.stateDir, run.current.run_id, "settled", now());
+      const settlement = options.tokenGateway.settle(reservation, { inputTokens: cumulativeInputTokens, outputTokens: cumulativeOutputTokens });
+      if (settlement === undefined) throw new Error("token_settlement_missing");
+      run = settleRunReservation(options.stateDir, run.current.run_id, settlement, now());
       options.afterPhase?.("reservation_terminal");
     }
     const latest = record(run.current.run_id);

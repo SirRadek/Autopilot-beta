@@ -25,7 +25,7 @@ function setup(options: { dispatch?: ReturnType<typeof vi.fn>; reserve?: ReturnT
   const tokenGateway = {
     reserve: options.reserve ?? vi.fn((request) => ({ ...reservation, ...request, totalTokens: request.inputTokens + request.outputTokens })),
     release: vi.fn(),
-    settle: vi.fn()
+    settle: vi.fn((_reservation, usage) => usage)
   };
   const tasks: Array<Record<string, unknown>> = [];
   const supervisor = {
@@ -662,6 +662,58 @@ describe("governed run orchestration", () => {
     expect(readRunStore(stateDir).runs[0]).toMatchObject({ queue_compensation_requested: false, supervisor_task_id: null, reservation_status: "none" });
     const restarted = createRunOrchestrator({ stateDir, projectRoot: fixtureProjectRoot, tokenGateway: new TokenGateway({ stateDir }), supervisor: new SupervisorQueue({ stateDir }), dispatch: vi.fn(), now: () => now, isRouteAvailable: () => true });
     expect(restarted.approveAndQueueRun(draft.current.run_id, 1, "owner").status).toBe("queued");
+  });
+
+  it("persists the exact gateway settlement before acknowledging the terminal reservation", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-settlement-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: fixtureProjectCwd, enabled: true }] });
+    const gateway = new TokenGateway({ stateDir });
+    const settleSpy = vi.spyOn(gateway, "settle");
+    const acknowledgeSpy = vi.spyOn(gateway, "acknowledgeTerminal");
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-settle", handoffId: "handoff" as never, vendor: "codex_cli" as const, model: "gpt-5", exitCode: 0, rawOutput: "settled output", parsedJson: null, durationSeconds: 1, lockStatus: "acquired_supervisor_spawn" as const, workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true as const }));
+    const orchestrator = createRunOrchestrator({ stateDir, projectRoot: fixtureProjectRoot, tokenGateway: gateway, supervisor: new SupervisorQueue({ stateDir }), dispatch, now: () => now, isRouteAvailable: () => true });
+    const draft = orchestrator.prepareRun({ project_id: "alpha", prompt: "settle me", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"], profile: "dev", requested_reasoning_effort: null });
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    expect((await orchestrator.runSupervisorOnce())?.status).toBe("completed");
+    const settleResult = settleSpy.mock.results[0]?.value;
+    expect(settleResult).toBeDefined();
+    expect(readRunStore(stateDir).runs[0]).toMatchObject({
+      reservation_status: "settled",
+      token_settlement: { inputTokens: settleResult.inputTokens, outputTokens: settleResult.outputTokens, totalTokens: settleResult.inputTokens + settleResult.outputTokens },
+    });
+    expect(acknowledgeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the same settlement on retry after a settle-before-store crash", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-orchestrator-settlement-fault-"));
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: fixtureProjectCwd, enabled: true }] });
+    const realGateway = new TokenGateway({ stateDir });
+    let fault = true;
+    let settleAttempts = 0;
+    const gateway = {
+      reserve: realGateway.reserve.bind(realGateway),
+      release: realGateway.release.bind(realGateway),
+      acknowledgeTerminal: realGateway.acknowledgeTerminal.bind(realGateway),
+      settle: (...args: Parameters<TokenGateway["settle"]>) => {
+        settleAttempts += 1;
+        const value = realGateway.settle(...args);
+        if (fault) { fault = false; throw new Error("after_settle_return"); }
+        return value;
+      }
+    };
+    const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-settle-crash", handoffId: "handoff" as never, vendor: "codex_cli" as const, model: "gpt-5", exitCode: 0, rawOutput: "crash output", parsedJson: null, durationSeconds: 1, lockStatus: "acquired_supervisor_spawn" as const, workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true as const }));
+    const first = createRunOrchestrator({ stateDir, projectRoot: fixtureProjectRoot, tokenGateway: gateway, supervisor: new SupervisorQueue({ stateDir }), dispatch, now: () => now, isRouteAvailable: () => true });
+    const draft = first.prepareRun({ project_id: "alpha", prompt: "settle crash", provider: "codex_cli", model: "gpt-5", estimated_tokens: 20_000, requested_artifacts: ["text"], profile: "dev", requested_reasoning_effort: null });
+    first.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    await expect(first.runSupervisorOnce()).rejects.toThrow("after_settle_return");
+    expect(readRunStore(stateDir).runs[0]?.token_settlement).toBeNull();
+    const second = createRunOrchestrator({ stateDir, projectRoot: fixtureProjectRoot, tokenGateway: gateway, supervisor: new SupervisorQueue({ stateDir }), dispatch, now: () => now, isRouteAvailable: () => true });
+    expect((await second.runSupervisorOnce())?.status).toBe("completed");
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(settleAttempts).toBe(2);
+    const settled = readRunStore(stateDir).runs[0]?.token_settlement;
+    expect(settled).not.toBeNull();
+    expect(settled?.totalTokens).toBe((settled?.inputTokens ?? 0) + (settled?.outputTokens ?? 0));
   });
 
   for (const phase of ["release", "reservation_terminal", "finalized"] as const) {

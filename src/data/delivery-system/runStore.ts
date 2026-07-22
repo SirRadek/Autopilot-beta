@@ -68,6 +68,12 @@ export interface RunProviderResult {
 
 export type RunArtifactInput = Omit<RunArtifact, "created_at">;
 
+export interface RunTokenSettlement {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+}
+
 export interface RunRecord {
   readonly schema_version: "v1";
   readonly orchestration_ref: { readonly group_id: string; readonly slot_id: string } | null;
@@ -82,6 +88,7 @@ export interface RunRecord {
   readonly worker_run_id: string | null;
   readonly terminal_reason: string | null;
   readonly token_reservation: RunReservation | null;
+  readonly token_settlement: RunTokenSettlement | null;
   readonly reservation_status: "none" | "active" | "settled" | "released";
   readonly provider_result: RunProviderResult | null;
   readonly cancellation_requested: boolean;
@@ -210,6 +217,12 @@ function validReservation(value: RunReservation | null): boolean {
       (validString(value.groupId, MAX_ID) && validString(value.slotId, MAX_ID) && Number.isSafeInteger(value.heldTokens) && value.heldTokens! >= value.totalTokens)));
 }
 
+function validTokenSettlement(value: RunTokenSettlement | null): boolean {
+  return value === null || (Number.isSafeInteger(value.inputTokens) && value.inputTokens >= 0 &&
+    Number.isSafeInteger(value.outputTokens) && value.outputTokens >= 0 &&
+    Number.isSafeInteger(value.totalTokens) && value.totalTokens === value.inputTokens + value.outputTokens);
+}
+
 function validProviderResult(value: RunProviderResult | null): boolean {
   return value === null || (typeof value.refused === "boolean" && validNullableString(value.reason, MAX_TERMINAL_REASON) &&
     validNullableString(value.worker_run_id, MAX_ID) && typeof value.raw_output === "string" && value.raw_output.length <= MAX_PREVIEW &&
@@ -249,7 +262,8 @@ function validate(document: unknown): asserts document is RunStoreDocument {
       !validNullableString(value.supervisor_task_id, MAX_ID) || !validNullableString(value.worker_run_id, MAX_ID) ||
       !validNullableString(value.terminal_reason, MAX_TERMINAL_REASON) || !validTimestamp(value.updated_at) ||
       !validReservation(value.token_reservation) || !["none", "active", "settled", "released"].includes(value.reservation_status) ||
-      (value.reservation_status === "none") !== (value.token_reservation === null) || !validProviderResult(value.provider_result) ||
+      (value.reservation_status === "none") !== (value.token_reservation === null) || !validTokenSettlement(value.token_settlement) ||
+      (value.token_settlement !== null && value.reservation_status !== "settled") || !validProviderResult(value.provider_result) ||
       typeof value.cancellation_requested !== "boolean" ||
       typeof value.queue_compensation_requested !== "boolean" ||
       !validNullableString(value.dispatch_failure, MAX_TERMINAL_REASON) ||
@@ -283,7 +297,7 @@ export function readRunStore(stateDir: string): RunStoreDocument {
       const orchestrationRequest = record.orchestration_request === null || record.orchestration_request === undefined
         ? null
         : { prompt_commitment: null, ...(record.orchestration_request as unknown as Record<string, unknown>) };
-      return { orchestration_ref: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, ...(record as unknown as Record<string, unknown>), current, revisions, orchestration_request: orchestrationRequest, ...(record.provider_result === null || record.provider_result === undefined ? {} : { provider_result: { exit_code: null, error_reason: null, lock_status: null, ...(record.provider_result as unknown as Record<string, unknown>) } }) };
+      return { orchestration_ref: null, token_reservation: null, token_settlement: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, ...(record as unknown as Record<string, unknown>), current, revisions, orchestration_request: orchestrationRequest, ...(record.provider_result === null || record.provider_result === undefined ? {} : { provider_result: { exit_code: null, error_reason: null, lock_status: null, ...(record.provider_result as unknown as Record<string, unknown>) } }) };
     }) };
   }
   validate(document);
@@ -323,7 +337,7 @@ export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
   const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: randomUUID(), revision: 1, created_at: createdAt };
-  const record: RunRecord = { schema_version: "v1", orchestration_ref: null, orchestration_request: null, current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: createdAt };
+  const record: RunRecord = { schema_version: "v1", orchestration_ref: null, orchestration_request: null, current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, token_settlement: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: createdAt };
   write(stateDir, { ...document, runs: [...document.runs, record] });
   return draft;
 }
@@ -341,7 +355,7 @@ export function createGroupRunDraft(stateDir: string, runId: string, orchestrati
   if (document.runs.some((run) => run.current.run_id === runId || (run.orchestration_ref?.group_id === orchestrationRef.group_id && run.orchestration_ref.slot_id === orchestrationRef.slot_id))) throw new Error("orchestration_group_run_exists");
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
   const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: 1, created_at: createdAt };
-  const record: RunRecord = { schema_version: "v1", orchestration_ref: orchestrationRef, orchestration_request: { operator, estimated_tokens: input.estimated_tokens, prompt_commitment: canonicalPromptCommitment(input.prompt) }, current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: createdAt };
+  const record: RunRecord = { schema_version: "v1", orchestration_ref: orchestrationRef, orchestration_request: { operator, estimated_tokens: input.estimated_tokens, prompt_commitment: canonicalPromptCommitment(input.prompt) }, current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, token_settlement: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: createdAt };
   write(stateDir, { ...document, runs: [...document.runs, record] });
   return draft;
 }
@@ -409,6 +423,29 @@ export function clearRunProviderResultForRetry(stateDir: string, runId: string, 
   const record = find(stateDir, runId);
   if (record.provider_result === null || !Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(outputTokens) || outputTokens < 0 || !validTimestamp(updatedAt)) throw new Error("invalid_run_provider_result");
   return replace(stateDir, { ...record, provider_result: null, worker_run_id: null, retry_input_tokens: record.retry_input_tokens + inputTokens, retry_output_tokens: record.retry_output_tokens + outputTokens, updated_at: updatedAt });
+}
+
+export function recordRunTokenSettlement(stateDir: string, runId: string, settlement: { readonly inputTokens: number; readonly outputTokens: number }, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  const normalized: RunTokenSettlement = { inputTokens: settlement.inputTokens, outputTokens: settlement.outputTokens, totalTokens: settlement.inputTokens + settlement.outputTokens };
+  if (!validTokenSettlement(normalized) || !validTimestamp(updatedAt)) throw new Error("invalid_run_token_settlement");
+  if (record.token_settlement !== null) {
+    if (isDeepStrictEqual(record.token_settlement, normalized)) return record;
+    throw new Error("run_token_settlement_conflict");
+  }
+  return replace(stateDir, { ...record, token_settlement: normalized, updated_at: updatedAt });
+}
+
+export function settleRunReservation(stateDir: string, runId: string, settlement: { readonly inputTokens: number; readonly outputTokens: number }, updatedAt: string): RunRecord {
+  const record = find(stateDir, runId);
+  const normalized: RunTokenSettlement = { inputTokens: settlement.inputTokens, outputTokens: settlement.outputTokens, totalTokens: settlement.inputTokens + settlement.outputTokens };
+  if (!validTokenSettlement(normalized) || !validTimestamp(updatedAt)) throw new Error("invalid_run_token_settlement");
+  if (record.reservation_status === "settled" && record.token_settlement !== null) {
+    if (isDeepStrictEqual(record.token_settlement, normalized)) return record;
+    throw new Error("run_token_settlement_conflict");
+  }
+  if (record.reservation_status !== "active" || record.token_settlement !== null) throw new Error("invalid_run_reservation_transition");
+  return replace(stateDir, { ...record, reservation_status: "settled", token_settlement: normalized, updated_at: updatedAt });
 }
 
 export function markRunReservationTerminal(stateDir: string, runId: string, status: "settled" | "released", updatedAt: string): RunRecord {

@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 140,
+  "file_count": 141,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -722,13 +722,18 @@
     {
       "source_path": "src/data/delivery-system/brainstormCoordinator.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "7a5ec003184d9587b7c97e4e2f88a6e78ca97f73572bc51d758c626d2f30a4e1"
+      "content_hash": "f216f7433aa9cab7d3d7cca9858718003b0c91491a9d1f2e5716f29ee416abd3"
     },
     {
       "source_path": "src/data/delivery-system/brainstormStore.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "b1692f00d65645d2f7d3bb82e40a8857f4242f82e1e97095cd8540d58482b300",
       "patched_by": "brainstorm-group-task-2"
+    },
+    {
+      "source_path": "src/data/delivery-system/brainstormTelemetry.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "8453dcf5517f2ec857072d9f8e15ef1a47cc85696f0d554c296d87af13fd28a5"
     },
     {
       "source_path": "src/data/delivery-system/checkCompletionMatrix.ts",

@@ -206,7 +206,7 @@ describe("governed brainstorm coordinator", () => {
     expect(conflicted.status).toBe("needs_arbitration");
     expect(conflicted.conflicts[0]).toMatchObject({ output_run_ids: conflicted.child_run_ids.slice(0, 2), material: true });
     expect(readRunStore(context.stateDir).runs).toHaveLength(4);
-    expect(() => context.make().coordinator.requestArbitration(context.brainstorm.brainstorm_id, arbitration, "owner")).toThrow("brainstorm_arbitration_not_implemented");
+    expect(() => context.make().coordinator.requestArbitration(context.brainstorm.brainstorm_id, arbitration, "owner")).toThrow("brainstorm_no_independent_arbiter");
     expect(readRunStore(context.stateDir).runs).toHaveLength(4);
   });
 
