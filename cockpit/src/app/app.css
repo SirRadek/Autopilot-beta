@@ -120,6 +120,11 @@ h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: #b
 .auth-card label { color: #b7c5e5; font-size: .75rem; } .auth-card input { border: 1px solid #2c3a61; border-radius: 6px; padding: .55rem; color: #dbe5fb; background: #0b1224; }
 .auth-card button { border: 1px solid #5d8dd9; border-radius: 6px; padding: .55rem; color: #fff; background: #294b86; cursor: pointer; } .auth-card button:disabled { cursor: wait; opacity: .6; }
 .model-health { color: #b7c5e5; font-size: .62rem; } .model-available { color: #baf8d4; } .model-unavailable { color: #cad0df; } .provider-empty, .provider-models p { color: #8293b8; }
+.brainstorm-routes { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.brainstorm-route-card { display: grid; gap: .3rem; }
+.brainstorm-pane fieldset { border: 1px solid #253152; border-radius: 8px; padding: .5rem; margin: 0 0 .5rem; }
+.brainstorm-pane legend { padding: 0 .3rem; color: #b7c5e5; font-size: .7rem; }
+.brainstorm-record { margin-bottom: .75rem; }
 @media (max-width: 850px) {
   .cockpit-shell { padding: .75rem; } .cockpit-header { align-items: flex-start; flex-direction: column; }
   .cockpit-tabs { display: flex; gap: .35rem; overflow-x: auto; margin: 0 auto 1rem; max-width: 1800px; }

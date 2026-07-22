@@ -24,8 +24,8 @@ describe("AppShell", () => {
     act(() => { tabs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
     expect(document.activeElement).toBe(tabs[2]);
     act(() => { tabs[2].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })); });
-    expect(document.activeElement).toBe(tabs[3]);
-    act(() => { tabs[3].dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })); });
+    expect(document.activeElement).toBe(tabs[4]);
+    act(() => { tabs[4].dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })); });
     expect(document.activeElement).toBe(tabs[0]);
     act(() => { root.unmount(); });
     host.remove();
@@ -65,7 +65,7 @@ describe("AppShell", () => {
     const html = renderToStaticMarkup(<AppShell {...environmentProps} projectsPane={<p>A</p>} approvalPane={<p>B</p>} operationsPane={<p>C</p>} />);
     const sectionNav = html.match(/<nav class="cockpit-tabs"[\s\S]*?<\/nav>/)?.[0] ?? "";
     const tabs = [...sectionNav.matchAll(/role="tab"[^>]*>([^<]+)/g)].map((match) => match[1]);
-    expect(tabs).toEqual(["Approval", "Sessions", "Providers", "Workers"]);
+    expect(tabs).toEqual(["Approval", "Sessions", "Providers", "Workers", "Brainstorm"]);
     expect(html).toMatch(/aria-controls="[^"]+-tab-panel-approval"/);
     expect(html).toContain('role="tabpanel"');
     expect(html).toMatch(/aria-labelledby="[^"]+-tab-approval"/);
