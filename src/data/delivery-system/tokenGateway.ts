@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import { readManagedStateTextFile } from "./managedStateFile";
 import { appendStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
@@ -72,7 +73,18 @@ export interface TokenReservation extends TokenReservationRequest {
   readonly reservationId: string;
   readonly reservedAt: string;
   readonly totalTokens: number;
+  readonly groupId?: string;
+  readonly slotId?: string;
+  readonly heldTokens?: number;
 }
+
+export interface TokenGroupSlotRequest extends TokenGatewayRoute { readonly slotId: string; readonly holdTokens: number; }
+export interface TokenGroupSlotReservation extends TokenGroupSlotRequest {
+  readonly state: "reserved" | "claimed" | "settled" | "released";
+  readonly reservation: TokenReservation | null;
+}
+export interface TokenGroupReservation { readonly groupId: string; readonly slots: readonly TokenGroupSlotReservation[]; readonly maximumTokens: number; }
+export interface OrchestrationGroupSpec { readonly groupId: string; readonly slots: readonly TokenGroupSlotRequest[]; }
 
 export interface TokenSettlement {
   readonly inputTokens: number;
@@ -96,9 +108,10 @@ export interface TokenGatewayTelemetry {
 }
 
 interface GatewayState {
-  readonly used: Record<string, number>;
+  used: Record<string, number>;
   readonly reservations: Record<string, TokenReservation>;
   readonly terminal: Record<string, { readonly event: "settled" | "released"; readonly settlement: TokenSettlement; readonly completedAt: string }>;
+  readonly groups: Record<string, TokenGroupReservation>;
 }
 
 const STATE_FILE = "token-gateway-state.json";
@@ -145,7 +158,9 @@ export class TokenGateway {
         return existing;
       }
     }
-    if (Object.keys(this.state.reservations).length >= MAX_ACTIVE_RESERVATIONS) throw this.refuse(request, "token_reservation_limit");
+    const activeGroupSlots = Object.values(this.state.groups).flatMap((group) => group.slots).filter((slot) => slot.state === "reserved" || slot.state === "claimed").length;
+    const ordinaryReservations = Object.values(this.state.reservations).filter((reservation) => reservation.groupId === undefined).length;
+    if (activeGroupSlots + ordinaryReservations >= MAX_ACTIVE_RESERVATIONS) throw this.refuse(request, "token_reservation_limit");
     const routeKeys = [`provider:${request.provider}`, `model:${request.provider}:${request.model ?? "default"}`, `session:${request.sessionId ?? "unscoped"}`];
     const newUsageKeys = routeKeys.filter((key) => this.state.used[key] === undefined).length;
     if (Object.keys(this.state.used).length + newUsageKeys > MAX_USAGE_KEYS) throw this.refuse(request, "token_reservation_limit");
@@ -175,6 +190,75 @@ export class TokenGateway {
     return reservation;
   }
 
+  reserveGroup(input: OrchestrationGroupSpec): TokenGroupReservation {
+    const normalized = normalizeGroup(input);
+    const existing = this.state.groups[normalized.groupId];
+    if (existing !== undefined) {
+      if (!sameGroupRequest(existing, normalized)) throw new Error("token_group_mismatch");
+      return existing;
+    }
+    const activeGroupSlots = Object.values(this.state.groups).flatMap((group) => group.slots).filter((slot) => slot.state === "reserved" || slot.state === "claimed").length;
+    const ordinaryReservations = Object.values(this.state.reservations).filter((reservation) => reservation.groupId === undefined).length;
+    if (Object.keys(this.state.groups).length >= MAX_ACTIVE_RESERVATIONS || normalized.slots.length === 0 ||
+      activeGroupSlots + ordinaryReservations + normalized.slots.length > MAX_ACTIVE_RESERVATIONS) throw new TokenGatewayError("token_reservation_limit");
+    const candidate = { ...this.state.used };
+    let maximumTokens = 0;
+    for (const slot of normalized.slots) {
+      maximumTokens += slot.holdTokens;
+      if (!Number.isSafeInteger(maximumTokens)) throw new Error("token_group_mismatch");
+      for (const [key, cap] of routeUsageKeys(slot).map((key, index) => [key, [this.limits.providerBudgetTokens, this.limits.modelBudgetTokens, this.limits.sessionBudgetTokens][index]!] as const)) {
+        const next = (candidate[key] ?? 0) + slot.holdTokens;
+        if (!Number.isSafeInteger(next) || next > cap) throw new TokenGatewayError("token_budget_exhausted");
+        candidate[key] = next;
+      }
+    }
+    if (Object.keys(candidate).length > MAX_USAGE_KEYS) throw new TokenGatewayError("token_reservation_limit");
+    const reservation: TokenGroupReservation = { groupId: normalized.groupId, maximumTokens, slots: normalized.slots.map((slot) => ({ ...slot, state: "reserved", reservation: null })) };
+    this.state.used = candidate;
+    this.state.groups[reservation.groupId] = reservation;
+    this.persist();
+    return reservation;
+  }
+
+  findGroup(groupId: string): TokenGroupReservation | null { return this.state.groups[groupId] ?? null; }
+
+  claimGroupSlot(groupId: string, slotId: string, input: TokenReservationRequest): TokenReservation {
+    const group = this.state.groups[groupId];
+    const index = group?.slots.findIndex((slot) => slot.slotId === slotId) ?? -1;
+    if (group === undefined || index < 0) throw new Error("token_group_slot_missing");
+    const slot = group.slots[index]!;
+    const request = normalizeRequest(input);
+    if (!isCanonicalRequest(input, request) || slot.provider !== request.provider || slot.model !== request.model || slot.sessionId !== request.sessionId || request.inputTokens + request.outputTokens > slot.holdTokens) throw new Error("token_group_slot_mismatch");
+    if (slot.reservation !== null) {
+      if (!sameReservationInput(slot.reservation, request)) throw new Error("token_group_slot_mismatch");
+      return slot.reservation;
+    }
+    if (request.inputTokens > this.limits.inputCapTokens) throw new TokenGatewayError("token_input_cap_exceeded");
+    if (request.outputTokens > this.limits.outputCapTokens) throw new TokenGatewayError("token_output_cap_exceeded");
+    const reservation: TokenReservation = { ...request, reservationId: `tgr-${randomUUID()}`, reservedAt: new Date().toISOString(), totalTokens: request.inputTokens + request.outputTokens, groupId, slotId, heldTokens: slot.holdTokens };
+    this.state.reservations[reservation.reservationId] = reservation;
+    const slots = [...group.slots]; slots[index] = { ...slot, state: "claimed", reservation };
+    this.state.groups[groupId] = { ...group, slots };
+    this.persist();
+    return reservation;
+  }
+
+  releaseGroupSlots(groupId: string, slotIds: readonly string[]): TokenGroupReservation {
+    const group = this.state.groups[groupId];
+    if (group === undefined) throw new Error("token_group_missing");
+    const requested = new Set(slotIds);
+    if (requested.size !== slotIds.length || slotIds.some((id) => !group.slots.some((slot) => slot.slotId === id))) throw new Error("token_group_slot_missing");
+    const slots = group.slots.map((slot) => {
+      if (!requested.has(slot.slotId) || slot.state === "released" || slot.state === "settled") return slot;
+      if (slot.state === "claimed" && slot.reservation !== null) this.release(slot.reservation);
+      else this.addRouteUsage(slot, -slot.holdTokens);
+      return { ...slot, state: "released" as const };
+    });
+    this.state.groups[groupId] = { ...group, slots };
+    this.persist();
+    return this.state.groups[groupId]!;
+  }
+
   settle(reservation: TokenReservation, usage: TokenSettlement): TokenSettlement {
     const active = this.state.reservations[reservation.reservationId];
     if (!active) {
@@ -191,12 +275,13 @@ export class TokenGateway {
     if (actualTotal > active.totalTokens) throw new TokenGatewayError("token_settlement_exceeds_reservation");
     const routes = [`provider:${active.provider}`, `model:${active.provider}:${active.model ?? "default"}`, `session:${active.sessionId ?? "unscoped"}`] as const;
     const caps = [this.limits.providerBudgetTokens, this.limits.modelBudgetTokens, this.limits.sessionBudgetTokens] as const;
-    if (routes.some((key, index) => this.used(key) - active.totalTokens + actualTotal > caps[index]!)) throw new TokenGatewayError("token_budget_exhausted");
+    if (routes.some((key, index) => this.used(key) - (active.heldTokens ?? active.totalTokens) + actualTotal > caps[index]!)) throw new TokenGatewayError("token_budget_exhausted");
     const settled = { inputTokens, outputTokens, released: usage.released === true };
-    this.addUsage(active, -(active.totalTokens));
+    this.addUsage(active, -(active.heldTokens ?? active.totalTokens));
     this.addUsage(active, inputTokens + outputTokens);
     delete this.state.reservations[reservation.reservationId];
     this.state.terminal[reservation.reservationId] = { event: "settled", settlement: settled, completedAt: new Date().toISOString() };
+    this.updateGroupSlot(active, "settled");
     this.pruneTerminal();
     this.persist();
     this.record({ event: "settled", reservation: active, ...settled, reason: null });
@@ -210,9 +295,10 @@ export class TokenGateway {
       throw new TokenGatewayError("token_reservation_missing");
     }
     assertRoute(active, reservation);
-    this.addUsage(active, -active.totalTokens);
+    this.addUsage(active, -(active.heldTokens ?? active.totalTokens));
     delete this.state.reservations[reservation.reservationId];
     this.state.terminal[reservation.reservationId] = { event: "released", settlement: { inputTokens: 0, outputTokens: 0, released: true }, completedAt: new Date().toISOString() };
+    this.updateGroupSlot(active, "released");
     this.pruneTerminal();
     this.persist();
     this.record({ event: "released", reservation: active, inputTokens: 0, outputTokens: 0, reason: null });
@@ -239,6 +325,16 @@ export class TokenGateway {
       const usage = Math.max(0, (this.state.used[key] ?? 0) + amount);
       if (usage === 0) delete this.state.used[key]; else this.state.used[key] = usage;
     }
+  }
+
+  private addRouteUsage(route: TokenGatewayRoute, amount: number): void {
+    for (const key of routeUsageKeys(route)) { const usage = Math.max(0, (this.state.used[key] ?? 0) + amount); if (usage === 0) delete this.state.used[key]; else this.state.used[key] = usage; }
+  }
+
+  private updateGroupSlot(reservation: TokenReservation, state: "settled" | "released"): void {
+    if (reservation.groupId === undefined || reservation.slotId === undefined) return;
+    const group = this.state.groups[reservation.groupId]; if (group === undefined) return;
+    this.state.groups[reservation.groupId] = { ...group, slots: group.slots.map((slot) => slot.slotId === reservation.slotId ? { ...slot, state } : slot) };
   }
 
   private refuse(request: TokenReservationRequest, reason: TokenGatewayRefusalCode): TokenGatewayError {
@@ -320,27 +416,33 @@ function bounded(value: string | null | undefined): string | null {
 function readGatewayState(path: string): GatewayState {
   try {
     const file = readManagedStateTextFile(path, { maxBytes: MAX_STATE_BYTES });
-    if (file.status === "missing") return { used: {}, reservations: {}, terminal: {} };
+    if (file.status === "missing") return { used: {}, reservations: {}, terminal: {}, groups: {} };
     const parsed: unknown = JSON.parse(file.text);
     if (!isGatewayState(parsed)) throw new Error("invalid_token_gateway_state");
     const terminal = Object.fromEntries(Object.entries(parsed.terminal).map(([id, value]) => [
       id,
       { ...value, completedAt: value.completedAt ?? "1970-01-01T00:00:00.000Z" }
     ]));
-    return { used: parsed.used, reservations: parsed.reservations, terminal };
+    return { used: parsed.used, reservations: parsed.reservations, terminal, groups: parsed.groups };
   } catch {
     throw new Error("invalid_token_gateway_state");
   }
 }
 
 function isGatewayState(value: unknown): value is GatewayState {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["used", "reservations", "terminal"]) ||
-    !isRecord(value.used) || !isRecord(value.reservations) || !isRecord(value.terminal) ||
+  if (!isRecord(value) || !hasOnlyKeys(value, ["used", "reservations", "terminal"], ["groups"]) ||
+    !isRecord(value.used) || !isRecord(value.reservations) || !isRecord(value.terminal) || (value.groups !== undefined && !isRecord(value.groups)) ||
     Object.keys(value.used).length > MAX_USAGE_KEYS ||
     Object.keys(value.reservations).length > MAX_ACTIVE_RESERVATIONS ||
     Object.keys(value.terminal).length > MAX_TERMINAL_RESERVATIONS) {
     return false;
   }
+  if (value.groups === undefined) value.groups = {};
+  const groups = value.groups;
+  if (!isRecord(groups) || Object.keys(groups).length > MAX_ACTIVE_RESERVATIONS || !Object.entries(groups).every(([id, group]) => isPersistedString(id) && isGroup(group) && group.groupId === id)) return false;
+  const activeGroupSlots = Object.values(groups).flatMap((group) => (group as TokenGroupReservation).slots).filter((slot) => slot.state === "reserved" || slot.state === "claimed").length;
+  const ordinaryReservations = Object.values(value.reservations).filter((reservation) => (reservation as TokenReservation).groupId === undefined).length;
+  if (activeGroupSlots + ordinaryReservations > MAX_ACTIVE_RESERVATIONS) return false;
   const reservationEntries = Object.entries(value.reservations);
   const terminalEntries = Object.entries(value.terminal);
   if (!reservationEntries.every(([id, reservation]) => isReservation(id, reservation)) ||
@@ -354,12 +456,23 @@ function isGatewayState(value: unknown): value is GatewayState {
     reservationEntries.some(([id]) => terminalIds.has(id))) {
     return false;
   }
-  return usageIsCoherent(value.used, reservations);
+  const activeById = new Map(reservations.map((reservation) => [reservation.reservationId, reservation]));
+  for (const group of Object.values(groups) as TokenGroupReservation[]) {
+    for (const slot of group.slots) {
+      if (slot.state === "claimed" && (slot.reservation === null || !isDeepStrictEqual(activeById.get(slot.reservation.reservationId), slot.reservation))) return false;
+    }
+  }
+  for (const reservation of reservations) {
+    if (reservation.groupId === undefined) continue;
+    const slot = (groups[reservation.groupId] as TokenGroupReservation | undefined)?.slots.find((candidate) => candidate.slotId === reservation.slotId);
+    if (slot?.state !== "claimed" || !isDeepStrictEqual(slot.reservation, reservation)) return false;
+  }
+  return usageIsCoherent(value.used, reservations, Object.values(groups) as TokenGroupReservation[]);
 }
 
 function isReservation(id: string, value: unknown): value is TokenReservation {
   return isPersistedString(id) && isRecord(value) &&
-    hasOnlyKeys(value, ["provider", "model", "sessionId", "inputTokens", "outputTokens", "reservationId", "reservedAt", "totalTokens"], ["handoffId"]) &&
+    hasOnlyKeys(value, ["provider", "model", "sessionId", "inputTokens", "outputTokens", "reservationId", "reservedAt", "totalTokens"], ["handoffId", "groupId", "slotId", "heldTokens"]) &&
     value.reservationId === id && isPersistedString(value.provider) &&
     (value.model === null || isPersistedString(value.model)) &&
     (value.sessionId === null || isPersistedString(value.sessionId)) &&
@@ -369,7 +482,36 @@ function isReservation(id: string, value: unknown): value is TokenReservation {
     isNonNegativeSafeInteger(value.outputTokens) &&
     isNonNegativeSafeInteger(value.totalTokens) &&
     Number.isSafeInteger(value.inputTokens + value.outputTokens) &&
-    value.totalTokens === value.inputTokens + value.outputTokens;
+    value.totalTokens === value.inputTokens + value.outputTokens &&
+    ((value.groupId === undefined && value.slotId === undefined && value.heldTokens === undefined) || (isPersistedString(value.groupId) && isPersistedString(value.slotId) && isNonNegativeSafeInteger(value.heldTokens) && value.totalTokens <= value.heldTokens));
+}
+
+function normalizeGroup(input: OrchestrationGroupSpec): OrchestrationGroupSpec {
+  if (!isRecord(input) || !hasOnlyKeys(input, ["groupId", "slots"]) || !isPersistedString(input.groupId) || !Array.isArray(input.slots)) throw new Error("token_group_mismatch");
+  const slots = input.slots;
+  if (slots.some((slot) => !isRecord(slot) || !hasOnlyKeys(slot, ["slotId", "provider", "model", "sessionId", "holdTokens"]) ||
+    !isPersistedString(slot.slotId) || !isPersistedString(slot.provider) || !(slot.model === null || isPersistedString(slot.model)) ||
+    !(slot.sessionId === null || isPersistedString(slot.sessionId)) || !isNonNegativeSafeInteger(slot.holdTokens) || slot.holdTokens === 0) ||
+    new Set(slots.map((slot) => slot.slotId)).size !== slots.length) throw new Error("token_group_mismatch");
+  return { groupId: input.groupId, slots: slots as unknown as readonly TokenGroupSlotRequest[] };
+}
+function sameGroupRequest(existing: TokenGroupReservation, request: OrchestrationGroupSpec): boolean { return existing.groupId === request.groupId && existing.slots.length === request.slots.length && existing.slots.every((slot, i) => { const next = request.slots[i]!; return slot.slotId === next.slotId && slot.provider === next.provider && slot.model === next.model && slot.sessionId === next.sessionId && slot.holdTokens === next.holdTokens; }); }
+function sameReservationInput(existing: TokenReservation, request: TokenReservationRequest): boolean { return existing.provider === request.provider && existing.model === request.model && existing.sessionId === request.sessionId && existing.inputTokens === request.inputTokens && existing.outputTokens === request.outputTokens && existing.handoffId === request.handoffId; }
+function isCanonicalRequest(input: TokenReservationRequest, normalized: TokenReservationRequest): boolean { return input.provider === normalized.provider && input.model === normalized.model && input.sessionId === normalized.sessionId && input.inputTokens === normalized.inputTokens && input.outputTokens === normalized.outputTokens && input.handoffId === normalized.handoffId; }
+function isGroup(value: unknown): value is TokenGroupReservation {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["groupId", "slots", "maximumTokens"]) || !isPersistedString(value.groupId) || !isNonNegativeSafeInteger(value.maximumTokens) || !Array.isArray(value.slots) || value.slots.length === 0) return false;
+  const ids = new Set<string>(); let maximumTokens = 0;
+  for (const slot of value.slots) {
+    if (!isRecord(slot) || !hasOnlyKeys(slot, ["slotId", "provider", "model", "sessionId", "holdTokens", "state", "reservation"]) || !isPersistedString(slot.slotId) || ids.has(slot.slotId) ||
+      !isPersistedString(slot.provider) || !(slot.model === null || isPersistedString(slot.model)) || !(slot.sessionId === null || isPersistedString(slot.sessionId)) ||
+      !isNonNegativeSafeInteger(slot.holdTokens) || slot.holdTokens === 0 || !["reserved", "claimed", "settled", "released"].includes(slot.state as string) ||
+      !(slot.reservation === null || isReservation((slot.reservation as TokenReservation).reservationId, slot.reservation)) ||
+      (slot.state === "reserved" && slot.reservation !== null) || (["claimed", "settled"].includes(slot.state as string) && slot.reservation === null)) return false;
+    ids.add(slot.slotId); maximumTokens += slot.holdTokens;
+    if (!Number.isSafeInteger(maximumTokens)) return false;
+    if (slot.reservation !== null && ((slot.reservation as TokenReservation).groupId !== value.groupId || (slot.reservation as TokenReservation).slotId !== slot.slotId || (slot.reservation as TokenReservation).heldTokens !== slot.holdTokens)) return false;
+  }
+  return maximumTokens === value.maximumTokens;
 }
 
 function isTerminalReservation(value: unknown): value is GatewayState["terminal"][string] {
@@ -410,7 +552,7 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-function usageIsCoherent(used: Record<string, unknown>, reservations: readonly TokenReservation[]): boolean {
+function usageIsCoherent(used: Record<string, unknown>, reservations: readonly TokenReservation[], groups: readonly TokenGroupReservation[]): boolean {
   const totals = { provider: 0, model: 0, session: 0 };
   for (const [key, value] of Object.entries(used)) {
     const kind = usageKeyKind(key);
@@ -419,10 +561,17 @@ function usageIsCoherent(used: Record<string, unknown>, reservations: readonly T
   if (totals.provider !== totals.model || totals.provider !== totals.session) return false;
 
   const required = new Map<string, number>();
-  for (const reservation of reservations) {
+  for (const reservation of reservations.filter((candidate) => candidate.groupId === undefined)) {
     if (reservation.totalTokens === 0) continue;
     for (const key of routeUsageKeys(reservation)) {
       const next = (required.get(key) ?? 0) + reservation.totalTokens;
+      if (!Number.isSafeInteger(next)) return false;
+      required.set(key, next);
+    }
+  }
+  for (const slot of groups.flatMap((group) => group.slots).filter((candidate) => candidate.state === "reserved" || candidate.state === "claimed")) {
+    for (const key of routeUsageKeys(slot)) {
+      const next = (required.get(key) ?? 0) + slot.holdTokens;
       if (!Number.isSafeInteger(next)) return false;
       required.set(key, next);
     }
@@ -448,7 +597,7 @@ function safeIncrement(totals: { provider: number; model: number; session: numbe
   return true;
 }
 
-function routeUsageKeys(reservation: TokenReservation): readonly string[] {
+function routeUsageKeys(reservation: TokenGatewayRoute): readonly string[] {
   return [
     `provider:${reservation.provider}`,
     `model:${reservation.provider}:${reservation.model ?? "default"}`,

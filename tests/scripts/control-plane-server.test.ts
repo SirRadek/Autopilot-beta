@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
 import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment, secureCookiesFromEnvironment } from "../../scripts/control-plane-server";
 import { readApprovalQueue, writeApprovalQueue } from "../../src/data/delivery-system/approvalQueue";
+import { readBrainstormStore } from "../../src/data/delivery-system/brainstormStore";
 import { readIncidentStore, recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
@@ -459,6 +460,187 @@ describe("control plane governed run API", () => {
     finish();
     await stopping;
     expect(readRunStore(stateDir).runs[0]?.status).toBe("completed");
+  });
+
+  it("advances an approved brainstorm to completion through the real supervisor poll without a manual tick", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-brainstorm-poll-"));
+    const projectRoot = join(stateDir, "projects");
+    const projectCwd = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectCwd, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [snapshot("codex_cli", new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
+    });
+    const outputs = ["Alpha view", "Beta view", "Gamma view", JSON.stringify({ consensus: ["aligned"], conflicts: [], confidence: 0.9, final: "Winning direction" })];
+    let callCount = 0;
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 5,
+      dispatch: async (handoff) => ({ refused: false, workerRunId: `poll-worker-${callCount}`, handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: outputs[callCount++] ?? "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true })
+    });
+    servers.push(runtime.server);
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    const address = runtime.server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+    const draftBody = {
+      project_id: "autopilot-beta",
+      brief: "Compare three provider approaches for the readiness ratchet",
+      profile: "dev" as const,
+      routes: [
+        { provider: "codex_cli", model: "model-a", requested_reasoning_effort: "low" },
+        { provider: "claude_cli", model: "model-a", requested_reasoning_effort: "low" },
+        { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "low" }
+      ],
+      synthesizer: "codex_cli",
+      estimated_tokens: 50_000,
+      arbitration_route: null
+    };
+    const created = await (await call("/brainstorms", draftBody)).json() as { brainstorm_id: string };
+    const approve = await call(`/brainstorms/${created.brainstorm_id}/approve`, { operator: "owner" });
+    expect(approve.status).toBe(200);
+
+    await vi.waitFor(() => {
+      const record = readBrainstormStore(stateDir).brainstorms.find((item) => item.brainstorm_id === created.brainstorm_id);
+      expect(["completed", "needs_arbitration"]).toContain(record?.status);
+    });
+
+    await runtime.stop();
+  });
+
+  it("parks a needs_arbitration brainstorm out of automatic polling instead of re-ticking it every cycle", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-brainstorm-park-"));
+    const projectRoot = join(stateDir, "projects");
+    const projectCwd = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectCwd, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [snapshot("codex_cli", new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
+    });
+    const outputs = [
+      "Alpha view",
+      "Beta view",
+      "Gamma view",
+      JSON.stringify({ consensus: [], conflicts: [{ output_labels: ["A", "B"], summary: "diverging recommendation", material: true }], confidence: 0.4, final: "" })
+    ];
+    let dispatchCalls = 0;
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 5,
+      dispatch: async (handoff) => {
+        const callCount = dispatchCalls++;
+        return { refused: false, workerRunId: `poll-worker-${callCount}`, handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: outputs[callCount] ?? "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
+      }
+    });
+    servers.push(runtime.server);
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    const address = runtime.server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+    const draftBody = {
+      project_id: "autopilot-beta",
+      brief: "Compare three provider approaches for a policy that will need arbitration",
+      profile: "dev" as const,
+      routes: [
+        { provider: "codex_cli", model: "model-a", requested_reasoning_effort: "low" },
+        { provider: "claude_cli", model: "model-a", requested_reasoning_effort: "low" },
+        { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "low" }
+      ],
+      synthesizer: "codex_cli",
+      estimated_tokens: 50_000,
+      arbitration_route: { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "low" }
+    };
+    const created = await (await call("/brainstorms", draftBody)).json() as { brainstorm_id: string };
+    const approve = await call(`/brainstorms/${created.brainstorm_id}/approve`, { operator: "owner" });
+    expect(approve.status).toBe(200);
+
+    await vi.waitFor(() => {
+      const record = readBrainstormStore(stateDir).brainstorms.find((item) => item.brainstorm_id === created.brainstorm_id);
+      expect(record?.status).toBe("needs_arbitration");
+    });
+    const dispatchCallsAtArbitration = dispatchCalls;
+
+    // Deliberately break the telemetry store so that any further coordinator tick of this
+    // parked record (which re-emits a "consolidated" telemetry event) throws and surfaces as
+    // an operational incident. If the poll still excludes needs_arbitration records, this file
+    // is never touched again and no incident is recorded.
+    writeFileSync(join(stateDir, "brainstorm-telemetry.json"), "{ not valid json", "utf8");
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(readIncidentStore(stateDir).incidents.length).toBe(0);
+    expect(dispatchCalls).toBe(dispatchCallsAtArbitration);
+    const parked = readBrainstormStore(stateDir).brainstorms.find((item) => item.brainstorm_id === created.brainstorm_id);
+    expect(parked?.status).toBe("needs_arbitration");
+
+    await runtime.stop();
+  });
+
+  it("keeps the supervisor poll running and recovers brainstorm progression after the store is repaired following corruption", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-brainstorm-corrupt-"));
+    const projectRoot = join(stateDir, "projects");
+    const projectCwd = join(projectRoot, "autopilot-beta");
+    mkdirSync(projectCwd, { recursive: true });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [snapshot("codex_cli", new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
+    });
+    writeFileSync(join(stateDir, "brainstorms.json"), "{ not valid json", "utf8");
+    const outputs = ["Alpha view", "Beta view", "Gamma view", JSON.stringify({ consensus: ["aligned"], conflicts: [], confidence: 0.9, final: "Winning direction" })];
+    let dispatchCalls = 0;
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      scheduler: { start() {}, stop() {} },
+      supervisorPollMs: 5,
+      dispatch: async (handoff) => {
+        const callCount = dispatchCalls++;
+        return { refused: false, workerRunId: `poll-worker-${callCount}`, handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: outputs[callCount] ?? "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
+      }
+    });
+    servers.push(runtime.server);
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    const address = runtime.server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const health = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: "Bearer secret" } });
+    expect(health.status).toBe(200);
+    expect(readIncidentStore(stateDir).incidents.length).toBeGreaterThan(0);
+    expect(dispatchCalls).toBe(0);
+
+    writeFileSync(join(stateDir, "brainstorms.json"), JSON.stringify({ schema_version: "v1", brainstorms: [] }), "utf8");
+
+    const draftBody = {
+      project_id: "autopilot-beta",
+      brief: "Compare three provider approaches after store repair",
+      profile: "dev" as const,
+      routes: [
+        { provider: "codex_cli", model: "model-a", requested_reasoning_effort: "low" },
+        { provider: "claude_cli", model: "model-a", requested_reasoning_effort: "low" },
+        { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "low" }
+      ],
+      synthesizer: "codex_cli",
+      estimated_tokens: 50_000,
+      arbitration_route: null
+    };
+    const created = await (await call("/brainstorms", draftBody)).json() as { brainstorm_id: string };
+    const approve = await call(`/brainstorms/${created.brainstorm_id}/approve`, { operator: "owner" });
+    expect(approve.status).toBe(200);
+
+    await vi.waitFor(() => {
+      const record = readBrainstormStore(stateDir).brainstorms.find((item) => item.brainstorm_id === created.brainstorm_id);
+      expect(["completed", "needs_arbitration"]).toContain(record?.status);
+    });
+    expect(dispatchCalls).toBeGreaterThan(0);
+
+    await runtime.stop();
   });
 
   it("keeps authentication and cookie CSRF protection on mutations", async () => {

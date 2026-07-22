@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ControlPlaneClient } from "../api/controlPlaneClient";
-import type { ApprovalRecord, AutopilotIncident, ControlPlaneStatus, ObservabilityTimeline, ProjectEntry, ProviderHealth, ProviderModels, ProviderQuota, RunRecord, SessionRecord, WorkerRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, BrainstormRecord, ControlPlaneStatus, ObservabilityTimeline, ProjectEntry, ProviderHealth, ProviderModels, ProviderQuota, RunRecord, SessionRecord, WorkerRecord } from "../types/controlPlane";
 import type { PromotionPacket } from "../types/controlPlane";
 import type { CockpitEnvironment } from "./environment";
 
-export type CockpitPane = "status" | "sessions" | "approvals" | "providers" | "workers" | "runs" | "promotions" | "incidents";
+export type CockpitPane = "status" | "sessions" | "approvals" | "providers" | "workers" | "runs" | "promotions" | "incidents" | "brainstorms";
 export type PaneError = { readonly message: string; readonly at: string };
-export type CockpitData = { readonly status?: ControlPlaneStatus; readonly sessions: readonly SessionRecord[]; readonly approvals: readonly ApprovalRecord[]; readonly quotas: readonly ProviderQuota[]; readonly workers: readonly WorkerRecord[]; readonly projects: readonly ProjectEntry[]; readonly runs: readonly RunRecord[]; readonly promotions: readonly PromotionPacket[]; readonly incidents: readonly AutopilotIncident[]; readonly models?: ProviderModels; readonly health?: ProviderHealth };
+export type CockpitData = { readonly status?: ControlPlaneStatus; readonly sessions: readonly SessionRecord[]; readonly approvals: readonly ApprovalRecord[]; readonly quotas: readonly ProviderQuota[]; readonly workers: readonly WorkerRecord[]; readonly projects: readonly ProjectEntry[]; readonly runs: readonly RunRecord[]; readonly promotions: readonly PromotionPacket[]; readonly incidents: readonly AutopilotIncident[]; readonly brainstorms: readonly BrainstormRecord[]; readonly models?: ProviderModels; readonly health?: ProviderHealth };
 export type CockpitDataState = CockpitData & { readonly loading: boolean; readonly refreshing: boolean; readonly errors: Partial<Record<CockpitPane, PaneError>>; readonly stale: Partial<Record<CockpitPane, boolean>>; readonly refreshedAt?: string; readonly refresh: () => Promise<void> };
 
-const EMPTY_DATA: CockpitData = { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], promotions: [], incidents: [] };
+const EMPTY_DATA: CockpitData = { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], promotions: [], incidents: [], brainstorms: [] };
 const DEFAULT_REFRESH_MS = 30_000; const MIN_REFRESH_MS = 5_000; const MAX_REFRESH_MS = 300_000;
 function boundedRefreshMs(value: number | undefined): number { return Math.min(MAX_REFRESH_MS, Math.max(MIN_REFRESH_MS, value ?? DEFAULT_REFRESH_MS)); }
 function messageFor(error: unknown): string { return error instanceof Error ? error.message.slice(0, 300) : "Control Plane request failed"; }
@@ -35,6 +35,7 @@ export async function loadCockpitData(client: ControlPlaneClient, previous: Cock
     ["runs", () => Promise.all([client.getProjects(), client.listRuns(environment)]), (value) => { const [projects, runs] = value as [readonly ProjectEntry[], readonly RunRecord[]]; next.projects = projects; next.runs = runs; }],
     ["promotions", () => client.listPromotions(), (value) => { next.promotions = value as readonly PromotionPacket[]; }],
     ["incidents", () => client.getIncidents(), (value) => { next.incidents = value as readonly AutopilotIncident[]; }],
+    ["brainstorms", () => client.listBrainstorms(), (value) => { next.brainstorms = value as readonly BrainstormRecord[]; }],
   ];
   await Promise.all(requests.map(async ([pane, request, assign]) => { try { const value = await request(); if (!signal?.aborted) assign(value); } catch (error) { if (!signal?.aborted) errors[pane] = { message: messageFor(error), at: now }; } }));
   const providerResults = await Promise.allSettled([client.getProviderQuotas(), client.getProviderModels(), client.getProviderHealth()]);
@@ -63,5 +64,5 @@ export function useCockpitData(client: ControlPlaneClient, environmentOrOptions:
   const refreshMs = request.refreshMs; const previous = useRef<CockpitData>(EMPTY_DATA); const generation = useRef(0); const controller = useRef<AbortController>(); const [data, setData] = useState<CockpitData>(previous.current); const [dataEnvironment, setDataEnvironment] = useState<CockpitEnvironment>(environment); const [errors, setErrors] = useState<Partial<Record<CockpitPane, PaneError>>>({}); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [refreshedAt, setRefreshedAt] = useState<string>();
   const refresh = useCallback(async () => { const current = ++generation.current; controller.current?.abort(); const nextController = new AbortController(); controller.current = nextController; setRefreshing(true); const result = await loadCockpitData(client, previous.current, environment, nextController.signal); if (nextController.signal.aborted || current !== generation.current) return; previous.current = result.data; setData(result.data); setDataEnvironment(environment); setErrors(result.errors); setLoading(false); setRefreshing(false); setRefreshedAt(new Date().toISOString()); }, [client, environment]);
   useEffect(() => { void refresh(); const timer = window.setInterval(() => void refresh(), refreshMs); return () => { generation.current += 1; controller.current?.abort(); window.clearInterval(timer); }; }, [refresh, refreshMs]);
-  const stale = Object.fromEntries(Object.keys(errors).map((pane) => [pane, true])) as Partial<Record<CockpitPane, boolean>>; const scoped = dataEnvironment === environment ? data : { ...data, runs: [], promotions: [] }; return { ...scoped, loading, refreshing, errors, stale, refreshedAt, refresh };
+  const stale = Object.fromEntries(Object.keys(errors).map((pane) => [pane, true])) as Partial<Record<CockpitPane, boolean>>; const scoped = dataEnvironment === environment ? data : { ...data, runs: [], promotions: [], brainstorms: [] }; return { ...scoped, loading, refreshing, errors, stale, refreshedAt, refresh };
 }

@@ -6,7 +6,7 @@ import "./app.css";
 
 export type CockpitSession = { id: string; name: string; status: StatusBadgeStatus; agent?: string };
 export type CockpitProject = { id: string; name: string };
-export type CockpitTab = "approval" | "sessions" | "providers" | "workers";
+export type CockpitTab = "approval" | "sessions" | "providers" | "workers" | "brainstorm";
 
 export type AppShellProps = {
   environment: CockpitEnvironment;
@@ -22,6 +22,7 @@ export type AppShellProps = {
   runWorkspace?: ReactNode;
   runInspector?: ReactNode;
   incidentPane?: ReactNode;
+  brainstormPane?: ReactNode;
   onTabChange?: (tab: CockpitTab) => void;
 };
 
@@ -30,9 +31,10 @@ const tabs: Array<{ id: CockpitTab; label: string }> = [
   { id: "sessions", label: "Sessions" },
   { id: "providers", label: "Providers" },
   { id: "workers", label: "Workers" },
+  { id: "brainstorm", label: "Brainstorm" },
 ];
 
-export function AppShell({ environment, onEnvironmentChange, selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, runWorkspace, runInspector, incidentPane, onTabChange }: AppShellProps) {
+export function AppShell({ environment, onEnvironmentChange, selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, runWorkspace, runInspector, incidentPane, brainstormPane, onTabChange }: AppShellProps) {
   const [activeTab, setActiveTab] = useState<CockpitTab>("approval");
   const [inspectorTab, setInspectorTab] = useState<"run" | "errors">("run");
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -86,11 +88,13 @@ export function AppShell({ environment, onEnvironmentChange, selectedProject, se
         <main className="cockpit-pane desktop-pane pane-approval" data-pane="approval" aria-label="Approval and Workflow"><h2>Approval &amp; Workflow</h2>{approvalPane}</main>
         <aside className="cockpit-pane desktop-pane pane-operations" data-pane="operations" aria-label="Live Operations and Provider Budget"><h2>Live Operations &amp; Provider Budget</h2>{operationsPane}{workersPane ? <section aria-label="Workers">{workersPane}</section> : null}{providersPane ? <section className="provider-slot" aria-label="Provider Budget">{providersPane}</section> : null}</aside>
       </div>
+      {brainstormPane !== undefined ? <div className="cockpit-pane desktop-pane pane-brainstorm" data-pane="brainstorm">{brainstormPane}</div> : null}
       <div className="mobile-panels">
         <section id={id("tab-panel-approval")} className="cockpit-pane tab-panel" role="tabpanel" aria-labelledby={id("tab-approval")} hidden={activeTab !== "approval"}>{approvalPane}</section>
         <section id={id("tab-panel-sessions")} className="cockpit-pane tab-panel" role="tabpanel" aria-labelledby={id("tab-sessions")} hidden={activeTab !== "sessions"}>{sessionsPane ?? projectsPane}</section>
         <section id={id("tab-panel-providers")} className="cockpit-pane tab-panel" role="tabpanel" aria-labelledby={id("tab-providers")} hidden={activeTab !== "providers"}>{providersPane}</section>
         <section id={id("tab-panel-workers")} className="cockpit-pane tab-panel" role="tabpanel" aria-labelledby={id("tab-workers")} hidden={activeTab !== "workers"}>{workersPane ?? operationsPane}</section>
+        <section id={id("tab-panel-brainstorm")} className="cockpit-pane tab-panel" role="tabpanel" aria-labelledby={id("tab-brainstorm")} hidden={activeTab !== "brainstorm"}>{brainstormPane}</section>
       </div>
     </div>
   );

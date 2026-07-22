@@ -36,3 +36,36 @@ export interface PromotionApproval { readonly approver: string; readonly approve
 export interface PromotionPublishEvidence { readonly prod_run_id: string; readonly full_verification_ref: string; readonly release_acceptance_ref: string; readonly rollback_ref: string }
 export interface PromotionPacket { readonly schema_version: "v1"; readonly packet_id: string; readonly source_run_id: string; readonly source_revision: number; readonly intent: string; readonly artifact_hash: string; readonly artifact_ref: string; readonly diff_summary: string; readonly tests: readonly string[]; readonly risks: readonly string[]; readonly approvals: readonly PromotionApproval[]; readonly prod_run_id: string | null; readonly full_verification_ref: string | null; readonly release_acceptance_ref: string | null; readonly rollback_ref: string | null; readonly status: PromotionStatus; readonly created_at: string; readonly updated_at: string }
 export interface PromotionDraftInput { readonly intent: string; readonly diff_summary: string; readonly tests: readonly string[]; readonly risks: readonly string[] }
+
+export type BrainstormStatus = "draft" | "approved" | "fanout_running" | "consolidating" | "needs_arbitration" | "arbitrating" | "completed" | "failed" | "cancelled";
+export type BrainstormStage = "fanout" | "consolidation" | "arbitration";
+export interface BrainstormSlot { readonly slot_id: string; readonly stage: BrainstormStage; readonly route_index: number | null; readonly run_id: string | null; readonly state: "planned" | "created" | "queued" | "terminal" | "released" }
+export interface BrainstormRoute { readonly provider: RunProvider; readonly model: string; readonly reasoning_effort: RunReasoningEffort | null; readonly estimated_tokens: number }
+export interface BrainstormRouteDraft { readonly provider: RunProvider; readonly model: string; readonly requested_reasoning_effort: RunReasoningEffort | null }
+export interface BrainstormTokenEnvelope { readonly fanout_tokens: number; readonly consolidation_tokens: number; readonly optional_arbitration_tokens: number; readonly minimum_tokens: number; readonly maximum_tokens: number }
+export interface BrainstormConflict { readonly conflict_id: string; readonly output_run_ids: readonly [string, string]; readonly summary: string; readonly material: boolean }
+export interface BrainstormRecord {
+  readonly schema_version: "v1";
+  readonly brainstorm_id: string;
+  readonly project_id: string;
+  readonly brief: string;
+  readonly routes: readonly BrainstormRoute[];
+  readonly synthesizer_route: BrainstormRoute;
+  readonly arbitration_route: BrainstormRoute | null;
+  readonly token_envelope: BrainstormTokenEnvelope;
+  readonly child_run_ids: readonly string[];
+  readonly consolidation_run_id: string | null;
+  readonly arbitration_run_id: string | null;
+  readonly conflicts: readonly BrainstormConflict[];
+  readonly final_artifact: string | null;
+  readonly status: BrainstormStatus;
+  readonly revision: number;
+  readonly approval_state: "none" | "pending" | "reserved";
+  readonly orchestration_group_id: string | null;
+  readonly slots: readonly BrainstormSlot[];
+  readonly approved_by: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+export interface BrainstormDraftInput { readonly project_id: string; readonly brief: string; readonly routes: readonly BrainstormRouteDraft[]; readonly synthesizer: RunProvider; readonly estimated_tokens: number; readonly arbitration_route: BrainstormRouteDraft | null }
+export interface BrainstormArbitrationInput { readonly provider: RunProvider; readonly model: string; readonly reasoning_effort: RunReasoningEffort | null; readonly estimated_tokens: number }

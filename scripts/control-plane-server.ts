@@ -19,6 +19,9 @@ import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderC
 import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
+import { handleControlPlaneBrainstormRoute } from "./control-plane-brainstorms";
+import { createBrainstormCoordinator } from "../src/data/delivery-system/brainstormCoordinator";
+import { readBrainstormStore } from "../src/data/delivery-system/brainstormStore";
 import { createRunOrchestrator, type RunPacketBuilder } from "../src/data/delivery-system/runOrchestrator";
 import { buildReadiness, type ReadinessReport } from "../src/data/delivery-system/readiness";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
@@ -122,6 +125,7 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
     else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
+    else if (await handleControlPlaneBrainstormRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else returnJson(response, { error: "not_found" }, 404);
   } catch {
     if (response.writableEnded) return;
@@ -142,7 +146,7 @@ function operationalStageForRequest(request: IncomingMessage): OperationalIncide
   if (path.startsWith("/providers")) return "control_plane_providers";
   if (path.startsWith("/observability")) return "control_plane_observability";
   if (path.startsWith("/approvals")) return "control_plane_approvals";
-  if (path.startsWith("/runs") || path.startsWith("/projects") || path.startsWith("/incidents")) return "control_plane_runs";
+  if (path.startsWith("/runs") || path.startsWith("/projects") || path.startsWith("/incidents") || path.startsWith("/brainstorms")) return "control_plane_runs";
   return "control_plane_status";
 }
 
@@ -387,10 +391,12 @@ export function createControlPlaneRuntime(
     })
   });
   scheduler.start();
+  const brainstormCoordinator = createBrainstormCoordinator({ stateDir, runOrchestrator: orchestrator });
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let activePoll: Promise<void> | null = null;
   let supervisorFailureActive = false;
+  let brainstormFailureActive = false;
   const poll = async () => {
     if (stopped) return;
     try {
@@ -405,6 +411,36 @@ export function createControlPlaneRuntime(
           // The supervisor retry loop must survive unavailable incident persistence.
         }
       }
+    }
+    let advanceable: ReturnType<typeof readBrainstormStore>["brainstorms"] = [];
+    let brainstormFailed = false;
+    try {
+      advanceable = readBrainstormStore(stateDir).brainstorms.filter(
+        (record) => record.approval_state === "reserved" && !["completed", "failed", "cancelled", "needs_arbitration"].includes(record.status)
+      );
+    } catch {
+      // A corrupted/unavailable brainstorm store must not stop future poll scheduling.
+      brainstormFailed = true;
+    }
+    for (const record of advanceable) {
+      try {
+        await brainstormCoordinator.tick(record.brainstorm_id);
+      } catch {
+        // One brainstorm's tick failure must not block other brainstorms from advancing.
+        brainstormFailed = true;
+      }
+    }
+    if (brainstormFailed) {
+      if (!brainstormFailureActive) {
+        brainstormFailureActive = true;
+        try {
+          recordOperationalIncident(stateDir, { stage: "supervisor_loop" });
+        } catch {
+          // The supervisor retry loop must survive unavailable incident persistence.
+        }
+      }
+    } else {
+      brainstormFailureActive = false;
     }
     if (!stopped) timer = setTimeout(startPoll, options.supervisorPollMs ?? 250);
   };

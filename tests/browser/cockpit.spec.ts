@@ -64,14 +64,14 @@ test("supports keyboard tab navigation on the responsive layout", async ({ page 
   await page.setViewportSize({ width: 700, height: 900 });
   await login(page);
   const tabs = page.getByRole("tablist", { name: "Cockpit sections" }).getByRole("tab");
-  await expect(tabs).toHaveCount(4);
+  await expect(tabs).toHaveCount(5);
   await tabs.first().focus();
   await page.keyboard.press("ArrowRight");
   await expect(tabs.nth(1)).toBeFocused();
   await expect(page.getByRole("tabpanel", { name: "Sessions" })).toBeVisible();
   await page.keyboard.press("End");
-  await expect(tabs.nth(3)).toBeFocused();
-  await expect(page.getByRole("tabpanel", { name: "Workers" })).toBeVisible();
+  await expect(tabs.nth(4)).toBeFocused();
+  await expect(page.getByRole("tabpanel", { name: "Brainstorm" })).toBeVisible();
 });
 
 test("keeps the cockpit usable at a narrow viewport", async ({ page }) => {
@@ -262,11 +262,12 @@ test("moves a reviewed DEV preview into an evidence-gated PROD draft without aut
   });
 
   await login(page);
+  const runWorkspace = page.getByRole("region", { name: "Pracovní plocha běhu" });
   await expect(page.getByRole("tab", { name: "DEV" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("combobox", { name: "Projekt" })).toHaveValue(project.project_id);
-  await expect(page.getByRole("combobox", { name: "Poskytovatel" })).toHaveValue("openrouter_api");
-  await expect(page.getByRole("combobox", { name: "Model" })).toHaveValue("free-model");
-  await expect(page.getByText("Doporučení: žádné (shadow-only)")).toBeVisible();
+  await expect(runWorkspace.getByRole("combobox", { name: "Projekt" })).toHaveValue(project.project_id);
+  await expect(runWorkspace.getByRole("combobox", { name: "Poskytovatel" })).toHaveValue("openrouter_api");
+  await expect(runWorkspace.getByRole("combobox", { name: "Model" })).toHaveValue("free-model");
+  await expect(runWorkspace.getByText("Doporučení: žádné (shadow-only)")).toBeVisible();
   await page.getByLabel("Prompt").fill("Prepare the showcase preview");
   await page.getByRole("button", { name: "Připravit běh" }).click();
   expect(workerInvocations).toBe(0);
@@ -308,4 +309,215 @@ test("moves a reviewed DEV preview into an evidence-gated PROD draft without aut
   await expect(page.getByText("rollback://fixture")).toBeVisible();
   await expect(page.getByRole("button", { name: "Připravit PROD draft" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /deploy|nasadit|publikovat/i })).toHaveCount(0);
+});
+
+test("drives a governed brainstorm from three-provider fan-out through precommitted arbitration to a completed artifact, and keeps PROD read-only", async ({ page }) => {
+  const now = "2026-07-22T09:00:00.000Z";
+  const project = { schema_version: "v1", project_id: "brainstorm-project", name: "Brainstorm project", cwd: "/fixture/brainstorm", enabled: true };
+  const routeFixtures = [
+    { provider: "codex_cli", model: "model-codex-x", preview: "Codex proposal: incremental rollout." },
+    { provider: "claude_cli", model: "model-claude-x", preview: "Claude proposal: big-bang rollout." },
+    { provider: "agy_cli", model: "model-agy-x", preview: "Agy proposal: canary rollout." },
+  ] as const;
+  const childRunIds = ["run-codex-1", "run-claude-1", "run-agy-1"] as const;
+  const consolidationRunId = "run-consolidate-1";
+  const arbitrationRunId = "run-arbiter-1";
+  const consensus = ["Adopt phased rollout", "Add canary gate before full deploy"] as const;
+  const confidence = 0.82;
+  const finalArtifact = "Synthesized decision: adopt phased rollout with canary gate.";
+  const brainstormId = "brainstorm-1";
+  // Canonical allocation for a submitted maximum of 42,684 tokens across 3 fan-out routes +
+  // synthesis + arbitration (5 shares): perRoute = floor(42684 / 5) = 8536, remainder 4 goes to
+  // synthesis (8540); mirrors canonicalAllocation() in scripts/control-plane-brainstorms.ts.
+  const perRouteTokens = 8_536;
+  const synthesisTokens = 8_540;
+  const tokenEnvelope = { fanout_tokens: perRouteTokens * 3, consolidation_tokens: synthesisTokens, optional_arbitration_tokens: perRouteTokens, minimum_tokens: perRouteTokens * 3 + synthesisTokens, maximum_tokens: perRouteTokens * 3 + synthesisTokens + perRouteTokens };
+  const arbitrationRoute = { provider: "agy_cli", model: "model-agy-x", reasoning_effort: "low", estimated_tokens: perRouteTokens };
+
+  const run = (runId: string, provider: string, model: string, preview: string, estimatedTokens: number) => ({
+    schema_version: "v1",
+    current: { run_id: runId, revision: 1, project_id: project.project_id, prompt: "Brainstorm child run", provider, model, input_token_bound: 8, output_token_allowance: 8_192, estimated_tokens: estimatedTokens, requested_artifacts: ["text"], prompt_review_acknowledged: false, requested_reasoning_effort: "low", created_at: now },
+    revisions: [],
+    status: "completed",
+    approved_revision: 1,
+    approved_by: "cockpit-operator",
+    approved_at: now,
+    supervisor_task_id: `task-${runId}`,
+    worker_run_id: `worker-${runId}`,
+    terminal_reason: null,
+    token_reservation: null,
+    reservation_status: "settled",
+    provider_result: { refused: false, reason: null, worker_run_id: `worker-${runId}`, raw_output: preview, exit_code: 0, error_reason: null, lock_status: "acquired_supervisor_spawn" },
+    cancellation_requested: false,
+    queue_compensation_requested: false,
+    dispatch_failure: null,
+    retry_input_tokens: 0,
+    retry_output_tokens: 0,
+    artifacts: [{ artifact_id: `artifact-${runId}`, type: "text", preview, created_at: now }],
+    updated_at: now,
+  });
+  expect(childRunIds).toHaveLength(routeFixtures.length);
+  const childRuns = routeFixtures.map((route, index) => {
+    const childRunId = childRunIds[index];
+    if (childRunId === undefined) throw new Error(`missing childRunIds entry at index ${index}`);
+    return run(childRunId, route.provider, route.model, route.preview, perRouteTokens);
+  });
+  const consolidationRun = run(consolidationRunId, "codex_cli", "model-codex-x", JSON.stringify({ consensus, confidence }), synthesisTokens);
+  const arbitrationRun = run(arbitrationRunId, "agy_cli", "model-agy-x", "Arbiter ruling: proceed phased with canary gate.", perRouteTokens);
+  const brainstormRuns = [...childRuns, consolidationRun, arbitrationRun];
+
+  let brainstorm: any;
+  let createCalls = 0;
+  let approveCalls = 0;
+  let arbitrateCalls = 0;
+  const draftRecord = () => ({
+    schema_version: "v1",
+    brainstorm_id: brainstormId,
+    project_id: project.project_id,
+    brief: "Evaluate the scaling roadmap for Q3.",
+    routes: routeFixtures.map((route) => ({ provider: route.provider, model: route.model, reasoning_effort: "low", estimated_tokens: perRouteTokens })),
+    synthesizer_route: { provider: "codex_cli", model: "model-codex-x", reasoning_effort: "low", estimated_tokens: synthesisTokens },
+    arbitration_route: arbitrationRoute,
+    token_envelope: tokenEnvelope,
+    child_run_ids: [],
+    consolidation_run_id: null,
+    arbitration_run_id: null,
+    conflicts: [],
+    final_artifact: null,
+    status: "draft",
+    revision: 1,
+    approval_state: "none",
+    orchestration_group_id: null,
+    slots: [],
+    approved_by: null,
+    created_at: now,
+    updated_at: now,
+  });
+  const needsArbitrationRecord = () => ({
+    ...draftRecord(),
+    child_run_ids: childRunIds,
+    consolidation_run_id: consolidationRunId,
+    conflicts: [{ conflict_id: "conflict-1", output_run_ids: ["run-codex-1", "run-claude-1"], summary: "Divergent rollout order", material: true }],
+    status: "needs_arbitration",
+    approval_state: "reserved",
+    approved_by: "cockpit-operator",
+  });
+  const completedRecord = () => ({
+    ...needsArbitrationRecord(),
+    arbitration_run_id: arbitrationRunId,
+    final_artifact: finalArtifact,
+    status: "completed",
+  });
+
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (!path.startsWith("/api") && !["/status", "/sessions", "/approvals", "/workers", "/projects", "/runs", "/incidents", "/brainstorms", "/providers/quotas", "/providers/models", "/providers/health", "/observability/timeline"].some((item) => path.startsWith(item))) return route.fallback();
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/projects") return json([project]);
+    if (path === "/providers/quotas") return json({ providers: routeFixtures.map((route) => ({ provider: route.provider, source: "cli", fetched_at: now, observed_at: now, freshness: "fresh", next_poll_at: null, five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null }, weekly: { limit: 100, used: 0, remaining: 100, resets_at: null }, api_spend: null, currency: null, models: [{ model_id: route.model, available: true, health: "healthy", source: "cli" }], health: "healthy", error_code: null })) });
+    if (path === "/providers/models") return json({ fetched_at: now, freshness: "fresh", next_poll_at: null, models: routeFixtures.map((route) => ({ model_id: route.model, providers: [route.provider], available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: route.provider, reasoning_efforts: ["low"] }] })) });
+    if (path === "/providers/health") return json({ fetched_at: now, freshness: "fresh", providers: [] });
+    if (path === "/runs") return json(approveCalls === 0 ? [] : brainstormRuns);
+    if (path === "/workers") return json([]);
+    if (path === "/observability/timeline") return json({ summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 1024, max_lines_per_file: 10, max_events: 100, truncated: false } });
+    if (path === "/status") return json({ telemetry: { calls: 0, total_tokens: 0 } });
+    if (path === "/brainstorms" && request.method() === "POST") {
+      createCalls += 1;
+      brainstorm = draftRecord();
+      return json(brainstorm, 201);
+    }
+    if (path === `/brainstorms/${brainstormId}/approve`) {
+      approveCalls += 1;
+      brainstorm = needsArbitrationRecord();
+      return json(brainstorm);
+    }
+    if (path === `/brainstorms/${brainstormId}/arbitrate`) {
+      arbitrateCalls += 1;
+      const body = request.postDataJSON() as { operator: string; route: typeof arbitrationRoute };
+      expect(body.route).toEqual(arbitrationRoute);
+      brainstorm = completedRecord();
+      return json(brainstorm);
+    }
+    if (path === "/brainstorms") return json(brainstorm ? [brainstorm] : []);
+    return json([]);
+  });
+
+  await login(page);
+  // The Brainstorm workspace is rendered twice in the DOM (a persistent desktop pane plus a
+  // mobile tab-panel copy hidden via CSS at desktop widths); scope every interaction to the
+  // desktop pane so locators never resolve to the CSS-hidden duplicate.
+  const workspace = page.locator('[data-pane="brainstorm"]');
+  await expect(page.getByRole("tab", { name: "DEV" })).toHaveAttribute("aria-selected", "true");
+  await expect(workspace.getByRole("heading", { name: "Brainstorm", exact: true })).toBeVisible();
+
+  await workspace.getByLabel("Brainstorm projekt").selectOption(project.project_id);
+  await workspace.getByLabel("Brief").fill("Evaluate the scaling roadmap for Q3.");
+  for (const route of routeFixtures) {
+    await workspace.getByLabel(`Model ${route.provider}`, { exact: true }).selectOption(route.model);
+    await workspace.getByLabel(`Reasoning ${route.provider}`, { exact: true }).selectOption("low");
+  }
+  await workspace.getByLabel("Syntezátor").selectOption("codex_cli");
+  await workspace.getByLabel("Arbitr", { exact: true }).selectOption("agy_cli");
+  await workspace.getByLabel("Model arbitra").selectOption("model-agy-x");
+  await workspace.getByLabel("Reasoning arbitra").selectOption("low");
+
+  await expect(workspace.getByText(/34\u{a0}148–42\u{a0}684 tokenů/u)).toBeVisible();
+
+  const prepareButton = workspace.getByRole("button", { name: "Připravit brainstorm" });
+  await expect(prepareButton).toBeEnabled();
+  await prepareButton.click();
+  await expect(workspace.getByText(`Brainstorm ${brainstormId} připraven ke schválení`)).toBeVisible();
+  expect(createCalls).toBe(1);
+  expect(approveCalls).toBe(0);
+  expect(arbitrateCalls).toBe(0);
+
+  await expect(workspace.getByText(/Uložený rozsah: 34\u{a0}148–42\u{a0}684 tokenů/u)).toBeVisible();
+
+  const fanoutButton = workspace.getByRole("button", { name: "Spustit fan-out" });
+  await expect(fanoutButton).toBeDisabled();
+  await workspace.getByLabel("Potvrzuji maximální tokenový rozsah").check();
+  await expect(fanoutButton).toBeEnabled();
+  await fanoutButton.click();
+  expect(approveCalls).toBe(1);
+
+  const record = workspace.getByRole("article", { name: `Brainstorm ${brainstormId}` });
+  await expect(record).toContainText("needs_arbitration");
+  for (const route of routeFixtures) await expect(record).toContainText(`${route.provider} · ${route.model}`);
+  await expect(record.getByLabel("Konsenzus a jistota")).toContainText(consensus[0]);
+  await expect(record.getByLabel("Konsenzus a jistota")).toContainText(consensus[1]);
+  await expect(record.getByLabel("Konsenzus a jistota")).toContainText("82 %");
+  await expect(record.getByLabel("Konflikty")).toContainText("Divergent rollout order (materiální)");
+  await expect(record.getByLabel("Precommitted arbiter")).toContainText("Předem určený arbitr: agy_cli · model-agy-x");
+
+  // Switch to PROD before arbitrating: creation controls and the arbitration mutation button must disappear,
+  // while the precommitted-arbiter evidence stays visible read-only.
+  await page.getByRole("tab", { name: "PROD" }).click();
+  await expect(workspace.getByLabel("Brief")).toHaveCount(0);
+  await expect(workspace.getByRole("button", { name: "Připravit brainstorm" })).toHaveCount(0);
+  const prodRecord = workspace.getByRole("article", { name: `Brainstorm ${brainstormId}` });
+  await expect(prodRecord).toContainText("needs_arbitration");
+  await expect(prodRecord.getByLabel("Precommitted arbiter")).toContainText("Předem určený arbitr: agy_cli · model-agy-x");
+  await expect(prodRecord.getByRole("button", { name: /arbitráž/i })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "DEV" }).click();
+  const arbitrateButton = record.getByRole("button", { name: "Vyvolat arbitráž" });
+  await arbitrateButton.click();
+  expect(arbitrateCalls).toBe(0);
+  const confirmButton = record.getByRole("button", { name: "Potvrdit arbitráž" });
+  await expect(confirmButton).toBeVisible();
+  await confirmButton.click();
+  await expect(record).toContainText("completed");
+  expect(arbitrateCalls).toBe(1);
+
+  await expect(record.getByLabel("Výsledek")).toContainText(finalArtifact);
+  await expect(record.getByLabel("Výsledek")).toContainText(`Provenience: ${[...childRunIds, consolidationRunId, arbitrationRunId].join(", ")}`);
+
+  await page.getByRole("tab", { name: "PROD" }).click();
+  const finalProdRecord = workspace.getByRole("article", { name: `Brainstorm ${brainstormId}` });
+  await expect(finalProdRecord).toContainText("completed");
+  await expect(finalProdRecord.getByLabel("Výsledek")).toContainText(finalArtifact);
+  await expect(finalProdRecord.getByRole("button", { name: /arbitráž/i })).toHaveCount(0);
+  await expect(workspace.getByLabel("Brief")).toHaveCount(0);
+  await expect(workspace.getByRole("button", { name: "Připravit brainstorm" })).toHaveCount(0);
 });

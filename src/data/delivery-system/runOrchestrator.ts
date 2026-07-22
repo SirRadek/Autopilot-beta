@@ -1,11 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
 import { isRunRouteEligible } from "./runRouteEligibility";
 import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
-import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
-import type { TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
+import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, canonicalPromptCommitment, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createGroupRunDraft, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, settleRunReservation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
+import type { OrchestrationGroupSpec, TokenGroupReservation, TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens } from "./runPromptPolicy";
 import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
@@ -22,6 +22,10 @@ interface Gateway {
   settle(reservation: TokenReservation, usage: TokenSettlement): TokenSettlement | void;
   findActiveReservation?(handoffId: string): TokenReservation | null;
   acknowledgeTerminal?(reservationId: string): void;
+  reserveGroup?(input: OrchestrationGroupSpec): TokenGroupReservation;
+  claimGroupSlot?(groupId: string, slotId: string, input: TokenReservationRequest): TokenReservation;
+  releaseGroupSlots?(groupId: string, slotIds: readonly string[]): TokenGroupReservation;
+  findGroup?(groupId: string): TokenGroupReservation | null;
 }
 
 interface SupervisorTaskView {
@@ -57,7 +61,7 @@ export function createRunOrchestrator(options: {
   readonly packetBuilder?: RunPacketBuilder;
   readonly now?: () => string;
   readonly isRouteAvailable?: (provider: string, model: string | null) => boolean;
-  readonly afterPhase?: (phase: "bound" | "queued" | "reservation_terminal" | "artifact" | "finalized" | "compensation_cleared") => void;
+  readonly afterPhase?: (phase: "run_persisted" | "approval_persisted" | "bound" | "queued" | "reservation_terminal" | "artifact" | "finalized" | "compensation_cleared") => void;
   readonly supervisorMaxAttempts?: number;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
@@ -83,7 +87,72 @@ export function createRunOrchestrator(options: {
     return record(draft.run_id);
   }
 
+  function approvalFor(run: RunRecord) {
+    const draft = run.current;
+    return createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, inputTokenBound: draft.input_token_bound, outputTokenAllowance: draft.output_token_allowance, promptReviewAcknowledged: draft.prompt_review_acknowledged, now: now() });
+  }
+
+  function reserveOrchestrationGroup(spec: OrchestrationGroupSpec): TokenGroupReservation {
+    if (options.tokenGateway.reserveGroup === undefined) throw new Error("token_group_unsupported");
+    return options.tokenGateway.reserveGroup(spec);
+  }
+
+  function releaseOrchestrationGroupSlots(groupId: string, slotIds: readonly string[]): TokenGroupReservation {
+    if (options.tokenGateway.releaseGroupSlots === undefined) throw new Error("token_group_unsupported");
+    return options.tokenGateway.releaseGroupSlots(groupId, slotIds);
+  }
+
+  function ensureGroupRun(input: { readonly groupId: string; readonly slotId: string; readonly draft: RunDraftInput; readonly operator: string }): QueuedRun {
+    resolveEnabledProject(options.stateDir, input.draft.project_id, registryOptions);
+    if (!routeAvailable(input.draft.provider, input.draft.model)) throw new Error("run_route_unavailable");
+    if (options.tokenGateway.findGroup === undefined || options.tokenGateway.claimGroupSlot === undefined) throw new Error("token_group_unsupported");
+    const group = options.tokenGateway.findGroup(input.groupId);
+    const slot = group?.slots.find((candidate) => candidate.slotId === input.slotId);
+    if (slot === undefined || slot.provider !== input.draft.provider || slot.model !== input.draft.model) throw new Error("token_group_slot_mismatch");
+    let run = readRunStore(options.stateDir).runs.find((candidate) => candidate.orchestration_ref?.group_id === input.groupId && candidate.orchestration_ref.slot_id === input.slotId);
+    if (run !== undefined && (!sameGroupDraft(run, input.draft) || run.orchestration_request?.operator !== input.operator || run.orchestration_request.estimated_tokens !== input.draft.estimated_tokens)) throw new Error("orchestration_group_run_mismatch");
+    if (run === undefined) {
+      const runId = deterministicGroupRunId(input.groupId, input.slotId);
+      createGroupRunDraft(options.stateDir, runId, { group_id: input.groupId, slot_id: input.slotId }, input.operator, input.draft, now(), registryOptions);
+      run = record(runId);
+      options.afterPhase?.("run_persisted");
+    }
+    let queue = readApprovalQueue(options.stateDir);
+    let approval = queue.records.find((item) => item.run_id === run!.current.run_id && item.revision === run!.current.revision);
+    if (approval === undefined) {
+      approval = approvalFor(run);
+      if (run.status !== "draft") approval = decideApproval(approval, "approved", now());
+      writeApprovalQueue(options.stateDir, { ...queue, records: [...queue.records, approval] });
+      queue = readApprovalQueue(options.stateDir);
+      options.afterPhase?.("approval_persisted");
+    }
+    if (run.status === "queued" && run.supervisor_task_id !== null) return { ...run, supervisor_task_id: run.supervisor_task_id };
+    if (run.status === "draft") {
+      if (approval.status === "pending") {
+        const decided = decideApproval(approval, "approved", now());
+        writeApprovalQueue(options.stateDir, { ...queue, records: queue.records.map((item) => item.approval_id === approval!.approval_id ? decided : item) });
+      } else if (approval.status !== "approved") throw new Error("approval_not_approved");
+      run = approveRunRevision(options.stateDir, run.current.run_id, run.current.revision, input.operator, now());
+    }
+    if (run.status !== "approved") throw new Error("run_revision_conflict");
+    const handoff = handoffFor(run);
+    let reservation = run.token_reservation;
+    let taskId = run.supervisor_task_id;
+    if (reservation === null || taskId === null) {
+      reservation = options.tokenGateway.claimGroupSlot(input.groupId, input.slotId, { provider: run.current.provider, model: run.current.model, sessionId: slot.sessionId, inputTokens: run.current.input_token_bound, outputTokens: run.current.output_token_allowance, handoffId: handoff.handoffId as string });
+      taskId = `run-task-${run.current.run_id}`;
+      run = bindRunToSupervisor(options.stateDir, run.current.run_id, taskId, reservation as RunReservation, now());
+      options.afterPhase?.("bound");
+    }
+    const existingTask = options.supervisor.snapshot?.().find((task) => task.task_id === taskId);
+    if (existingTask === undefined) options.supervisor.enqueue({ taskId, handoff, sessionId: run.current.run_id, requiresApproval: true, approvalGranted: true, now: now(), ...(options.supervisorMaxAttempts === undefined ? {} : { maxAttempts: options.supervisorMaxAttempts }) });
+    const queued = transitionRun(options.stateDir, run.current.run_id, "queued", now());
+    options.afterPhase?.("queued");
+    return { ...queued, supervisor_task_id: taskId };
+  }
+
   function handoffFor(run: RunRecord): GovernedHandoff {
+    assertGroupPromptCommitment(run);
     assertRunPromptPolicy(run.current.prompt, run.current.prompt_review_acknowledged);
     if (run.current.estimated_tokens !== canonicalRunTokenBudget(run.current.prompt)) throw new Error("run_token_budget_mismatch");
     const task = `Execute approved run ${run.current.run_id} revision ${run.current.revision}`;
@@ -95,7 +164,7 @@ export function createRunOrchestrator(options: {
     const workUnit = classifyWorkUnitForProfile(executionProfile, false);
     const reasoningEffort = resolveLegacyRequestedReasoning(run);
     return {
-      handoffId: `run-handoff-${run.current.run_id}-${run.current.revision}` as GovernedHandoff["handoffId"],
+      handoffId: handoffIdFor(run) as GovernedHandoff["handoffId"],
       sessionId: run.current.run_id,
       vendor: run.current.provider,
       ...(run.current.model === null ? {} : { model: run.current.model }),
@@ -263,8 +332,9 @@ export function createRunOrchestrator(options: {
     }
     if (!cancelled && !failed && (task === undefined || task.status === "running")) options.supervisor.complete(taskId, now());
     if (run.reservation_status === "active") {
-      options.tokenGateway.settle(reservation, { inputTokens: cumulativeInputTokens, outputTokens: cumulativeOutputTokens });
-      run = markRunReservationTerminal(options.stateDir, run.current.run_id, "settled", now());
+      const settlement = options.tokenGateway.settle(reservation, { inputTokens: cumulativeInputTokens, outputTokens: cumulativeOutputTokens });
+      if (settlement === undefined) throw new Error("token_settlement_missing");
+      run = settleRunReservation(options.stateDir, run.current.run_id, settlement, now());
       options.afterPhase?.("reservation_terminal");
     }
     const latest = record(run.current.run_id);
@@ -329,6 +399,18 @@ export function createRunOrchestrator(options: {
     if (run.provider_result !== null) return finishProviderResult(taskId, run, reconstructedResult(run));
     assertTaskRoute(run, task);
     if (run.status === "queued") run = transitionRun(options.stateDir, run.current.run_id, "running", now());
+    try {
+      assertDispatchPromptCommitment(run, task);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "run_prompt_commitment_violation";
+      run = recordRunDispatchFailure(options.stateDir, run.current.run_id, reason, now());
+      const taskSnapshot = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
+      if (taskSnapshot?.status === undefined || !["cancelled", "failed", "completed"].includes(taskSnapshot.status)) {
+        try { options.supervisor.cancel(taskId, reason, now()); } catch { /* best-effort task cleanup; run finalization below is authoritative */ }
+      }
+      finishDispatchFailure(run);
+      throw error;
+    }
     let result: DispatchResult;
     try {
       const cwd = resolveEnabledProject(options.stateDir, run.current.project_id, registryOptions).cwd;
@@ -362,7 +444,7 @@ export function createRunOrchestrator(options: {
     if (current.status === "running" && (boundTask === undefined || boundTask.status === "running")) return current;
     let firstError: unknown;
     if (current.token_reservation === null) {
-      const orphan = options.tokenGateway.findActiveReservation?.(handoffFor(current).handoffId as string) ?? null;
+      const orphan = options.tokenGateway.findActiveReservation?.(handoffIdFor(current)) ?? null;
       if (orphan !== null) {
         try { options.tokenGateway.release(orphan); } catch (error) { firstError = error; }
       }
@@ -381,7 +463,35 @@ export function createRunOrchestrator(options: {
     return transitionRun(options.stateDir, runId, "cancelled", now());
   }
 
-  return { prepareRun, approveAndQueueRun, runSupervisorOnce, cancelRun, handoffForRun: (runId: string) => handoffFor(record(runId)) };
+  return { prepareRun, reserveOrchestrationGroup, releaseOrchestrationGroupSlots, ensureGroupRun, approveAndQueueRun, runSupervisorOnce, cancelRun, handoffForRun: (runId: string) => handoffFor(record(runId)) };
+}
+
+function deterministicGroupRunId(groupId: string, slotId: string): string { return `bgr-${createHash("sha256").update(`${groupId}\0${slotId}`).digest("hex").slice(0, 32)}`; }
+function handoffIdFor(run: RunRecord): string {
+  return `run-handoff-${run.current.run_id}-${run.current.revision}`;
+}
+function requiredGroupPromptCommitment(run: RunRecord): string {
+  const commitment = run.orchestration_request?.prompt_commitment ?? null;
+  if (commitment === null) throw new Error("run_prompt_commitment_missing");
+  return commitment;
+}
+function assertGroupPromptCommitment(run: RunRecord): void {
+  if (run.orchestration_ref === null) return;
+  const commitment = requiredGroupPromptCommitment(run);
+  if (canonicalPromptCommitment(run.current.prompt) !== commitment) throw new Error("run_prompt_commitment_mismatch");
+}
+function assertDispatchPromptCommitment(run: RunRecord, task: SupervisorTaskView): void {
+  if (run.orchestration_ref === null) return;
+  const commitment = requiredGroupPromptCommitment(run);
+  if (canonicalPromptCommitment(run.current.prompt) !== commitment || canonicalPromptCommitment(task.handoff.prompt) !== commitment) throw new Error("run_prompt_commitment_mismatch");
+  if (task.handoff.sessionId !== run.current.run_id || String(task.handoff.handoffId) !== handoffIdFor(run)) throw new Error("run_prompt_commitment_identity_mismatch");
+}
+function sameGroupDraft(run: RunRecord, input: RunDraftInput): boolean {
+  const current = run.current;
+  return current.project_id === input.project_id && current.prompt === input.prompt && current.provider === input.provider && current.model === input.model &&
+    run.orchestration_request?.estimated_tokens === input.estimated_tokens &&
+    current.profile === input.profile && current.requested_reasoning_effort === input.requested_reasoning_effort && current.promotion_packet_id === (input.promotion_packet_id ?? null) &&
+    current.prompt_review_acknowledged === (input.prompt_review_acknowledged === true) && JSON.stringify(current.requested_artifacts) === JSON.stringify(input.requested_artifacts);
 }
 
 function assertTaskRoute(run: RunRecord, task: SupervisorTaskView): void {

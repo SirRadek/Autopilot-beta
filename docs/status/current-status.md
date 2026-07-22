@@ -40,6 +40,7 @@ an independent code review with its systemd regression finding resolved before m
 | Worker cancellation | CLI path tested | No Cockpit mutation | Exact worker ID and operator CLI | Cockpit shows unavailable | Design server/UI cancellation contract |
 | Filesystem service containment | Yes, including fail-closed probe | Deployed root-manager proof passed | Root system manager; system Node 24; tmpfiles prerequisites | Requires explicit writable-root review for path changes | Monitor unit and timers |
 | Batch, scheduled, multivendor automation | No | No | None | Planned only | Separate design and budget gate |
+| Brainstorm mode (multi-provider fan-out/consolidation/arbitration) | Yes | No | Governed run orchestrator; atomic orchestration groups; DEV-only mutation | PROD is read-only; efficiency remains `insufficient_evidence` until 20 ordinary + 5 high-risk samples | VM acceptance and live provider trial |
 
 ## Live cutover result
 

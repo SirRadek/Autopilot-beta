@@ -19,6 +19,12 @@
       "label": "Bot / RAG Mesh"
     },
     {
+      "id": "brainstorm_policy",
+      "group": "governance_policy",
+      "risk": 0.7,
+      "label": "Brainstorm mode policy"
+    },
+    {
       "id": "capability_routing",
       "group": "routing_policy",
       "risk": 0.7,

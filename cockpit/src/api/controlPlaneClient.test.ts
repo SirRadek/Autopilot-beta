@@ -91,4 +91,40 @@ describe("ControlPlaneClient", () => {
     expect(fetcher.mock.calls[0]?.[0]).toBe("http://cp/promotions/packet%2F1/reject");
     expect(fetcher.mock.calls[0]?.[1]?.method).toBe("POST");
   });
+
+  it("uses the brainstorm routes with exact JSON bodies and no coercion", async () => {
+    const record = { brainstorm_id: "bs/1", status: "draft" };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(record), { status: 200 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+    const draft = {
+      project_id: "autopilot-beta",
+      brief: "Explore approaches",
+      routes: [
+        { provider: "codex_cli" as const, model: "model-a", requested_reasoning_effort: "low" as const },
+        { provider: "claude_cli" as const, model: "model-a", requested_reasoning_effort: "low" as const },
+        { provider: "agy_cli" as const, model: "model-a", requested_reasoning_effort: "low" as const }
+      ],
+      synthesizer: "codex_cli" as const,
+      estimated_tokens: 50_000,
+      arbitration_route: null
+    };
+    const arbitrationRoute = { provider: "agy_cli" as const, model: "model-a", reasoning_effort: "low" as const, estimated_tokens: 8_000 };
+
+    await client.listBrainstorms();
+    await client.getBrainstorm("bs/1");
+    await client.createBrainstorm(draft);
+    await client.approveBrainstorm("bs/1", "owner");
+    await client.arbitrateBrainstorm("bs/1", "owner", arbitrationRoute);
+    await client.cancelBrainstorm("bs/1");
+
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "http://cp/brainstorms", "http://cp/brainstorms/bs%2F1", "http://cp/brainstorms",
+      "http://cp/brainstorms/bs%2F1/approve", "http://cp/brainstorms/bs%2F1/arbitrate", "http://cp/brainstorms/bs%2F1/cancel"
+    ]);
+    expect(JSON.parse(fetcher.mock.calls[2]?.[1]?.body as string)).toEqual(draft);
+    expect(JSON.parse(fetcher.mock.calls[3]?.[1]?.body as string)).toEqual({ operator: "owner" });
+    expect(JSON.parse(fetcher.mock.calls[4]?.[1]?.body as string)).toEqual({ operator: "owner", route: arbitrationRoute });
+    expect(JSON.parse(fetcher.mock.calls[5]?.[1]?.body as string)).toEqual({});
+    expect(fetcher.mock.calls.every(([, init]) => init.credentials === "include")).toBe(true);
+  });
 });
