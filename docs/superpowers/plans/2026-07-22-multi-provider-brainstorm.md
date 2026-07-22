@@ -4,7 +4,7 @@
 
 **Goal:** Add a Cockpit Brainstorm mode that sends one immutable brief independently to every approved provider route, consolidates the outputs, and optionally lets a remaining provider adjudicate material disagreements before producing the final artifact.
 
-**Architecture:** A durable `BrainstormRecord` owns the brief, route snapshot, child run IDs, consolidation evidence, disagreement records, optional arbitration, and final artifact. Existing governed runs remain the only provider execution path; the brainstorm coordinator creates and observes child DEV runs rather than bypassing approval, token reservation, routing, or telemetry. Round one is independent, consolidation is a separately approved run, and at most one operator-approved arbitration round may occur.
+**Architecture:** A durable `BrainstormRecord` owns the brief, route snapshot, fixed orchestration slots, child run IDs, consolidation evidence, disagreement records, optional arbitration, and final artifact. A first-class orchestration group atomically reserves route-specific token holds whose sum equals the worst-case envelope; the parent envelope is metadata and is never charged again. Existing governed runs remain the only provider execution path, and deterministic group/slot references make child creation restart-safe without a second runtime. Round one is independent, consolidation is a separately governed run, and at most one operator-approved arbitration round may occur.
 
 **Tech Stack:** TypeScript, Node 24, existing JSON managed-state stores, control-plane HTTP API, React/Vitest Cockpit, existing governed run orchestrator.
 
@@ -22,10 +22,12 @@
 - If no provider remains independent of all material conflicts, fail closed with `brainstorm_no_independent_arbiter` and require a new operator-created brainstorm.
 - Before initial approval, show a worst-case token range covering fan-out, consolidation, and optional arbitration.
 - Approval atomically reserves the worst-case envelope; no stage starts without its allocation and an overrun fails the brainstorm before any later stage.
+- The envelope is not an additional charged reservation: atomically persisted route-specific slot holds sum to `maximum_tokens`, and child runs claim those holds without increasing reserved usage.
+- One immutable `(orchestration_group_id, slot_id)` maps to at most one governed run; retries and restarts must retrieve or repair that run rather than create another.
 - High-risk or PROD publication continues through the existing promotion/full-verification path.
 - Privacy-safe telemetry stores identifiers, token counts, timings, statuses, and scores—not raw prompts or full outputs.
 - Do not claim the 30% efficiency target before 20 ordinary and 5 high-risk work units; otherwise report `insufficient_evidence`.
-- Estimated implementation budget: 90k–160k aggregate implementation tokens plus 20k–35k independent-review tokens.
+- Estimated implementation budget: 115k–205k aggregate implementation tokens plus 28k–47k independent-review tokens.
 
 ---
 
@@ -40,7 +42,7 @@
 
 **Interfaces:**
 - Produces: `BrainstormRecord`, `BrainstormRoute`, `BrainstormConflict`, `BrainstormTokenEnvelope`, `createBrainstorm`, `readBrainstormStore`, `replaceBrainstorm`, and `estimateBrainstormTokenEnvelope`.
-- Consumes later: Tasks 2–5 persist and render these exact types.
+- Consumes later: Tasks 2–6 persist and render these exact types.
 
 - [ ] **Step 1: Write failing store and budget tests**
 
@@ -75,7 +77,7 @@ export type BrainstormStatus = "draft" | "approved" | "fanout_running" | "consol
 export interface BrainstormRoute {
   readonly provider: RunProvider;
   readonly model: string;
-  readonly reasoning_effort: RunReasoningEffort;
+  readonly reasoning_effort: RunReasoningEffort | null;
   readonly estimated_tokens: number;
 }
 export interface BrainstormConflict {
@@ -107,6 +109,8 @@ export interface BrainstormRecord {
 
 Use `writeStateFileAtomically` and the existing managed-state size/ownership conventions. Reject unknown fields, duplicate providers, fewer than 3 or more than 4 routes, unavailable enum values, unsafe IDs, oversized briefs, and non-canonical token budgets.
 
+Provider capability validation is exact: `openrouter_api` requires `reasoning_effort: null`; every other provider requires a non-null value present in `SUPPORTED_REASONING_EFFORTS[provider]`. Do not coerce, default, or silently change the requested effort.
+
 - [ ] **Step 4: Run tests and verify GREEN**
 
 Run: `npx vitest run tests/delivery-system/brainstorm-store.test.ts tests/delivery-system/brainstorm-budget.test.ts`
@@ -122,7 +126,142 @@ git commit -m "feat: add durable brainstorm records and budgets"
 
 ---
 
-### Task 2: Governed Fan-Out and Consolidation Coordinator
+### Task 2: Atomic Orchestration Group Foundation
+
+**Files:**
+- Modify: `src/data/delivery-system/brainstormStore.ts`
+- Modify: `src/data/delivery-system/tokenGateway.ts`
+- Modify: `src/data/delivery-system/runStore.ts`
+- Modify: `src/data/delivery-system/runOrchestrator.ts`
+- Test: `tests/delivery-system/brainstorm-store.test.ts`
+- Create: `tests/delivery-system/token-gateway-group.test.ts`
+- Create: `tests/delivery-system/run-orchestrator-group.test.ts`
+- Modify: `vendor-manifest.json`
+
+**Interfaces:**
+- Consumes: Task 1 route snapshots and token envelope.
+- Produces: `compareAndSwapBrainstorm`, `TokenGateway.reserveGroup`, `claimGroupSlot`, `releaseGroupSlots`, `findGroup`, and run-orchestrator methods `reserveOrchestrationGroup` and `ensureGroupRun`.
+
+- [ ] **Step 1: Write failing CAS, group-reservation, and idempotent-run tests**
+
+```ts
+const reserved = gateway.reserveGroup({
+  groupId: "bsg-example",
+  slots: [
+    { slotId: "fanout-0", provider: "codex_cli", model: "gpt-5", sessionId: "bgr-example-fanout-0", holdTokens: 12_000 },
+    { slotId: "fanout-1", provider: "claude_cli", model: "sonnet", sessionId: "bgr-example-fanout-1", holdTokens: 12_000 },
+  ],
+});
+expect(gateway.reserveGroup(sameRequest)).toEqual(reserved);
+expect(() => gateway.reserveGroup(changedRequest)).toThrow("token_group_mismatch");
+
+const first = orchestrator.ensureGroupRun(groupRunInput);
+const repeated = orchestrator.ensureGroupRun(groupRunInput);
+expect(repeated.current.run_id).toBe(first.current.run_id);
+expect(readRunStore(stateDir).runs).toHaveLength(1);
+```
+
+Also prove: stale brainstorm revisions cannot overwrite newer lifecycle state; group reservation is all-or-none when any route exceeds a budget; slot holds sum to the requested group maximum; claiming a slot does not increase gateway usage; settlement replaces its full hold with actual usage; unused slots release idempotently; the same group/slot with different immutable run input fails; restart after run persistence, approval persistence, binding, and queueing repairs or returns the same run; ordinary non-group runs retain current behavior.
+
+- [ ] **Step 2: Run tests and verify RED**
+
+Run:
+
+```bash
+npx vitest run tests/delivery-system/brainstorm-store.test.ts tests/delivery-system/token-gateway-group.test.ts tests/delivery-system/run-orchestrator-group.test.ts
+```
+
+Expected: FAIL because CAS and orchestration-group APIs do not exist.
+
+- [ ] **Step 3: Add fixed slots, monotonic CAS, and atomic route holds**
+
+Extend the unreleased `BrainstormRecord` v1 schema without a migration layer:
+
+```ts
+export type BrainstormStage = "fanout" | "consolidation" | "arbitration";
+export interface BrainstormSlot {
+  readonly slot_id: string;
+  readonly stage: BrainstormStage;
+  readonly route_index: number | null;
+  readonly run_id: string | null;
+  readonly state: "planned" | "created" | "queued" | "terminal" | "released";
+}
+
+// Added to BrainstormRecord
+readonly revision: number;
+readonly approval_state: "none" | "pending" | "reserved";
+readonly orchestration_group_id: string | null;
+readonly slots: readonly BrainstormSlot[];
+```
+
+`createBrainstorm` initializes revision `1`, approval state `none`, a fixed fan-out slot per route, one consolidation slot, and one arbitration slot only when `arbitration_route` is non-null. Add:
+
+```ts
+compareAndSwapBrainstorm(
+  stateDir: string,
+  brainstormId: string,
+  expectedRevision: number,
+  mutate: (current: BrainstormRecord) => BrainstormRecord,
+): BrainstormRecord;
+```
+
+The complete read/validate/mutate/revision-increment/write cycle runs under `withStateMaintenanceLock`; stale revisions throw `brainstorm_revision_conflict`, and immutable fields remain protected.
+
+Add atomic gateway group state:
+
+```ts
+export interface TokenGroupSlotRequest extends TokenGatewayRoute {
+  readonly slotId: string;
+  readonly holdTokens: number;
+}
+export interface TokenGroupReservation {
+  readonly groupId: string;
+  readonly slots: readonly TokenGroupSlotReservation[];
+  readonly maximumTokens: number;
+}
+```
+
+`reserveGroup` validates every slot and all provider/model/session aggregate limits against one in-memory candidate, then persists once. The group itself adds no usage; each slot hold adds exactly `holdTokens`. `claimGroupSlot` requires a canonical `TokenReservationRequest` whose total is at most the hold, returns a reservation carrying `groupId`, `slotId`, and `heldTokens`, and adds no usage. Settlement subtracts `heldTokens` before adding actual usage. Group IDs and slot IDs are exact-input idempotency keys; changed inputs fail with `token_group_mismatch` or `token_group_slot_mismatch`.
+
+- [ ] **Step 4: Add governed group-run creation and recovery**
+
+Add nullable immutable `orchestration_ref: { group_id: string; slot_id: string } | null` to `RunRecord`, defaulting existing ordinary runs to null when read. Add an internal run-store creation path that accepts a deterministic safe run ID derived by the orchestrator from the group and slot; do not expose caller-selected IDs through the public draft API.
+
+```ts
+reserveOrchestrationGroup(spec: OrchestrationGroupSpec): TokenGroupReservation;
+ensureGroupRun(input: {
+  readonly groupId: string;
+  readonly slotId: string;
+  readonly draft: RunDraftInput;
+  readonly operator: string;
+}): QueuedRun;
+```
+
+`ensureGroupRun` finds or creates by `orchestration_ref`, rejects the same key with different immutable input, repairs a missing approval record after restart, claims the pre-reserved slot through the gateway, and reuses the existing approval/bind/enqueue transitions. No coordinator-accessible gateway, supervisor, provider adapter, or `dispatchHandoff` method is added.
+
+- [ ] **Step 5: Verify foundation GREEN**
+
+Run:
+
+```bash
+npx vitest run tests/delivery-system/brainstorm-store.test.ts tests/delivery-system/token-gateway-group.test.ts tests/delivery-system/run-orchestrator-group.test.ts tests/delivery-system/token-gateway.test.ts tests/delivery-system/run-orchestrator.test.ts tests/delivery-system/run-orchestrator-profile.test.ts
+npm run typecheck
+npm run beta:vendor-check
+git diff --check
+```
+
+Expected: all tests and gates PASS; ordinary runs are unchanged and group usage is never double-counted.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/data/delivery-system/brainstormStore.ts src/data/delivery-system/tokenGateway.ts src/data/delivery-system/runStore.ts src/data/delivery-system/runOrchestrator.ts tests/delivery-system/brainstorm-store.test.ts tests/delivery-system/token-gateway-group.test.ts tests/delivery-system/run-orchestrator-group.test.ts vendor-manifest.json
+git commit -m "feat: add atomic brainstorm orchestration groups"
+```
+
+---
+
+### Task 3: Governed Fan-Out and Consolidation Coordinator
 
 **Files:**
 - Create: `src/data/delivery-system/brainstormCoordinator.ts`
@@ -131,7 +270,7 @@ git commit -m "feat: add durable brainstorm records and budgets"
 - Modify: `vendor-manifest.json`
 
 **Interfaces:**
-- Consumes: Task 1 store types and existing `createRunOrchestrator` methods.
+- Consumes: Task 1 store types and Task 2 orchestration-group methods.
 - Produces: `createBrainstormCoordinator(options)` with `approve`, `tick`, `requestArbitration`, and `cancel`.
 
 - [ ] **Step 1: Write failing coordinator tests**
@@ -167,7 +306,7 @@ export interface BrainstormCoordinator {
 }
 ```
 
-`approve` first performs an atomic compare-and-swap from `draft` to `approved` and reserves the complete `maximum_tokens` envelope, then creates one DEV child run per snapshotted route and approves each through the existing run orchestrator. A racing or repeated approval returns the already-created record and cannot create more child runs. Each child uses its route allocation through the existing token-reservation path; an actual settlement above that allocation marks the brainstorm failed and prevents consolidation or arbitration. `tick` only observes durable child states; once every successful child has a terminal text artifact, it creates exactly one separately governed consolidation run. Never call a CLI capture function, provider adapter, or `dispatchHandoff` directly from the coordinator.
+`approve` first CASes `draft` into an approval-pending state with its deterministic group ID and fixed slots, then calls `reserveOrchestrationGroup`; retry after either side of that boundary finds the exact group and advances to `reserved`. It creates or retrieves one DEV child run per fan-out slot through `ensureGroupRun`. A racing or repeated approval returns the same group/slot/run identities and cannot create more child runs. Each child claims its route slot without increasing reserved usage; settlement beyond the slot allocation fails the brainstorm and prevents later stages. `tick` only observes durable child states; once every child is durably `completed` and has a terminal text artifact, it creates exactly one separately governed consolidation run in the consolidation slot. It never infers terminality from prose such as plans, summaries, or “done”, and never calls a CLI capture function, provider adapter, gateway, supervisor, or `dispatchHandoff` directly.
 
 Before embedding outputs, generate a 128-bit random nonce and use it in every block delimiter. Reject or escape any provider-output occurrence of that exact delimiter. The consolidation prompt must demand strict JSON:
 
@@ -197,7 +336,7 @@ git commit -m "feat: coordinate governed brainstorm fanout"
 
 ---
 
-### Task 3: Explicit Arbitration and Final Evidence
+### Task 4: Explicit Arbitration and Final Evidence
 
 **Files:**
 - Modify: `src/data/delivery-system/brainstormCoordinator.ts`
@@ -207,7 +346,7 @@ git commit -m "feat: coordinate governed brainstorm fanout"
 - Modify: `vendor-manifest.json`
 
 **Interfaces:**
-- Consumes: `BrainstormConflict` and coordinator state from Tasks 1–2.
+- Consumes: `BrainstormConflict` and coordinator state from Tasks 1–3.
 - Produces: bounded arbitration selection and privacy-safe `BrainstormTelemetryEvent` records.
 
 - [ ] **Step 1: Write failing arbitration tests**
@@ -265,7 +404,7 @@ git commit -m "feat: add bounded brainstorm arbitration"
 
 ---
 
-### Task 4: Control-Plane Brainstorm API
+### Task 5: Control-Plane Brainstorm API
 
 **Files:**
 - Create: `scripts/control-plane-brainstorms.ts`
@@ -273,7 +412,7 @@ git commit -m "feat: add bounded brainstorm arbitration"
 - Test: `tests/scripts/control-plane-brainstorms.test.ts`
 
 **Interfaces:**
-- Consumes: Tasks 1–3 coordinator.
+- Consumes: Tasks 1–4 coordinator.
 - Produces: `GET /brainstorms`, `GET /brainstorms/:id`, `POST /brainstorms`, `POST /brainstorms/:id/approve`, `POST /brainstorms/:id/arbitrate`, and `POST /brainstorms/:id/cancel`.
 
 - [ ] **Step 1: Write failing API tests**
@@ -314,7 +453,7 @@ git commit -m "feat: expose governed brainstorm API"
 
 ---
 
-### Task 5: Cockpit Brainstorm Workspace
+### Task 6: Cockpit Brainstorm Workspace
 
 **Files:**
 - Create: `cockpit/src/features/brainstorm/BrainstormPane.tsx`
@@ -328,7 +467,7 @@ git commit -m "feat: expose governed brainstorm API"
 - Modify: `tests/browser/cockpit.spec.ts`
 
 **Interfaces:**
-- Consumes: Task 4 API and Task 1 domain shapes.
+- Consumes: Task 5 API and Task 1 domain shapes.
 - Produces: an operator-visible Brainstorm pane and no new automatic mutation.
 
 - [ ] **Step 1: Write failing component and browser tests**
@@ -387,7 +526,7 @@ git commit -m "feat: add multi-provider brainstorm cockpit"
 
 ---
 
-### Task 6: Documentation, Mesh, and Complete Verification
+### Task 7: Documentation, Mesh, and Complete Verification
 
 **Files:**
 - Create: `docs/autopilot/brainstorm-mode.md`
@@ -399,7 +538,7 @@ git commit -m "feat: add multi-provider brainstorm cockpit"
 - Modify: `vendor-manifest.json`
 
 **Interfaces:**
-- Consumes: the complete feature from Tasks 1–5.
+- Consumes: the complete feature from Tasks 1–6.
 - Produces: operator documentation, decision-mesh routing, and release evidence.
 
 - [ ] **Step 1: Document the operator workflow and failure semantics**
