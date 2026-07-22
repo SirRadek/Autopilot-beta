@@ -19,6 +19,10 @@ const routes = [
 ] as const satisfies readonly BrainstormRoute[];
 const synthesizerRoute = { provider: "codex_cli", model: "gpt-5", reasoning_effort: "high", estimated_tokens: 10_000 } as const;
 const arbitrationRoute = { provider: "claude_cli", model: "sonnet", reasoning_effort: "max", estimated_tokens: 8_000 } as const;
+const fourRoutes = [
+  ...routes,
+  { provider: "openrouter_api", model: "google/gemini-2.5-pro", reasoning_effort: null, estimated_tokens: 12_000 },
+] as const;
 const now = "2026-07-22T10:00:00.000Z";
 const stateDirs: string[] = [];
 
@@ -81,6 +85,31 @@ describe("brainstorm store", () => {
     expect(() => createBrainstorm(directory, fixture({ routes: [...routes, { ...routes[0], provider: "openrouter_api" }, { ...routes[1], provider: "openrouter_api" }] }), now)).toThrow("brainstorm_route_count");
   });
 
+  it("round-trips the supported four-distinct-provider upper boundary", () => {
+    const directory = stateDir();
+    const record = createBrainstorm(directory, fixture({
+      routes: fourRoutes,
+      token_envelope: estimateBrainstormTokenEnvelope(fourRoutes, synthesizerRoute.estimated_tokens, arbitrationRoute.estimated_tokens),
+    }), now);
+
+    expect(record.routes).toEqual(fourRoutes);
+    expect(readBrainstormStore(directory).brainstorms).toEqual([record]);
+  });
+
+  it("rejects provider-incompatible reasoning snapshots before persistence", () => {
+    const directory = stateDir();
+    expect(() => createBrainstorm(directory, fixture({
+      routes: [routes[0], routes[1], { ...routes[2], reasoning_effort: "max" }],
+    }), now)).toThrow("invalid_brainstorm");
+    expect(() => createBrainstorm(directory, fixture({
+      synthesizer_route: { ...synthesizerRoute, provider: "agy_cli", reasoning_effort: "max" },
+    }), now)).toThrow("invalid_brainstorm");
+    expect(() => createBrainstorm(directory, fixture({
+      arbitration_route: { ...arbitrationRoute, provider: "openrouter_api", reasoning_effort: "high" },
+    }), now)).toThrow("invalid_brainstorm");
+    expect(readBrainstormStore(directory).brainstorms).toEqual([]);
+  });
+
   it("rejects unknown fields, unsafe values, oversized briefs, and non-canonical envelopes", () => {
     const directory = stateDir();
     expect(() => createBrainstorm(directory, fixture({ surprise: true }), now)).toThrow("invalid_brainstorm");
@@ -129,6 +158,13 @@ describe("brainstorm store", () => {
     const created = createBrainstorm(directory, fixture(), now);
     const path = join(directory, "brainstorms.json");
     const valid = { schema_version: "v1", brainstorms: [created] };
+    const incompatibleRoute = {
+      ...valid,
+      brainstorms: [{
+        ...created,
+        routes: created.routes.map((route, index) => index === 2 ? { ...route, reasoning_effort: "max" } : route),
+      }],
+    };
 
     for (const document of [
       "{broken",
@@ -136,6 +172,7 @@ describe("brainstorm store", () => {
       JSON.stringify({ ...valid, brainstorms: [{ ...created, unknown: true }] }),
       JSON.stringify({ ...valid, brainstorms: [{ ...created, status: "mystery" }] }),
       JSON.stringify({ ...valid, brainstorms: [{ ...created, token_envelope: { ...created.token_envelope, minimum_tokens: 1 } }] }),
+      JSON.stringify(incompatibleRoute),
     ]) {
       writeFileSync(path, document);
       expect(() => readBrainstormStore(directory)).toThrow("invalid_brainstorm_store");

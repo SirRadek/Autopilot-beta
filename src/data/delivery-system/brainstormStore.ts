@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { estimateBrainstormTokenEnvelope, type BrainstormTokenEnvelope } from "./brainstormBudget";
-import type { RunReasoningEffort } from "./executionProfile";
+import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "./executionProfile";
 import { readManagedStateTextFile } from "./managedStateFile";
 import type { RunProvider } from "./runStore";
 import { withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
@@ -13,7 +13,7 @@ export type BrainstormStatus = "draft" | "approved" | "fanout_running" | "consol
 export interface BrainstormRoute {
   readonly provider: RunProvider;
   readonly model: string;
-  readonly reasoning_effort: RunReasoningEffort;
+  readonly reasoning_effort: RunReasoningEffort | null;
   readonly estimated_tokens: number;
 }
 
@@ -64,7 +64,6 @@ const MAX_FINAL_ARTIFACT_CHARS = 64_000;
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const PROVIDERS = new Set<RunProvider>(["codex_cli", "claude_cli", "agy_cli", "openrouter_api"]);
-const REASONING_EFFORTS = new Set<RunReasoningEffort>(["low", "medium", "high", "xhigh", "max"]);
 const STATUSES = new Set<BrainstormStatus>(["draft", "approved", "fanout_running", "consolidating", "needs_arbitration", "arbitrating", "completed", "failed", "cancelled"]);
 const INPUT_KEYS = ["project_id", "brief", "routes", "synthesizer_route", "arbitration_route", "token_envelope"] as const;
 const RECORD_KEYS = ["schema_version", "brainstorm_id", "project_id", "brief", "routes", "synthesizer_route", "arbitration_route", "token_envelope", "child_run_ids", "consolidation_run_id", "arbitration_run_id", "conflicts", "final_artifact", "status", "approved_by", "created_at", "updated_at"] as const;
@@ -186,9 +185,13 @@ function isBrainstormRecord(value: unknown): value is BrainstormRecord {
 }
 
 function isBrainstormRoute(value: unknown): value is BrainstormRoute {
-  return isExactRecord(value, ROUTE_KEYS) && PROVIDERS.has(value.provider as RunProvider) &&
-    boundedString(value.model, MAX_MODEL_CHARS) && REASONING_EFFORTS.has(value.reasoning_effort as RunReasoningEffort) &&
-    Number.isSafeInteger(value.estimated_tokens) && (value.estimated_tokens as number) > 0;
+  if (!isExactRecord(value, ROUTE_KEYS) || !PROVIDERS.has(value.provider as RunProvider) ||
+    !boundedString(value.model, MAX_MODEL_CHARS) || !Number.isSafeInteger(value.estimated_tokens) ||
+    (value.estimated_tokens as number) <= 0) return false;
+  const supported: readonly RunReasoningEffort[] = SUPPORTED_REASONING_EFFORTS[value.provider as RunProvider];
+  return supported.length === 0
+    ? value.reasoning_effort === null
+    : value.reasoning_effort !== null && supported.includes(value.reasoning_effort as RunReasoningEffort);
 }
 
 function isCanonicalEnvelope(value: unknown, routes: readonly BrainstormRoute[], synthesizerRoute: BrainstormRoute, arbitrationRoute: BrainstormRoute | null): value is BrainstormTokenEnvelope {
