@@ -9,6 +9,14 @@ import type { RunProvider } from "./runStore";
 import { withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export type BrainstormStatus = "draft" | "approved" | "fanout_running" | "consolidating" | "needs_arbitration" | "arbitrating" | "completed" | "failed" | "cancelled";
+export type BrainstormStage = "fanout" | "consolidation" | "arbitration";
+export interface BrainstormSlot {
+  readonly slot_id: string;
+  readonly stage: BrainstormStage;
+  readonly route_index: number | null;
+  readonly run_id: string | null;
+  readonly state: "planned" | "created" | "queued" | "terminal" | "released";
+}
 
 export interface BrainstormRoute {
   readonly provider: RunProvider;
@@ -39,6 +47,10 @@ export interface BrainstormRecord {
   readonly conflicts: readonly BrainstormConflict[];
   readonly final_artifact: string | null;
   readonly status: BrainstormStatus;
+  readonly revision: number;
+  readonly approval_state: "none" | "pending" | "reserved";
+  readonly orchestration_group_id: string | null;
+  readonly slots: readonly BrainstormSlot[];
   readonly approved_by: string | null;
   readonly created_at: string;
   readonly updated_at: string;
@@ -66,7 +78,7 @@ const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const PROVIDERS = new Set<RunProvider>(["codex_cli", "claude_cli", "agy_cli", "openrouter_api"]);
 const STATUSES = new Set<BrainstormStatus>(["draft", "approved", "fanout_running", "consolidating", "needs_arbitration", "arbitrating", "completed", "failed", "cancelled"]);
 const INPUT_KEYS = ["project_id", "brief", "routes", "synthesizer_route", "arbitration_route", "token_envelope"] as const;
-const RECORD_KEYS = ["schema_version", "brainstorm_id", "project_id", "brief", "routes", "synthesizer_route", "arbitration_route", "token_envelope", "child_run_ids", "consolidation_run_id", "arbitration_run_id", "conflicts", "final_artifact", "status", "approved_by", "created_at", "updated_at"] as const;
+const RECORD_KEYS = ["schema_version", "brainstorm_id", "project_id", "brief", "routes", "synthesizer_route", "arbitration_route", "token_envelope", "child_run_ids", "consolidation_run_id", "arbitration_run_id", "conflicts", "final_artifact", "status", "revision", "approval_state", "orchestration_group_id", "slots", "approved_by", "created_at", "updated_at"] as const;
 const ROUTE_KEYS = ["provider", "model", "reasoning_effort", "estimated_tokens"] as const;
 const CONFLICT_KEYS = ["conflict_id", "output_run_ids", "summary", "material"] as const;
 const ENVELOPE_KEYS = ["fanout_tokens", "consolidation_tokens", "optional_arbitration_tokens", "minimum_tokens", "maximum_tokens"] as const;
@@ -110,6 +122,14 @@ export function createBrainstorm(
       conflicts: [],
       final_artifact: null,
       status: "draft",
+      revision: 1,
+      approval_state: "none",
+      orchestration_group_id: null,
+      slots: [
+        ...input.routes.map((_, index) => ({ slot_id: `fanout-${index}`, stage: "fanout" as const, route_index: index, run_id: null, state: "planned" as const })),
+        { slot_id: "consolidation", stage: "consolidation", route_index: null, run_id: null, state: "planned" },
+        ...(input.arbitration_route === null ? [] : [{ slot_id: "arbitration", stage: "arbitration" as const, route_index: null, run_id: null, state: "planned" as const }]),
+      ],
       approved_by: null,
       created_at: createdAt,
       updated_at: createdAt,
@@ -127,10 +147,34 @@ export function replaceBrainstorm(stateDir: string, record: BrainstormRecord): B
     if (index < 0) throw new Error("brainstorm_not_found");
     const existing = document.brainstorms[index] as BrainstormRecord;
     if (!sameImmutableFields(existing, record)) throw new Error("brainstorm_immutable_fields");
+    if (record.revision !== existing.revision + 1) throw new Error("brainstorm_revision_conflict");
     const brainstorms = [...document.brainstorms];
     brainstorms[index] = record;
     writeBrainstormStore(stateDir, { schema_version: "v1", brainstorms });
     return record;
+  });
+}
+
+export function compareAndSwapBrainstorm(
+  stateDir: string,
+  brainstormId: string,
+  expectedRevision: number,
+  mutate: (current: BrainstormRecord) => BrainstormRecord,
+): BrainstormRecord {
+  return withStateMaintenanceLock(stateDir, () => {
+    const document = readBrainstormStore(stateDir);
+    const index = document.brainstorms.findIndex((candidate) => candidate.brainstorm_id === brainstormId);
+    if (index < 0) throw new Error("brainstorm_not_found");
+    const current = document.brainstorms[index]!;
+    if (current.revision !== expectedRevision) throw new Error("brainstorm_revision_conflict");
+    const proposed = mutate(structuredClone(current));
+    const replacement = { ...proposed, revision: current.revision + 1 };
+    if (!isBrainstormRecord(replacement)) throw new Error("invalid_brainstorm");
+    if (!sameImmutableFields(current, replacement)) throw new Error("brainstorm_immutable_fields");
+    const brainstorms = [...document.brainstorms];
+    brainstorms[index] = replacement;
+    writeBrainstormStore(stateDir, { schema_version: "v1", brainstorms });
+    return replacement;
   });
 }
 
@@ -180,7 +224,9 @@ function isBrainstormRecord(value: unknown): value is BrainstormRecord {
     (value.arbitration_route === null && value.arbitration_run_id !== null) ||
     !Array.isArray(value.conflicts) || value.conflicts.length > MAX_CONFLICTS || !validConflicts(value.conflicts) ||
     !(value.final_artifact === null || boundedString(value.final_artifact, MAX_FINAL_ARTIFACT_CHARS, true)) ||
-    !STATUSES.has(value.status as BrainstormStatus) || !nullableSafeId(value.approved_by)) return false;
+    !STATUSES.has(value.status as BrainstormStatus) || !Number.isSafeInteger(value.revision) || (value.revision as number) < 1 ||
+    !["none", "pending", "reserved"].includes(value.approval_state as string) || !nullableSafeId(value.orchestration_group_id) ||
+    !validSlots(value.slots, value.routes.length, value.arbitration_route !== null) || !nullableSafeId(value.approved_by)) return false;
   return true;
 }
 
@@ -214,7 +260,20 @@ function sameImmutableFields(existing: BrainstormRecord, replacement: Brainstorm
     isDeepStrictEqual(existing.synthesizer_route, replacement.synthesizer_route) &&
     isDeepStrictEqual(existing.arbitration_route, replacement.arbitration_route) &&
     isDeepStrictEqual(existing.token_envelope, replacement.token_envelope) &&
+    isDeepStrictEqual(existing.slots.map(({ run_id: _run, state: _state, ...slot }) => slot), replacement.slots.map(({ run_id: _run, state: _state, ...slot }) => slot)) &&
     existing.created_at === replacement.created_at;
+}
+
+function validSlots(value: unknown, routeCount: number, hasArbitration: boolean): value is readonly BrainstormSlot[] {
+  if (!Array.isArray(value) || value.length !== routeCount + 1 + (hasArbitration ? 1 : 0)) return false;
+  const expected = [
+    ...Array.from({ length: routeCount }, (_, index) => ({ slot_id: `fanout-${index}`, stage: "fanout", route_index: index })),
+    { slot_id: "consolidation", stage: "consolidation", route_index: null },
+    ...(hasArbitration ? [{ slot_id: "arbitration", stage: "arbitration", route_index: null }] : []),
+  ];
+  return value.every((slot, index) => isExactRecord(slot, ["slot_id", "stage", "route_index", "run_id", "state"]) &&
+    slot.slot_id === expected[index]!.slot_id && slot.stage === expected[index]!.stage && slot.route_index === expected[index]!.route_index &&
+    nullableSafeId(slot.run_id) && ["planned", "created", "queued", "terminal", "released"].includes(slot.state as string));
 }
 
 function validConflicts(value: readonly unknown[]): value is readonly BrainstormConflict[] {

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { estimateBrainstormTokenEnvelope } from "../../src/data/delivery-system/brainstormBudget";
 import {
   createBrainstorm,
+  compareAndSwapBrainstorm,
   readBrainstormStore,
   replaceBrainstorm,
   type BrainstormRecord,
@@ -70,12 +71,34 @@ describe("brainstorm store", () => {
       conflicts: [],
       final_artifact: null,
       status: "draft",
+      revision: 1,
+      approval_state: "none",
+      orchestration_group_id: null,
+      slots: [
+        { slot_id: "fanout-0", stage: "fanout", route_index: 0, run_id: null, state: "planned" },
+        { slot_id: "fanout-1", stage: "fanout", route_index: 1, run_id: null, state: "planned" },
+        { slot_id: "fanout-2", stage: "fanout", route_index: 2, run_id: null, state: "planned" },
+        { slot_id: "consolidation", stage: "consolidation", route_index: null, run_id: null, state: "planned" },
+        { slot_id: "arbitration", stage: "arbitration", route_index: null, run_id: null, state: "planned" },
+      ],
       approved_by: null,
       created_at: now,
       updated_at: now,
     });
     expect(readBrainstormStore(directory).brainstorms).toEqual([record]);
     expect(readFileSync(join(directory, "brainstorms.json"), "utf8")).toBe(`${JSON.stringify({ schema_version: "v1", brainstorms: [record] }, null, 2)}\n`);
+  });
+
+  it("uses monotonic compare-and-swap so stale lifecycle state cannot overwrite newer state", () => {
+    const directory = stateDir();
+    const created = createBrainstorm(directory, fixture(), now);
+    const approved = compareAndSwapBrainstorm(directory, created.brainstorm_id, 1, (current) => ({
+      ...current, approval_state: "reserved", orchestration_group_id: "bsg-1", status: "approved",
+    }));
+    expect(approved.revision).toBe(2);
+    expect(() => compareAndSwapBrainstorm(directory, created.brainstorm_id, 1, (current) => ({ ...current, status: "cancelled" })))
+      .toThrow("brainstorm_revision_conflict");
+    expect(readBrainstormStore(directory).brainstorms[0]).toEqual(approved);
   });
 
   it("requires exactly three or four distinct fanout providers", () => {
@@ -125,6 +148,7 @@ describe("brainstorm store", () => {
     const created = createBrainstorm(directory, fixture(), now);
     const replacement: BrainstormRecord = {
       ...created,
+      revision: 2,
       status: "approved",
       approved_by: "owner-1",
       updated_at: "2026-07-22T10:01:00.000Z",
