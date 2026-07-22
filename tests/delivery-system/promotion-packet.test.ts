@@ -19,7 +19,7 @@ import { acquireStateMaintenanceLock } from "../../src/data/delivery-system/stat
 
 const NOW = "2026-07-21T11:00:00.000Z";
 const completedDevRun = {
-  schema_version: "v1", orchestration_ref: null, status: "completed", approved_revision: 2,
+  schema_version: "v1", orchestration_ref: null, orchestration_request: null, status: "completed", approved_revision: 2,
   current: { run_id: "run-1", revision: 2, project_id: "p", prompt: "secret Authorization: Bearer abc", provider: "codex_cli", model: null, requested_reasoning_effort: null, profile: "dev", promotion_packet_id: null, estimated_tokens: 0, input_token_bound: 0, output_token_allowance: 0, requested_artifacts: ["text"], prompt_review_acknowledged: true, created_at: "2026-07-21T10:00:00.000Z" },
   revisions: [], approved_by: "owner", approved_at: "2026-07-21T10:00:00.000Z", supervisor_task_id: null, worker_run_id: "w1", terminal_reason: null, token_reservation: null, reservation_status: "settled", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0,
   artifacts: [{ artifact_id: "a1", type: "text", preview: "showcase output", created_at: "2026-07-21T10:00:00.000Z" }], updated_at: "2026-07-21T10:00:00.000Z"

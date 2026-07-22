@@ -105,10 +105,10 @@ export function createRunOrchestrator(options: {
     const slot = group?.slots.find((candidate) => candidate.slotId === input.slotId);
     if (slot === undefined || slot.provider !== input.draft.provider || slot.model !== input.draft.model) throw new Error("token_group_slot_mismatch");
     let run = readRunStore(options.stateDir).runs.find((candidate) => candidate.orchestration_ref?.group_id === input.groupId && candidate.orchestration_ref.slot_id === input.slotId);
-    if (run !== undefined && (!sameGroupDraft(run, input.draft) || (run.approved_by !== null && run.approved_by !== input.operator))) throw new Error("orchestration_group_run_mismatch");
+    if (run !== undefined && (!sameGroupDraft(run, input.draft) || run.orchestration_request?.operator !== input.operator || run.orchestration_request.estimated_tokens !== input.draft.estimated_tokens)) throw new Error("orchestration_group_run_mismatch");
     if (run === undefined) {
       const runId = deterministicGroupRunId(input.groupId, input.slotId);
-      createGroupRunDraft(options.stateDir, runId, { group_id: input.groupId, slot_id: input.slotId }, input.draft, now(), registryOptions);
+      createGroupRunDraft(options.stateDir, runId, { group_id: input.groupId, slot_id: input.slotId }, input.operator, input.draft, now(), registryOptions);
       run = record(runId);
       options.afterPhase?.("run_persisted");
     }
@@ -451,6 +451,7 @@ function deterministicGroupRunId(groupId: string, slotId: string): string { retu
 function sameGroupDraft(run: RunRecord, input: RunDraftInput): boolean {
   const current = run.current;
   return current.project_id === input.project_id && current.prompt === input.prompt && current.provider === input.provider && current.model === input.model &&
+    run.orchestration_request?.estimated_tokens === input.estimated_tokens &&
     current.profile === input.profile && current.requested_reasoning_effort === input.requested_reasoning_effort && current.promotion_packet_id === (input.promotion_packet_id ?? null) &&
     current.prompt_review_acknowledged === (input.prompt_review_acknowledged === true) && JSON.stringify(current.requested_artifacts) === JSON.stringify(input.requested_artifacts);
 }

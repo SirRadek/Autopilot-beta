@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import { readManagedStateTextFile } from "./managedStateFile";
 import { appendStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
@@ -232,6 +233,8 @@ export class TokenGateway {
       if (!sameReservationInput(slot.reservation, request)) throw new Error("token_group_slot_mismatch");
       return slot.reservation;
     }
+    if (request.inputTokens > this.limits.inputCapTokens) throw new TokenGatewayError("token_input_cap_exceeded");
+    if (request.outputTokens > this.limits.outputCapTokens) throw new TokenGatewayError("token_output_cap_exceeded");
     const reservation: TokenReservation = { ...request, reservationId: `tgr-${randomUUID()}`, reservedAt: new Date().toISOString(), totalTokens: request.inputTokens + request.outputTokens, groupId, slotId, heldTokens: slot.holdTokens };
     this.state.reservations[reservation.reservationId] = reservation;
     const slots = [...group.slots]; slots[index] = { ...slot, state: "claimed", reservation };
@@ -453,7 +456,18 @@ function isGatewayState(value: unknown): value is GatewayState {
     reservationEntries.some(([id]) => terminalIds.has(id))) {
     return false;
   }
-  return usageIsCoherent(value.used, reservations);
+  const activeById = new Map(reservations.map((reservation) => [reservation.reservationId, reservation]));
+  for (const group of Object.values(groups) as TokenGroupReservation[]) {
+    for (const slot of group.slots) {
+      if (slot.state === "claimed" && (slot.reservation === null || !isDeepStrictEqual(activeById.get(slot.reservation.reservationId), slot.reservation))) return false;
+    }
+  }
+  for (const reservation of reservations) {
+    if (reservation.groupId === undefined) continue;
+    const slot = (groups[reservation.groupId] as TokenGroupReservation | undefined)?.slots.find((candidate) => candidate.slotId === reservation.slotId);
+    if (slot?.state !== "claimed" || !isDeepStrictEqual(slot.reservation, reservation)) return false;
+  }
+  return usageIsCoherent(value.used, reservations, Object.values(groups) as TokenGroupReservation[]);
 }
 
 function isReservation(id: string, value: unknown): value is TokenReservation {
@@ -538,7 +552,7 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-function usageIsCoherent(used: Record<string, unknown>, reservations: readonly TokenReservation[]): boolean {
+function usageIsCoherent(used: Record<string, unknown>, reservations: readonly TokenReservation[], groups: readonly TokenGroupReservation[]): boolean {
   const totals = { provider: 0, model: 0, session: 0 };
   for (const [key, value] of Object.entries(used)) {
     const kind = usageKeyKind(key);
@@ -547,10 +561,17 @@ function usageIsCoherent(used: Record<string, unknown>, reservations: readonly T
   if (totals.provider !== totals.model || totals.provider !== totals.session) return false;
 
   const required = new Map<string, number>();
-  for (const reservation of reservations) {
+  for (const reservation of reservations.filter((candidate) => candidate.groupId === undefined)) {
     if (reservation.totalTokens === 0) continue;
     for (const key of routeUsageKeys(reservation)) {
       const next = (required.get(key) ?? 0) + reservation.totalTokens;
+      if (!Number.isSafeInteger(next)) return false;
+      required.set(key, next);
+    }
+  }
+  for (const slot of groups.flatMap((group) => group.slots).filter((candidate) => candidate.state === "reserved" || candidate.state === "claimed")) {
+    for (const key of routeUsageKeys(slot)) {
+      const next = (required.get(key) ?? 0) + slot.holdTokens;
       if (!Number.isSafeInteger(next)) return false;
       required.set(key, next);
     }

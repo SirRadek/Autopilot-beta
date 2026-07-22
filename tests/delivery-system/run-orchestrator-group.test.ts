@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -38,4 +38,29 @@ describe("group run orchestration recovery", () => {
       expect(recovered.status).toBe("queued"); expect(readRunStore(c.stateDir).runs).toHaveLength(1);
     });
   }
+
+  it("rejects changed estimated-token input and operator after run or approval persistence", () => {
+    for (const phase of ["run_persisted", "approval_persisted"] as const) {
+      for (const changed of [
+        (c: ReturnType<typeof setup>) => ({ ...c.draft, estimated_tokens: c.draft.estimated_tokens + 1 }),
+        (c: ReturnType<typeof setup>) => c.draft,
+      ]) {
+        const c = setup(phase); c.orchestrator.reserveOrchestrationGroup(c.spec);
+        expect(() => c.orchestrator.ensureGroupRun({ groupId: "bsg-1", slotId: "fanout-0", draft: c.draft, operator: "owner" })).toThrow(`crash:${phase}`);
+        const draft = changed(c); const operator = draft === c.draft ? "other-owner" : "owner";
+        expect(() => c.restart().ensureGroupRun({ groupId: "bsg-1", slotId: "fanout-0", draft, operator })).toThrow("orchestration_group_run_mismatch");
+      }
+    }
+  });
+
+  it("rejects a duplicate persisted orchestration reference", () => {
+    const c = setup(); c.orchestrator.reserveOrchestrationGroup(c.spec);
+    c.orchestrator.ensureGroupRun({ groupId: "bsg-1", slotId: "fanout-0", draft: c.draft, operator: "owner" });
+    c.orchestrator.reserveOrchestrationGroup({ groupId: "bsg-2", slots: [{ ...c.spec.slots[0], sessionId: "bgr-2-fanout-0" }] });
+    c.orchestrator.ensureGroupRun({ groupId: "bsg-2", slotId: "fanout-0", draft: c.draft, operator: "owner" });
+    const path = join(c.stateDir, "runs.json"); const document = JSON.parse(readFileSync(path, "utf8"));
+    document.runs[1].orchestration_ref = document.runs[0].orchestration_ref;
+    writeFileSync(path, JSON.stringify(document));
+    expect(() => readRunStore(c.stateDir)).toThrow("invalid_run_store");
+  });
 });

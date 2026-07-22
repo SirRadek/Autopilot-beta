@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -42,5 +42,35 @@ describe("token gateway orchestration groups", () => {
     subject.releaseGroupSlots("bsg-example", ["fanout-1"]);
     expect(subject.snapshot().used["provider:claude_cli"]).toBeUndefined();
     expect(subject.findGroup("bsg-example")?.slots.map((slot) => slot.state)).toEqual(["settled", "released"]);
+  });
+
+  it("enforces ordinary input and output caps before persisting a slot claim", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "gateway-group-caps-"));
+    const subject = new TokenGateway({ stateDir, limits: { inputCapTokens: 4, outputCapTokens: 4, providerBudgetTokens: 20, modelBudgetTokens: 20, sessionBudgetTokens: 20 } });
+    subject.reserveGroup({ groupId: "g", slots: [{ slotId: "s", provider: "codex_cli", model: "gpt-5", sessionId: "session", holdTokens: 10 }] });
+    const before = readFileSync(join(stateDir, "token-gateway-state.json"), "utf8");
+    expect(() => subject.claimGroupSlot("g", "s", { provider: "codex_cli", model: "gpt-5", sessionId: "session", inputTokens: 5, outputTokens: 1 })).toThrow("token_input_cap_exceeded");
+    expect(() => subject.claimGroupSlot("g", "s", { provider: "codex_cli", model: "gpt-5", sessionId: "session", inputTokens: 1, outputTokens: 5 })).toThrow("token_output_cap_exceeded");
+    expect(readFileSync(join(stateDir, "token-gateway-state.json"), "utf8")).toBe(before);
+  });
+
+  it("rejects undercounted holds, missing claimed reservations, and orphan group reservations on restart", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "gateway-group-corrupt-"));
+    const subject = new TokenGateway({ stateDir });
+    subject.reserveGroup({ groupId: "g", slots: [{ slotId: "s", provider: "codex_cli", model: "gpt-5", sessionId: "session", holdTokens: 12 }] });
+    subject.claimGroupSlot("g", "s", { provider: "codex_cli", model: "gpt-5", sessionId: "session", inputTokens: 3, outputTokens: 5, handoffId: "h" });
+    const path = join(stateDir, "token-gateway-state.json");
+    const valid = JSON.parse(readFileSync(path, "utf8"));
+    const reservationId = Object.keys(valid.reservations)[0]!;
+    const corruptions = [
+      { ...valid, used: { ...valid.used, "provider:codex_cli": 11, "model:codex_cli:gpt-5": 11, "session:session": 11 } },
+      { ...valid, reservations: {} },
+      { ...valid, groups: {} },
+      { ...valid, reservations: { [reservationId]: { ...valid.reservations[reservationId], inputTokens: 2, totalTokens: 7 } } },
+    ];
+    for (const corrupted of corruptions) {
+      writeFileSync(path, JSON.stringify(corrupted));
+      expect(() => new TokenGateway({ stateDir })).toThrow("invalid_token_gateway_state");
+    }
   });
 });
