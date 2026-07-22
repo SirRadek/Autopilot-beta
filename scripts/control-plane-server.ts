@@ -19,6 +19,7 @@ import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderC
 import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
+import { handleControlPlaneBrainstormRoute } from "./control-plane-brainstorms";
 import { createRunOrchestrator, type RunPacketBuilder } from "../src/data/delivery-system/runOrchestrator";
 import { buildReadiness, type ReadinessReport } from "../src/data/delivery-system/readiness";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
@@ -122,6 +123,7 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
     else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
+    else if (await handleControlPlaneBrainstormRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else returnJson(response, { error: "not_found" }, 404);
   } catch {
     if (response.writableEnded) return;
@@ -142,7 +144,7 @@ function operationalStageForRequest(request: IncomingMessage): OperationalIncide
   if (path.startsWith("/providers")) return "control_plane_providers";
   if (path.startsWith("/observability")) return "control_plane_observability";
   if (path.startsWith("/approvals")) return "control_plane_approvals";
-  if (path.startsWith("/runs") || path.startsWith("/projects") || path.startsWith("/incidents")) return "control_plane_runs";
+  if (path.startsWith("/runs") || path.startsWith("/projects") || path.startsWith("/incidents") || path.startsWith("/brainstorms")) return "control_plane_runs";
   return "control_plane_status";
 }
 
