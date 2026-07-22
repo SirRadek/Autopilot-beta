@@ -135,17 +135,21 @@ function brainstormCreateInput(stateDir: string, body: Record<string, unknown>, 
   if (synthesizerSource === undefined) throw new HttpError(400, "invalid_brainstorm_draft");
   if (!Number.isSafeInteger(body.estimated_tokens) || (body.estimated_tokens as number) <= 0) throw new HttpError(400, "invalid_brainstorm_draft");
   const estimatedTokens = body.estimated_tokens as number;
-  const allocation = canonicalAllocation(estimatedTokens, routeDrafts.length);
+  if (body.arbitration_route === undefined) throw new HttpError(400, "invalid_brainstorm_draft");
+  const arbitrationDraft = body.arbitration_route === null ? null : routeDraft(body.arbitration_route);
+  if (arbitrationDraft !== null) checkRouteEligible(stateDir, arbitrationDraft.provider, arbitrationDraft.model);
+  const allocation = canonicalAllocation(estimatedTokens, routeDrafts.length, arbitrationDraft !== null);
   const routes: BrainstormRoute[] = routeDrafts.map((route) => ({ ...route, estimated_tokens: allocation.perRoute }));
   const synthesizerRoute: BrainstormRoute = { ...synthesizerSource, estimated_tokens: allocation.synthesis };
-  const tokenEnvelope = estimateBrainstormTokenEnvelope(routes, synthesizerRoute.estimated_tokens, 0);
+  const arbitrationRoute: BrainstormRoute | null = arbitrationDraft === null ? null : { ...arbitrationDraft, estimated_tokens: allocation.perRoute };
+  const tokenEnvelope = estimateBrainstormTokenEnvelope(routes, synthesizerRoute.estimated_tokens, arbitrationRoute?.estimated_tokens ?? 0);
   if (tokenEnvelope.maximum_tokens > estimatedTokens) throw new HttpError(409, "brainstorm_token_budget_insufficient");
   return {
     project_id: body.project_id,
     brief: body.brief,
     routes,
     synthesizer_route: synthesizerRoute,
-    arbitration_route: null,
+    arbitration_route: arbitrationRoute,
     token_envelope: tokenEnvelope
   };
 }
@@ -171,8 +175,8 @@ function checkRouteEligible(stateDir: string, provider: RunProvider, model: stri
   if (!isRunRouteEligible(stateDir, provider, model, new Date().toISOString())) throw new HttpError(409, "brainstorm_route_unavailable");
 }
 
-function canonicalAllocation(estimatedTokens: number, routeCount: number): { readonly perRoute: number; readonly synthesis: number } {
-  const shares = routeCount + 1;
+function canonicalAllocation(estimatedTokens: number, routeCount: number, hasArbitration: boolean): { readonly perRoute: number; readonly synthesis: number } {
+  const shares = routeCount + 1 + (hasArbitration ? 1 : 0);
   const perRoute = Math.floor(estimatedTokens / shares);
   if (perRoute < 1) throw new HttpError(409, "brainstorm_token_budget_insufficient");
   const remainder = estimatedTokens - perRoute * shares;

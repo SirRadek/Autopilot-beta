@@ -83,7 +83,8 @@ const validDraft = {
     { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "low" }
   ],
   synthesizer: "codex_cli",
-  estimated_tokens: 50_000
+  estimated_tokens: 50_000,
+  arbitration_route: null
 };
 
 describe("control plane governed brainstorm API (RED)", () => {
@@ -246,6 +247,69 @@ describe("control plane governed brainstorm HTTP actions", () => {
 
     expect(response.status).toBe(409);
     expect((await response.json() as { error: string }).error).toBe("brainstorm_token_budget_insufficient");
+  });
+
+  it("rejects a POST /brainstorms body that omits arbitration_route with 400 instead of silently defaulting", async () => {
+    const api = await brainstormApi();
+    const missingArbitration = { ...validDraft } as Record<string, unknown>;
+    delete missingArbitration.arbitration_route;
+
+    const response = await api.call("POST", "/brainstorms", missingArbitration);
+
+    expect(response.status).toBe(400);
+    expect((await response.json() as { error: string }).error).toBe("invalid_brainstorm_draft");
+  });
+
+  it("persists a non-null arbitration_route and allocates estimated_tokens canonically across fanout, synthesis, and arbitration", async () => {
+    const api = await brainstormApi();
+    const withArbitration = {
+      ...validDraft,
+      arbitration_route: { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "low" }
+    };
+
+    const response = await api.call("POST", "/brainstorms", withArbitration);
+    const body = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(201);
+    expect(body.arbitration_route).toMatchObject({ provider: "agy_cli", model: "model-a", reasoning_effort: "low" });
+    const envelope = body.token_envelope as { readonly maximum_tokens: number };
+    expect(envelope.maximum_tokens).toBe(validDraft.estimated_tokens);
+    const arbitrationSlot = (body.slots as { readonly slot_id: string; readonly stage: string }[]).find((slot) => slot.stage === "arbitration");
+    expect(arbitrationSlot).toBeDefined();
+  });
+
+  it("rejects an arbitration_route with an unsupported reasoning effort with 409, exactly like a fanout route", async () => {
+    const api = await brainstormApi();
+    const badArbitration = {
+      ...validDraft,
+      arbitration_route: { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "xhigh" }
+    };
+
+    const response = await api.call("POST", "/brainstorms", badArbitration);
+
+    expect(response.status).toBe(409);
+    expect((await response.json() as { error: string }).error).toBe("unsupported_reasoning_effort");
+  });
+
+  it("keeps an explicit null arbitration_route a valid draft, but fails closed instead of zombie needs_arbitration on a material conflict", async () => {
+    const conflictJson = JSON.stringify({ consensus: [], conflicts: [{ output_labels: ["B", "C"], summary: "material disagreement", material: true }], confidence: 0.4, final: "provisional" });
+    const api = await lifecycleApi(["A", "B", "C", conflictJson]);
+    const stateDir = api.stateDir;
+    const noArbitrationBrainstorm = createBrainstorm(stateDir, {
+      project_id: "alpha", brief, routes, synthesizer_route: synthesizer, arbitration_route: null,
+      token_envelope: estimateBrainstormTokenEnvelope(routes, synthesizer.estimated_tokens, 0)
+    }, now);
+
+    const approve = await api.call("POST", `/brainstorms/${noArbitrationBrainstorm.brainstorm_id}/approve`, { operator: "owner" });
+    expect(approve.status).toBe(200);
+    await finishQueuedRuns(api.runOrchestrator, 3);
+    const directCoordinator = createBrainstormCoordinator({ stateDir, runOrchestrator: api.runOrchestrator, now: () => now });
+    await directCoordinator.tick(noArbitrationBrainstorm.brainstorm_id);
+    await api.runOrchestrator.runSupervisorOnce();
+    const settled = await directCoordinator.tick(noArbitrationBrainstorm.brainstorm_id);
+
+    expect(settled.status).toBe("failed");
+    expect(settled.status).not.toBe("needs_arbitration");
   });
 
   it("emits exactly one privacy-safe created telemetry event immediately on POST /brainstorms", async () => {

@@ -67,5 +67,5 @@ export interface BrainstormRecord {
   readonly created_at: string;
   readonly updated_at: string;
 }
-export interface BrainstormDraftInput { readonly project_id: string; readonly brief: string; readonly routes: readonly BrainstormRouteDraft[]; readonly synthesizer: RunProvider; readonly estimated_tokens: number }
+export interface BrainstormDraftInput { readonly project_id: string; readonly brief: string; readonly routes: readonly BrainstormRouteDraft[]; readonly synthesizer: RunProvider; readonly estimated_tokens: number; readonly arbitration_route: BrainstormRouteDraft | null }
 export interface BrainstormArbitrationInput { readonly provider: RunProvider; readonly model: string; readonly reasoning_effort: RunReasoningEffort | null; readonly estimated_tokens: number }

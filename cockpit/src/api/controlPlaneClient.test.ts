@@ -105,7 +105,8 @@ describe("ControlPlaneClient", () => {
         { provider: "agy_cli" as const, model: "model-a", requested_reasoning_effort: "low" as const }
       ],
       synthesizer: "codex_cli" as const,
-      estimated_tokens: 50_000
+      estimated_tokens: 50_000,
+      arbitration_route: null
     };
     const arbitrationRoute = { provider: "agy_cli" as const, model: "model-a", reasoning_effort: "low" as const, estimated_tokens: 8_000 };
 

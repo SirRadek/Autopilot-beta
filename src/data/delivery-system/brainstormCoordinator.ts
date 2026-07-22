@@ -378,15 +378,16 @@ export function createBrainstormCoordinator(options: {
       if (text === null) return record;
       let parsed: ReturnType<typeof parseConsolidation>;
       try { parsed = parseConsolidation(text, record.child_run_ids); } catch { return markFailed(record); }
+      const failClosed = parsed.material && record.arbitration_route === null;
       const updated = update(record, (current) => ({
         ...current,
         slots: current.slots.map((item) => item.stage === "consolidation" ? { ...item, state: "terminal" } : item),
         conflicts: parsed.conflicts,
         final_artifact: parsed.material ? null : parsed.final,
-        status: parsed.material ? "needs_arbitration" : "completed",
+        status: failClosed ? "failed" : parsed.material ? "needs_arbitration" : "completed",
       }));
-      emit(updated, "consolidated");
-      if (!parsed.material) cleanupGroup(updated);
+      emit(updated, failClosed ? "failed" : "consolidated");
+      if (!parsed.material || failClosed) cleanupGroup(updated);
       return updated;
     }
     if (record.status === "arbitrating") {
