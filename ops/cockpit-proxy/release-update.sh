@@ -704,7 +704,11 @@ inspect_command short_command systemctl is-enabled caddy.service
 [ "$inspection_rc" -eq 0 ] && [ "$inspection_output" = enabled ] || exit 1
 require_active caddy.service
 inspect_command short_command dpkg -V caddy
-if [ "$inspection_rc" -ne 0 ] || [ -n "$inspection_output" ]; then exit 1; fi
+if [ "$inspection_rc" -ne 0 ]; then exit 1; fi
+case "$inspection_output" in
+	""|"??5?????? c /etc/caddy/Caddyfile") ;;
+	*) exit 1 ;;
+esac
 
 # The live proxy configuration must equal the accepted release's reviewed config;
 # a static release update never rewrites the proxy. Any drift needs a config cutover.

@@ -578,6 +578,78 @@ describe("Cockpit second-and-later release update", () => {
     });
   });
 
+  // The reviewed Caddyfile is deployed over the packaged default, so `dpkg -V caddy`
+  // reports exactly one intentional conffile divergence. That single
+  // known record must be permitted; any other drift, extra line, or malformed output must
+  // still fail closed. The same installed Caddyfile bytes are separately pinned to the
+  // accepted release above, so permitting this record does not weaken config verification.
+  describe("package verification conffile drift", () => {
+    const unchanged = (fixture: UpdateFixture) => {
+      expect(readlinkSync(fixture.currentPath)).toBe(fixture.previousTarget);
+      expect(existsSync(join(fixture.root, "var", "lib", "autopilot-cockpit", "release-update-transactions", "active"))).toBe(false);
+    };
+
+    // Override the dpkg stub so `-V caddy` emits a chosen verification output and status,
+    // while `-s caddy` still succeeds (both are required by the worker).
+    function stubDpkgVerify(fixture: UpdateFixture, verifyBody: string): void {
+      stubExecutable(
+        fixture.stubDir,
+        "dpkg",
+        `[[ "$1" == -s && "$2" == caddy ]] && exit 0\n` +
+          `if [[ "$1" == -V && "$2" == caddy ]]; then ${verifyBody}\nfi\nexit 1`,
+      );
+    }
+
+    it("permits exactly the known intentional Caddyfile conffile drift record", () => {
+      const fixture = prepareUpdate();
+      // Real production output: md5 differs on the intentionally managed conffile.
+      stubDpkgVerify(fixture, `printf '??5?????? c /etc/caddy/Caddyfile\\n'; exit 0`);
+      const result = runUpdate(fixture);
+      if (result.status !== 0) {
+        throw new Error(`${result.stdout}\n${result.stderr}\n${readFileSync(fixture.stubLog, "utf8")}`);
+      }
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("RELEASE_UPDATE_OK");
+      expect(readlinkSync(fixture.currentPath)).toBe(`releases/${fixture.sha}`);
+    });
+
+    it("refuses drift on a different package file alongside the known Caddyfile record", () => {
+      const fixture = prepareUpdate();
+      stubDpkgVerify(
+        fixture,
+        `printf '??5?????? c /etc/caddy/Caddyfile\\n??5??????   /usr/bin/caddy\\n'; exit 0`,
+      );
+      const result = runUpdate(fixture);
+      expect(result.status).not.toBe(0);
+      unchanged(fixture);
+    });
+
+    it("refuses the known record when package verification itself errors", () => {
+      const fixture = prepareUpdate();
+      stubDpkgVerify(fixture, `printf '??5?????? c /etc/caddy/Caddyfile\\n'; exit 2`);
+      const result = runUpdate(fixture);
+      expect(result.status).not.toBe(0);
+      unchanged(fixture);
+    });
+
+    it("refuses a single verification record for a file other than the Caddyfile", () => {
+      const fixture = prepareUpdate();
+      stubDpkgVerify(fixture, `printf '??5?????? c /etc/caddy/Caddyfile.decoy\\n'; exit 0`);
+      const result = runUpdate(fixture);
+      expect(result.status).not.toBe(0);
+      unchanged(fixture);
+    });
+
+    it("refuses a malformed verification record that only resembles the known drift", () => {
+      const fixture = prepareUpdate();
+      // Extra trailing content on the same line must not be accepted as the known record.
+      stubDpkgVerify(fixture, `printf '??5?????? c /etc/caddy/Caddyfile extra\\n'; exit 0`);
+      const result = runUpdate(fixture);
+      expect(result.status).not.toBe(0);
+      unchanged(fixture);
+    });
+  });
+
   // I2: the production trusted-path/root boundary. These exercise the real
   // assert_trusted_invocation enforcement (owner/mode/symlink/$0) via a root-relative
   // installed copy, without EUID 0 and without simply bypassing it in test mode.
