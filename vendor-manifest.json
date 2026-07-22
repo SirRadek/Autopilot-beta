@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 139,
+  "file_count": 140,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -718,6 +718,11 @@
       "source_path": "src/data/delivery-system/brainstormBudget.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "4637fcd779a35f10c6d75360d6b2cbfd22849f3eb46af8bf1fddebcb54fb2910"
+    },
+    {
+      "source_path": "src/data/delivery-system/brainstormCoordinator.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "e91a1840737c5342c392a273112724bb4bf7d9247b00fe230862ade26dfd0310"
     },
     {
       "source_path": "src/data/delivery-system/brainstormStore.ts",

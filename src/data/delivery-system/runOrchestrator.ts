@@ -97,6 +97,11 @@ export function createRunOrchestrator(options: {
     return options.tokenGateway.reserveGroup(spec);
   }
 
+  function releaseOrchestrationGroupSlots(groupId: string, slotIds: readonly string[]): TokenGroupReservation {
+    if (options.tokenGateway.releaseGroupSlots === undefined) throw new Error("token_group_unsupported");
+    return options.tokenGateway.releaseGroupSlots(groupId, slotIds);
+  }
+
   function ensureGroupRun(input: { readonly groupId: string; readonly slotId: string; readonly draft: RunDraftInput; readonly operator: string }): QueuedRun {
     resolveEnabledProject(options.stateDir, input.draft.project_id, registryOptions);
     if (!routeAvailable(input.draft.provider, input.draft.model)) throw new Error("run_route_unavailable");
@@ -444,7 +449,7 @@ export function createRunOrchestrator(options: {
     return transitionRun(options.stateDir, runId, "cancelled", now());
   }
 
-  return { prepareRun, reserveOrchestrationGroup, ensureGroupRun, approveAndQueueRun, runSupervisorOnce, cancelRun, handoffForRun: (runId: string) => handoffFor(record(runId)) };
+  return { prepareRun, reserveOrchestrationGroup, releaseOrchestrationGroupSlots, ensureGroupRun, approveAndQueueRun, runSupervisorOnce, cancelRun, handoffForRun: (runId: string) => handoffFor(record(runId)) };
 }
 
 function deterministicGroupRunId(groupId: string, slotId: string): string { return `bgr-${createHash("sha256").update(`${groupId}\0${slotId}`).digest("hex").slice(0, 32)}`; }

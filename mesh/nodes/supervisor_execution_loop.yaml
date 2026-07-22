@@ -18,6 +18,7 @@ related_agents:
   - qa
   - security
 related_files:
+  - src/data/delivery-system/brainstormCoordinator.ts
   - src/data/delivery-system/modelPolicy.ts
   - src/data/delivery-system/modelOutputEvaluation.ts
   - src/data/delivery-system/cliWorker.ts
