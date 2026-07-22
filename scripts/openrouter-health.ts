@@ -439,7 +439,14 @@ function realpathIfExists(path: string): string {
 const currentFile = realpathIfExists(fileURLToPath(import.meta.url));
 const invokedFile = process.argv[1] ? realpathIfExists(process.argv[1]) : "";
 
-if (invokedFile === currentFile) {
+export function isOpenRouterHealthEntrypoint(invoked: string, current: string): boolean {
+  return invoked === current && /(?:^|[\\/])openrouter-health\.(?:[cm]?js|ts)$/.test(invoked);
+}
+
+// An esbuild bundle shares the entry point's import.meta.url with every bundled
+// module. Keep this CLI side effect tied to the actual openrouter-health entry
+// point so importing it into a standalone recovery artifact stays inert.
+if (isOpenRouterHealthEntrypoint(invokedFile, currentFile)) {
   let args: { readonly json: boolean };
   try {
     args = parseCliArgs(process.argv.slice(2));

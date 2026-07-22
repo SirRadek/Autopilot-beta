@@ -35,6 +35,7 @@ import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } f
 import { recordOperationalIncident } from "./operationalIncidents";
 import { ensureOpenRouterLedgersMigrated } from "./openRouterLedgerMigration";
 import type { RoutingModeId } from "./routingModes";
+import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "./executionProfile";
 import {
   writeCorrelationEntry,
   writeSubagentEvidence
@@ -446,9 +447,9 @@ export async function runCliWorker(
   input: CliWorkerInput,
   stateDir: string
 ): Promise<CliWorkerResult> {
+  assertCliWorkerRoute(input);
   sweepVendorArtifactsBestEffort();
   sweepVendorProcessRegistryBestEffort(stateDir);
-  assertCodexDispatchGuard(input);
   const openRouterConfig = input.vendor === "openrouter_api" ? resolveOpenRouterWorkerConfig(input) : null;
   const taskPacketRef = normalizeTaskPacketRef(input.taskPacketRef);
   const modelForRun = openRouterConfig?.model ?? input.model ?? null;
@@ -568,6 +569,8 @@ export async function runCliWorker(
   try {
     if (input.vendor === "claude_cli") {
       const result = await captureClaudeResponse(input.prompt, {
+        ...(input.model !== undefined ? { model: input.model } : {}),
+        ...(input.generationSettings?.reasoning_effort !== undefined ? { effort: input.generationSettings.reasoning_effort } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...promptLimitOptions,
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {})
@@ -580,6 +583,7 @@ export async function runCliWorker(
     } else if (input.vendor === "agy_cli") {
       const result = await captureAgyResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
+        ...(input.generationSettings?.reasoning_effort !== undefined ? { effort: input.generationSettings.reasoning_effort } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.addDirs !== undefined ? { addDirs: input.addDirs } : {}),
         ...(input.images !== undefined ? { images: input.images } : {}),
@@ -643,6 +647,7 @@ export async function runCliWorker(
     } else {
       const result = await captureCodexResponse(input.prompt, {
         ...(input.model !== undefined ? { model: input.model } : {}),
+        ...(input.generationSettings?.reasoning_effort !== undefined ? { effort: input.generationSettings.reasoning_effort } : {}),
         ...(input.outputSchemaPath !== undefined ? { outputSchemaPath: input.outputSchemaPath } : {}),
         ...(input.codexMode !== undefined ? { codexMode: input.codexMode } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
@@ -925,7 +930,19 @@ function appendBestEffort(path: string, record: unknown): void {
   }
 }
 
-function assertCodexDispatchGuard(input: CliWorkerInput): void {
+/** Complete adapter route guard. Keep this as the first statement in runCliWorker. */
+function assertCliWorkerRoute(input: CliWorkerInput): void {
+  if (
+    input.model !== undefined &&
+    (input.model.length === 0 || /\s|[\x00-\x1f\x7f-\x9f]/.test(input.model) || input.model.startsWith("-"))
+  ) {
+    throw new Error("invalid_model");
+  }
+  const effort = input.generationSettings?.reasoning_effort;
+  const supported: readonly RunReasoningEffort[] = SUPPORTED_REASONING_EFFORTS[input.vendor];
+  if (effort !== undefined && !supported.includes(effort as RunReasoningEffort)) {
+    throw new Error("unsupported_reasoning_effort");
+  }
   if (
     input.vendor === "codex_cli" &&
     input.codexMode === "codex_implement" &&

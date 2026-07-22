@@ -55,6 +55,12 @@
       "label": "Enforcement gates"
     },
     {
+      "id": "execution_profile_policy",
+      "group": "governance_policy",
+      "risk": 0.35,
+      "label": "Execution profile policy"
+    },
+    {
       "id": "file_upload",
       "group": "risk_detector",
       "risk": 0.9,

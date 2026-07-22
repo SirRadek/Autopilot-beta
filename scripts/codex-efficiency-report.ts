@@ -92,18 +92,20 @@ function readWorkUnitMap(path: string | null): WorkUnitMap {
   };
 }
 
-function parseWorkUnitRecord(value: unknown): WorkUnitRecord {
+export function parseWorkUnitRecord(value: unknown): WorkUnitRecord {
   if (!isRecord(value) || !isRecord(value.descriptor)) {
     throw new Error("invalid_work_unit_record");
   }
   const descriptor = value.descriptor;
   const workClass = descriptor.class;
   const risk = descriptor.risk;
+  const profile = value.profile;
   if (
     typeof value.source !== "string" ||
     typeof descriptor.work_unit_id !== "string" ||
     !isWorkUnitClass(workClass) ||
     !isWorkUnitRisk(risk) ||
+    (profile !== undefined && profile !== "dev" && profile !== "prod") ||
     (value.status !== "completed" && value.status !== "incomplete") ||
     typeof value.first_pass_accepted !== "boolean" ||
     !isEscapedSeverity(value.escaped_severity) ||
@@ -113,6 +115,7 @@ function parseWorkUnitRecord(value: unknown): WorkUnitRecord {
   }
   return {
     source: value.source,
+    profile: profile ?? "legacy",
     descriptor: {
       work_unit_id: descriptor.work_unit_id,
       class: workClass,

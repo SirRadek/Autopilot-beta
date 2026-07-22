@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { ControlPlaneClient } from "../api/controlPlaneClient";
-import { loadCockpitData } from "./useCockpitData";
+import { loadCockpitData, resolveCockpitDataRequest } from "./useCockpitData";
 import { useCockpitData } from "./useCockpitData";
 import { useRunTimeline } from "./useCockpitData";
 
@@ -10,7 +10,8 @@ const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient
   getAuthSession: vi.fn().mockResolvedValue({ authenticated: true }), login: vi.fn(), logout: vi.fn(),
   getStatus: vi.fn().mockResolvedValue({ sessions: { total: 1, active: 1, closed: 0 }, approvals: { total: 0, pending: 0, approved: 0, rejected: 0 }, telemetry: { calls: 2, successful: 2, total_tokens: 10 } }),
   getSessions: vi.fn().mockResolvedValue([]), getApprovals: vi.fn().mockResolvedValue([]), getWorkers: vi.fn().mockResolvedValue([]),
-  getProjects: vi.fn().mockResolvedValue([]), getRuns: vi.fn().mockResolvedValue([]), getRun: vi.fn(), prepareRun: vi.fn(), reviseRun: vi.fn(), approveRun: vi.fn(), cancelRun: vi.fn(),
+  getProjects: vi.fn().mockResolvedValue([]), getRuns: vi.fn().mockResolvedValue([]), listRuns: vi.fn().mockResolvedValue([]), getRun: vi.fn(), prepareRun: vi.fn(), createDevRun: vi.fn(), createProdDraft: vi.fn(), promoteRun: vi.fn(), reviseRun: vi.fn(), approveRun: vi.fn(), cancelRun: vi.fn(),
+  listPromotions: vi.fn().mockResolvedValue([]), approvePromotion: vi.fn(), rejectPromotion: vi.fn(), recordPromotionVerification: vi.fn(), markPromotionPublished: vi.fn(),
   getIncidents: vi.fn().mockResolvedValue([]), acknowledgeIncident: vi.fn(), prepareRepairPacket: vi.fn(),
   getObservabilitySummary: vi.fn().mockResolvedValue({ events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }), getObservabilityTimeline: vi.fn().mockResolvedValue({ summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 0, max_lines_per_file: 0, max_events: 100, truncated: false } }),
   createSession: vi.fn(), mutateSession: vi.fn(),
@@ -19,8 +20,10 @@ const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient
 });
 
 describe("useCockpitData loader", () => {
+  it("distinguishes the legacy options overload and rejects ambiguous keys", () => { expect(resolveCockpitDataRequest({ refreshMs: 5_000 })).toEqual({ environment: "dev", refreshMs: 5_000 }); expect(resolveCockpitDataRequest("prod", { refreshMs: 6_000 })).toEqual({ environment: "prod", refreshMs: 6_000 }); expect(() => resolveCockpitDataRequest({ environment: "prod" } as never)).toThrow("invalid_cockpit_data_options"); expect(() => resolveCockpitDataRequest("prod", { environment: "dev" } as never)).toThrow("invalid_cockpit_data_options"); });
   it("loads all panes independently", async () => { const result = await loadCockpitData(client(), { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }); expect(result.errors).toEqual({}); expect(result.data.status?.telemetry.total_tokens).toBe(10); });
   it("preserves the last safe pane snapshot on failure", async () => { const previous = { sessions: [{ session_id: "s1" } as never], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }; const result = await loadCockpitData(client({ getSessions: vi.fn().mockRejectedValue(new Error("offline")) }), previous); expect(result.data.sessions).toBe(previous.sessions); expect(result.errors.sessions?.message).toBe("offline"); });
+  it("loads runs and promotions for the selected environment", async () => { const source = client(); await loadCockpitData(source, { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], promotions: [], incidents: [] }, "prod"); expect(source.listRuns).toHaveBeenCalledWith("prod"); expect(source.listPromotions).toHaveBeenCalledOnce(); });
   it("refreshes a recovered pane without discarding other data", async () => { const result = await loadCockpitData(client({ getSessions: vi.fn().mockResolvedValue([{ session_id: "s2" }]) }), { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }); expect(result.data.sessions[0]?.session_id).toBe("s2"); });
 });
 

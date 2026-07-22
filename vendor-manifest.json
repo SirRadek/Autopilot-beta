@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 135,
+  "file_count": 137,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -749,12 +749,17 @@
     {
       "source_path": "src/data/delivery-system/efficiencyReport.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "6f2cdc8b1cef712df8f15b0da1ec926725177ca1d62323fe8fe656ac824af717"
+      "content_hash": "30480c7a3fcc980353637840d3e5ce9fa52c693037ebea172e6126eb3e2a3685"
     },
     {
       "source_path": "src/data/delivery-system/efficiencyTelemetry.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "49ddd9dd83c135c7bba2dfed92cb619119aa3c64be6ff599a17ec0406a45ab60"
+      "content_hash": "51d34b72ee40f8820a62272034f1fd2a7c8a30d698d3d0115c6b6100548cb9b7"
+    },
+    {
+      "source_path": "src/data/delivery-system/executionProfile.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "41eeab2ebcce915bb1b4bf29688741d74d802658f912dcb6f0ae638dec95fe0c"
     },
     {
       "source_path": "src/data/delivery-system/fallbackChains.ts",
@@ -782,6 +787,11 @@
       "source_path": "src/data/delivery-system/operationalIncidents.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "7993981b1132c56b9c9cad419c8a7480ef80b08c72e9b6172ad7b223b79aa0be"
+    },
+    {
+      "source_path": "src/data/delivery-system/promotionPacket.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "c90a0ca144c3e684ecf96677eff6172fd2e1a663aec4b7d4d1abef189560765a"
     },
     {
       "source_path": "src/data/delivery-system/routingModes.ts",

@@ -7,6 +7,7 @@ import type {
   WorkUnitRisk,
 } from "./efficiencyPolicy";
 import { EFFICIENCY_TELEMETRY_PATH } from "./sessionState";
+import type { StoredRunProfile } from "./executionProfile";
 
 export interface EfficiencyTelemetryEventV1 {
   readonly schema_version: "v1";
@@ -14,6 +15,7 @@ export interface EfficiencyTelemetryEventV1 {
   readonly work_unit_id: string;
   readonly work_unit_class: WorkUnitClass;
   readonly risk: WorkUnitRisk;
+  readonly profile: StoredRunProfile;
   readonly handoff_id: string;
   readonly actual_model: string | null;
   readonly actual_reasoning_effort: string | null;
@@ -32,6 +34,7 @@ export interface BuildEfficiencyTelemetryEventInput {
   readonly actualModel: string | null;
   readonly actualReasoningEffort: string | null;
   readonly status: EfficiencyTelemetryEventV1["status"];
+  readonly profile: StoredRunProfile;
 }
 
 export function buildEfficiencyTelemetryEvent(
@@ -43,6 +46,7 @@ export function buildEfficiencyTelemetryEvent(
     work_unit_id: input.workUnit.work_unit_id,
     work_unit_class: input.workUnit.class,
     risk: input.workUnit.risk,
+    profile: input.profile,
     handoff_id: input.handoffId,
     actual_model: input.actualModel,
     actual_reasoning_effort: input.actualReasoningEffort,

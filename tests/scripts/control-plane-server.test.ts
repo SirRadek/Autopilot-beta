@@ -134,7 +134,7 @@ async function governedApi() {
 }
 
 describe("control plane governed run API", () => {
-  const draft = { project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: null, requested_artifacts: ["text"] };
+  const draft = { project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: null, requested_artifacts: ["text"], profile: "dev" as const, requested_reasoning_effort: null };
 
   it("rejects an out-of-root HTTP run through the server fallback", async () => {
     const root = mkdtempSync(join(tmpdir(), "control-plane-default-root-"));
@@ -215,7 +215,7 @@ describe("control plane governed run API", () => {
       supervisorPollMs: 60_000
     });
     try {
-      expect(() => runtime.orchestrator.prepareRun({ ...draft, provider: "codex_cli", requested_artifacts: ["text"], estimated_tokens: 20_000 }))
+      expect(() => runtime.orchestrator.prepareRun({ ...draft, provider: "codex_cli", requested_artifacts: ["text"], estimated_tokens: 20_000, profile: "dev", requested_reasoning_effort: null }))
         .toThrow("project_path_outside_root");
     } finally {
       await runtime.stop();
@@ -322,6 +322,30 @@ describe("control plane governed run API", () => {
     expect(created.current).toMatchObject({ input_token_bound: 14, output_token_allowance: 8_192, estimated_tokens: 8_206 });
   });
 
+  it("rejects explicitly invalid profile, reasoning-effort, and promotion-packet types instead of coercing them", async () => {
+    const api = await governedApi();
+    const invalidProfile = await api.call("POST", "/runs", { ...draft, profile: "staging" });
+    expect(invalidProfile.status).toBe(400);
+    expect(await invalidProfile.json()).toEqual({ error: "invalid_run_draft" });
+    const invalidReasoning = await api.call("POST", "/runs", { ...draft, requested_reasoning_effort: 7 });
+    expect(invalidReasoning.status).toBe(400);
+    expect(await invalidReasoning.json()).toEqual({ error: "invalid_run_draft" });
+    const invalidPromotion = await api.call("POST", "/runs", { ...draft, promotion_packet_id: 7 });
+    expect(invalidPromotion.status).toBe(400);
+    expect(await invalidPromotion.json()).toEqual({ error: "invalid_run_draft" });
+  });
+
+  it("requires an explicit profile on create and defaults only the reasoning effort", async () => {
+    const api = await governedApi();
+    const { profile, requested_reasoning_effort, ...withoutProfileFields } = draft as Record<string, unknown>;
+    const missingProfile = await api.call("POST", "/runs", withoutProfileFields);
+    expect(missingProfile.status).toBe(400);
+    expect(await missingProfile.json()).toEqual({ error: "run_profile_required" });
+    const created = await (await api.call("POST", "/runs", { ...withoutProfileFields, profile: "dev" })).json() as { current: { profile: string; requested_reasoning_effort: unknown } };
+    expect(created.current.profile).toBe("dev");
+    expect(created.current.requested_reasoning_effort).toBeNull();
+  });
+
   it("requires application/json for every mutation body", async () => {
     const api = await governedApi();
     const missing = await fetch(`${api.base}/runs`, { method: "POST", headers: { authorization: "Bearer secret" }, body: JSON.stringify(draft) });
@@ -404,7 +428,7 @@ describe("control plane governed run API", () => {
     const supervisor = new SupervisorQueue({ stateDir: api.stateDir });
     const gateway = new (await import("../../src/data/delivery-system/tokenGateway")).TokenGateway({ stateDir: api.stateDir });
     const first = (await import("../../src/data/delivery-system/runOrchestrator")).createRunOrchestrator({ stateDir: api.stateDir, projectRoot: api.projectRoot, tokenGateway: gateway, supervisor, dispatch: async () => new Promise(() => {}), isRouteAvailable: () => true });
-    const draft = first.prepareRun({ project_id: "autopilot-beta", prompt: "cancel after crash", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"] });
+    const draft = first.prepareRun({ project_id: "autopilot-beta", prompt: "cancel after crash", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"], profile: "dev", requested_reasoning_effort: null });
     first.approveAndQueueRun(draft.current.run_id, 1, "owner");
     supervisor.claim(new Date().toISOString());
     const { requestRunCancellation, transitionRun } = await import("../../src/data/delivery-system/runStore");
@@ -425,7 +449,7 @@ describe("control plane governed run API", () => {
     let finish!: () => void;
     const runtime = createControlPlaneRuntime(stateDir, "secret", { projectRoot, scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
     const orchestrator = (runtime as any).orchestrator;
-    const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"] });
+    const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"], profile: "dev", requested_reasoning_effort: null });
     orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
     await vi.waitFor(() => expect(typeof finish).toBe("function"));
     let stopped = false;
@@ -740,7 +764,7 @@ describe("control plane provider endpoints", () => {
     const init = { headers: { authorization: "Bearer secret" } };
     const models = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, init)).json() as { models: Array<{ model_id: string }> };
     const health = await (await fetch(`http://127.0.0.1:${address.port}/providers/health`, init)).json() as { providers: Array<{ freshness: string }> };
-    expect(models.models).toEqual([{ model_id: "model-a", providers: ["codex_cli"], available: true, health: ["healthy"] }]);
+    expect(models.models).toEqual([{ model_id: "model-a", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low", "medium", "high", "xhigh"] }]);
     expect(health.providers[0]?.freshness).toBe("fresh");
   });
 });

@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { createStateBackup, validateStateBackup } from "../../src/data/delivery-system/stateBackup";
 import { performStateMaintenance } from "../../src/data/delivery-system/stateMaintenance";
 import { withStateMaintenanceLock } from "../../src/data/delivery-system/stateMaintenanceLock";
+import { restoreStateBackup } from "../../src/data/delivery-system/stateRecovery";
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "autopilot-maintenance-"));
@@ -30,6 +31,23 @@ function fixture() {
 }
 
 describe("state maintenance transaction", () => {
+  it("backs up and restores promotions.json byte-identically with mode 0600", () => {
+    const fixture_ = fixture();
+    const promotions = `${JSON.stringify({ schema_version: "v1", packets: [] }, null, 2)}\n`;
+    writeFileSync(join(fixture_.stateDirectory, "promotions.json"), promotions, { mode: 0o600 });
+
+    const backup = createStateBackup(fixture_.stateDirectory, fixture_.backupDirectory);
+    const archive = JSON.parse(readFileSync(backup.path, "utf8")) as { manifest: { path: string }[] };
+    const restoreDirectory = join(fixture_.root, "restored-state");
+    const restored = restoreStateBackup(backup.path, restoreDirectory, { apply: true });
+
+    expect(validateStateBackup(backup.path).valid).toBe(true);
+    expect(archive.manifest.map((entry) => entry.path)).toContain("promotions.json");
+    expect(restored.applied).toBe(true);
+    expect(readFileSync(join(restoreDirectory, "promotions.json"), "utf8")).toBe(promotions);
+    expect(statSync(join(restoreDirectory, "promotions.json")).mode & 0o777).toBe(0o600);
+  });
+
   it("fails closed on preflight findings without backup, rotation, or pruning", () => {
     const fixture_ = fixture();
     const logPath = join(fixture_.stateDirectory, "audit.jsonl");

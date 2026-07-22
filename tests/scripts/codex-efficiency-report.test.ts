@@ -16,7 +16,10 @@ import {
   type EfficiencyReportV1,
 } from "../../src/data/delivery-system/efficiencyReport";
 import type { RolloutEfficiencyEstimate } from "../../src/data/delivery-system/codexRolloutEfficiency";
-import { runCodexEfficiencyCli } from "../../scripts/codex-efficiency-report";
+import {
+  parseWorkUnitRecord,
+  runCodexEfficiencyCli,
+} from "../../scripts/codex-efficiency-report";
 
 describe("Codex efficiency reporting", () => {
   it("requires matched sample sizes and a 30 percent median reduction", () => {
@@ -84,6 +87,7 @@ describe("Codex efficiency reporting", () => {
       workUnits: [
         {
           source: estimate.source,
+          profile: "dev",
           descriptor: {
             work_unit_id: "wu-1",
             class: "bounded_implementation",
@@ -142,8 +146,122 @@ describe("Codex efficiency reporting", () => {
 
     expect(report.contains_raw_content).toBe(false);
     expect(report.samples.completed).toBe(5);
+    expect(report.samples.ordinary).toBe(0);
+    expect(report.samples.high_risk).toBe(0);
     expect(() => assertAggregateOnly(report)).not.toThrow();
     expect(output).not.toContain("private prompt");
+  });
+
+  it("preserves explicit profiles, defaults absent profiles to legacy, and excludes legacy from acceptance counts", () => {
+    const baseRecord = {
+      source: "root.jsonl",
+      descriptor: {
+        work_unit_id: "wu-profile",
+        class: "bounded_implementation",
+        risk: "ordinary",
+      },
+      status: "completed",
+      first_pass_accepted: true,
+      escaped_severity: null,
+      retry_exhausted: false,
+    };
+    expect(parseWorkUnitRecord({ ...baseRecord, profile: "dev" }).profile).toBe("dev");
+    expect(parseWorkUnitRecord(baseRecord).profile).toBe("legacy");
+
+    const root = mkdtempSync(join(tmpdir(), "codex-efficiency-profiles-"));
+    try {
+      const mapPath = join(root, "work-units.json");
+      writeFileSync(
+        mapPath,
+        JSON.stringify({
+          schema_version: "autopilot-codex-work-unit-map-v1",
+          work_units: [
+            {
+              source: "root.jsonl",
+              profile: "dev",
+              descriptor: {
+                work_unit_id: "wu-dev",
+                class: "bounded_implementation",
+                risk: "ordinary"
+              },
+              status: "completed",
+              first_pass_accepted: true,
+              escaped_severity: null,
+              retry_exhausted: false
+            },
+            {
+              source: "root.jsonl",
+              descriptor: {
+                work_unit_id: "wu-legacy",
+                class: "high_risk",
+                risk: "high"
+              },
+              status: "completed",
+              first_pass_accepted: true,
+              escaped_severity: null,
+              retry_exhausted: false
+            }
+          ]
+        })
+      );
+
+      const report = runCodexEfficiencyCli(
+        [
+          "report",
+          "--sessions",
+          "tests/fixtures/codex-efficiency",
+          "--work-units",
+          mapPath,
+          "--since",
+          "7d",
+          "--json"
+        ],
+        new Date("2026-07-16T00:00:00.000Z")
+      ) as EfficiencyReportV1;
+
+      expect(report.samples).toEqual({ ordinary: 1, high_risk: 0, completed: 2 });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unknown work-unit profiles", () => {
+    const root = mkdtempSync(join(tmpdir(), "codex-efficiency-profile-invalid-"));
+    try {
+      const mapPath = join(root, "work-units.json");
+      writeFileSync(
+        mapPath,
+        JSON.stringify({
+          schema_version: "autopilot-codex-work-unit-map-v1",
+          work_units: [{
+            source: "root.jsonl",
+            profile: "preview",
+            descriptor: {
+              work_unit_id: "wu-invalid",
+              class: "bounded_implementation",
+              risk: "ordinary"
+            },
+            status: "completed",
+            first_pass_accepted: true,
+            escaped_severity: null,
+            retry_exhausted: false
+          }]
+        })
+      );
+
+      expect(() => runCodexEfficiencyCli([
+        "report",
+        "--sessions",
+        "tests/fixtures/codex-efficiency",
+        "--work-units",
+        mapPath,
+        "--since",
+        "7d",
+        "--json"
+      ], new Date("2026-07-16T00:00:00.000Z"))).toThrow(/invalid_work_unit_record/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it.each([

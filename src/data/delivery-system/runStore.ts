@@ -7,6 +7,7 @@ import { resolveEnabledProject, type ProjectRegistryOptions } from "./projectReg
 import type { CliWorkerResult } from "./cliWorker";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens, RUN_OUTPUT_TOKEN_ALLOWANCE, RUN_OUTPUT_TOKEN_ALLOWANCE_MAX } from "./runPromptPolicy";
 import { writeStateFileAtomically } from "./stateMaintenanceLock";
+import { SUPPORTED_REASONING_EFFORTS, type RunProfile, type RunReasoningEffort, type StoredRunProfile } from "./executionProfile";
 
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
@@ -24,10 +25,14 @@ export interface RunDraft {
   readonly output_token_allowance: number;
   readonly requested_artifacts: readonly RunArtifactType[];
   readonly prompt_review_acknowledged: boolean;
+  readonly profile: RunProfile;
+  readonly requested_reasoning_effort: RunReasoningEffort | null;
+  readonly promotion_packet_id: string | null;
   readonly created_at: string;
 }
 
-export type RunDraftInput = Omit<RunDraft, "run_id" | "revision" | "created_at" | "prompt_review_acknowledged" | "input_token_bound" | "output_token_allowance"> & { readonly prompt_review_acknowledged?: boolean };
+export type RunDraftInput = Omit<RunDraft, "run_id" | "revision" | "created_at" | "prompt_review_acknowledged" | "input_token_bound" | "output_token_allowance" | "promotion_packet_id"> &
+  { readonly prompt_review_acknowledged?: boolean; readonly promotion_packet_id?: string | null };
 
 export interface RunArtifact {
   readonly artifact_id: string;
@@ -101,6 +106,8 @@ const MAX_OPERATOR = 256;
 const MAX_TERMINAL_REASON = 32_000;
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const PROVIDERS = new Set<RunProvider>(["codex_cli", "claude_cli", "agy_cli", "openrouter_api"]);
+const PROFILES = new Set<RunProfile>(["dev", "prod"]);
+const REASONING_EFFORTS = new Set<RunReasoningEffort>(["low", "medium", "high", "xhigh", "max"]);
 const ARTIFACT_TYPES = new Set<RunArtifactType>(["text", "visual"]);
 const STATUSES = new Set<RunStatus>(["draft", "approved", "queued", "running", "completed", "failed", "cancelled"]);
 const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
@@ -131,11 +138,52 @@ function validDraftInput(input: RunDraftInput & Pick<RunDraft, "input_token_boun
     input.requested_artifacts.every((type) => ARTIFACT_TYPES.has(type));
 }
 
+function validStoredProfileFields(draft: { readonly provider?: unknown; readonly profile?: unknown; readonly requested_reasoning_effort?: unknown; readonly promotion_packet_id?: unknown }): boolean {
+  if (draft.profile === undefined) return draft.requested_reasoning_effort === undefined && draft.promotion_packet_id === undefined;
+  if (!PROFILES.has(draft.profile as RunProfile)) return false;
+  if (draft.requested_reasoning_effort !== null) {
+    if (!REASONING_EFFORTS.has(draft.requested_reasoning_effort as RunReasoningEffort)) return false;
+    if (!PROVIDERS.has(draft.provider as RunProvider)) return false;
+    const supported: readonly RunReasoningEffort[] = SUPPORTED_REASONING_EFFORTS[draft.provider as RunProvider];
+    if (!supported.includes(draft.requested_reasoning_effort as RunReasoningEffort)) return false;
+  }
+  if (draft.profile === "dev") return draft.promotion_packet_id === null;
+  return validString(draft.promotion_packet_id, MAX_ID);
+}
+
 function validDraft(value: unknown): value is RunDraft {
   if (typeof value !== "object" || value === null) return false;
   const draft = value as RunDraft;
   return validString(draft.run_id, MAX_ID) && Number.isSafeInteger(draft.revision) && draft.revision > 0 &&
-    validTimestamp(draft.created_at) && validDraftInput(draft);
+    validTimestamp(draft.created_at) && validDraftInput(draft) && validStoredProfileFields(draft);
+}
+
+function normalizeProfileFields(input: RunDraftInput): Pick<RunDraft, "requested_reasoning_effort" | "promotion_packet_id"> {
+  if (!PROFILES.has(input.profile)) throw new Error("invalid_run_draft");
+  const effort = input.requested_reasoning_effort;
+  if (effort !== null) {
+    const supported: readonly RunReasoningEffort[] = SUPPORTED_REASONING_EFFORTS[input.provider];
+    if (!REASONING_EFFORTS.has(effort) || !supported.includes(effort)) throw new Error("invalid_run_draft");
+  }
+  if (input.profile === "dev") {
+    if (input.promotion_packet_id !== undefined && input.promotion_packet_id !== null) throw new Error("invalid_run_draft");
+    return { requested_reasoning_effort: effort, promotion_packet_id: null };
+  }
+  if (!validString(input.promotion_packet_id, MAX_ID)) throw new Error("invalid_run_draft");
+  return { requested_reasoning_effort: effort, promotion_packet_id: input.promotion_packet_id };
+}
+
+export function resolveRunProfile(record: RunRecord): StoredRunProfile {
+  const value = (record.current as { readonly profile?: RunProfile }).profile;
+  return value === "dev" || value === "prod" ? value : "legacy";
+}
+
+export function resolveLegacyRequestedReasoning(record: RunRecord): RunReasoningEffort | null {
+  return resolveRunProfile(record) === "legacy" ? null : record.current.requested_reasoning_effort;
+}
+
+export function resolveLegacyPromotionPacketId(record: RunRecord): string | null {
+  return resolveRunProfile(record) === "legacy" ? null : record.current.promotion_packet_id;
 }
 
 function validNullableString(value: unknown, maximum: number): boolean {
@@ -232,6 +280,8 @@ function write(stateDir: string, document: RunStoreDocument): void {
 
 function replace(stateDir: string, record: RunRecord): RunRecord {
   const document = readRunStore(stateDir);
+  const original = document.runs.find((run) => run.current.run_id === record.current.run_id);
+  if (original === undefined || resolveRunProfile(original) === "legacy") throw new Error("legacy_run_read_only");
   write(stateDir, { ...document, runs: document.runs.map((run) => run.current.run_id === record.current.run_id ? record : run) });
   return record;
 }
@@ -247,7 +297,8 @@ export function createRunDraft(stateDir: string, input: RunDraftInput, createdAt
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
   const canonicalBudget = canonicalRunTokenBudget(input.prompt);
   if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");
-  const normalized = { ...input, input_token_bound: conservativeRunPromptTokens(input.prompt), output_token_allowance: RUN_OUTPUT_TOKEN_ALLOWANCE, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  const profileFields = normalizeProfileFields(input);
+  const normalized = { ...input, ...profileFields, input_token_bound: conservativeRunPromptTokens(input.prompt), output_token_allowance: RUN_OUTPUT_TOKEN_ALLOWANCE, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
   if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const document = readRunStore(stateDir);
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
@@ -265,7 +316,8 @@ export function reviseRunDraft(stateDir: string, runId: string, revision: number
   assertRunPromptPolicy(input.prompt, input.prompt_review_acknowledged === true);
   const canonicalBudget = canonicalRunTokenBudget(input.prompt);
   if (!Number.isSafeInteger(input.estimated_tokens) || input.estimated_tokens < canonicalBudget) throw new Error("run_token_budget_underestimated");
-  const normalized = { ...input, input_token_bound: conservativeRunPromptTokens(input.prompt), output_token_allowance: RUN_OUTPUT_TOKEN_ALLOWANCE, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
+  const profileFields = normalizeProfileFields(input);
+  const normalized = { ...input, ...profileFields, input_token_bound: conservativeRunPromptTokens(input.prompt), output_token_allowance: RUN_OUTPUT_TOKEN_ALLOWANCE, estimated_tokens: canonicalBudget, prompt_review_acknowledged: input.prompt_review_acknowledged === true };
   if (!validDraftInput(normalized) || !validTimestamp(createdAt)) throw new Error("invalid_run_draft");
   const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: revision + 1, created_at: createdAt };
   replace(stateDir, { ...record, current: draft, revisions: [...record.revisions, draft], updated_at: createdAt });

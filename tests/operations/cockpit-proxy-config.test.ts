@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -128,10 +129,40 @@ describe("Cockpit production proxy boundary", () => {
       version: "autopilot-cockpit-recovery-smoke-v1",
       source: "scripts/smoke-cockpit-run.ts",
       output: "ops/cockpit-proxy/autopilot-cockpit-recovery-smoke.mjs",
-      source_sha256: "c63de72541f40d3d8fbaeae5362236f08f4b6d9570a423b1dbc51e4166185fcf",
-      output_sha256: "f18c5031a1a40f3f07b5b2e060d83d1a9f022c25cee0ec63b54997a3482d8a3a",
+      source_sha256: "8214b62749c6ecbd0d49511cc1b79ea4803bf4a6f3ff331812273e36d5b70f6c",
+      output_sha256: "3ccbe0c73d7667113437b0b09fc04c5531885a970de8b367ea500352d1498022",
       esbuild_version: "0.28.1",
-      flags: ["--bundle", "--platform=node", "--format=esm", "--target=node24", "--minify"],
+      flags: [
+        "--bundle",
+        "--platform=node",
+        "--format=esm",
+        "--target=node24",
+        "--minify",
+        "--external:node-pty",
+        '--banner:js=import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
+      ],
+    });
+  });
+
+  it("executes the pinned recovery smoke bundle under Node 24", () => {
+    const bundle = join(process.cwd(), "ops", "cockpit-proxy", "autopilot-cockpit-recovery-smoke.mjs");
+    const work = mkdtempSync(join(tmpdir(), "autopilot-recovery-artifact-test-"));
+    const relocated = join(work, "recovery-smoke.mjs");
+    copyFileSync(bundle, relocated);
+    const result = spawnSync(process.execPath, [relocated, "--dry-run"], {
+      cwd: work,
+      encoding: "utf8",
+      timeout: 20_000,
+    });
+    rmSync(work, { recursive: true, force: true });
+
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      mode: "dry-run",
+      provider_invoked: false,
+      run_status: "completed",
+      reservation_status: "settled",
     });
   });
 });

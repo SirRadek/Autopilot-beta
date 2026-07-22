@@ -1,6 +1,7 @@
 import React, { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { StatusBadge, type StatusBadgeStatus } from "../components/StatusBadge";
+import type { CockpitEnvironment } from "./environment";
 import "./app.css";
 
 export type CockpitSession = { id: string; name: string; status: StatusBadgeStatus; agent?: string };
@@ -8,6 +9,8 @@ export type CockpitProject = { id: string; name: string };
 export type CockpitTab = "approval" | "sessions" | "providers" | "workers";
 
 export type AppShellProps = {
+  environment: CockpitEnvironment;
+  onEnvironmentChange: (environment: CockpitEnvironment) => void;
   selectedProject?: CockpitProject;
   selectedSession?: CockpitSession;
   projectsPane?: ReactNode;
@@ -29,15 +32,23 @@ const tabs: Array<{ id: CockpitTab; label: string }> = [
   { id: "workers", label: "Workers" },
 ];
 
-export function AppShell({ selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, runWorkspace, runInspector, incidentPane, onTabChange }: AppShellProps) {
+export function AppShell({ environment, onEnvironmentChange, selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, runWorkspace, runInspector, incidentPane, onTabChange }: AppShellProps) {
   const [activeTab, setActiveTab] = useState<CockpitTab>("approval");
   const [inspectorTab, setInspectorTab] = useState<"run" | "errors">("run");
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const idPrefix = useId();
   const tabRefs = useRef<Partial<Record<CockpitTab, HTMLButtonElement>>>({});
+  const environmentTabRefs = useRef<Partial<Record<CockpitEnvironment, HTMLButtonElement>>>({});
   const inspectorTabRefs = useRef<Partial<Record<"run" | "errors", HTMLButtonElement>>>({});
   const id = (suffix: string) => `${idPrefix}-${suffix}`;
   const selectTab = (tab: CockpitTab) => { setActiveTab(tab); onTabChange?.(tab); };
+  const handleEnvironmentKeyDown = (event: KeyboardEvent<HTMLButtonElement>, current: CockpitEnvironment) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next: CockpitEnvironment = event.key === "Home" ? "dev" : event.key === "End" ? "prod" : current === "dev" ? "prod" : "dev";
+    onEnvironmentChange(next);
+    environmentTabRefs.current[next]?.focus();
+  };
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
     if (direction === 0 && event.key !== "Home" && event.key !== "End") return;
@@ -60,6 +71,9 @@ export function AppShell({ selectedProject, selectedSession, projectsPane, sessi
           {selectedSession ? <><span aria-hidden="true">/</span><span>{selectedSession.name}</span><StatusBadge status={selectedSession.status} /></> : null}
         </div>
       </header>
+      <nav className="cockpit-environments" aria-label="Prostředí Cockpitu" role="tablist">
+        {(["dev", "prod"] as const).map((candidate) => <button ref={(node) => { if (node) environmentTabRefs.current[candidate] = node; }} key={candidate} type="button" role="tab" aria-selected={environment === candidate} tabIndex={environment === candidate ? 0 : -1} onClick={() => onEnvironmentChange(candidate)} onKeyDown={(event) => handleEnvironmentKeyDown(event, candidate)}>{candidate.toUpperCase()}</button>)}
+      </nav>
       {runWorkspace !== undefined || runInspector !== undefined || incidentPane !== undefined ? <div className={`run-control-room${inspectorOpen ? "" : " inspector-collapsed"}`}>
         <section className="run-workspace" role="region" aria-label="Pracovní plocha běhu">{runWorkspace}</section>
         <aside className="run-inspector-pane" aria-label="Inspektor běhu"><button className="inspector-toggle" type="button" aria-expanded={inspectorOpen} aria-controls={id("inspector-content")} onClick={() => setInspectorOpen((open) => !open)}>{inspectorOpen ? "Skrýt inspektor" : "Zobrazit inspektor"}</button>{inspectorOpen ? <div id={id("inspector-content")}><div className="inspector-tabs" role="tablist" aria-label="Části inspektoru"><button ref={(node) => { if (node) inspectorTabRefs.current.run = node; }} id={id("inspector-tab-run")} data-inspector-tab="run" type="button" role="tab" aria-controls={id("inspector-panel")} aria-selected={inspectorTab === "run"} tabIndex={inspectorTab === "run" ? 0 : -1} onClick={() => setInspectorTab("run")} onKeyDown={handleInspectorKeyDown}>Běh</button><button ref={(node) => { if (node) inspectorTabRefs.current.errors = node; }} id={id("inspector-tab-errors")} data-inspector-tab="errors" type="button" role="tab" aria-controls={id("inspector-panel")} aria-selected={inspectorTab === "errors"} tabIndex={inspectorTab === "errors" ? 0 : -1} onClick={() => setInspectorTab("errors")} onKeyDown={handleInspectorKeyDown}>Chyby</button></div><div id={id("inspector-panel")} role="tabpanel" aria-labelledby={id(`inspector-tab-${inspectorTab}`)}>{inspectorTab === "run" ? runInspector : incidentPane}</div></div> : null}</aside>

@@ -19,12 +19,14 @@ import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderC
 import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
-import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
+import { createRunOrchestrator, type RunPacketBuilder } from "../src/data/delivery-system/runOrchestrator";
 import { buildReadiness, type ReadinessReport } from "../src/data/delivery-system/readiness";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
 import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
 import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
+import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
+import type { RunProvider } from "../src/data/delivery-system/runStore";
 
 const execFileAsync = promisify(execFile);
 
@@ -50,6 +52,8 @@ export interface ControlPlaneRuntimeOptions {
   readonly secureCookies?: boolean;
   readonly openRouterConfigured?: boolean;
   readonly dispatch?: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
+  /** Test/recovery seam; production omits it and loads the canonical decision mesh. */
+  readonly packetBuilder?: RunPacketBuilder;
   readonly supervisorPollMs?: number;
   readonly shutdownDrainMs?: number;
 }
@@ -367,6 +371,7 @@ export function createControlPlaneRuntime(
     projectRoot,
     tokenGateway: new TokenGateway({ stateDir }),
     supervisor,
+    ...(options.packetBuilder === undefined ? {} : { packetBuilder: options.packetBuilder }),
     dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
   });
   const server = createControlPlaneServer(stateDir, authToken, {
@@ -522,13 +527,17 @@ function providerQuota(directory: string, provider: string): QuotaView | { error
 function providerModels(directory: string): { freshness: string; fetched_at: string | null; next_poll_at: string | null; models: readonly Record<string, unknown>[] } {
   const snapshots = readProviderQuotaStore(directory).snapshots;
   const now = new Date().toISOString();
-  const byModel = new Map<string, { model_id: string; providers: Set<string>; available: boolean; health: Set<string> }>();
+  const byModel = new Map<string, { model_id: string; providers: Set<string>; available: boolean; health: Set<string>; reasoningByProvider: Map<string, readonly RunReasoningEffort[]> }>();
   for (const snapshot of snapshots) {
+    const supported: readonly RunReasoningEffort[] = snapshot.provider in SUPPORTED_REASONING_EFFORTS
+      ? SUPPORTED_REASONING_EFFORTS[snapshot.provider as RunProvider]
+      : [];
     for (const model of snapshot.models) {
-      const entry = byModel.get(model.model_id) ?? { model_id: model.model_id, providers: new Set<string>(), available: false, health: new Set<string>() };
+      const entry = byModel.get(model.model_id) ?? { model_id: model.model_id, providers: new Set<string>(), available: false, health: new Set<string>(), reasoningByProvider: new Map<string, readonly RunReasoningEffort[]>() };
       entry.providers.add(snapshot.provider);
       entry.available ||= model.available;
       entry.health.add(model.health);
+      entry.reasoningByProvider.set(snapshot.provider, supported);
       byModel.set(model.model_id, entry);
     }
   }
@@ -536,7 +545,24 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
   const freshness = views.length === 0 || views.some((view) => view.freshness === "unavailable") ? "unavailable" : views.some((view) => view.freshness === "stale") ? "stale" : "fresh";
   const fetchedAt = views.map((view) => view.fetched_at).sort().at(-1) ?? null;
   const nextPollAt = views.map((view) => view.next_poll_at).filter((value): value is string => value !== null).sort().at(0) ?? null;
-  return { freshness, fetched_at: fetchedAt, next_poll_at: nextPollAt, models: [...byModel.values()].map((model) => ({ model_id: model.model_id, providers: [...model.providers].sort(), available: model.available, health: [...model.health].sort() })).sort((a, b) => a.model_id.localeCompare(b.model_id)) };
+  return {
+    freshness,
+    fetched_at: fetchedAt,
+    next_poll_at: nextPollAt,
+    models: [...byModel.values()].map((model) => {
+      const providers = [...model.providers].sort();
+      const routes = providers.map((provider) => ({ provider, reasoning_efforts: [...(model.reasoningByProvider.get(provider) ?? [])] }));
+      const reasoningEfforts = routes.length === 0 ? [] : routes[0]!.reasoning_efforts.filter((effort) => routes.every((route) => route.reasoning_efforts.includes(effort)));
+      return {
+        model_id: model.model_id,
+        providers,
+        available: model.available,
+        health: [...model.health].sort(),
+        reasoning_efforts: reasoningEfforts,
+        ...(routes.length > 1 ? { provider_routes: routes } : {})
+      };
+    }).sort((a, b) => a.model_id.localeCompare(b.model_id))
+  };
 }
 
 function providerHealth(directory: string): { providers: readonly Record<string, unknown>[] } {

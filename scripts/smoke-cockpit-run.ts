@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { createControlPlaneRuntime } from "./control-plane-server";
 import { readApprovalQueue } from "../src/data/delivery-system/approvalQueue";
@@ -41,12 +41,27 @@ export interface CockpitSmokeReport {
 export async function runCockpitSmoke(options: { readonly mode: SmokeMode; readonly beforeEvidenceInspection?: (stateDir: string) => void }): Promise<CockpitSmokeReport> {
   if (options.mode !== "dry-run") throw new Error("live_execution_forbidden");
   const stateDir = mkdtempSync(join(tmpdir(), "autopilot-cockpit-smoke-"));
+  const projectRoot = join(stateDir, "projects");
+  const projectCwd = join(projectRoot, "cockpit-smoke");
+  mkdirSync(projectCwd, { recursive: true, mode: 0o700 });
   const token = "cockpit-smoke-local-token";
   let dispatchOutput: DispatchResult | undefined;
   const runtime = createControlPlaneRuntime(stateDir, token, {
-    projectRoot: dirname(realpathSync(process.cwd())),
+    projectRoot,
     scheduler: { start() {}, stop() {} },
     supervisorPollMs: 5,
+    packetBuilder: ({ task, agent }) => ({
+      agent,
+      task,
+      objective: ["Prove the deterministic recovery path"],
+      rules: ["recovery-smoke-dry-run"],
+      relevant_nodes: ["recovery-smoke"],
+      required_agents: [],
+      must_read: [],
+      must_not_assume: ["provider invocation is allowed"],
+      required_checks: ["provider_invoked=false"],
+      stop_conditions: ["live execution requested"],
+    }),
     dispatch: async (handoff) => {
       dispatchOutput = { refused: false, workerRunId: "smoke-worker-1", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: `deterministic cockpit smoke result\n${"x".repeat(2_048)}`, parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true };
       return dispatchOutput;
@@ -54,7 +69,7 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
   });
   const server = runtime.server;
   try {
-    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "cockpit-smoke", name: "Cockpit smoke fixture", cwd: process.cwd(), enabled: true }] });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "cockpit-smoke", name: "Cockpit smoke fixture", cwd: projectCwd, enabled: true }] });
     const now = new Date().toISOString();
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [{ provider: "codex_cli", source: "cli", fetched_at: now, observed_at: now, five_hour: { limit: 100_000, used: 0, remaining: 100_000, resets_at: null }, weekly: { limit: 100_000, used: 0, remaining: 100_000, resets_at: null }, api_spend: null, currency: null, models: [{ model_id: "smoke-model", available: true, health: "healthy", source: "cli" }], health: "healthy", error_code: null }] });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -65,7 +80,7 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
       if (!response.ok) throw new Error(`smoke_control_plane_${response.status}:${await response.text()}`);
       return response.json() as Promise<any>;
     };
-    const prepared = await call("/runs", { project_id: "cockpit-smoke", prompt: "Return deterministic cockpit smoke result", provider: "codex_cli", model: "smoke-model", estimated_tokens: 20_000, requested_artifacts: ["text"] });
+    const prepared = await call("/runs", { project_id: "cockpit-smoke", prompt: "Return deterministic cockpit smoke result", provider: "codex_cli", model: "smoke-model", estimated_tokens: 20_000, requested_artifacts: ["text"], profile: "dev" });
     const runId = prepared.current.run_id as string;
     await call(`/runs/${runId}/approve`, { revision: 1, operator: "cockpit-smoke" });
 

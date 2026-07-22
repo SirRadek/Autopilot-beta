@@ -23,6 +23,10 @@ const laneImportAllowedPrefixes = [
   "tests/",
 ];
 const vendorSpawnAllowedPrefixes = laneImportAllowedPrefixes;
+// This generated, provenance-pinned recovery artifact bundles the governed lane
+// but its execution test proves provider_invoked=false. It is not authored as a
+// second spawn lane and must stay the only exact exception outside the prefixes.
+const generatedTrustedVendorArtifact = "ops/cockpit-proxy/autopilot-cockpit-recovery-smoke.mjs";
 const lanePrefix = "src/data/delivery-system/";
 const forbiddenImportPattern =
   /\bfrom\s+["'][^"']*(?:cliWorker|cliWorkerCapture)["']|\bimport\s*\(\s*["'][^"']*(?:cliWorker|cliWorkerCapture)["']\s*\)/;
@@ -56,7 +60,7 @@ describe("governed dispatch boundary", () => {
   it("keeps vendor CLI process creation inside governed-core, tests, or the lane", () => {
     const violations = sourceFiles(repoRoot).flatMap((file) => {
       const rel = normalizePath(relative(repoRoot, file));
-      if (vendorSpawnAllowedPrefixes.some((prefix) => rel.startsWith(prefix))) {
+      if (vendorSpawnAllowedPrefixes.some((prefix) => rel.startsWith(prefix)) || rel === generatedTrustedVendorArtifact) {
         return [];
       }
 

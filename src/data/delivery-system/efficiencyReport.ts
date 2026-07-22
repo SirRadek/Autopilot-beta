@@ -6,9 +6,11 @@ import type {
   WorkUnitClass,
   WorkUnitDescriptor,
 } from "./efficiencyPolicy";
+import type { StoredRunProfile } from "./executionProfile";
 
 export interface WorkUnitRecord {
   readonly source: string;
+  readonly profile: StoredRunProfile;
   readonly descriptor: WorkUnitDescriptor;
   readonly status: "completed" | "incomplete";
   readonly first_pass_accepted: boolean;
@@ -138,10 +140,12 @@ export function buildEfficiencyReport(
     contains_raw_content: false,
     samples: {
       ordinary: completedRecords.filter(
-        (record) => record.descriptor.risk === "ordinary",
+        (record) =>
+          record.descriptor.risk === "ordinary" && record.profile !== "legacy",
       ).length,
       high_risk: completedRecords.filter(
-        (record) => record.descriptor.risk === "high",
+        (record) =>
+          record.descriptor.risk === "high" && record.profile !== "legacy",
       ).length,
       completed: completedRecords.length,
     },
