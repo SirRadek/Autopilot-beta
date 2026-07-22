@@ -47,7 +47,10 @@ export interface BrainstormPaneProps {
   readonly onCreate: (input: BrainstormDraftInput) => Promise<BrainstormRecord>;
   readonly onApprove: (id: string, operator: string) => Promise<BrainstormRecord>;
   readonly onArbitrate: (id: string, operator: string, route: BrainstormArbitrationInput) => Promise<BrainstormRecord>;
+  readonly onCancel?: (id: string) => Promise<BrainstormRecord>;
 }
+
+const CANCELLABLE_STATUSES: readonly BrainstormRecord["status"][] = ["draft", "approved", "fanout_running", "consolidating"];
 
 function estimateBriefTokens(brief: string): number {
   return brief.trim() === "" ? 0 : new TextEncoder().encode(brief).length;
@@ -63,7 +66,7 @@ function reasoningEffortsFor(provider: string, modelId: string, models: Provider
   return entry?.provider_routes?.find((route) => route.provider === provider)?.reasoning_efforts ?? [];
 }
 
-export function BrainstormPane({ environment, projects, quotas, models, brainstorms, runs, onCreate, onApprove, onArbitrate }: BrainstormPaneProps) {
+export function BrainstormPane({ environment, projects, quotas, models, brainstorms, runs, onCreate, onApprove, onArbitrate, onCancel }: BrainstormPaneProps) {
   const enabledProjects = projects.filter((project) => project.enabled);
   const [projectId, setProjectId] = useState(enabledProjects[0]?.project_id ?? "");
   useEffect(() => { if (!enabledProjects.some((project) => project.project_id === projectId)) setProjectId(enabledProjects[0]?.project_id ?? ""); }, [enabledProjects, projectId]);
@@ -85,10 +88,14 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
   const [approvePending, setApprovePending] = useState(false);
   const [confirmArbitrationId, setConfirmArbitrationId] = useState<string>();
   const [arbitratePending, setArbitratePending] = useState(false);
+  const [confirmCancelId, setConfirmCancelId] = useState<string>();
+  const [cancelPendingId, setCancelPendingId] = useState<string>();
+  const [cancelError, setCancelError] = useState<{ readonly id: string; readonly message: string }>();
   const generation = useRef(0);
   const createActive = useRef(false);
   const approveActive = useRef(false);
   const arbitrateActive = useRef(false);
+  const cancelActive = useRef(false);
 
   function resolveReasoning(selection: ReasoningSelection, efforts: readonly RunReasoningEffort[]): { readonly value: RunReasoningEffort | null; readonly explicit: boolean } {
     if (efforts.length === 0) return { value: null, explicit: selection === NO_REASONING };
@@ -132,7 +139,8 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
     : undefined;
 
   const boundKey = draftInput ? JSON.stringify(draftInput) : "";
-  const anyMutationPending = createPending || approvePending || arbitratePending;
+  const otherMutationPending = createPending || approvePending || arbitratePending;
+  const anyMutationPending = otherMutationPending || cancelPendingId !== undefined;
   const canCreate = environment === "dev" && draftInput !== undefined && !anyMutationPending;
   const validPrepared = prepared?.key === boundKey ? prepared.record : undefined;
 
@@ -174,7 +182,7 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
   }
 
   async function confirmArbitrate(record: BrainstormRecord) {
-    if (environment !== "dev" || arbitrateActive.current || record.arbitration_route === null) return;
+    if (environment !== "dev" || arbitrateActive.current || cancelPendingId !== undefined || record.arbitration_route === null) return;
     if (confirmArbitrationId !== record.brainstorm_id) { setConfirmArbitrationId(record.brainstorm_id); return; }
     arbitrateActive.current = true; setArbitratePending(true); setMessage("Volám arbitráž…");
     const route: BrainstormArbitrationInput = { provider: record.arbitration_route.provider, model: record.arbitration_route.model, reasoning_effort: record.arbitration_route.reasoning_effort, estimated_tokens: record.arbitration_route.estimated_tokens };
@@ -185,6 +193,19 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
       setMessage(error instanceof Error ? error.message : "Arbitráž selhala.");
     } finally {
       arbitrateActive.current = false; setArbitratePending(false); setConfirmArbitrationId(undefined);
+    }
+  }
+
+  async function confirmCancel(record: BrainstormRecord) {
+    if (environment !== "dev" || onCancel === undefined || cancelActive.current || otherMutationPending || !CANCELLABLE_STATUSES.includes(record.status)) return;
+    if (confirmCancelId !== record.brainstorm_id) { setConfirmCancelId(record.brainstorm_id); setCancelError(undefined); return; }
+    cancelActive.current = true; setCancelPendingId(record.brainstorm_id); setCancelError(undefined);
+    try {
+      await onCancel(record.brainstorm_id);
+    } catch (error) {
+      setCancelError({ id: record.brainstorm_id, message: error instanceof Error ? error.message : "Zrušení brainstormu selhalo." });
+    } finally {
+      cancelActive.current = false; setCancelPendingId(undefined); setConfirmCancelId(undefined);
     }
   }
 
@@ -263,6 +284,18 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
         {projectBrainstorms.map((record) => (
           <article key={record.brainstorm_id} className="incident-pane brainstorm-record" aria-label={`Brainstorm ${record.brainstorm_id}`}>
             <header><strong>{record.brainstorm_id}</strong><span>{record.status}</span></header>
+            {environment === "dev" && onCancel !== undefined && CANCELLABLE_STATUSES.includes(record.status) ? (
+              confirmCancelId === record.brainstorm_id ? (
+                <div role="group" aria-label={`Potvrdit zrušení ${record.brainstorm_id}`}>
+                  <span>Zrušit tento brainstorm?</span>
+                  <button type="button" disabled={cancelPendingId === record.brainstorm_id || otherMutationPending} onClick={() => void confirmCancel(record)}>{cancelPendingId === record.brainstorm_id ? "Ruším…" : "Potvrdit zrušení"}</button>
+                  <button type="button" disabled={cancelPendingId === record.brainstorm_id} onClick={() => setConfirmCancelId(undefined)}>Ponechat</button>
+                </div>
+              ) : (
+                <button type="button" disabled={anyMutationPending} onClick={() => void confirmCancel(record)}>Zrušit brainstorm</button>
+              )
+            ) : null}
+            {cancelError?.id === record.brainstorm_id ? <p role="alert">{cancelError.message}</p> : null}
             <p>{record.token_envelope.minimum_tokens.toLocaleString("cs-CZ")}–{record.token_envelope.maximum_tokens.toLocaleString("cs-CZ")} tokenů</p>
             <ul>
               {record.child_run_ids.map((runId) => {

@@ -319,10 +319,10 @@ test("drives a governed brainstorm from three-provider fan-out through precommit
     { provider: "claude_cli", model: "model-claude-x", preview: "Claude proposal: big-bang rollout." },
     { provider: "agy_cli", model: "model-agy-x", preview: "Agy proposal: canary rollout." },
   ] as const;
-  const childRunIds = ["run-codex-1", "run-claude-1", "run-agy-1"];
+  const childRunIds = ["run-codex-1", "run-claude-1", "run-agy-1"] as const;
   const consolidationRunId = "run-consolidate-1";
   const arbitrationRunId = "run-arbiter-1";
-  const consensus = ["Adopt phased rollout", "Add canary gate before full deploy"];
+  const consensus = ["Adopt phased rollout", "Add canary gate before full deploy"] as const;
   const confidence = 0.82;
   const finalArtifact = "Synthesized decision: adopt phased rollout with canary gate.";
   const brainstormId = "brainstorm-1";
@@ -356,7 +356,12 @@ test("drives a governed brainstorm from three-provider fan-out through precommit
     artifacts: [{ artifact_id: `artifact-${runId}`, type: "text", preview, created_at: now }],
     updated_at: now,
   });
-  const childRuns = routeFixtures.map((route, index) => run(childRunIds[index], route.provider, route.model, route.preview, perRouteTokens));
+  expect(childRunIds).toHaveLength(routeFixtures.length);
+  const childRuns = routeFixtures.map((route, index) => {
+    const childRunId = childRunIds[index];
+    if (childRunId === undefined) throw new Error(`missing childRunIds entry at index ${index}`);
+    return run(childRunId, route.provider, route.model, route.preview, perRouteTokens);
+  });
   const consolidationRun = run(consolidationRunId, "codex_cli", "model-codex-x", JSON.stringify({ consensus, confidence }), synthesisTokens);
   const arbitrationRun = run(arbitrationRunId, "agy_cli", "model-agy-x", "Arbiter ruling: proceed phased with canary gate.", perRouteTokens);
   const brainstormRuns = [...childRuns, consolidationRun, arbitrationRun];

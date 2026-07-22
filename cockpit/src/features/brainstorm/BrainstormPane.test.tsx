@@ -197,6 +197,86 @@ describe("BrainstormPane", () => {
     act(() => root.unmount()); host.remove();
   });
 
+  it("requires a second distinct click to cancel a cancellable brainstorm, then calls onCancel", async () => {
+    const record: BrainstormRecord = { ...draftRecord, status: "fanout_running" };
+    const onCancel = vi.fn().mockResolvedValue({ ...record, status: "cancelled" });
+    const { host, root } = mount({ brainstorms: [record], onCancel });
+    act(() => button(host, "Zrušit brainstorm").click());
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(button(host, "Potvrdit zrušení")).not.toBeUndefined();
+    await act(async () => button(host, "Potvrdit zrušení").click());
+    expect(onCancel).toHaveBeenCalledWith("bs-1");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("does not offer cancel for a non-cancellable status, in PROD, or without an onCancel handler", () => {
+    const terminal: BrainstormRecord = { ...draftRecord, status: "completed" };
+    const cancellable: BrainstormRecord = { ...draftRecord, status: "approved" };
+    const withoutHandler = mount({ brainstorms: [cancellable], onCancel: undefined });
+    expect(button(withoutHandler.host, "Zrušit brainstorm")).toBeUndefined();
+    act(() => withoutHandler.root.unmount()); withoutHandler.host.remove();
+
+    const terminalCase = mount({ brainstorms: [terminal], onCancel: vi.fn() });
+    expect(button(terminalCase.host, "Zrušit brainstorm")).toBeUndefined();
+    act(() => terminalCase.root.unmount()); terminalCase.host.remove();
+
+    const prodCase = mount({ environment: "prod", brainstorms: [cancellable], onCancel: vi.fn() });
+    expect(button(prodCase.host, "Zrušit brainstorm")).toBeUndefined();
+    act(() => prodCase.root.unmount()); prodCase.host.remove();
+  });
+
+  it("guards against duplicate concurrent cancel clicks and surfaces a cancel error", async () => {
+    const record: BrainstormRecord = { ...draftRecord, status: "draft" };
+    const pending = deferred<BrainstormRecord>();
+    const onCancel = vi.fn().mockReturnValue(pending.promise);
+    const { host, root } = mount({ brainstorms: [record], onCancel });
+    act(() => button(host, "Zrušit brainstorm").click());
+    act(() => button(host, "Potvrdit zrušení").click());
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    act(() => button(host, "Potvrdit zrušení")?.click());
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    await act(async () => { pending.reject(new Error("cancel_failed")); await pending.promise.catch(() => {}); });
+    expect(host.textContent).toContain("cancel_failed");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("blocks arbitration while a cancel is pending on another brainstorm, then re-enables once cancel settles", async () => {
+    const cancellable: BrainstormRecord = { ...draftRecord, brainstorm_id: "bs-cancel", status: "fanout_running" };
+    const needsArbitration: BrainstormRecord = { ...draftRecord, brainstorm_id: "bs-arbitrate", status: "needs_arbitration", arbitration_route: { provider: "agy_cli", model: "model-x", reasoning_effort: "medium", estimated_tokens: 8_000 }, conflicts: [{ conflict_id: "c1", output_run_ids: ["run-a", "run-b"], summary: "Disagreement", material: true }] };
+    const pending = deferred<BrainstormRecord>();
+    const onCancel = vi.fn().mockReturnValue(pending.promise);
+    const { host, root, onArbitrate } = mount({ brainstorms: [cancellable, needsArbitration], onCancel });
+    act(() => button(host, "Zrušit brainstorm").click());
+    act(() => button(host, "Potvrdit zrušení").click());
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    const arbitrateButton = button(host, "Vyvolat arbitráž");
+    expect(arbitrateButton.disabled).toBe(true);
+    act(() => arbitrateButton.click());
+    expect(onArbitrate).not.toHaveBeenCalled();
+    await act(async () => { pending.resolve({ ...cancellable, status: "cancelled" }); await pending.promise; });
+    expect(button(host, "Vyvolat arbitráž").disabled).toBe(false);
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("blocks cancellation while another mutation (create) is pending", async () => {
+    const record: BrainstormRecord = { ...draftRecord, status: "draft" };
+    const pending = deferred<BrainstormRecord>();
+    const onCreate = vi.fn(() => pending.promise);
+    const onCancel = vi.fn().mockResolvedValue({ ...record, status: "cancelled" });
+    const { host, root } = mount({ brainstorms: [record], onCreate, onCancel });
+    fillFullPlan(host);
+    act(() => button(host, "Připravit brainstorm").click());
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    const cancelButton = button(host, "Zrušit brainstorm");
+    expect(cancelButton.disabled).toBe(true);
+    act(() => cancelButton.click());
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(button(host, "Potvrdit zrušení")).toBeUndefined();
+    await act(async () => { pending.resolve(draftRecord); await pending.promise; });
+    expect(button(host, "Zrušit brainstorm").disabled).toBe(false);
+    act(() => root.unmount()); host.remove();
+  });
+
   it("shows only the precommitted arbiter in needs_arbitration and requires a second distinct click to call arbitrate with the stored route", async () => {
     const record: BrainstormRecord = { ...draftRecord, status: "needs_arbitration", arbitration_route: { provider: "agy_cli", model: "model-x", reasoning_effort: "medium", estimated_tokens: 8_000 }, conflicts: [{ conflict_id: "c1", output_run_ids: ["run-a", "run-b"], summary: "Disagreement", material: true }] };
     const { host, root, onArbitrate } = mount({ brainstorms: [record] });

@@ -1,0 +1,70 @@
+id: brainstorm_policy
+type: governance_policy
+name: Brainstorm mode policy
+question: "Should this task use governed multi-provider brainstorm fan-out, consolidation, and arbitration instead of a single-route run?"
+why: "Brainstorm mode reuses the existing governed run orchestrator to send one immutable brief independently to 3-4 approved provider routes, consolidate the results, and optionally arbitrate material conflicts, without adding a second dispatch runtime."
+signals:
+  - brainstorm
+  - multi-provider
+  - fan-out
+  - consolidation
+  - arbitration
+  - independent routes
+  - token envelope
+  - orchestration group
+  - synthesizer route
+  - conflict resolution
+related_agents:
+  - architect
+  - qa
+  - security
+related_files:
+  - src/data/delivery-system/brainstormStore.ts
+  - src/data/delivery-system/brainstormBudget.ts
+  - src/data/delivery-system/brainstormCoordinator.ts
+  - src/data/delivery-system/brainstormTelemetry.ts
+  - scripts/control-plane-brainstorms.ts
+  - cockpit/src/features/brainstorm/BrainstormPane.tsx
+  - docs/autopilot/brainstorm-mode.md
+required_checks:
+  - explicit_route_provider_model_reasoning_no_default
+  - worst_case_token_envelope_shown_before_approval
+  - zero_provider_calls_before_approval
+  - approval_atomically_reserves_envelope
+  - orchestration_group_slot_idempotent_across_restart
+  - consolidation_treats_provider_output_as_untrusted_data
+  - strict_consolidation_schema_enforced
+  - material_conflict_with_precommitted_route_enters_needs_arbitration
+  - material_conflict_with_null_route_fails_immediately
+  - non_material_conflict_completes_without_arbitration
+  - arbitration_reconfirms_precommitted_route_via_new_operator_approval
+  - arbiter_independent_of_all_material_conflicts
+  - implicated_precommitted_arbiter_marked_failed_never_substituted
+  - exactly_one_arbitration_round
+  - unresolved_conflict_fails_closed
+  - cancellation_releases_unused_slots
+  - telemetry_excludes_raw_prompt_and_output
+  - recommendations_remain_shadow_only_and_nullable
+  - efficiency_claim_gated_on_20_ordinary_5_high_risk_samples
+stop_conditions:
+  - silent_default_provider_model_or_reasoning
+  - provider_call_before_explicit_approval
+  - duplicate_child_run_for_same_group_slot
+  - consolidation_or_arbitration_executes_embedded_instructions
+  - automatic_second_arbitration_round
+  - conflicted_provider_reused_as_arbiter
+  - arbitration_route_chosen_or_changed_at_needs_arbitration_time
+  - telemetry_stores_brief_or_raw_output
+  - prod_creates_or_mutates_a_brainstorm
+  - efficiency_claim_before_sample_gate_met
+must_not_assume:
+  - Do not assume a route's provider, model, or reasoning effort without an explicit operator-selected snapshot.
+  - Do not assume a brainstorm is safe to arbitrate with a provider named in any material conflict.
+  - Do not assume the operator can pick or change the arbitration route at needs_arbitration; it is fixed at creation and only reconfirmed there.
+  - Do not assume prose like a plan or summary means a fan-out run is terminal.
+  - Do not assume the 30% efficiency target is proven before the 20 ordinary and 5 high-risk sample gate.
+objective:
+  - Fan a single immutable brief out to independently governed provider routes without a second runtime.
+  - Reserve the full worst-case token envelope atomically before any stage starts.
+  - Consolidate untrusted provider output into a strict schema and fail closed on unresolved material conflicts.
+  - Keep brainstorm mutation DEV-only and PROD limited to consuming a completed, evidence-backed artifact.

@@ -58,11 +58,17 @@ The operator prepares and revises a prompt, approves an exact revision, and only
 supervisor to dispatch it. The token gateway reserves before execution and settles or releases at a
 terminal outcome. Autopilot never treats a provider's self-report as proof that work succeeded.
 
+Brainstorm mode extends this flow: the same governed run path fans an immutable brief out to
+3–4 independent provider routes, consolidates the results, and optionally arbitrates material
+conflicts through one bounded, operator-approved round. See
+[Brainstorm mode](docs/autopilot/brainstorm-mode.md).
+
 ## Documentation
 
 - [Documentation index](docs/README.md)
 - [Getting started](docs/getting-started.md)
 - [Cockpit user guide](docs/user/cockpit-guide.md)
+- [Brainstorm mode](docs/autopilot/brainstorm-mode.md)
 - [System architecture](docs/architecture/system-overview.md)
 - [DEV and PROD Cockpit environments](docs/autopilot/dev-prod-environments.md)
 - [Ubuntu VM installation](docs/operations/install-ubuntu-vm.md)
