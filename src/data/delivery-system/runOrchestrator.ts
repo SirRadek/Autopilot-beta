@@ -4,7 +4,7 @@ import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQ
 import { isRunRouteEligible } from "./runRouteEligibility";
 import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
-import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createGroupRunDraft, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
+import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, canonicalPromptCommitment, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createGroupRunDraft, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
 import type { OrchestrationGroupSpec, TokenGroupReservation, TokenReservation, TokenReservationRequest, TokenSettlement } from "./tokenGateway";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens } from "./runPromptPolicy";
 import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
@@ -152,6 +152,7 @@ export function createRunOrchestrator(options: {
   }
 
   function handoffFor(run: RunRecord): GovernedHandoff {
+    assertGroupPromptCommitment(run);
     assertRunPromptPolicy(run.current.prompt, run.current.prompt_review_acknowledged);
     if (run.current.estimated_tokens !== canonicalRunTokenBudget(run.current.prompt)) throw new Error("run_token_budget_mismatch");
     const task = `Execute approved run ${run.current.run_id} revision ${run.current.revision}`;
@@ -163,7 +164,7 @@ export function createRunOrchestrator(options: {
     const workUnit = classifyWorkUnitForProfile(executionProfile, false);
     const reasoningEffort = resolveLegacyRequestedReasoning(run);
     return {
-      handoffId: `run-handoff-${run.current.run_id}-${run.current.revision}` as GovernedHandoff["handoffId"],
+      handoffId: handoffIdFor(run) as GovernedHandoff["handoffId"],
       sessionId: run.current.run_id,
       vendor: run.current.provider,
       ...(run.current.model === null ? {} : { model: run.current.model }),
@@ -397,6 +398,18 @@ export function createRunOrchestrator(options: {
     if (run.provider_result !== null) return finishProviderResult(taskId, run, reconstructedResult(run));
     assertTaskRoute(run, task);
     if (run.status === "queued") run = transitionRun(options.stateDir, run.current.run_id, "running", now());
+    try {
+      assertDispatchPromptCommitment(run, task);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "run_prompt_commitment_violation";
+      run = recordRunDispatchFailure(options.stateDir, run.current.run_id, reason, now());
+      const taskSnapshot = options.supervisor.snapshot?.().find((item) => item.task_id === taskId);
+      if (taskSnapshot?.status === undefined || !["cancelled", "failed", "completed"].includes(taskSnapshot.status)) {
+        try { options.supervisor.cancel(taskId, reason, now()); } catch { /* best-effort task cleanup; run finalization below is authoritative */ }
+      }
+      finishDispatchFailure(run);
+      throw error;
+    }
     let result: DispatchResult;
     try {
       const cwd = resolveEnabledProject(options.stateDir, run.current.project_id, registryOptions).cwd;
@@ -430,7 +443,7 @@ export function createRunOrchestrator(options: {
     if (current.status === "running" && (boundTask === undefined || boundTask.status === "running")) return current;
     let firstError: unknown;
     if (current.token_reservation === null) {
-      const orphan = options.tokenGateway.findActiveReservation?.(handoffFor(current).handoffId as string) ?? null;
+      const orphan = options.tokenGateway.findActiveReservation?.(handoffIdFor(current)) ?? null;
       if (orphan !== null) {
         try { options.tokenGateway.release(orphan); } catch (error) { firstError = error; }
       }
@@ -453,6 +466,25 @@ export function createRunOrchestrator(options: {
 }
 
 function deterministicGroupRunId(groupId: string, slotId: string): string { return `bgr-${createHash("sha256").update(`${groupId}\0${slotId}`).digest("hex").slice(0, 32)}`; }
+function handoffIdFor(run: RunRecord): string {
+  return `run-handoff-${run.current.run_id}-${run.current.revision}`;
+}
+function requiredGroupPromptCommitment(run: RunRecord): string {
+  const commitment = run.orchestration_request?.prompt_commitment ?? null;
+  if (commitment === null) throw new Error("run_prompt_commitment_missing");
+  return commitment;
+}
+function assertGroupPromptCommitment(run: RunRecord): void {
+  if (run.orchestration_ref === null) return;
+  const commitment = requiredGroupPromptCommitment(run);
+  if (canonicalPromptCommitment(run.current.prompt) !== commitment) throw new Error("run_prompt_commitment_mismatch");
+}
+function assertDispatchPromptCommitment(run: RunRecord, task: SupervisorTaskView): void {
+  if (run.orchestration_ref === null) return;
+  const commitment = requiredGroupPromptCommitment(run);
+  if (canonicalPromptCommitment(run.current.prompt) !== commitment || canonicalPromptCommitment(task.handoff.prompt) !== commitment) throw new Error("run_prompt_commitment_mismatch");
+  if (task.handoff.sessionId !== run.current.run_id || String(task.handoff.handoffId) !== handoffIdFor(run)) throw new Error("run_prompt_commitment_identity_mismatch");
+}
 function sameGroupDraft(run: RunRecord, input: RunDraftInput): boolean {
   const current = run.current;
   return current.project_id === input.project_id && current.prompt === input.prompt && current.provider === input.provider && current.model === input.model &&

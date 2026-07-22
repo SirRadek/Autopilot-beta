@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { compareAndSwapBrainstorm, readBrainstormStore, type BrainstormConflict, type BrainstormRecord, type BrainstormRoute, type BrainstormSlot } from "./brainstormStore";
 import { readRunStore, type RunDraftInput, type RunRecord } from "./runStore";
-import type { createRunOrchestrator } from "./runOrchestrator";
+import type { createRunOrchestrator, QueuedRun } from "./runOrchestrator";
 import type { OrchestrationGroupSpec } from "./tokenGateway";
 
 type RunOrchestrator = ReturnType<typeof createRunOrchestrator>;
@@ -16,6 +16,7 @@ export interface BrainstormCoordinator {
 }
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+const RECOVERABLE_ENSURE_ERRORS = new Set(["run_token_budget_underestimated", "token_group_slot_mismatch", "run_prompt_commitment_mismatch", "run_prompt_commitment_missing"]);
 const MAX_EMBEDDED_OUTPUT_BYTES = 2_000;
 const MAX_RESULT_BYTES = 24_000;
 const MAX_CONSENSUS = 64;
@@ -111,7 +112,13 @@ export function createBrainstormCoordinator(options: {
 
     for (const slot of record.slots.filter((item) => item.stage === "fanout")) {
       const route = routeForSlot(record, slot);
-      const queued = options.runOrchestrator.ensureGroupRun({ groupId: reservedGroupId, slotId: slot.slot_id, draft: draft(record, route, record.brief), operator });
+      let queued: QueuedRun;
+      try {
+        queued = options.runOrchestrator.ensureGroupRun({ groupId: reservedGroupId, slotId: slot.slot_id, draft: draft(record, route, record.brief), operator });
+      } catch (error) {
+        if (error instanceof Error && RECOVERABLE_ENSURE_ERRORS.has(error.message)) return markFailed(get(brainstormId));
+        throw error;
+      }
       record = bindSlot(get(brainstormId), slot.slot_id, queued.current.run_id);
     }
     if (record.status !== "fanout_running") record = update(record, (current) => ({ ...current, status: "fanout_running" }));
@@ -131,7 +138,12 @@ export function createBrainstormCoordinator(options: {
 
   function terminalText(run: RunRecord): string | null {
     if (run.status !== "completed") return null;
-    return run.artifacts.findLast((artifact) => artifact.type === "text")?.preview ?? null;
+    const result = run.provider_result;
+    if (result === null || result.refused || result.worker_run_id === null || result.worker_run_id !== run.worker_run_id) return null;
+    const artifact = run.artifacts.find((candidate) => candidate.artifact_id === `text-${run.worker_run_id}`);
+    if (artifact === undefined || artifact.type !== "text") return null;
+    if (artifact.preview !== result.raw_output) return null;
+    return artifact.preview;
   }
 
   function markFailed(record: BrainstormRecord): BrainstormRecord {
@@ -141,13 +153,12 @@ export function createBrainstormCoordinator(options: {
   }
 
   function cleanupGroup(record: BrainstormRecord): void {
-    const runIds = [...record.child_run_ids, ...(record.consolidation_run_id === null ? [] : [record.consolidation_run_id])];
-    const runs = readRunStore(options.stateDir).runs;
-    for (const runId of runIds) {
-      const run = runs.find((item) => item.current.run_id === runId);
-      if (run !== undefined && !TERMINAL.has(run.status)) options.runOrchestrator.cancelRun(runId);
-    }
     if (record.orchestration_group_id === null) return;
+    const groupId = record.orchestration_group_id;
+    const runs = readRunStore(options.stateDir).runs;
+    for (const run of runs) {
+      if (run.orchestration_ref?.group_id === groupId && !TERMINAL.has(run.status)) options.runOrchestrator.cancelRun(run.current.run_id);
+    }
     const latestRuns = readRunStore(options.stateDir).runs;
     const releasable = record.slots.filter((slot) => {
       if (slot.run_id === null) return true;
@@ -227,7 +238,11 @@ export function createBrainstormCoordinator(options: {
   async function tick(brainstormId: string): Promise<BrainstormRecord> {
     let record = get(brainstormId);
     if (["draft", "approved"].includes(record.status) || record.approval_state !== "reserved") return record;
-    if (["completed", "failed", "cancelled", "needs_arbitration", "arbitrating"].includes(record.status)) return record;
+    if (TERMINAL.has(record.status)) {
+      cleanupGroup(record);
+      return get(brainstormId);
+    }
+    if (record.status === "needs_arbitration" || record.status === "arbitrating") return record;
     const runs = readRunStore(options.stateDir).runs;
     if (record.status === "fanout_running") {
       const fanoutSlots = record.slots.filter((slot) => slot.stage === "fanout");
@@ -240,7 +255,7 @@ export function createBrainstormCoordinator(options: {
       }
       try { return ensureConsolidation(record, outputs as string[]); }
       catch (error) {
-        if (error instanceof Error && ["brainstorm_output_too_large", "run_prompt_token_cap_exceeded"].includes(error.message)) return markFailed(get(brainstormId));
+        if (error instanceof Error && (["brainstorm_output_too_large", "run_prompt_token_cap_exceeded"].includes(error.message) || RECOVERABLE_ENSURE_ERRORS.has(error.message))) return markFailed(get(brainstormId));
         throw error;
       }
     }
@@ -252,13 +267,15 @@ export function createBrainstormCoordinator(options: {
       if (text === null) return record;
       let parsed: ReturnType<typeof parseConsolidation>;
       try { parsed = parseConsolidation(text, record.child_run_ids); } catch { return markFailed(record); }
-      return update(record, (current) => ({
+      const updated = update(record, (current) => ({
         ...current,
         slots: current.slots.map((item) => item.stage === "consolidation" ? { ...item, state: "terminal" } : item),
         conflicts: parsed.conflicts,
         final_artifact: parsed.material ? null : parsed.final,
         status: parsed.material ? "needs_arbitration" : "completed",
       }));
+      if (!parsed.material) cleanupGroup(updated);
+      return updated;
     }
     return record;
   }

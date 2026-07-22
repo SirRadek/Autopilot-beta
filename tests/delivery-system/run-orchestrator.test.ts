@@ -240,6 +240,16 @@ describe("governed run orchestration", () => {
     expect(readRunStore(stateDir).runs[0]).toMatchObject({ status: "completed", artifacts: [{ type: "text", preview: "text result" }] });
   });
 
+  it("dispatches an ordinary non-group run without any prompt commitment, keeping both orchestration fields null", async () => {
+    const { orchestrator, input, stateDir } = setup();
+    const draft = orchestrator.prepareRun(input);
+    orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
+    expect(readRunStore(stateDir).runs[0]).toMatchObject({ orchestration_ref: null, orchestration_request: null });
+    const result = await orchestrator.runSupervisorOnce();
+    expect(result?.status).toBe("completed");
+    expect(readRunStore(stateDir).runs[0]).toMatchObject({ status: "completed", orchestration_ref: null, orchestration_request: null });
+  });
+
   it("fails a nonzero worker result while settling its actual usage", async () => {
     const dispatch = vi.fn(async () => ({ refused: false as const, workerRunId: "worker-failed", rawOutput: "password=pw authorization: Bearer bt api_key=ak cookie=session-secret", parsedJson: { password: "parsed-secret" }, exitCode: 7, errorReason: "provider_failed password=error-secret", lockStatus: "failed" as const, model: "gpt-5" }));
     const { orchestrator, input, tokenGateway, stateDir, supervisor } = setup({ dispatch });

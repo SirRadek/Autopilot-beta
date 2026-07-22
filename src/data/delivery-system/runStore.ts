@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -71,7 +71,7 @@ export type RunArtifactInput = Omit<RunArtifact, "created_at">;
 export interface RunRecord {
   readonly schema_version: "v1";
   readonly orchestration_ref: { readonly group_id: string; readonly slot_id: string } | null;
-  readonly orchestration_request: { readonly operator: string; readonly estimated_tokens: number } | null;
+  readonly orchestration_request: { readonly operator: string; readonly estimated_tokens: number; readonly prompt_commitment: string | null } | null;
   readonly current: RunDraft;
   readonly revisions: readonly RunDraft[];
   readonly status: RunStatus;
@@ -110,6 +110,7 @@ const MAX_MODEL = 256;
 const MAX_OPERATOR = 256;
 const MAX_TERMINAL_REASON = 32_000;
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
+const PROMPT_COMMITMENT_PATTERN = /^[a-f0-9]{64}$/;
 const PROVIDERS = new Set<RunProvider>(["codex_cli", "claude_cli", "agy_cli", "openrouter_api"]);
 const PROFILES = new Set<RunProfile>(["dev", "prod"]);
 const REASONING_EFFORTS = new Set<RunReasoningEffort>(["low", "medium", "high", "xhigh", "max"]);
@@ -178,6 +179,10 @@ function normalizeProfileFields(input: RunDraftInput): Pick<RunDraft, "requested
   return { requested_reasoning_effort: effort, promotion_packet_id: input.promotion_packet_id };
 }
 
+export function canonicalPromptCommitment(prompt: string): string {
+  return createHash("sha256").update(prompt, "utf8").digest("hex");
+}
+
 export function resolveRunProfile(record: RunRecord): StoredRunProfile {
   const value = (record.current as { readonly profile?: RunProfile }).profile;
   return value === "dev" || value === "prod" ? value : "legacy";
@@ -235,7 +240,7 @@ function validate(document: unknown): asserts document is RunStoreDocument {
     const artifactIds = new Set<string>();
     const orchestrationKey = value.orchestration_ref === null ? null : JSON.stringify([value.orchestration_ref.group_id, value.orchestration_ref.slot_id]);
     if (value.schema_version !== "v1" || !(value.orchestration_ref === null || (validString(value.orchestration_ref?.group_id, MAX_ID) && validString(value.orchestration_ref?.slot_id, MAX_ID))) ||
-      (value.orchestration_ref === null) !== (value.orchestration_request === null) || !(value.orchestration_request === null || (validString(value.orchestration_request?.operator, MAX_OPERATOR) && Number.isSafeInteger(value.orchestration_request?.estimated_tokens) && value.orchestration_request.estimated_tokens >= 0)) ||
+      (value.orchestration_ref === null) !== (value.orchestration_request === null) || !(value.orchestration_request === null || (validString(value.orchestration_request?.operator, MAX_OPERATOR) && Number.isSafeInteger(value.orchestration_request?.estimated_tokens) && value.orchestration_request.estimated_tokens >= 0 && (value.orchestration_request.prompt_commitment === null || PROMPT_COMMITMENT_PATTERN.test(value.orchestration_request.prompt_commitment)))) ||
       (orchestrationKey !== null && orchestrationRefs.has(orchestrationKey)) || !Array.isArray(value.revisions) || value.revisions.length === 0 || value.revisions.length > MAX_REVISIONS ||
       !Array.isArray(value.artifacts) || value.artifacts.length > MAX_ARTIFACTS || !validDraft(value.current) ||
       runIds.has(value.current.run_id) || value.current.revision !== value.revisions.length || !STATUSES.has(value.status) || !approvalIsValid ||
@@ -275,7 +280,10 @@ export function readRunStore(stateDir: string): RunStoreDocument {
       const record = run as RunRecord;
       const revisions = Array.isArray(record.revisions) ? record.revisions.map((revision) => ({ prompt_review_acknowledged: false, ...(revision as unknown as Record<string, unknown>) })) : record.revisions;
       const current = record.current === undefined ? record.current : { prompt_review_acknowledged: false, ...(record.current as unknown as Record<string, unknown>) };
-      return { orchestration_ref: null, orchestration_request: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, ...(record as unknown as Record<string, unknown>), current, revisions, ...(record.provider_result === null || record.provider_result === undefined ? {} : { provider_result: { exit_code: null, error_reason: null, lock_status: null, ...(record.provider_result as unknown as Record<string, unknown>) } }) };
+      const orchestrationRequest = record.orchestration_request === null || record.orchestration_request === undefined
+        ? null
+        : { prompt_commitment: null, ...(record.orchestration_request as unknown as Record<string, unknown>) };
+      return { orchestration_ref: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, ...(record as unknown as Record<string, unknown>), current, revisions, orchestration_request: orchestrationRequest, ...(record.provider_result === null || record.provider_result === undefined ? {} : { provider_result: { exit_code: null, error_reason: null, lock_status: null, ...(record.provider_result as unknown as Record<string, unknown>) } }) };
     }) };
   }
   validate(document);
@@ -333,7 +341,7 @@ export function createGroupRunDraft(stateDir: string, runId: string, orchestrati
   if (document.runs.some((run) => run.current.run_id === runId || (run.orchestration_ref?.group_id === orchestrationRef.group_id && run.orchestration_ref.slot_id === orchestrationRef.slot_id))) throw new Error("orchestration_group_run_exists");
   if (document.runs.length >= MAX_RUNS) throw new Error("run_limit");
   const draft: RunDraft = { ...normalized, requested_artifacts: [...input.requested_artifacts], run_id: runId, revision: 1, created_at: createdAt };
-  const record: RunRecord = { schema_version: "v1", orchestration_ref: orchestrationRef, orchestration_request: { operator, estimated_tokens: input.estimated_tokens }, current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: createdAt };
+  const record: RunRecord = { schema_version: "v1", orchestration_ref: orchestrationRef, orchestration_request: { operator, estimated_tokens: input.estimated_tokens, prompt_commitment: canonicalPromptCommitment(input.prompt) }, current: draft, revisions: [draft], status: "draft", approved_revision: null, approved_by: null, approved_at: null, supervisor_task_id: null, worker_run_id: null, terminal_reason: null, token_reservation: null, reservation_status: "none", provider_result: null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: createdAt };
   write(stateDir, { ...document, runs: [...document.runs, record] });
   return draft;
 }

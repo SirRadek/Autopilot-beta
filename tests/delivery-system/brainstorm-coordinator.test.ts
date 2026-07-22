@@ -116,15 +116,40 @@ describe("governed brainstorm coordinator", () => {
     await finishQueuedRuns(context, 2);
     const runsPath = join(context.stateDir, "runs.json");
     const document = JSON.parse(readFileSync(runsPath, "utf8"));
+    const workerRunId = document.runs[1].worker_run_id;
     document.runs[1].artifacts = [];
     writeFileSync(runsPath, JSON.stringify(document));
     expect((await context.make().coordinator.tick(context.brainstorm.brainstorm_id)).status).toBe("fanout_running");
 
-    document.runs[1].artifacts = [{ artifact_id: "terminal-plan", type: "text", preview: "I'll first plan the work", created_at: now }];
+    document.runs[1].artifacts = [{ artifact_id: `text-${workerRunId}`, type: "text", preview: "I'll first plan the work", created_at: now }];
     writeFileSync(runsPath, JSON.stringify(document));
     const consolidating = await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
     expect(consolidating.status).toBe("consolidating");
     expect(readRunStore(context.stateDir).runs).toHaveLength(4);
+  });
+
+  it("binds terminal text to the exact structural artifact id and rejects unrelated, intermediate, or post-completion substitutes", async () => {
+    const context = setup(["A", "B", "C"]);
+    context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+    await finishQueuedRuns(context, 3);
+    const runsPath = join(context.stateDir, "runs.json");
+    const document = JSON.parse(readFileSync(runsPath, "utf8"));
+    const target = document.runs[0];
+    const correctArtifact = target.artifacts.find((artifact: { artifact_id: string }) => artifact.artifact_id === `text-${target.worker_run_id}`);
+    expect(correctArtifact).toBeDefined();
+
+    target.artifacts = [{ artifact_id: "unrelated-artifact", type: "text", preview: "unrelated text", created_at: now }];
+    writeFileSync(runsPath, JSON.stringify(document));
+    expect((await context.make().coordinator.tick(context.brainstorm.brainstorm_id)).status).toBe("fanout_running");
+
+    target.artifacts = [{ artifact_id: "text-stale-worker-id", type: "text", preview: "stale intermediate text", created_at: now }];
+    writeFileSync(runsPath, JSON.stringify(document));
+    expect((await context.make().coordinator.tick(context.brainstorm.brainstorm_id)).status).toBe("fanout_running");
+
+    target.artifacts = [correctArtifact, { artifact_id: "text-post-completion", type: "text", preview: "later unrelated prose", created_at: now }];
+    writeFileSync(runsPath, JSON.stringify(document));
+    const consolidating = await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
+    expect(consolidating.status).toBe("consolidating");
   });
 
   it("builds one nonce-delimited injection-resistant consolidation and completes from bounded strict JSON", async () => {
@@ -256,5 +281,261 @@ describe("governed brainstorm coordinator", () => {
     writeFileSync(path, JSON.stringify(document));
 
     await expect(context.make().coordinator.tick(context.brainstorm.brainstorm_id)).rejects.toThrow("brainstorm_child_run_mismatch");
+  });
+
+  it.each(["run_token_budget_underestimated", "token_group_slot_mismatch"])(
+    "fails closed with idempotent cleanup when fan-out ensure throws %s, but a generic crash still propagates for retry",
+    async (code) => {
+      const context = setup();
+      const runtime = context.make();
+      const failingOrchestrator = {
+        ...runtime.runOrchestrator,
+        ensureGroupRun: (input: Parameters<typeof runtime.runOrchestrator.ensureGroupRun>[0]) => {
+          if (input.slotId === "fanout-1") throw new Error(code);
+          return runtime.runOrchestrator.ensureGroupRun(input);
+        },
+      };
+      const coordinator = createBrainstormCoordinator({ stateDir: context.stateDir, runOrchestrator: failingOrchestrator, now: () => now });
+      const result = coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+      expect(result.status).toBe("failed");
+      expect(readRunStore(context.stateDir).runs.every((run) => run.status === "cancelled")).toBe(true);
+      const group = new TokenGateway({ stateDir: context.stateDir }).findGroup(result.orchestration_group_id!);
+      expect(group?.slots.every((slot) => slot.state === "released")).toBe(true);
+
+      const crashContext = setup();
+      const crashRuntime = crashContext.make();
+      const crashingOrchestrator = {
+        ...crashRuntime.runOrchestrator,
+        ensureGroupRun: (input: Parameters<typeof crashRuntime.runOrchestrator.ensureGroupRun>[0]) => {
+          if (input.slotId === "fanout-1") throw new Error("crash:generic-dispatch-failure");
+          return crashRuntime.runOrchestrator.ensureGroupRun(input);
+        },
+      };
+      const crashCoordinator = createBrainstormCoordinator({ stateDir: crashContext.stateDir, runOrchestrator: crashingOrchestrator, now: () => now });
+      expect(() => crashCoordinator.approve(crashContext.brainstorm.brainstorm_id, "owner")).toThrow("crash:generic-dispatch-failure");
+      expect(readBrainstormStore(crashContext.stateDir).brainstorms[0]?.status).toBe("approved");
+    },
+  );
+
+  it.each(["run_token_budget_underestimated", "token_group_slot_mismatch"])(
+    "fails closed with idempotent cleanup when consolidation ensure throws %s, but a generic crash still propagates for retry",
+    async (code) => {
+      const context = setup(["A", "B", "C"]);
+      context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+      await finishQueuedRuns(context, 3);
+      const runtime = context.make();
+      const failingOrchestrator = {
+        ...runtime.runOrchestrator,
+        ensureGroupRun: (input: Parameters<typeof runtime.runOrchestrator.ensureGroupRun>[0]) => {
+          if (input.slotId === "consolidation") throw new Error(code);
+          return runtime.runOrchestrator.ensureGroupRun(input);
+        },
+      };
+      const coordinator = createBrainstormCoordinator({ stateDir: context.stateDir, runOrchestrator: failingOrchestrator, now: () => now, randomBytes: () => Buffer.alloc(16, 0xab) });
+      const result = await coordinator.tick(context.brainstorm.brainstorm_id);
+      expect(result.status).toBe("failed");
+      expect(readRunStore(context.stateDir).runs.filter((run) => run.orchestration_ref?.slot_id === "consolidation")).toHaveLength(0);
+      expect(readRunStore(context.stateDir).runs.every((run) => run.status === "completed" || run.status === "cancelled")).toBe(true);
+      const group = new TokenGateway({ stateDir: context.stateDir }).findGroup(result.orchestration_group_id!);
+      expect(group?.slots.find((slot) => slot.slotId === "arbitration")?.state).toBe("released");
+
+      const crashContext = setup(["A", "B", "C"]);
+      crashContext.make().coordinator.approve(crashContext.brainstorm.brainstorm_id, "owner");
+      await finishQueuedRuns(crashContext, 3);
+      const crashRuntime = crashContext.make();
+      const crashingOrchestrator = {
+        ...crashRuntime.runOrchestrator,
+        ensureGroupRun: (input: Parameters<typeof crashRuntime.runOrchestrator.ensureGroupRun>[0]) => {
+          if (input.slotId === "consolidation") throw new Error("crash:generic-dispatch-failure");
+          return crashRuntime.runOrchestrator.ensureGroupRun(input);
+        },
+      };
+      const crashCoordinator = createBrainstormCoordinator({ stateDir: crashContext.stateDir, runOrchestrator: crashingOrchestrator, now: () => now, randomBytes: () => Buffer.alloc(16, 0xab) });
+      await expect(crashCoordinator.tick(crashContext.brainstorm.brainstorm_id)).rejects.toThrow("crash:generic-dispatch-failure");
+      expect(readBrainstormStore(crashContext.stateDir).brainstorms[0]?.status).toBe("fanout_running");
+    },
+  );
+
+  it("rejects a consolidation run whose persisted prompt was tampered after creation before any dispatch, while an untampered exact restart still reuses the original nonce", async () => {
+    const tamperedContext = setup(["A", "B", "C"]);
+    tamperedContext.make().coordinator.approve(tamperedContext.brainstorm.brainstorm_id, "owner");
+    await finishQueuedRuns(tamperedContext, 3);
+    const projects = join(tamperedContext.root, "projects");
+    let crashed = false;
+    const crashingRunOrchestrator = createRunOrchestrator({
+      stateDir: tamperedContext.stateDir, projectRoot: projects, tokenGateway: new TokenGateway({ stateDir: tamperedContext.stateDir }),
+      supervisor: new SupervisorQueue({ stateDir: tamperedContext.stateDir }), dispatch: tamperedContext.dispatch as never, now: () => now, isRouteAvailable: () => true,
+      afterPhase: (phase) => { if (phase === "run_persisted" && !crashed) { crashed = true; throw new Error("crash:after-run-persisted"); } },
+    });
+    const crashingCoordinator = createBrainstormCoordinator({ stateDir: tamperedContext.stateDir, runOrchestrator: crashingRunOrchestrator, now: () => now, randomBytes: () => Buffer.alloc(16, 0xab) });
+    await expect(crashingCoordinator.tick(tamperedContext.brainstorm.brainstorm_id)).rejects.toThrow("crash:after-run-persisted");
+
+    const runsPath = join(tamperedContext.stateDir, "runs.json");
+    const document = JSON.parse(readFileSync(runsPath, "utf8"));
+    const consolidationRun = document.runs.find((run: { orchestration_ref: { slot_id: string } | null }) => run.orchestration_ref?.slot_id === "consolidation");
+    const tamperedPrompt = "X".repeat(Buffer.byteLength(consolidationRun.current.prompt, "utf8"));
+    consolidationRun.current.prompt = tamperedPrompt;
+    consolidationRun.revisions[0].prompt = tamperedPrompt;
+    writeFileSync(runsPath, JSON.stringify(document));
+
+    const dispatchCallsBeforeRecovery = tamperedContext.dispatch.mock.calls.length;
+    const failed = await tamperedContext.make().coordinator.tick(tamperedContext.brainstorm.brainstorm_id);
+    expect(failed.status).toBe("failed");
+    expect(tamperedContext.dispatch.mock.calls.length).toBe(dispatchCallsBeforeRecovery);
+    expect(readRunStore(tamperedContext.stateDir).runs.every((run) => run.status === "completed" || run.status === "cancelled")).toBe(true);
+    const group = new TokenGateway({ stateDir: tamperedContext.stateDir }).findGroup(failed.orchestration_group_id!);
+    expect(group?.slots.find((slot) => slot.slotId === "consolidation")?.state).toBe("released");
+    expect(group?.slots.find((slot) => slot.slotId === "arbitration")?.state).toBe("released");
+
+    const exactContext = setup(["A", "B", "C"]);
+    const exactRuntime = exactContext.make();
+    exactRuntime.coordinator.approve(exactContext.brainstorm.brainstorm_id, "owner");
+    await finishQueuedRuns(exactContext, 3);
+    let exactCrashed = false;
+    const exactCrashingOrchestrator = {
+      ...exactRuntime.runOrchestrator,
+      ensureGroupRun: (input: Parameters<typeof exactRuntime.runOrchestrator.ensureGroupRun>[0]) => {
+        const run = exactRuntime.runOrchestrator.ensureGroupRun(input);
+        if (input.slotId === "consolidation" && !exactCrashed) { exactCrashed = true; throw new Error("crash:after-consolidation-ensure"); }
+        return run;
+      },
+    };
+    const exactCoordinator = createBrainstormCoordinator({ stateDir: exactContext.stateDir, runOrchestrator: exactCrashingOrchestrator, now: () => now, randomBytes: () => Buffer.alloc(16, 0xab) });
+    await expect(exactCoordinator.tick(exactContext.brainstorm.brainstorm_id)).rejects.toThrow("crash:after-consolidation-ensure");
+    const originalPrompt = readRunStore(exactContext.stateDir).runs.find((run) => run.orchestration_ref?.slot_id === "consolidation")!.current.prompt;
+
+    const recovered = await exactContext.make().coordinator.tick(exactContext.brainstorm.brainstorm_id);
+    expect(recovered.status).toBe("consolidating");
+    expect(readRunStore(exactContext.stateDir).runs.filter((run) => run.orchestration_ref?.slot_id === "consolidation")).toHaveLength(1);
+    expect(readRunStore(exactContext.stateDir).runs.find((run) => run.orchestration_ref?.slot_id === "consolidation")!.current.prompt).toBe(originalPrompt);
+  });
+
+  it("repairs a crash after terminal CAS but before cleanup by idempotently releasing holds on the next fresh tick", async () => {
+    const finalJson = JSON.stringify({ consensus: ["shared"], conflicts: [], confidence: 0.9, final: "final answer" });
+    const context = setup(["A", "B", "C", finalJson]);
+    context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+    await finishQueuedRuns(context, 3);
+    await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
+    await context.make().runOrchestrator.runSupervisorOnce();
+
+    const runtime = context.make();
+    let releaseThrew = false;
+    const crashingOrchestrator = {
+      ...runtime.runOrchestrator,
+      releaseOrchestrationGroupSlots: (groupId: string, slotIds: readonly string[]) => {
+        if (!releaseThrew) { releaseThrew = true; throw new Error("crash:after-terminal-cas-before-release"); }
+        return runtime.runOrchestrator.releaseOrchestrationGroupSlots(groupId, slotIds);
+      },
+    };
+    const crashingCoordinator = createBrainstormCoordinator({ stateDir: context.stateDir, runOrchestrator: crashingOrchestrator, now: () => now });
+    await expect(crashingCoordinator.tick(context.brainstorm.brainstorm_id)).rejects.toThrow("crash:after-terminal-cas-before-release");
+
+    const afterCrash = readBrainstormStore(context.stateDir).brainstorms[0]!;
+    expect(afterCrash.status).toBe("completed");
+    const groupId = afterCrash.orchestration_group_id!;
+    expect(new TokenGateway({ stateDir: context.stateDir }).findGroup(groupId)?.slots.find((slot) => slot.slotId === "arbitration")?.state).toBe("reserved");
+
+    const recovered = await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
+    expect(recovered.status).toBe("completed");
+    expect(new TokenGateway({ stateDir: context.stateDir }).findGroup(groupId)?.slots.find((slot) => slot.slotId === "arbitration")?.state).toBe("released");
+  });
+
+  it("releases the unused arbitration hold on successful no-conflict completion but preserves it while arbitration is pending", async () => {
+    const finalJson = JSON.stringify({ consensus: ["shared"], conflicts: [], confidence: 0.9, final: "final answer" });
+    const context = setup(["A", "B", "C", finalJson]);
+    context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+    await finishQueuedRuns(context, 3);
+    await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
+    await context.make().runOrchestrator.runSupervisorOnce();
+    const completed = await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
+    expect(completed.status).toBe("completed");
+    const completedGroup = new TokenGateway({ stateDir: context.stateDir }).findGroup(completed.orchestration_group_id!);
+    expect(completedGroup?.slots.find((slot) => slot.slotId === "arbitration")?.state).toBe("released");
+
+    const conflictJson = JSON.stringify({ consensus: [], conflicts: [{ output_labels: ["A", "B"], summary: "material disagreement", material: true }], confidence: 0.4, final: "provisional" });
+    const conflictContext = setup(["A", "B", "C", conflictJson]);
+    conflictContext.make().coordinator.approve(conflictContext.brainstorm.brainstorm_id, "owner");
+    await finishQueuedRuns(conflictContext, 3);
+    await conflictContext.make().coordinator.tick(conflictContext.brainstorm.brainstorm_id);
+    await conflictContext.make().runOrchestrator.runSupervisorOnce();
+    const needsArbitration = await conflictContext.make().coordinator.tick(conflictContext.brainstorm.brainstorm_id);
+    expect(needsArbitration.status).toBe("needs_arbitration");
+    const pendingGroup = new TokenGateway({ stateDir: conflictContext.stateDir }).findGroup(needsArbitration.orchestration_group_id!);
+    expect(pendingGroup?.slots.find((slot) => slot.slotId === "arbitration")?.state).toBe("reserved");
+  });
+
+  it.each(["nulled", "missing"])(
+    "fails closed at the actual dispatch boundary, never calling the provider, when a queued fan-out run's mandatory prompt commitment is %s",
+    async (mode) => {
+      const context = setup();
+      context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+      const runsPath = join(context.stateDir, "runs.json");
+      const document = JSON.parse(readFileSync(runsPath, "utf8"));
+      for (const run of document.runs) {
+        if (mode === "nulled") run.orchestration_request.prompt_commitment = null;
+        else delete run.orchestration_request.prompt_commitment;
+      }
+      writeFileSync(runsPath, JSON.stringify(document));
+
+      const dispatchCallsBefore = context.dispatch.mock.calls.length;
+      await expect(context.make().runOrchestrator.runSupervisorOnce()).rejects.toThrow("run_prompt_commitment_missing");
+      expect(context.dispatch.mock.calls.length).toBe(dispatchCallsBefore);
+      expect(readRunStore(context.stateDir).runs.some((run) => run.status === "failed")).toBe(true);
+
+      const failed = await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
+      expect(failed.status).toBe("failed");
+      expect(readRunStore(context.stateDir).runs.every((run) => run.status === "cancelled" || run.status === "failed")).toBe(true);
+      const group = new TokenGateway({ stateDir: context.stateDir }).findGroup(failed.orchestration_group_id!);
+      expect(group?.slots.every((slot) => slot.state === "released")).toBe(true);
+    },
+  );
+
+  it("fails closed at the actual dispatch boundary, never calling the provider, when a queued fan-out run's persisted prompt is tampered after enqueue", async () => {
+    const context = setup();
+    context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+    const runsPath = join(context.stateDir, "runs.json");
+    const document = JSON.parse(readFileSync(runsPath, "utf8"));
+    const tampered = document.runs[0];
+    const tamperedPrompt = "X".repeat(Buffer.byteLength(tampered.current.prompt, "utf8"));
+    tampered.current.prompt = tamperedPrompt;
+    tampered.revisions[0].prompt = tamperedPrompt;
+    writeFileSync(runsPath, JSON.stringify(document));
+
+    const dispatchCallsBefore = context.dispatch.mock.calls.length;
+    await expect(context.make().runOrchestrator.runSupervisorOnce()).rejects.toThrow("run_prompt_commitment_mismatch");
+    expect(context.dispatch.mock.calls.length).toBe(dispatchCallsBefore);
+    expect(readRunStore(context.stateDir).runs.find((run) => run.current.run_id === tampered.current.run_id)?.status).toBe("failed");
+
+    // The tampered fan-out prompt no longer matches the brief, so the strict structural
+    // reconciliation in tick() rejects it outright instead of silently absorbing tampered
+    // state; cancel() remains the deterministic operator path to release the group.
+    await expect(context.make().coordinator.tick(context.brainstorm.brainstorm_id)).rejects.toThrow("brainstorm_child_run_mismatch");
+    const cancelled = context.make().coordinator.cancel(context.brainstorm.brainstorm_id);
+    expect(cancelled.status).toBe("cancelled");
+    expect(readRunStore(context.stateDir).runs.every((run) => run.status === "cancelled" || run.status === "failed")).toBe(true);
+    const group = new TokenGateway({ stateDir: context.stateDir }).findGroup(cancelled.orchestration_group_id!);
+    expect(group?.slots.every((slot) => slot.state === "released")).toBe(true);
+  });
+
+  it("fails closed at the actual dispatch boundary, never calling the provider, when a queued fan-out task's persisted supervisor handoff prompt is tampered after enqueue", async () => {
+    const context = setup();
+    context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+    const queuePath = join(context.stateDir, "supervisor-queue.json");
+    const queueDocument = JSON.parse(readFileSync(queuePath, "utf8"));
+    const task = queueDocument.tasks[0];
+    const tamperedPrompt = "Y".repeat(Buffer.byteLength(task.handoff.prompt, "utf8"));
+    task.handoff.prompt = tamperedPrompt;
+    writeFileSync(queuePath, `${JSON.stringify(queueDocument)}\n`);
+
+    const dispatchCallsBefore = context.dispatch.mock.calls.length;
+    await expect(context.make().runOrchestrator.runSupervisorOnce()).rejects.toThrow("run_prompt_commitment_mismatch");
+    expect(context.dispatch.mock.calls.length).toBe(dispatchCallsBefore);
+    expect(readRunStore(context.stateDir).runs.find((run) => run.current.run_id === task.session_id)?.status).toBe("failed");
+
+    const failed = await context.make().coordinator.tick(context.brainstorm.brainstorm_id);
+    expect(failed.status).toBe("failed");
+    expect(readRunStore(context.stateDir).runs.every((run) => run.status === "cancelled" || run.status === "failed")).toBe(true);
+    const group = new TokenGateway({ stateDir: context.stateDir }).findGroup(failed.orchestration_group_id!);
+    expect(group?.slots.every((slot) => slot.state === "released")).toBe(true);
   });
 });
