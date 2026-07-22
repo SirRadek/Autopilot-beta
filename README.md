@@ -6,9 +6,11 @@ owner approval, token reservations, a durable supervisor queue, Decision Mesh ro
 worker-output handling, and operational recovery tooling.
 
 The current branch is a release candidate for an Ubuntu 24.04 VM. Repository and isolated-VM
-acceptance pass, but the live service has not been cut over. The supported deployment uses
-root-managed systemd units whose processes run as the unprivileged `radek` account. A fail-closed
-startup probe prevents service start when the installation is writable from inside the service.
+acceptance pass. The owner-approved live cutover completed on 2026-07-14; see the
+[current status](docs/status/current-status.md) for the authoritative deployed revision and acceptance
+evidence. The supported deployment uses root-managed systemd units whose processes run as the
+unprivileged `radek` account. A fail-closed startup probe prevents service start when the installation
+is writable from inside the service.
 
 ## Supported boundary
 
@@ -62,6 +64,7 @@ terminal outcome. Autopilot never treats a provider's self-report as proof that 
 - [Getting started](docs/getting-started.md)
 - [Cockpit user guide](docs/user/cockpit-guide.md)
 - [System architecture](docs/architecture/system-overview.md)
+- [DEV and PROD Cockpit environments](docs/autopilot/dev-prod-environments.md)
 - [Ubuntu VM installation](docs/operations/install-ubuntu-vm.md)
 - [Configuration](docs/operations/configuration.md)
 - [Service runbook](docs/operations/service-runbook.md)

@@ -86,7 +86,7 @@ test("keeps the cockpit usable at a narrow viewport", async ({ page }) => {
 test("prepares without a worker, approves, and inspects terminal evidence", async ({ page }) => {
   const now = "2026-07-13T10:00:00.000Z";
   let run: any;
-  const draft = { run_id: "browser-run-1", revision: 1, project_id: "browser-project", prompt: "Inspect the governed path", provider: "codex_cli", model: "browser-model", input_token_bound: 25, output_token_allowance: 8_192, estimated_tokens: 8_217, requested_artifacts: ["text"], prompt_review_acknowledged: false, created_at: now };
+  const draft = { run_id: "browser-run-1", revision: 1, project_id: "browser-project", prompt: "Inspect the governed path", provider: "codex_cli", model: "browser-model", input_token_bound: 25, output_token_allowance: 8_192, estimated_tokens: 8_217, requested_artifacts: ["text"], prompt_review_acknowledged: false, requested_reasoning_effort: "low", created_at: now };
   const record = (status: string) => ({ schema_version: "v1", current: draft, revisions: [draft], status, approved_revision: status === "draft" ? null : 1, approved_by: status === "draft" ? null : "cockpit-operator", approved_at: status === "draft" ? null : now, supervisor_task_id: status === "draft" ? null : "browser-task-1", worker_run_id: status === "completed" ? "browser-worker-1" : null, terminal_reason: null, token_reservation: status === "draft" ? null : { reservationId: "browser-reservation-1", reservedAt: now, totalTokens: 8_217, provider: "codex_cli", model: "browser-model", sessionId: "browser-run-1", handoffId: "run-handoff-browser-run-1-1", inputTokens: 25, outputTokens: 8_192 }, reservation_status: status === "draft" ? "none" : status === "completed" ? "settled" : "active", provider_result: status === "completed" ? { refused: false, reason: null, worker_run_id: "browser-worker-1", raw_output: "browser deterministic artifact", exit_code: 0, error_reason: null, lock_status: "acquired_supervisor_spawn" } : null, cancellation_requested: false, queue_compensation_requested: false, dispatch_failure: null, retry_input_tokens: 0, retry_output_tokens: 0, artifacts: status === "completed" ? [{ artifact_id: "text-browser-worker-1", type: "text", preview: "browser deterministic artifact", created_at: now }] : [], updated_at: now });
   await page.route("**/*", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -94,7 +94,7 @@ test("prepares without a worker, approves, and inspects terminal evidence", asyn
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/projects") return json([{ schema_version: "v1", project_id: "browser-project", name: "Browser project", cwd: "/fixture", enabled: true }]);
     if (path === "/providers/quotas") return json({ providers: [{ provider: "codex_cli", source: "cli", fetched_at: now, observed_at: now, freshness: "fresh", next_poll_at: null, five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null }, weekly: { limit: 100, used: 0, remaining: 100, resets_at: null }, api_spend: null, currency: null, models: [{ model_id: "browser-model", available: true, health: "healthy", source: "cli" }], health: "healthy", error_code: null }] });
-    if (path === "/providers/models") return json({ fetched_at: now, freshness: "fresh", next_poll_at: null, models: [{ model_id: "browser-model", providers: ["codex_cli"], available: true, health: ["healthy"] }] });
+    if (path === "/providers/models") return json({ fetched_at: now, freshness: "fresh", next_poll_at: null, models: [{ model_id: "browser-model", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low"] }] }] });
     if (path === "/providers/health") return json({ fetched_at: now, freshness: "fresh", providers: [] });
     if (path === "/runs" && route.request().method() === "POST") { run = record("draft"); return json(run, 201); }
     if (path === "/runs/browser-run-1/approve") { run = record("completed"); return json(run); }
@@ -104,7 +104,7 @@ test("prepares without a worker, approves, and inspects terminal evidence", asyn
     if (path === "/status") return json({ telemetry: { calls: 0, total_tokens: 0 } });
     return json([]);
   });
-  await page.route("**/providers/models", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ fetched_at: now, freshness: "fresh", next_poll_at: null, models: [{ model_id: "browser-model", providers: ["codex_cli"], available: true, health: ["healthy"] }] }) }));
+  await page.route("**/providers/models", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ fetched_at: now, freshness: "fresh", next_poll_at: null, models: [{ model_id: "browser-model", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low"] }] }] }) }));
   const modelsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/providers/models");
   await login(page);
   expect(await (await modelsResponse).json()).toMatchObject({ freshness: "fresh", models: [{ model_id: "browser-model" }] });
@@ -150,4 +150,162 @@ test("persists, redacts, exports, and acknowledges a real internal incident", as
   const acknowledgedIncident = page.getByRole("listitem").filter({ hasText: failureBody.incident_id });
   await expect(acknowledgedIncident).toContainText("Potvrzeno: cockpit-operator");
   await expect(acknowledgedIncident).toContainText(failureBody.incident_id);
+});
+
+test("moves a reviewed DEV preview into an evidence-gated PROD draft without automatic publication", async ({ page }) => {
+  const now = "2026-07-21T12:00:00.000Z";
+  const project = { schema_version: "v1", project_id: "showcase", name: "Showcase", cwd: "/fixture/showcase", enabled: true };
+  const draft = (profile: "dev" | "prod", status: "draft" | "completed") => ({
+    schema_version: "v1",
+    current: {
+      run_id: profile === "dev" ? "dev-preview-1" : "prod-draft-1",
+      revision: 1,
+      project_id: project.project_id,
+      prompt: "Prepare the showcase preview",
+      provider: "openrouter_api",
+      model: "free-model",
+      input_token_bound: 8,
+      output_token_allowance: 8_192,
+      estimated_tokens: 8_220,
+      requested_artifacts: ["text"],
+      prompt_review_acknowledged: false,
+      profile,
+      requested_reasoning_effort: "low",
+      promotion_packet_id: profile === "prod" ? "promotion-1" : null,
+      created_at: now,
+    },
+    revisions: [],
+    status,
+    approved_revision: status === "completed" ? 1 : null,
+    approved_by: status === "completed" ? "cockpit-operator" : null,
+    approved_at: status === "completed" ? now : null,
+    supervisor_task_id: status === "completed" ? "preview-task-1" : null,
+    worker_run_id: status === "completed" ? "preview-worker-1" : null,
+    terminal_reason: null,
+    token_reservation: null,
+    reservation_status: status === "completed" ? "settled" : "none",
+    provider_result: null,
+    cancellation_requested: false,
+    queue_compensation_requested: false,
+    dispatch_failure: null,
+    retry_input_tokens: 0,
+    retry_output_tokens: 0,
+    artifacts: status === "completed" ? [{ artifact_id: "preview-artifact", type: "text", preview: "Preview ready", created_at: now }] : [],
+    updated_at: now,
+  });
+  let devRun: ReturnType<typeof draft> | undefined;
+  let prodRun: ReturnType<typeof draft> | undefined;
+  let workerInvocations = 0;
+  let packet: any;
+  const packetState = (status: "promotion_pending" | "approved" | "published") => ({
+    schema_version: "v1",
+    packet_id: "promotion-1",
+    source_run_id: "dev-preview-1",
+    source_revision: 1,
+    intent: "Publish showcase",
+    artifact_hash: "a".repeat(64),
+    artifact_ref: "artifact://dev-preview-1/1",
+    diff_summary: "Reviewed preview",
+    tests: ["npm run browser:qa"],
+    risks: ["release"],
+    approvals: status === "promotion_pending" ? [] : [{ approver: "owner", approved_at: now, review_ref: "review://promotion-1" }],
+    prod_run_id: status === "published" ? "prod-draft-1" : null,
+    full_verification_ref: status === "promotion_pending" ? null : packet?.full_verification_ref ?? null,
+    release_acceptance_ref: status === "published" ? "acceptance://fixture" : null,
+    rollback_ref: status === "published" ? "rollback://fixture" : null,
+    status,
+    created_at: now,
+    updated_at: now,
+  });
+
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (path === "/__fixtures__/full-verification" && request.method() === "POST") {
+      packet = { ...packetState("approved"), full_verification_ref: "verification://fixture/full" };
+      return route.fulfill({ status: 204 });
+    }
+    if (path === "/__fixtures__/production-acceptance" && request.method() === "POST") {
+      prodRun = draft("prod", "completed");
+      packet = { ...packetState("published"), full_verification_ref: "verification://fixture/full" };
+      return route.fulfill({ status: 204 });
+    }
+    if (!path.startsWith("/api") && !["/status", "/sessions", "/approvals", "/workers", "/projects", "/runs", "/promotions", "/incidents", "/providers/quotas", "/providers/models", "/providers/health", "/observability/timeline"].some((item) => path.startsWith(item))) return route.fallback();
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/projects") return json([project]);
+    if (path === "/providers/quotas") return json({ providers: [{ provider: "openrouter_api", source: "api", fetched_at: now, observed_at: now, freshness: "fresh", next_poll_at: null, five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null }, weekly: { limit: 100, used: 0, remaining: 100, resets_at: null }, api_spend: 0, currency: "USD", models: [{ model_id: "free-model", available: true, health: "healthy", source: "api" }], health: "healthy", error_code: null }] });
+    if (path === "/providers/models") return json({ fetched_at: now, freshness: "fresh", next_poll_at: null, models: [{ model_id: "free-model", providers: ["openrouter_api"], available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: "openrouter_api", reasoning_efforts: ["low"] }] }] });
+    if (path === "/providers/health") return json({ fetched_at: now, freshness: "fresh", providers: [] });
+    if (path === "/runs" && request.method() === "POST") {
+      const body = request.postDataJSON() as { profile: "dev" | "prod" };
+      if (body.profile === "dev") { devRun = draft("dev", "draft"); return json(devRun, 201); }
+      prodRun = draft("prod", "draft"); return json(prodRun, 201);
+    }
+    if (path === "/runs/dev-preview-1/approve") { workerInvocations += 1; devRun = draft("dev", "completed"); return json(devRun); }
+    if (path === "/runs/dev-preview-1/promote") { packet = packetState("promotion_pending"); return json(packet, 201); }
+    if (path === "/runs/dev-preview-1") return json(devRun);
+    if (path === "/runs") return json(url.searchParams.get("profile") === "prod" ? (prodRun ? [prodRun] : []) : (devRun ? [devRun] : []));
+    if (path === "/promotions/promotion-1/approve") { packet = packetState("approved"); return json(packet); }
+    if (path === "/promotions/promotion-1/record-verification") { packet = { ...packetState("approved"), full_verification_ref: "verification://fixture/full" }; return json(packet); }
+    if (path === "/promotions/promotion-1/mark-published") {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      if (prodRun?.status !== "completed" || packet?.full_verification_ref !== "verification://fixture/full" || body.release_acceptance_ref !== "acceptance://fixture" || body.rollback_ref !== "rollback://fixture") return json({ error: "promotion_publish_evidence_required" }, 409);
+      packet = { ...packetState("published"), full_verification_ref: "verification://fixture/full" };
+      return json(packet);
+    }
+    if (path === "/promotions") return json({ packets: packet ? [packet] : [] });
+    if (path === "/workers") return json(workerInvocations === 0 ? [] : [{ worker_run_id: "preview-worker-1", vendor: "openrouter_api", model: "free-model", session_id: "dev-preview-1", status: "completed", started_at: now, finished_at: now, output: "Preview ready" }]);
+    if (path === "/observability/timeline") return json({ summary: { events: 1, tokens: 8, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 1, max_bytes_per_file: 1024, max_lines_per_file: 10, max_events: 100, truncated: false } });
+    if (path === "/status") return json({ telemetry: { calls: workerInvocations, total_tokens: 8 } });
+    return json([]);
+  });
+
+  await login(page);
+  await expect(page.getByRole("tab", { name: "DEV" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("combobox", { name: "Projekt" })).toHaveValue(project.project_id);
+  await expect(page.getByRole("combobox", { name: "Poskytovatel" })).toHaveValue("openrouter_api");
+  await expect(page.getByRole("combobox", { name: "Model" })).toHaveValue("free-model");
+  await expect(page.getByText("Doporučení: žádné (shadow-only)")).toBeVisible();
+  await page.getByLabel("Prompt").fill("Prepare the showcase preview");
+  await page.getByRole("button", { name: "Připravit běh" }).click();
+  expect(workerInvocations).toBe(0);
+  await page.getByRole("button", { name: "Schválit a spustit" }).click();
+  await expect(page.getByLabel("Artefakty").getByText("Preview ready")).toBeVisible();
+  await page.getByLabel("Shrnutí diffu dev-preview-1").fill("Reviewed preview");
+  await page.getByLabel("Testy dev-preview-1").fill("npm run browser:qa");
+  await page.getByLabel("Rizika dev-preview-1").fill("release");
+  await page.getByRole("button", { name: "Propagovat" }).click();
+  await expect(page.getByText("promotion_pending")).toBeVisible();
+  await page.getByRole("button", { name: "Schválit propagaci" }).click();
+  await expect(page.getByRole("button", { name: "Připravit PROD draft" })).toBeDisabled();
+  const incompletePublication = await page.evaluate(async () => {
+    const response = await fetch("/promotions/promotion-1/mark-published", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    return response.status;
+  });
+  expect(incompletePublication).toBe(409);
+  await expect(page.getByText("published")).toHaveCount(0);
+  await page.evaluate(async () => {
+    const response = await fetch("/__fixtures__/full-verification", { method: "POST" });
+    if (!response.ok) throw new Error("fixture_verification_failed");
+  });
+  await page.getByRole("tab", { name: "PROD" }).click();
+  await page.getByRole("tab", { name: "DEV" }).click();
+  await expect(page.getByRole("button", { name: "Připravit PROD draft" })).toBeEnabled();
+  const callsBeforeProdDraft = workerInvocations;
+  await page.getByRole("button", { name: "Připravit PROD draft" }).click();
+  await expect(page.getByRole("tab", { name: "PROD" })).toHaveAttribute("aria-selected", "true");
+  expect(workerInvocations).toBe(callsBeforeProdDraft);
+  await expect(page.getByRole("button", { name: /prod-draft-1 · draft/ })).toBeVisible();
+  await page.evaluate(async () => {
+    const response = await fetch("/__fixtures__/production-acceptance", { method: "POST" });
+    if (!response.ok) throw new Error("fixture_publication_failed");
+  });
+  await page.getByRole("tab", { name: "DEV" }).click();
+  await page.getByRole("tab", { name: "PROD" }).click();
+  await expect(page.getByText("published")).toBeVisible();
+  await expect(page.getByText("acceptance://fixture")).toBeVisible();
+  await expect(page.getByText("rollback://fixture")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Připravit PROD draft" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /deploy|nasadit|publikovat/i })).toHaveCount(0);
 });

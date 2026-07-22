@@ -36,6 +36,7 @@ an independent code review with its systemd regression finding resolved before m
 | State maintenance and backup | Yes | Yes | Daily timer; private env/state | Local, unencrypted, non-zero-RPO | Add off-host operator policy |
 | Recovery drill | Yes | Yes | Valid `.apbackup.json` | No automatic live cutover | Schedule periodic evidence |
 | Cockpit responsive/browser QA | Yes | Yes | Chromium dependencies | Partial Czech UI; not full AT certification | Product/design review |
+| DEV/PROD Cockpit environments and promotion | Yes | Pending final VM regression acceptance | Explicit run profile; owner-approved promotion packet; immutable evidence refs | Publication remains read-only and evidence-gated; no automatic deploy | Complete unchanged proxy/recovery acceptance |
 | Worker cancellation | CLI path tested | No Cockpit mutation | Exact worker ID and operator CLI | Cockpit shows unavailable | Design server/UI cancellation contract |
 | Filesystem service containment | Yes, including fail-closed probe | Deployed root-manager proof passed | Root system manager; system Node 24; tmpfiles prerequisites | Requires explicit writable-root review for path changes | Monitor unit and timers |
 | Batch, scheduled, multivendor automation | No | No | None | Planned only | Separate design and budget gate |

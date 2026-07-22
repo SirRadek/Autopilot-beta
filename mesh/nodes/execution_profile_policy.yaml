@@ -1,0 +1,28 @@
+id: execution_profile_policy
+type: governance_policy
+name: Execution profile policy
+question: "Which DEV or PROD execution and promotion guarantees apply to this run?"
+why: "Explicit profiles keep fast preview work separate from evidence-gated publication without creating a second control plane."
+signals:
+  - execution profile
+  - dev run
+  - prod run
+  - promotion packet
+  - full verification
+  - release acceptance
+  - rollback evidence
+related_agents:
+  - architect
+  - qa
+  - security
+related_files:
+  - src/data/delivery-system/executionProfile.ts
+  - src/data/delivery-system/promotionPacket.ts
+  - src/data/delivery-system/runOrchestrator.ts
+  - scripts/verify-scope.ts
+  - scripts/control-plane-runs.ts
+required_checks:
+  - prod_requires_owner_approval_and_full_verification_release_acceptance_rollback_evidence
+  - dev_ordinary_changes_use_mapped_diff_scope
+  - routing_recommendations_remain_shadow_only_and_null
+  - provider_model_reasoning_route_never_changes_silently
