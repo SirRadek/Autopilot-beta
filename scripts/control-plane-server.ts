@@ -19,7 +19,7 @@ import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderC
 import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
-import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
+import { createRunOrchestrator, type RunPacketBuilder } from "../src/data/delivery-system/runOrchestrator";
 import { buildReadiness, type ReadinessReport } from "../src/data/delivery-system/readiness";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
@@ -52,6 +52,8 @@ export interface ControlPlaneRuntimeOptions {
   readonly secureCookies?: boolean;
   readonly openRouterConfigured?: boolean;
   readonly dispatch?: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
+  /** Test/recovery seam; production omits it and loads the canonical decision mesh. */
+  readonly packetBuilder?: RunPacketBuilder;
   readonly supervisorPollMs?: number;
   readonly shutdownDrainMs?: number;
 }
@@ -369,6 +371,7 @@ export function createControlPlaneRuntime(
     projectRoot,
     tokenGateway: new TokenGateway({ stateDir }),
     supervisor,
+    ...(options.packetBuilder === undefined ? {} : { packetBuilder: options.packetBuilder }),
     dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
   });
   const server = createControlPlaneServer(stateDir, authToken, {

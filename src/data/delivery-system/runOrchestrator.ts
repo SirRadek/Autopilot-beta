@@ -11,7 +11,10 @@ import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } f
 import type { GovernedHandoff, DispatchResult } from "../../governed-core/dispatch";
 import { computePacketHash } from "../../governed-core/dispatch";
 import { buildAgentPacket, loadDecisionMeshFromRoot } from "../../lib/decision-mesh";
+import type { AgentPacket, AgentPacketInput } from "../../lib/decision-mesh/types";
 import { assertNoSilentRouteChange, classifyWorkUnitForProfile, type RouteSnapshot } from "./executionProfile";
+
+export type RunPacketBuilder = (input: AgentPacketInput) => AgentPacket;
 
 interface Gateway {
   reserve(input: TokenReservationRequest): TokenReservation;
@@ -51,6 +54,7 @@ export function createRunOrchestrator(options: {
   readonly tokenGateway: Gateway;
   readonly supervisor: Supervisor;
   readonly dispatch: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
+  readonly packetBuilder?: RunPacketBuilder;
   readonly now?: () => string;
   readonly isRouteAvailable?: (provider: string, model: string | null) => boolean;
   readonly afterPhase?: (phase: "bound" | "queued" | "reservation_terminal" | "artifact" | "finalized" | "compensation_cleared") => void;
@@ -84,7 +88,8 @@ export function createRunOrchestrator(options: {
     if (run.current.estimated_tokens !== canonicalRunTokenBudget(run.current.prompt)) throw new Error("run_token_budget_mismatch");
     const task = `Execute approved run ${run.current.run_id} revision ${run.current.revision}`;
     const agent = "worker";
-    const packet = buildAgentPacket(loadDecisionMeshFromRoot(process.cwd()), { task, agent, token_budget: run.current.estimated_tokens });
+    const packetInput = { task, agent, token_budget: run.current.estimated_tokens };
+    const packet = options.packetBuilder?.(packetInput) ?? buildAgentPacket(loadDecisionMeshFromRoot(process.cwd()), packetInput);
     const storedProfile = resolveRunProfile(run);
     const executionProfile = storedProfile === "legacy" ? "prod" : storedProfile;
     const workUnit = classifyWorkUnitForProfile(executionProfile, false);

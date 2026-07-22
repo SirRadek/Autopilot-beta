@@ -2,10 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   endpointVerdict,
-  evaluateModelHealth
+  evaluateModelHealth,
+  isOpenRouterHealthEntrypoint
 } from "../../scripts/openrouter-health";
 
 describe("openrouter health reader", () => {
+  it("recognizes the direct CLI entry point on POSIX and Windows paths only", () => {
+    expect(isOpenRouterHealthEntrypoint("/app/scripts/openrouter-health.ts", "/app/scripts/openrouter-health.ts")).toBe(true);
+    expect(isOpenRouterHealthEntrypoint("C:\\app\\scripts\\openrouter-health.ts", "C:\\app\\scripts\\openrouter-health.ts")).toBe(true);
+    expect(isOpenRouterHealthEntrypoint("/tmp/recovery-smoke.mjs", "/tmp/recovery-smoke.mjs")).toBe(false);
+    expect(isOpenRouterHealthEntrypoint("/app/scripts/openrouter-health.ts", "/other/openrouter-health.ts")).toBe(false);
+  });
+
   it("treats the measured Venice outage shape as unusable", () => {
     const health = evaluateModelHealth({
       endpoints: [

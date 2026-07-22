@@ -14,7 +14,15 @@ const source = join(root, sourceRelative);
 const output = join(root, outputRelative);
 const provenancePath = join(root, provenanceRelative);
 const esbuild = join(root, "node_modules", ".bin", "esbuild");
-const flags = ["--bundle", "--platform=node", "--format=esm", "--target=node24", "--minify"];
+const flags = [
+  "--bundle",
+  "--platform=node",
+  "--format=esm",
+  "--target=node24",
+  "--minify",
+  "--external:node-pty",
+  '--banner:js=import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
+];
 const mode = process.argv[2];
 
 if (mode !== "--check" && mode !== "--write") process.exit(64);

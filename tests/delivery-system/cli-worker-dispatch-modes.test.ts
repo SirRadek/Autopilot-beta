@@ -91,7 +91,7 @@ describe("CLI worker Codex dispatch modes", () => {
       "/tmp/out.json",
       "/tmp/prompt.txt"
     )).toBe(
-      "'codex' exec -c sandbox_mode=read-only -c approval_policy=never -m 'gpt-5-codex' -o '/tmp/out.json' - < '/tmp/prompt.txt'"
+      "'codex' exec -c sandbox_mode=read-only -c approval_policy=never --model 'gpt-5-codex' -o '/tmp/out.json' - < '/tmp/prompt.txt'"
     );
   });
 
