@@ -1,4 +1,4 @@
-import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
 
 export class ControlPlaneApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "ControlPlaneApiError"; }
@@ -42,6 +42,12 @@ export interface ControlPlaneClient {
   getIncidents(): Promise<readonly AutopilotIncident[]>;
   acknowledgeIncident(id: string, owner: string): Promise<AutopilotIncident>;
   prepareRepairPacket(id: string, input: RepairPacketInput): Promise<AutopilotRepairPacket>;
+  listBrainstorms(): Promise<readonly BrainstormRecord[]>;
+  getBrainstorm(id: string): Promise<BrainstormRecord>;
+  createBrainstorm(input: BrainstormDraftInput): Promise<BrainstormRecord>;
+  approveBrainstorm(id: string, operator: string): Promise<BrainstormRecord>;
+  arbitrateBrainstorm(id: string, operator: string, route: BrainstormArbitrationInput): Promise<BrainstormRecord>;
+  cancelBrainstorm(id: string): Promise<BrainstormRecord>;
 }
 
 export function createControlPlaneClient(options: ControlPlaneClientOptions = {}): ControlPlaneClient {
@@ -102,7 +108,13 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
     cancelRun: (id) => request<RunRecord>(`/runs/${encodeURIComponent(id)}/cancel`, jsonPost({})),
     getIncidents: () => request<readonly AutopilotIncident[]>("/incidents"),
     acknowledgeIncident: (id, owner) => request<AutopilotIncident>(`/incidents/${encodeURIComponent(id)}/acknowledge`, jsonPost({ owner })),
-    prepareRepairPacket: (id, input) => request<AutopilotRepairPacket>(`/incidents/${encodeURIComponent(id)}/repair-packet`, jsonPost(input))
+    prepareRepairPacket: (id, input) => request<AutopilotRepairPacket>(`/incidents/${encodeURIComponent(id)}/repair-packet`, jsonPost(input)),
+    listBrainstorms: () => request<readonly BrainstormRecord[]>("/brainstorms"),
+    getBrainstorm: (id) => request<BrainstormRecord>(`/brainstorms/${encodeURIComponent(id)}`),
+    createBrainstorm: (input) => request<BrainstormRecord>("/brainstorms", jsonPost(input)),
+    approveBrainstorm: (id, operator) => request<BrainstormRecord>(`/brainstorms/${encodeURIComponent(id)}/approve`, jsonPost({ operator })),
+    arbitrateBrainstorm: (id, operator, route) => request<BrainstormRecord>(`/brainstorms/${encodeURIComponent(id)}/arbitrate`, jsonPost({ operator, route })),
+    cancelBrainstorm: (id) => request<BrainstormRecord>(`/brainstorms/${encodeURIComponent(id)}/cancel`, jsonPost({}))
   };
 }
 

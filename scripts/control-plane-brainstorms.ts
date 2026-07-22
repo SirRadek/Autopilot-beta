@@ -155,14 +155,16 @@ function routeDraft(value: unknown): BrainstormRoute {
   const record = value as Record<string, unknown>;
   if (!PROVIDERS.has(record.provider as RunProvider) || !boundedString(record.model, MAX_MODEL_CHARS)) throw new HttpError(400, "invalid_brainstorm_draft");
   const provider = record.provider as RunProvider;
-  if (record.requested_reasoning_effort !== undefined && record.requested_reasoning_effort !== null && typeof record.requested_reasoning_effort !== "string") {
+  if (record.requested_reasoning_effort === undefined) throw new HttpError(400, "invalid_brainstorm_draft");
+  if (record.requested_reasoning_effort !== null && typeof record.requested_reasoning_effort !== "string") {
     throw new HttpError(400, "invalid_brainstorm_draft");
   }
-  const requested: RunReasoningEffort | null = record.requested_reasoning_effort === undefined ? null : (record.requested_reasoning_effort as RunReasoningEffort | null);
+  const requested = record.requested_reasoning_effort as RunReasoningEffort | null;
   const supported: readonly RunReasoningEffort[] = SUPPORTED_REASONING_EFFORTS[provider];
-  if (requested !== null && !supported.includes(requested)) throw new HttpError(409, "unsupported_reasoning_effort");
-  const reasoningEffort = supported.length === 0 ? null : requested ?? supported[0]!;
-  return { provider, model: record.model, reasoning_effort: reasoningEffort, estimated_tokens: 1 };
+  if (supported.length === 0 ? requested !== null : requested === null || !supported.includes(requested)) {
+    throw new HttpError(409, "unsupported_reasoning_effort");
+  }
+  return { provider, model: record.model as string, reasoning_effort: requested, estimated_tokens: 1 };
 }
 
 function checkRouteEligible(stateDir: string, provider: RunProvider, model: string): void {

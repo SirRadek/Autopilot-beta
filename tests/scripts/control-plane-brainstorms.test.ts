@@ -78,9 +78,9 @@ const validDraft = {
   brief: "Compare three provider approaches for the delivery-system readiness ratchet",
   profile: "dev" as const,
   routes: [
-    { provider: "codex_cli", model: "model-a", requested_reasoning_effort: null },
-    { provider: "claude_cli", model: "model-a", requested_reasoning_effort: null },
-    { provider: "agy_cli", model: "model-a", requested_reasoning_effort: null }
+    { provider: "codex_cli", model: "model-a", requested_reasoning_effort: "low" },
+    { provider: "claude_cli", model: "model-a", requested_reasoning_effort: "low" },
+    { provider: "agy_cli", model: "model-a", requested_reasoning_effort: "low" }
   ],
   synthesizer: "codex_cli",
   estimated_tokens: 50_000
@@ -210,6 +210,29 @@ describe("control plane governed brainstorm HTTP actions", () => {
     const invalidReasoning = { ...validDraft, routes: [validDraft.routes[0], validDraft.routes[1], { ...validDraft.routes[2], requested_reasoning_effort: "xhigh" }] };
 
     const response = await api.call("POST", "/brainstorms", invalidReasoning);
+
+    expect(response.status).toBe(409);
+    expect((await response.json() as { error: string }).error).toBe("unsupported_reasoning_effort");
+  });
+
+  it("rejects a route with a missing requested_reasoning_effort field with 400 instead of silently defaulting", async () => {
+    const api = await brainstormApi();
+    const route2 = validDraft.routes[2] as Record<string, unknown>;
+    const missingField = { ...route2 };
+    delete missingField.requested_reasoning_effort;
+    const missingReasoning = { ...validDraft, routes: [validDraft.routes[0], validDraft.routes[1], missingField] };
+
+    const response = await api.call("POST", "/brainstorms", missingReasoning);
+
+    expect(response.status).toBe(400);
+    expect((await response.json() as { error: string }).error).toBe("invalid_brainstorm_draft");
+  });
+
+  it("rejects null requested_reasoning_effort for a provider that requires one with 409 instead of silently defaulting", async () => {
+    const api = await brainstormApi();
+    const nullReasoning = { ...validDraft, routes: [validDraft.routes[0], validDraft.routes[1], { ...validDraft.routes[2], requested_reasoning_effort: null }] };
+
+    const response = await api.call("POST", "/brainstorms", nullReasoning);
 
     expect(response.status).toBe(409);
     expect((await response.json() as { error: string }).error).toBe("unsupported_reasoning_effort");
