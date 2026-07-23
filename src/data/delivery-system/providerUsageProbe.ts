@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 export type UsageProbeProvider = "codex_cli" | "claude_cli" | "agy_cli";
 
 export interface ParsedUsage {
-  readonly five_hour: { readonly limit: number; readonly used: number; readonly remaining: number; readonly resets_at: string | null };
+  readonly five_hour: { readonly limit: number | null; readonly used: number | null; readonly remaining: number | null; readonly resets_at: string | null };
   readonly weekly: { readonly limit: number; readonly used: number; readonly remaining: number; readonly resets_at: string | null };
   readonly models: readonly { readonly model_id: string; readonly available: boolean }[];
 }
@@ -32,8 +32,20 @@ export function parseCodexStatus(raw: string): ParsedUsage | null {
   const text = terminalText(raw);
   const five = text.match(/5h\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left\s*\(resets\s+([^\r\n)]+)\)/i);
   const week = text.match(/weekly\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left\s*\(resets\s+([^\r\n)]+)\)/i);
-  if (!five || !week) return null;
-  return { five_hour: percentWindow(five[1]!, five[2]!), weekly: percentWindow(week[1]!, week[2]!), models: [] };
+  if (!week) return null;
+  const five_hour = five
+    ? percentWindow(five[1]!, five[2]!)
+    : { limit: null, used: null, remaining: null, resets_at: null };
+  const activeModel = text.match(/Model:\s*([^\r\n(]+?)\s*\(/i)?.[1];
+  const namedModels = [...text.matchAll(/^(?:\s*\S\s+)?([A-Za-z][A-Za-z0-9.-]*)(?:\r?\n\s*|\s+)Weekly limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left/gim)];
+  const activeNamedRow = activeModel ? namedModels.find((match) => match[1] === activeModel) : undefined;
+  const activeWeeklyPercent = activeNamedRow ? activeNamedRow[2]! : week[1]!;
+  const seenModelIds = new Set<string>();
+  const models = [
+    ...(activeModel ? [{ model_id: activeModel, available: boundedPercent(activeWeeklyPercent) > 0 }] : []),
+    ...namedModels.map((match) => ({ model_id: match[1]!, available: boundedPercent(match[2]!) > 0 }))
+  ].filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)));
+  return { five_hour, weekly: percentWindow(week[1]!, week[2]!), models };
 }
 
 export function parseAgyUsage(raw: string): ParsedUsage | null {

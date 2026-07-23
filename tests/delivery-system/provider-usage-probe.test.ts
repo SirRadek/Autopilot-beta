@@ -22,6 +22,34 @@ describe("provider usage parsers", () => {
     });
   });
 
+  it("parses weekly-only Codex status without fabricating a 5h window", () => {
+    expect(parseCodexStatus(fixture("codex-status-weekly-only.txt"))).toEqual({
+      five_hour: { limit: null, used: null, remaining: null, resets_at: null },
+      weekly: { limit: 100, used: 91, remaining: 9, resets_at: "16:25 on 30 Jul" },
+      models: [
+        { model_id: "gpt-5.5-sol", available: true },
+        { model_id: "GPT-5.5-Codex-Spark", available: true }
+      ]
+    });
+  });
+
+  it("deduplicates a model that is both the active model and an explicitly named weekly row, preferring the named row's availability", () => {
+    const raw = [
+      "OpenAI Codex (v0.144.5)",
+      "",
+      "Model: gpt-5.5-sol (reasoning low, summaries auto)",
+      "5h limit:    [████████████████████] 2% left (resets 11:43)",
+      "Weekly limit:    [████████████████░░░░] 40% left (resets 12:05 on 18 Jul)",
+      "gpt-5.5-sol Weekly limit:    [░░░░░░░░░░░░░░░░░░░░] 0% left (resets 16:25 on 30 Jul)",
+      ""
+    ].join("\n");
+    expect(parseCodexStatus(raw)).toEqual({
+      five_hour: { limit: 100, used: 98, remaining: 2, resets_at: "11:43" },
+      weekly: { limit: 100, used: 60, remaining: 40, resets_at: "12:05 on 18 Jul" },
+      models: [{ model_id: "gpt-5.5-sol", available: false }]
+    });
+  });
+
   it("exposes the conservative minimum AGY group balance and group models", () => {
     expect(parseAgyUsage(fixture("agy-usage.txt"))).toEqual({
       five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null },
