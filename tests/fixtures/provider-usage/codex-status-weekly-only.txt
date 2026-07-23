@@ -1,0 +1,7 @@
+OpenAI Codex (v0.144.5)
+
+│ Model: gpt-5.5-sol (reasoning low, summaries auto)                     │
+│ Weekly limit:    [█████████░░░░░░░░░░░] 9% left (resets 16:25 on 30 Jul) │
+
+│ GPT-5.5-Codex-Spark Weekly limit:    [████████████████████] 100% left (resets 16:25 on 30 Jul) │
+
