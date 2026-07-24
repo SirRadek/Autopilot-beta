@@ -118,10 +118,6 @@ export async function runTmuxUsageProbe(
     await checked(execute, ["send-keys", "-t", target, "-l", spec.slashCommand], controller.signal);
     await pause(delayMs ?? 250, controller.signal);
     await checked(execute, ["send-keys", "-t", target, "C-m"], controller.signal);
-    if (provider === "codex_cli") {
-      await pause(delayMs ?? 750, controller.signal);
-      await checked(execute, ["send-keys", "-t", target, "C-m"], controller.signal);
-    }
     await pause(delayMs ?? 4_000, controller.signal);
     const captured = await checked(execute, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target], controller.signal);
     const stdout = Buffer.from(captured.stdout).subarray(0, MAX_CAPTURE_BYTES).toString("utf8");

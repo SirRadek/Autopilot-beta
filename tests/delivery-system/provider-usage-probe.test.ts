@@ -92,6 +92,9 @@ describe("tmux usage probe", () => {
     expect(result.stdout.length).toBeLessThanOrEqual(128 * 1024);
     expect(calls.some((args) => args.includes("/status"))).toBe(true);
     expect(calls.at(-1)).toEqual(["kill-session", "-t", "autopilot-quota-test"]);
+    const statusIndex = calls.findIndex((args) => args.includes("/status"));
+    const enterSendsAfterStatus = calls.slice(statusIndex + 1).filter((args) => args.includes("C-m")).length;
+    expect(enterSendsAfterStatus).toBe(1);
   });
 
   it("reports missing credentials for Claude login without fabricating quota", async () => {
