@@ -29,6 +29,7 @@ import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
 import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
 import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
 import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
+import { STATIC_PROVIDER_MODEL_CATALOG } from "../src/data/delivery-system/providerModelCatalog";
 import type { RunProvider } from "../src/data/delivery-system/runStore";
 
 const execFileAsync = promisify(execFile);
@@ -563,18 +564,39 @@ function providerQuota(directory: string, provider: string): QuotaView | { error
 function providerModels(directory: string): { freshness: string; fetched_at: string | null; next_poll_at: string | null; models: readonly Record<string, unknown>[] } {
   const snapshots = readProviderQuotaStore(directory).snapshots;
   const now = new Date().toISOString();
-  const byModel = new Map<string, { model_id: string; providers: Set<string>; available: boolean; health: Set<string>; reasoningByProvider: Map<string, readonly RunReasoningEffort[]> }>();
+  type Route = { available: boolean; health: Set<string>; reasoning_efforts: readonly RunReasoningEffort[]; source: "live_snapshot" | "static_fallback" | "mixed" };
+  const byModel = new Map<string, Map<string, Route>>();
   for (const snapshot of snapshots) {
     const supported: readonly RunReasoningEffort[] = snapshot.provider in SUPPORTED_REASONING_EFFORTS
       ? SUPPORTED_REASONING_EFFORTS[snapshot.provider as RunProvider]
       : [];
     for (const model of snapshot.models) {
-      const entry = byModel.get(model.model_id) ?? { model_id: model.model_id, providers: new Set<string>(), available: false, health: new Set<string>(), reasoningByProvider: new Map<string, readonly RunReasoningEffort[]>() };
-      entry.providers.add(snapshot.provider);
-      entry.available ||= model.available;
-      entry.health.add(model.health);
-      entry.reasoningByProvider.set(snapshot.provider, supported);
-      byModel.set(model.model_id, entry);
+      const routes = byModel.get(model.model_id) ?? new Map<string, Route>();
+      const route = routes.get(snapshot.provider) ?? { available: false, health: new Set<string>(), reasoning_efforts: supported, source: "live_snapshot" };
+      route.available ||= model.available;
+      route.health.add(model.health);
+      routes.set(snapshot.provider, route);
+      byModel.set(model.model_id, routes);
+    }
+  }
+  for (const [provider, catalog] of Object.entries(STATIC_PROVIDER_MODEL_CATALOG)) {
+    for (const modelId of catalog.models) {
+      const routes = byModel.get(modelId) ?? new Map<string, Route>();
+      if (!routes.has(provider)) {
+        routes.set(provider, {
+          available: true,
+          health: new Set(["unavailable"]),
+          reasoning_efforts: catalog.reasoning_efforts,
+          source: "static_fallback"
+        });
+      } else {
+        const route = routes.get(provider)!;
+        if (!route.available) {
+          route.available = true;
+          route.source = "mixed";
+        }
+      }
+      byModel.set(modelId, routes);
     }
   }
   const views = snapshots.map((snapshot) => quotaView(snapshot, now));
@@ -585,17 +607,28 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
     freshness,
     fetched_at: fetchedAt,
     next_poll_at: nextPollAt,
-    models: [...byModel.values()].map((model) => {
-      const providers = [...model.providers].sort();
-      const routes = providers.map((provider) => ({ provider, reasoning_efforts: [...(model.reasoningByProvider.get(provider) ?? [])] }));
+    models: [...byModel.entries()].map(([modelId, byProvider]) => {
+      const providers = [...byProvider.keys()].sort();
+      const routes = providers.map((provider) => {
+        const route = byProvider.get(provider)!;
+        return {
+          provider,
+          available: route.available,
+          health: [...route.health].sort(),
+          source: route.source,
+          reasoning_efforts: [...route.reasoning_efforts]
+        };
+      });
       const reasoningEfforts = routes.length === 0 ? [] : routes[0]!.reasoning_efforts.filter((effort) => routes.every((route) => route.reasoning_efforts.includes(effort)));
+      const sources = new Set([...byProvider.values()].map((route) => route.source));
       return {
-        model_id: model.model_id,
+        model_id: modelId,
         providers,
-        available: model.available,
-        health: [...model.health].sort(),
+        available: [...byProvider.values()].some((route) => route.available),
+        health: [...new Set([...byProvider.values()].flatMap((route) => [...route.health]))].sort(),
+        source: sources.size === 1 ? [...sources][0] : "mixed",
         reasoning_efforts: reasoningEfforts,
-        ...(routes.length > 1 ? { provider_routes: routes } : {})
+        provider_routes: routes
       };
     }).sort((a, b) => a.model_id.localeCompare(b.model_id))
   };

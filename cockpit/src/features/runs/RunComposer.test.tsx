@@ -62,12 +62,76 @@ describe("RunComposer", () => {
     act(() => root.unmount()); host.remove();
   });
 
-  it("disables stale and unavailable routes and warns explicitly", () => {
-    const stale = { ...quota, freshness: "stale" as const };
-    const { host, root } = mount({ quotas: [stale], models: { ...models, freshness: "stale" } });
-    expect(host.textContent).toContain("Data poskytovatele nejsou aktuální");
+  it("uses catalog models and allows preparation when the selected provider quota is unavailable", async () => {
+    const unavailable: ProviderQuota = { ...quota, freshness: "unavailable", health: "unavailable", models: [] };
+    const fallbackModels: ProviderModels = {
+      ...models,
+      freshness: "unavailable",
+      models: [{
+        ...models.models[0]!,
+        health: ["unavailable"],
+        provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low", "medium", "high"] }]
+      }]
+    };
+    const { host, root, onPrepare } = mount({ quotas: [unavailable], models: fallbackModels });
+    change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
+    expect((host.querySelector('[aria-label="Model"]') as HTMLSelectElement).value).toBe("gpt-5");
+    expect(host.textContent).toContain("Kvóta poskytovatele není aktuální – běh poběží, ale spotřeba se neověřuje.");
+    expect(host.textContent).not.toContain("Příprava běhu je zakázána");
+    expect(button(host, "Připravit běh").disabled).toBe(false);
+    expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).options[0]?.disabled).toBe(false);
+    await act(async () => button(host, "Připravit běh").click());
+    expect(onPrepare).toHaveBeenCalledWith(expect.objectContaining({ provider: "codex_cli", model: "gpt-5" }));
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("lists catalog-only providers when quota snapshots omit them", () => {
+    const catalogOnly: ProviderModels = {
+      ...models,
+      models: [
+        ...models.models,
+        {
+          model_id: "Sonnet 5",
+          providers: ["claude_cli"],
+          available: true,
+          health: ["unavailable"],
+          reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
+          provider_routes: [{ provider: "claude_cli", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] }]
+        }
+      ]
+    };
+    const { host, root } = mount({ models: catalogOnly });
+    const providers = host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement;
+    expect([...providers.options].map((option) => option.value)).toEqual(["codex_cli", "claude_cli"]);
+    change(providers, "claude_cli");
+    expect((host.querySelector('[aria-label="Model"]') as HTMLSelectElement).value).toBe("Sonnet 5");
+    expect(host.textContent).toContain("Kvóta poskytovatele není aktuální");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("does not offer a shared model on a provider whose exact catalog route is unavailable", () => {
+    const sharedModels: ProviderModels = {
+      ...models,
+      models: [{
+        model_id: "shared-live-model",
+        providers: ["claude_cli", "codex_cli"],
+        available: true,
+        health: ["healthy", "unavailable"],
+        source: "live_snapshot",
+        reasoning_efforts: ["low", "medium", "high"],
+        provider_routes: [
+          { provider: "claude_cli", reasoning_efforts: ["low", "medium", "high"], available: false, health: ["unavailable"], source: "live_snapshot" },
+          { provider: "codex_cli", reasoning_efforts: ["low", "medium", "high"], available: true, health: ["healthy"], source: "live_snapshot" }
+        ]
+      }]
+    };
+    const claudeQuota: ProviderQuota = { ...quota, provider: "claude_cli", models: [] };
+    const { host, root } = mount({ quotas: [claudeQuota, quota], models: sharedModels });
+    change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
+
+    expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).value).toBe("claude_cli");
+    expect((host.querySelector('[aria-label="Model"]') as HTMLSelectElement).options.length).toBe(0);
     expect(button(host, "Připravit běh").disabled).toBe(true);
-    expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).options[0]?.disabled).toBe(true);
     act(() => root.unmount()); host.remove();
   });
 
@@ -116,11 +180,9 @@ describe("RunComposer", () => {
     act(() => root.unmount()); host.remove();
   });
 
-  it("requires a healthy provider and a model available in both quota and catalog", () => {
-    const unavailable = { ...quota, health: "unavailable" };
-    const first = mount({ quotas: [unavailable] }); change(first.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(first.host, "Připravit běh").disabled).toBe(true); act(() => first.root.unmount()); first.host.remove();
-    const second = mount({ quotas: [{ ...quota, models: [] }], models: { ...models, models: [] } }); change(second.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(second.host, "Připravit běh").disabled).toBe(true); act(() => second.root.unmount()); second.host.remove();
-    const third = mount({ models: { ...models, models: [{ ...models.models[0]!, available: false }] } }); change(third.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(third.host, "Připravit běh").disabled).toBe(true); act(() => third.root.unmount()); third.host.remove();
+  it("requires an available catalog model with an advertised reasoning route", () => {
+    const missing = mount({ models: { ...models, models: [] } }); change(missing.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(missing.host, "Připravit běh").disabled).toBe(true); act(() => missing.root.unmount()); missing.host.remove();
+    const unavailable = mount({ models: { ...models, models: [{ ...models.models[0]!, available: false }] } }); change(unavailable.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(unavailable.host, "Připravit běh").disabled).toBe(true); act(() => unavailable.root.unmount()); unavailable.host.remove();
   });
 
   it("invalidates a prepared revision when refreshed route props change", async () => {

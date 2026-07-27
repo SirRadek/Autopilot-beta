@@ -19,6 +19,8 @@ related_files:
   - src/data/delivery-system/executionProfile.ts
   - src/data/delivery-system/promotionPacket.ts
   - src/data/delivery-system/runOrchestrator.ts
+  - src/data/delivery-system/runRouteEligibility.ts
+  - src/data/delivery-system/providerModelCatalog.ts
   - scripts/verify-scope.ts
   - scripts/control-plane-runs.ts
 required_checks:

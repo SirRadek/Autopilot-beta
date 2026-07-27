@@ -48,6 +48,21 @@ h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: #b
 .session-state { border-radius: 99px; padding: .1rem .3rem; font-size: .58rem; font-weight: 700; } .session-state-active { color: #baf8d4; background: #145c3a; } .session-state-expired { color: #ffe9a8; background: #654c13; } .session-state-closed { color: #cad0df; background: #3a4255; }
 .session-actions { display: flex; align-items: center; gap: .2rem; } .session-actions button { align-self: center; border: 0; padding: .2rem; color: #9cb8e8; background: transparent; font-size: .65rem; cursor: pointer; }
 .session-empty { color: #8293b8; font-size: .78rem; } .session-empty button { border: 1px solid #2c3a61; border-radius: 6px; padding: .4rem .55rem; color: #dbe5fb; background: #172443; cursor: pointer; }
+.projects-pane { display: grid; gap: 1rem; }
+.project-list { display: grid; gap: .4rem; margin: .5rem 0 0; padding: 0; list-style: none; }
+.project-select { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .2rem .5rem; width: 100%; border: 1px solid #253152; border-radius: 8px; padding: .55rem; color: #dbe5fb; background: #121d36; text-align: left; cursor: pointer; }
+.project-select[aria-pressed="true"] { border-color: #5d8dd9; background: #172849; }
+.project-name { overflow: hidden; font-size: .78rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.project-state { border-radius: 99px; padding: .1rem .35rem; font-size: .6rem; font-weight: 700; }
+.project-state-enabled { color: #baf8d4; background: #145c3a; } .project-state-disabled { color: #cad0df; background: #3a4255; }
+.project-cwd { grid-column: 1 / -1; overflow: hidden; color: #8293b8; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+.project-create { display: grid; gap: .4rem; border-top: 1px solid #253152; padding-top: .8rem; }
+.project-create h3 { margin: 0 0 .2rem; color: #b7c5e5; font-size: .8rem; }
+.project-create label { color: #9eadd0; font-size: .68rem; }
+.project-create input { min-width: 0; border: 1px solid #2c3a61; border-radius: 6px; padding: .45rem; color: #dbe5fb; background: #0b1224; }
+.project-create button { border: 1px solid #5d8dd9; border-radius: 6px; padding: .45rem; color: #fff; background: #294b86; cursor: pointer; }
+.project-create button:disabled { cursor: wait; opacity: .6; }
+.projects-error { margin: 0; color: #ffc1c1; font-size: .7rem; overflow-wrap: anywhere; }
 .approval-pane { display: grid; gap: .8rem; }
 .approval-queue-header, .approval-detail-header, .approval-actions { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
 .approval-queue-header { color: #8ea0c4; font-size: .75rem; }
