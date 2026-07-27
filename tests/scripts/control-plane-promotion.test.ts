@@ -155,9 +155,9 @@ describe("control plane profile scoping and promotion endpoints", () => {
     ] });
 
     const response = await request("GET", "/providers/models", null);
-    const model = (response.json as { models: Array<{ reasoning_efforts: string[]; provider_routes: Array<{ provider: string; reasoning_efforts: string[] }> }> }).models[0]!;
+    const model = (response.json as { models: Array<{ model_id: string; reasoning_efforts: string[]; provider_routes: Array<{ provider: string; reasoning_efforts: string[] }> }> }).models.find((entry) => entry.model_id === "shared-model")!;
     expect(model.reasoning_efforts).toEqual([]);
-    expect(model.provider_routes).toEqual([
+    expect(model.provider_routes.map((route) => ({ provider: route.provider, reasoning_efforts: route.reasoning_efforts }))).toEqual([
       { provider: "codex_cli", reasoning_efforts: ["low", "medium", "high", "xhigh"] },
       { provider: "openrouter_api", reasoning_efforts: [] }
     ]);
