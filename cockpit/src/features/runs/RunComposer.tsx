@@ -15,21 +15,26 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
   const enabledProjects = projects.filter((project) => project.enabled);
   const [projectId, setProjectId] = useState(enabledProjects[0]?.project_id ?? "");
   const selectedProject = enabledProjects.find((project) => project.project_id === projectId);
-  const [provider, setProvider] = useState(quotas[0]?.provider ?? "");
+  const providers = useMemo(() => {
+    const union = new Set(quotas.map((candidate) => candidate.provider));
+    for (const model of models?.models ?? []) {
+      for (const candidate of model.providers) union.add(candidate);
+    }
+    return [...union];
+  }, [models, quotas]);
+  const [provider, setProvider] = useState(providers[0] ?? "");
   useEffect(() => {
     if (!enabledProjects.some((project) => project.project_id === projectId)) setProjectId(enabledProjects[0]?.project_id ?? "");
-    if (!quotas.some((candidate) => candidate.provider === provider)) setProvider(quotas[0]?.provider ?? "");
-  }, [enabledProjects, projectId, provider, quotas]);
+    if (!providers.includes(provider)) setProvider(providers[0] ?? "");
+  }, [enabledProjects, projectId, provider, providers]);
   const quota = quotas.find((candidate) => candidate.provider === provider);
-  // Eligibility is scoped to the SELECTED route, matching the control plane's
-  // isRunRouteEligible. The aggregate provider-models freshness must not gate a
-  // fresh, healthy provider: one stale/unavailable sibling provider would otherwise
-  // disable preparation for every route in production.
-  const routeFresh = quota?.freshness === "fresh" && quota.health !== "unavailable";
+  const quotaFresh = quota?.freshness === "fresh" && quota.health !== "unavailable";
   const availableModels = useMemo(() => {
-    const catalog = (models?.models ?? []).filter((model) => model.providers.includes(provider) && model.available && !model.health.includes("unavailable"));
-    return (quota?.models ?? []).filter((model) => model.available && model.health !== "unavailable" && catalog.some((candidate) => candidate.model_id === model.model_id));
-  }, [models, provider, quota]);
+    return (models?.models ?? []).filter((candidate) => {
+      const route = candidate.provider_routes?.find((item) => item.provider === provider);
+      return candidate.providers.includes(provider) && (route?.available ?? candidate.available);
+    });
+  }, [models, provider]);
   const [model, setModel] = useState("");
   const selectedModel = availableModels.some((candidate) => candidate.model_id === model) ? model : availableModels[0]?.model_id ?? "";
   const selectedModelEntry = (models?.models ?? []).find((candidate) => candidate.model_id === selectedModel && candidate.providers.includes(provider));
@@ -57,7 +62,7 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
   const previousRouteKey = useRef(routeKey);
   const invalidate = () => { generation.current += 1; setPrepared(undefined); setMessage(""); };
   useEffect(() => { if (previousRouteKey.current !== routeKey) { previousRouteKey.current = routeKey; invalidate(); } }, [routeKey]);
-  const canPrepare = selectedProject !== undefined && prompt.trim() !== "" && promptTokens < 9_000 && (promptTokens <= 1_000 || promptReviewAcknowledged) && provider !== "" && routeFresh && selectedModel !== "" && reasoningEfforts.length > 0 && selectedReasoningEffort !== null && !pendingPrepareKeys.has(boundKey);
+  const canPrepare = selectedProject !== undefined && prompt.trim() !== "" && promptTokens < 9_000 && (promptTokens <= 1_000 || promptReviewAcknowledged) && provider !== "" && selectedModel !== "" && reasoningEfforts.length > 0 && selectedReasoningEffort !== null && !pendingPrepareKeys.has(boundKey);
   const validPrepared = prepared?.boundKey === boundKey && prepared.routeKey === routeKey ? prepared.record : undefined;
 
   async function prepare() {
@@ -83,11 +88,11 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
 
   return <section aria-label="Sestavení řízeného běhu">
     <label>Projekt<select aria-label="Projekt" value={projectId} onChange={(event) => { setProjectId(event.target.value); invalidate(); }}>{enabledProjects.map((project) => <option key={project.project_id} value={project.project_id}>{project.name}</option>)}</select></label>
-    <label>Poskytovatel<select aria-label="Poskytovatel" value={provider} onChange={(event) => { setProvider(event.target.value); setModel(""); setReasoningEffort(null); invalidate(); }}>{quotas.map((candidate) => <option key={candidate.provider} value={candidate.provider} disabled={candidate.freshness !== "fresh" || candidate.health === "unavailable"}>{candidate.provider}</option>)}</select></label>
+    <label>Poskytovatel<select aria-label="Poskytovatel" value={provider} onChange={(event) => { setProvider(event.target.value); setModel(""); setReasoningEffort(null); invalidate(); }}>{providers.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
     <label>Model<select aria-label="Model" value={selectedModel} onChange={(event) => { setModel(event.target.value); setReasoningEffort(null); invalidate(); }}>{availableModels.map((candidate) => <option key={candidate.model_id} value={candidate.model_id}>{candidate.model_id}</option>)}</select></label>
     <label>Reasoning<select aria-label="Reasoning" value={selectedReasoningEffort ?? ""} onChange={(event) => { setReasoningEffort(event.target.value as RunReasoningEffort); invalidate(); }}>{reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select></label>
     <p>Doporučení: žádné (shadow-only)</p>
-    {!routeFresh ? <p role="alert">Data poskytovatele nejsou aktuální. Příprava běhu je zakázána.</p> : null}
+    {!quotaFresh ? <p>Kvóta poskytovatele není aktuální – běh poběží, ale spotřeba se neověřuje.</p> : null}
     <label>Prompt<textarea aria-label="Prompt" value={prompt} onChange={(event) => { setPrompt(event.target.value); invalidate(); }} /></label>
     {promptTokens > 1_000 ? <label><input type="checkbox" aria-label="Potvrdit ruční kontrolu promptu" checked={promptReviewAcknowledged} onChange={(event) => { setPromptReviewAcknowledged(event.target.checked); invalidate(); }} /> Potvrzuji ruční kontrolu promptu nad 1 000 tokenů</label> : null}
     {promptTokens >= 9_000 ? <p role="alert">Prompt překračuje pevný limit modelového kontextu.</p> : null}

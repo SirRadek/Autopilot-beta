@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { isAbsolute, normalize, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { createApprovalRecord, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { acknowledgeIncident, prepareRepairPacket, readIncidentStore } from "../src/data/delivery-system/incidentStore";
 import { recordOperationalIncident } from "../src/data/delivery-system/operationalIncidents";
-import { isProjectConfigurationError, readProjectRegistry, resolveEnabledProject } from "../src/data/delivery-system/projectRegistry";
-import { isRunRouteEligible } from "../src/data/delivery-system/runRouteEligibility";
+import { deriveProjectId, isProjectConfigurationError, readProjectRegistry, resolveEnabledProject, writeProjectRegistry, type ProjectEntry } from "../src/data/delivery-system/projectRegistry";
+import { isRunRouteEligibleForProfile } from "../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../src/data/delivery-system/runOrchestrator";
 import { readRunStore, resolveRunProfile, reviseRunDraft, type RunDraft, type RunDraftInput, type RunProvider, type RunRecord, type RunStatus } from "../src/data/delivery-system/runStore";
 import { SUPPORTED_REASONING_EFFORTS, type RunProfile, type RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
@@ -91,6 +92,7 @@ export async function handleControlPlaneRunRoute(
     if (match.kind === "promotions") return json(response, { packets: readPromotionStore(stateDir).packets });
     requireJsonContentType(request);
     const body = await readJsonBody(request);
+    if (match.kind === "create_project") return json(response, createProject(stateDir, body), 201);
     if (match.kind === "create") {
       if (body.profile === undefined) throw new HttpError(400, "run_profile_required");
       checkReasoningCapability(body);
@@ -102,7 +104,7 @@ export async function handleControlPlaneRunRoute(
       const revision = integer(body.revision, "invalid_run_revision");
       checkReasoningCapability(body);
       const input = draftInput(body);
-      if (!routeAvailable(stateDir, input.provider, input.model)) throw new HttpError(409, "run_route_unavailable");
+      if (!routeAvailable(stateDir, input)) throw new HttpError(409, "run_route_unavailable");
       const existing = readRunStore(stateDir).runs.find((run) => run.current.run_id === match.id);
       if (existing === undefined) throw new HttpError(404, "run_not_found");
       if (resolveRunProfile(existing) === "prod" || input.profile === "prod") {
@@ -168,12 +170,13 @@ export function reviseRunWithApproval(stateDir: string, runId: string, expectedR
   return readRunStore(stateDir).runs.find((run) => run.current.run_id === runId)!;
 }
 
-type Route = { readonly kind: "projects" | "runs" | "create" | "incidents" | "promotions" } |
+type Route = { readonly kind: "projects" | "create_project" | "runs" | "create" | "incidents" | "promotions" } |
   { readonly kind: "run" | "revision" | "approve" | "cancel" | "promote" | "acknowledge" | "repair" |
     "promotion_approve" | "promotion_reject" | "promotion_verify" | "promotion_publish" | "promotion_rollback"; readonly id: string };
 
 function matchRoute(method: string, path: string): Route | null {
   if (method === "GET" && path === "/projects") return { kind: "projects" };
+  if (method === "POST" && path === "/projects") return { kind: "create_project" };
   if (method === "GET" && path === "/runs") return { kind: "runs" };
   if (method === "POST" && path === "/runs") return { kind: "create" };
   if (method === "GET" && path === "/incidents") return { kind: "incidents" };
@@ -183,6 +186,39 @@ function matchRoute(method: string, path: string): Route | null {
     if (match !== null && method === (kind === "run" ? "GET" : "POST")) return { kind, id: decodeURIComponent(match[1]!) };
   }
   return null;
+}
+
+function createProject(stateDir: string, body: Record<string, unknown>): ProjectEntry {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const cwd = body.cwd;
+  if (name.length === 0 || name.length > 160 ||
+      typeof cwd !== "string" || cwd.length === 0 || cwd.length > 1_024 ||
+      !isAbsolute(cwd) || normalize(cwd) !== cwd ||
+      body.enabled !== undefined && typeof body.enabled !== "boolean") {
+    throw new HttpError(400, "project_invalid");
+  }
+  let projectId: string;
+  try {
+    projectId = deriveProjectId(name);
+  } catch {
+    throw new HttpError(400, "project_invalid");
+  }
+  const project: ProjectEntry = {
+    schema_version: "v1",
+    project_id: projectId,
+    name,
+    cwd,
+    enabled: body.enabled ?? true
+  };
+  return withStateMaintenanceLock(stateDir, () => {
+    const registry = readProjectRegistry(stateDir);
+    if (registry.projects.some((entry) => entry.project_id === projectId || resolve(entry.cwd) === resolve(cwd))) {
+      throw new HttpError(400, "project_exists");
+    }
+    if (registry.projects.length >= 64) throw new HttpError(400, "project_invalid");
+    writeProjectRegistry(stateDir, { ...registry, projects: [...registry.projects, project] });
+    return project;
+  });
 }
 
 function draftInput(body: Record<string, unknown>): RunDraftInput {
@@ -339,8 +375,15 @@ function knownHttpError(error: unknown): HttpError | null {
 function integer(value: unknown, code: string): number { if (!Number.isSafeInteger(value) || (value as number) < 1) throw new HttpError(400, code); return value as number; }
 function nonEmpty(value: unknown, code: string): string { if (typeof value !== "string" || value.length === 0 || value.length > 200) throw new HttpError(400, code); return value; }
 function isStringArray(value: unknown): value is string[] { return Array.isArray(value) && value.every((item) => typeof item === "string"); }
-function routeAvailable(stateDir: string, provider: string, model: string | null): boolean {
-  return isRunRouteEligible(stateDir, provider, model, new Date().toISOString());
+function routeAvailable(stateDir: string, input: RunDraftInput): boolean {
+  return isRunRouteEligibleForProfile(
+    stateDir,
+    input.provider,
+    input.model,
+    input.requested_reasoning_effort ?? null,
+    input.profile ?? "dev",
+    new Date().toISOString()
+  );
 }
 function sameDraftInput(draft: RunDraft, input: RunDraftInput): boolean {
   return isDeepStrictEqual({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, prompt_review_acknowledged: draft.prompt_review_acknowledged, profile: draft.profile, requested_reasoning_effort: draft.requested_reasoning_effort, promotion_packet_id: draft.promotion_packet_id }, { project_id: input.project_id, prompt: input.prompt, provider: input.provider, model: input.model, estimated_tokens: canonicalRunTokenBudget(input.prompt), requested_artifacts: input.requested_artifacts, prompt_review_acknowledged: input.prompt_review_acknowledged === true, profile: input.profile, requested_reasoning_effort: input.requested_reasoning_effort, promotion_packet_id: input.promotion_packet_id ?? null });

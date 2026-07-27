@@ -382,6 +382,38 @@ describe("control plane governed run API", () => {
     expect(new SupervisorQueue({ stateDir: api.stateDir }).snapshot()).toEqual([]);
   });
 
+  it("prepares, revises, and approves a known DEV route without a usable quota snapshot", async () => {
+    const api = await governedApi();
+    writeProviderQuotaStore(api.stateDir, {
+      schema_version: "v1",
+      snapshots: [{
+        ...snapshot("codex_cli", new Date().toISOString()),
+        models: [],
+        health: "unavailable",
+        error_code: "provider_unavailable"
+      }]
+    });
+    const fallbackDraft = { ...draft, model: "gpt-5.6-sol", requested_reasoning_effort: "high" };
+
+    const createdResponse = await api.call("POST", "/runs", fallbackDraft);
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json() as { current: { run_id: string; revision: number } };
+    const revisedResponse = await api.call("POST", `/runs/${created.current.run_id}/revisions`, {
+      ...fallbackDraft,
+      prompt: "Inspect revised status",
+      revision: created.current.revision
+    });
+    expect(revisedResponse.status).toBe(201);
+    const revised = await revisedResponse.json() as { current: { revision: number } };
+    const approvedResponse = await api.call("POST", `/runs/${created.current.run_id}/approve`, {
+      revision: revised.current.revision,
+      operator: "owner"
+    });
+
+    expect(approvedResponse.status).toBe(200);
+    expect((await approvedResponse.json() as { status: string }).status).toBe("queued");
+  });
+
   it("runs the production supervisor loop to a terminal result", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-"));
     const projectRoot = join(stateDir, "projects");
@@ -918,6 +950,108 @@ describe("control plane provider endpoints", () => {
     expect(await response.json()).toEqual({ providers: [] });
   });
 
+  it("serves the static fallback model catalog when quota snapshots contain no models", async () => {
+    const response = await request("/providers/models", "secret");
+    const body = await response.json() as {
+      models: Array<{
+        model_id: string;
+        providers: string[];
+        available: boolean;
+        health: string[];
+        source: string;
+        provider_routes: Array<{ provider: string; reasoning_efforts: string[] }>;
+      }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        model_id: "gpt-5.6-sol",
+        providers: ["codex_cli"],
+        available: true,
+        health: ["unavailable"],
+        source: "static_fallback",
+        provider_routes: [{
+          provider: "codex_cli",
+          available: true,
+          health: ["unavailable"],
+          source: "static_fallback",
+          reasoning_efforts: ["low", "medium", "high", "xhigh"]
+        }]
+      }),
+      expect.objectContaining({
+        model_id: "Sonnet 5",
+        providers: ["claude_cli"],
+        source: "static_fallback"
+      }),
+      expect.objectContaining({
+        model_id: "Gemini Flash",
+        providers: ["agy_cli"],
+        source: "static_fallback"
+      })
+    ]));
+  });
+
+  it("keeps a statically known model available when an unusable live row has the same provider/model pair", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [{
+        ...snapshot("codex_cli", new Date().toISOString()),
+        models: [{ model_id: "gpt-5.6-sol", available: false, health: "unavailable", source: "api" }]
+      }]
+    });
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const body = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, {
+      headers: { authorization: "Bearer secret" }
+    })).json() as { models: Array<{ model_id: string; providers: string[]; available: boolean; source: string }> };
+
+    expect(body.models.filter((model) => model.model_id === "gpt-5.6-sol" && model.providers.includes("codex_cli")))
+      .toEqual([expect.objectContaining({ available: true, source: "mixed" })]);
+  });
+
+  it("preserves provider-specific availability when providers share a live model id", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [
+        {
+          ...snapshot("codex_cli", new Date().toISOString()),
+          models: [{ model_id: "shared-live-model", available: true, health: "healthy", source: "api" }]
+        },
+        {
+          ...snapshot("claude_cli", new Date().toISOString()),
+          models: [{ model_id: "shared-live-model", available: false, health: "unavailable", source: "api" }]
+        }
+      ]
+    });
+    const server = createControlPlaneServer(stateDir, "secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const body = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, {
+      headers: { authorization: "Bearer secret" }
+    })).json() as {
+      models: Array<{
+        model_id: string;
+        provider_routes: Array<{ provider: string; available: boolean; health: string[]; source: string }>;
+      }>;
+    };
+    const shared = body.models.find((model) => model.model_id === "shared-live-model");
+
+    expect(shared?.provider_routes).toEqual([
+      expect.objectContaining({ provider: "claude_cli", available: false, health: ["unavailable"], source: "live_snapshot" }),
+      expect.objectContaining({ provider: "codex_cli", available: true, health: ["healthy"], source: "live_snapshot" })
+    ]);
+  });
+
   it("returns stale snapshots and filters a provider", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     const old = new Date(Date.now() - 10 * 60 * 1000).toISOString();
@@ -946,7 +1080,23 @@ describe("control plane provider endpoints", () => {
     const init = { headers: { authorization: "Bearer secret" } };
     const models = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, init)).json() as { models: Array<{ model_id: string }> };
     const health = await (await fetch(`http://127.0.0.1:${address.port}/providers/health`, init)).json() as { providers: Array<{ freshness: string }> };
-    expect(models.models).toEqual([{ model_id: "model-a", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low", "medium", "high", "xhigh"] }]);
+    expect(models.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        model_id: "model-a",
+        providers: ["codex_cli"],
+        available: true,
+        health: ["healthy"],
+        reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        provider_routes: [{
+          provider: "codex_cli",
+          available: true,
+          health: ["healthy"],
+          source: "live_snapshot",
+          reasoning_efforts: ["low", "medium", "high", "xhigh"]
+        }]
+      }),
+      expect.objectContaining({ model_id: "gpt-5.6-sol", providers: ["codex_cli"], source: "static_fallback" })
+    ]));
     expect(health.providers[0]?.freshness).toBe("fresh");
   });
 });

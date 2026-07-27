@@ -1,4 +1,4 @@
-import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectCreateInput, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
 
 export class ControlPlaneApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "ControlPlaneApiError"; }
@@ -23,6 +23,7 @@ export interface ControlPlaneClient {
   getProviderHealth(): Promise<ProviderHealth>;
   decideApproval(id: string, decision: "approved" | "rejected", reason?: string): Promise<ApprovalRecord>;
   getProjects(): Promise<readonly ProjectEntry[]>;
+  createProject(input: ProjectCreateInput): Promise<ProjectEntry>;
   getRuns(status?: RunStatus): Promise<readonly RunRecord[]>;
   listRuns(profile: RunProfile): Promise<readonly RunRecord[]>;
   getRun(id: string): Promise<RunRecord>;
@@ -91,6 +92,7 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
     getProviderHealth: () => request<ProviderHealth>("/providers/health"),
     decideApproval: (id, decision, reason) => request<ApprovalRecord>(`/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, ...(reason === undefined ? {} : { reason }) }) }),
     getProjects: () => request<readonly ProjectEntry[]>("/projects"),
+    createProject: (input) => request<ProjectEntry>("/projects", jsonPost(input)),
     getRuns: (status) => request<readonly RunRecord[]>(`/runs${status === undefined ? "" : `?status=${encodeURIComponent(status)}`}`),
     listRuns: (profile) => request<readonly RunRecord[]>(`/runs?profile=${encodeURIComponent(profile)}`),
     getRun: (id) => request<RunRecord>(`/runs/${encodeURIComponent(id)}`),

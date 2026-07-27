@@ -67,6 +67,12 @@ export function projectRegistryPath(stateDir: string): string {
   return join(stateDir, PROJECT_REGISTRY_FILE);
 }
 
+export function deriveProjectId(name: string): string {
+  const projectId = name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+  if (!PROJECT_ID_PATTERN.test(projectId)) throw new Error("invalid_project_id");
+  return projectId;
+}
+
 function validateProjectRegistry(document: unknown): asserts document is ProjectRegistryDocument {
   if (typeof document !== "object" || document === null) {
     throw new Error(PROJECT_REGISTRY_ERROR_CODES.INVALID_REGISTRY);

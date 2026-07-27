@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
-import { isRunRouteEligible } from "./runRouteEligibility";
+import { isRunRouteEligibleForProfile } from "./runRouteEligibility";
 import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
 import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, canonicalPromptCommitment, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createGroupRunDraft, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, settleRunReservation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
@@ -60,7 +60,7 @@ export function createRunOrchestrator(options: {
   readonly dispatch: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
   readonly packetBuilder?: RunPacketBuilder;
   readonly now?: () => string;
-  readonly isRouteAvailable?: (provider: string, model: string | null) => boolean;
+  readonly isRouteAvailable?: (provider: string, model: string | null, profile: "dev" | "prod", reasoning: RunDraftInput["requested_reasoning_effort"]) => boolean;
   readonly afterPhase?: (phase: "run_persisted" | "approval_persisted" | "bound" | "queued" | "reservation_terminal" | "artifact" | "finalized" | "compensation_cleared") => void;
   readonly supervisorMaxAttempts?: number;
 }) {
@@ -72,14 +72,16 @@ export function createRunOrchestrator(options: {
     return value;
   }
 
-  function routeAvailable(provider: string, model: string | null): boolean {
-    if (options.isRouteAvailable !== undefined) return options.isRouteAvailable(provider, model);
-    return isRunRouteEligible(options.stateDir, provider, model, now());
+  function routeAvailable(input: Pick<RunDraftInput, "provider" | "model" | "profile" | "requested_reasoning_effort">): boolean {
+    const profile = input.profile ?? "dev";
+    const reasoning = input.requested_reasoning_effort ?? null;
+    if (options.isRouteAvailable !== undefined) return options.isRouteAvailable(input.provider, input.model, profile, reasoning);
+    return isRunRouteEligibleForProfile(options.stateDir, input.provider, input.model, reasoning, profile, now());
   }
 
   function prepareRun(input: RunDraftInput): RunRecord {
     resolveEnabledProject(options.stateDir, input.project_id, registryOptions);
-    if (!routeAvailable(input.provider, input.model)) throw new Error("run_route_unavailable");
+    if (!routeAvailable(input)) throw new Error("run_route_unavailable");
     const draft = createRunDraft(options.stateDir, input, now(), registryOptions);
     const approval = createApprovalRecord({ approvalId: `run-approval-${draft.run_id}-${draft.revision}`, runId: draft.run_id, revision: draft.revision, sessionId: draft.run_id, vendor: draft.provider, ...(draft.model === null ? {} : { model: draft.model }), skillIds: [], prompt: draft.prompt, estimatedTokens: draft.estimated_tokens, inputTokenBound: draft.input_token_bound, outputTokenAllowance: draft.output_token_allowance, promptReviewAcknowledged: draft.prompt_review_acknowledged, now: now() });
     const queue = readApprovalQueue(options.stateDir);
@@ -104,7 +106,7 @@ export function createRunOrchestrator(options: {
 
   function ensureGroupRun(input: { readonly groupId: string; readonly slotId: string; readonly draft: RunDraftInput; readonly operator: string }): QueuedRun {
     resolveEnabledProject(options.stateDir, input.draft.project_id, registryOptions);
-    if (!routeAvailable(input.draft.provider, input.draft.model)) throw new Error("run_route_unavailable");
+    if (!routeAvailable(input.draft)) throw new Error("run_route_unavailable");
     if (options.tokenGateway.findGroup === undefined || options.tokenGateway.claimGroupSlot === undefined) throw new Error("token_group_unsupported");
     const group = options.tokenGateway.findGroup(input.groupId);
     const slot = group?.slots.find((candidate) => candidate.slotId === input.slotId);
@@ -218,7 +220,7 @@ export function createRunOrchestrator(options: {
     if (before.current.revision !== revision) throw new Error("run_revision_conflict");
     if (before.status === "queued" && before.supervisor_task_id !== null) return { ...before, supervisor_task_id: before.supervisor_task_id };
     if (!["draft", "approved"].includes(before.status)) throw new Error("run_revision_conflict");
-    if (!routeAvailable(before.current.provider, before.current.model)) throw new Error("run_route_unavailable");
+    if (!routeAvailable(before.current)) throw new Error("run_route_unavailable");
     const queue = readApprovalQueue(options.stateDir);
     const index = queue.records.findIndex((item) => item.run_id === runId && item.revision === revision);
     if (index < 0) throw new Error("approval_not_found");

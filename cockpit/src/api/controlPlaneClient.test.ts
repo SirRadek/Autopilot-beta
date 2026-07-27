@@ -46,6 +46,21 @@ describe("ControlPlaneClient", () => {
     expect(fetcher.mock.calls[0]?.[0]).toBe("http://cp/observability/timeline?session_id=project%2Fa&limit=25");
   });
 
+  it("creates a project with an exact same-origin JSON request", async () => {
+    const project = { schema_version: "v1", project_id: "alpha", name: "Alpha", cwd: "/work/alpha", enabled: true };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(project), { status: 201 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+
+    await client.createProject({ name: "Alpha", cwd: "/work/alpha" });
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe("http://cp/projects");
+    const init = fetcher.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "Alpha", cwd: "/work/alpha" });
+  });
+
   it("uses the governed project, run, and incident routes with exact JSON bodies", async () => {
     const run = { current: { run_id: "run/1", revision: 3 } };
     const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(run), { status: 200 }));
