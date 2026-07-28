@@ -22,11 +22,11 @@ export function App() {
   const [authError, setAuthError] = useState<string>();
   useEffect(() => { client.getAuthSession().then(() => setAuthenticated(true)).catch((error: unknown) => { if (error instanceof ControlPlaneApiError && error.status === 401) setAuthenticated(false); else setAuthError(error instanceof Error ? error.message : "Control Plane není dostupný"); }); }, [client]);
   if (authenticated === undefined) return <main className="auth-page"><p role="status">Připojuji Control Plane…</p></main>;
-  if (!authenticated) return <LoginForm error={authError} onLogin={async (token) => { await client.login(token); setAuthError(undefined); setAuthenticated(true); }} />;
-  return <AuthenticatedCockpit client={client} />;
+  if (!authenticated) return <LoginForm error={authError} onLogin={async (credentials) => { await client.login(credentials); setAuthError(undefined); setAuthenticated(true); }} />;
+  return <AuthenticatedCockpit client={client} onLogout={async () => { await client.logout(); setAuthError(undefined); setAuthenticated(false); }} />;
 }
 
-export function AuthenticatedCockpit({ client }: { readonly client: ReturnType<typeof createControlPlaneClient> }) {
+export function AuthenticatedCockpit({ client, onLogout }: { readonly client: ReturnType<typeof createControlPlaneClient>; readonly onLogout?: () => Promise<void> }) {
   const [route, setRoute] = useRouteState();
   const data = useCockpitData(client, route.environment);
   const [budgetProvider, setBudgetProvider] = useState<string>();
@@ -89,7 +89,7 @@ export function AuthenticatedCockpit({ client }: { readonly client: ReturnType<t
     onArbitrate={async (id, operator, route) => { const record = await client.arbitrateBrainstorm(id, operator, route); await data.refresh(); return record; }}
     onCancel={async (id) => { const record = await client.cancelBrainstorm(id); await data.refresh(); return record; }}
   />;
-  return <EnvironmentProvider environment={route.environment}><AppShell environment={route.environment} onEnvironmentChange={(environment) => setRoute({ ...route, environment, runId: undefined })} selectedProject={selectedProject} selectedSession={selectedSession ? { id: selectedSession.session_id, name: selectedSession.name ?? selectedSession.session_id, status: selectedSession.status === "active" ? "running" : "completed", agent: selectedSession.agent_command } : undefined}
+  return <EnvironmentProvider environment={route.environment}><AppShell environment={route.environment} onEnvironmentChange={(environment) => setRoute({ ...route, environment, runId: undefined })} onLogout={onLogout} selectedProject={selectedProject} selectedSession={selectedSession ? { id: selectedSession.session_id, name: selectedSession.name ?? selectedSession.session_id, status: selectedSession.status === "active" ? "running" : "completed", agent: selectedSession.agent_command } : undefined}
     runWorkspace={<>{route.environment === "dev" ? <RunComposer projects={data.projects} quotas={data.quotas} models={data.models} onPrepare={async (input) => { const run = await client.createDevRun(input); setRoute({ ...route, projectId: run.current.project_id, runId: run.current.run_id }); await data.refresh(); return run; }} onApprove={async (runId, revision) => { const run = await client.approveRun(runId, revision, "cockpit-operator"); setRoute({ ...route, projectId: run.current.project_id, runId }); await data.refresh(); return run; }} /> : null}{promotionPane}{data.runs.length ? <section className="run-picker" aria-label="Běhy"><h2>Běhy</h2>{data.runs.slice(0, 50).map((run) => <button type="button" key={run.current.run_id} aria-pressed={run.current.run_id === selectedRun?.current.run_id} onClick={() => setRoute({ ...route, projectId: run.current.project_id, runId: run.current.run_id })}>{run.current.run_id} · {run.status}</button>)}</section> : null}</>}
     runInspector={<>{runTimeline.error ? <p role="alert">Časová osa není dostupná: {runTimeline.error.message}</p> : null}<RunInspector run={selectedRun} timeline={runTimeline.data} /></>}
     incidentPane={<IncidentPane incidents={data.incidents} onAcknowledge={async (id) => { await client.acknowledgeIncident(id, "cockpit-operator"); await data.refresh(); }} onPrepareRepairPacket={(id) => { const incident = data.incidents.find((item) => item.incident_id === id); return client.prepareRepairPacket(id, { expected: incident?.impact ?? "Governed run completes without an internal incident", actual: incident?.summary ?? "Internal incident recorded" }); }} />}

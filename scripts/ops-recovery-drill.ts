@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { buildReadiness } from "../src/data/delivery-system/readiness";
 import {
@@ -7,6 +8,8 @@ import {
 } from "../src/data/delivery-system/stateRecovery";
 import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
+import { defaultAdminCredentialsPath } from "../src/data/delivery-system/adminCredentials";
+import { AuthSessionRegistry, authStateRoot } from "../src/data/delivery-system/authSessionRegistry";
 
 const [archivePath] = process.argv.slice(2);
 if (!archivePath || process.argv.length !== 3) {
@@ -27,10 +30,20 @@ function validateRestoredState(stateDir: string): RecoveryValidation {
   } catch {
     return { ready: false, reconciled: false, errors: ["reconciliation_failed"] };
   }
+  const liveStateDir = resolve(
+    process.env.AUTOPILOT_STATE_DIR?.trim() ||
+    process.env.CONTROL_PLANE_STATE_DIR?.trim() ||
+    join(homedir(), ".local", "state", "autopilot")
+  );
+  const authRegistry = new AuthSessionRegistry(authStateRoot(liveStateDir));
   const report = buildReadiness({
     stateDir,
     projectRoot: resolveConfiguredProjectRoot(),
     authToken: "recovery-drill-validation",
+    adminCredentialsPath: defaultAdminCredentialsPath(),
+    serviceTokenDigest: () => authRegistry.serviceTokenDigest(),
+    secureCookies: false,
+    secureCookiesRequired: false,
     providerCommands: {},
     openRouterConfigured: false
   });

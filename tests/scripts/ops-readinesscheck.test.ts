@@ -35,6 +35,7 @@ async function runCli(status: number, body: unknown) {
 
 const components = {
   configuration: { status: "ready", error_code: null },
+  authentication: { status: "ready", error_code: null },
   managed_state: { status: "ready", error_code: null },
   project_registry: { status: "ready", error_code: null },
   supervisor: { status: "ready", error_code: null },

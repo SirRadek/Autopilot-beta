@@ -4,11 +4,17 @@ export class ControlPlaneApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "ControlPlaneApiError"; }
 }
 
-export interface ControlPlaneClientOptions { readonly baseUrl?: string; readonly token?: string; readonly fetcher?: typeof fetch }
+export interface ControlPlaneClientOptions {
+  readonly baseUrl?: string;
+  /** Service/test-only bearer seam; browser operators authenticate with login(). */
+  readonly serviceToken?: string;
+  readonly fetcher?: typeof fetch;
+}
 export interface BrowserAuthSession { readonly authenticated: boolean; readonly expires_at?: string }
+export interface AdminLoginCredentials { readonly username: string; readonly password: string }
 export interface ControlPlaneClient {
   getAuthSession(): Promise<BrowserAuthSession>;
-  login(token: string): Promise<BrowserAuthSession>;
+  login(credentials: AdminLoginCredentials): Promise<BrowserAuthSession>;
   logout(): Promise<void>;
   getStatus(): Promise<ControlPlaneStatus>;
   getSessions(): Promise<readonly SessionRecord[]>;
@@ -56,12 +62,12 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
   // production reverse proxy) forwards these paths to the loopback Control
   // Plane, so no long-lived credential is embedded in the asset bundle.
   const baseUrl = (options.baseUrl ?? import.meta.env?.VITE_CONTROL_PLANE_URL ?? "").replace(/\/$/, "");
-  const token = options.token ?? "";
+  const serviceToken = options.serviceToken ?? "";
   const fetcher = options.fetcher ?? fetch;
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Accept", "application/json");
-    if (token) headers.set("Authorization", `Bearer ${token}`);
+    if (serviceToken) headers.set("Authorization", `Bearer ${serviceToken}`);
     const response = await fetcher(`${baseUrl}${path}`, { ...init, headers, credentials: "include" });
     if (!response.ok) {
       const body = (await response.text()).slice(0, 500);
@@ -71,7 +77,7 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
   }
   return {
     getAuthSession: () => request<BrowserAuthSession>("/auth/session"),
-    login: (loginToken) => request<BrowserAuthSession>("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: loginToken }) }),
+    login: (credentials) => request<BrowserAuthSession>("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credentials) }),
     logout: async () => { await request<BrowserAuthSession>("/auth/logout", { method: "POST" }); },
     getStatus: () => request<ControlPlaneStatus>("/status"),
     getSessions: () => request<readonly SessionRecord[]>("/sessions"),

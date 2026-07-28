@@ -16,6 +16,9 @@ related_agents:
 related_files:
   - src/auth/session.ts
   - src/api
+  - src/data/delivery-system/adminCredentials.ts
+  - src/data/delivery-system/authSessionRegistry.ts
+  - scripts/control-plane-auth.ts
 required_checks:
   - reject_unauthenticated
   - bind_action_to_session_user

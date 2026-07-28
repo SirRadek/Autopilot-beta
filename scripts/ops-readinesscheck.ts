@@ -1,11 +1,13 @@
 const MAX_RESPONSE_BYTES = 64 * 1024;
-const CORE_COMPONENTS = ["configuration", "managed_state", "project_registry", "supervisor", "token_gateway"] as const;
+const CORE_COMPONENTS = ["configuration", "authentication", "managed_state", "project_registry", "supervisor", "token_gateway"] as const;
 const PROVIDERS = ["codex_cli", "claude_cli", "agy_cli", "openrouter_api"] as const;
 const STATUSES = new Set(["ready", "degraded", "unavailable"]);
 const ERROR_CODES = new Set([
   "invalid_configuration", "state_unavailable", "invalid_state_schema",
   "project_registry_missing", "invalid_project_registry", "invalid_supervisor_state",
   "invalid_token_gateway_state", "probe_not_configured", "not_observed", "timeout",
+  "admin_credentials_missing", "invalid_admin_credentials", "admin_credentials_in_managed_state", "service_token_missing",
+  "invalid_service_token", "secure_cookies_required",
   "missing_credential", "malformed_response", "provider_unavailable", "provider_error"
 ]);
 

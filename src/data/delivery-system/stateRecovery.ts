@@ -18,8 +18,9 @@ import {
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 
+import { AUTH_STATE_DIRECTORY_NAME } from "./authSessionRegistry";
 import { validateStateBackup } from "./stateBackup";
 
 interface RestoreArchiveFile {
@@ -148,7 +149,14 @@ function validateRestoreTarget(targetDirectory: string): {
 }
 
 function materializeRestoreFile(staging: string, file: RestoreArchiveFile): void {
-  const outputPath = join(staging, ...file.path.split("/"));
+  const segments = file.path.split("/");
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")
+    || segments[0] === AUTH_STATE_DIRECTORY_NAME) {
+    throw new Error("unsafe_restore_path");
+  }
+  const stagingRoot = resolve(staging);
+  const outputPath = resolve(stagingRoot, ...segments);
+  if (!outputPath.startsWith(`${stagingRoot}${sep}`)) throw new Error("unsafe_restore_path");
   mkdirSync(dirname(outputPath), { recursive: true, mode: 0o700 });
   const descriptor = openSync(outputPath, "wx", 0o600);
   try {

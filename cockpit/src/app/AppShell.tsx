@@ -24,6 +24,7 @@ export type AppShellProps = {
   incidentPane?: ReactNode;
   brainstormPane?: ReactNode;
   onTabChange?: (tab: CockpitTab) => void;
+  onLogout?: () => Promise<void>;
 };
 
 const tabs: Array<{ id: CockpitTab; label: string }> = [
@@ -34,7 +35,7 @@ const tabs: Array<{ id: CockpitTab; label: string }> = [
   { id: "brainstorm", label: "Brainstorm" },
 ];
 
-export function AppShell({ environment, onEnvironmentChange, selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, runWorkspace, runInspector, incidentPane, brainstormPane, onTabChange }: AppShellProps) {
+export function AppShell({ environment, onEnvironmentChange, selectedProject, selectedSession, projectsPane, sessionsPane, approvalPane, operationsPane, providersPane, workersPane, runWorkspace, runInspector, incidentPane, brainstormPane, onTabChange, onLogout }: AppShellProps) {
   const [activeTab, setActiveTab] = useState<CockpitTab>("approval");
   const [inspectorTab, setInspectorTab] = useState<"run" | "errors">("run");
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -71,6 +72,7 @@ export function AppShell({ environment, onEnvironmentChange, selectedProject, se
         <div className="selection-context" aria-label="Selected context">
           <span>{selectedProject?.name ?? "No project selected"}</span>
           {selectedSession ? <><span aria-hidden="true">/</span><span>{selectedSession.name}</span><StatusBadge status={selectedSession.status} /></> : null}
+          {onLogout ? <button type="button" onClick={onLogout}>Odhlásit</button> : null}
         </div>
       </header>
       <nav className="cockpit-environments" aria-label="Prostředí Cockpitu" role="tablist">

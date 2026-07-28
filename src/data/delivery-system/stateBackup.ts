@@ -17,6 +17,7 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { withStateMaintenanceLock } from "./stateMaintenanceLock";
+import { AUTH_STATE_DIRECTORY_NAME, authStateRoot } from "./authSessionRegistry";
 
 const BACKUP_VERSION = 1;
 const DEFAULT_MAX_FILE_BYTES = 4 * 1024 * 1024;
@@ -202,6 +203,7 @@ export function quarantineStateBackup(path: string): string {
 function regularBackupFiles(stateDirectory: string, backupDirectory: string): string[] {
   const root = resolve(stateDirectory);
   const excludedBackupDirectory = resolve(backupDirectory);
+  const excludedAuthDirectory = resolve(authStateRoot(stateDirectory));
   const output: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -210,6 +212,7 @@ function regularBackupFiles(stateDirectory: string, backupDirectory: string): st
       if (entry.isDirectory()) {
         const resolved = resolve(path);
         if (resolved === excludedBackupDirectory
+          || resolved === excludedAuthDirectory
           || entry.name === ".state-maintenance.lock"
           || entry.name.endsWith("-incident-spool")) continue;
         visit(path);
@@ -234,7 +237,11 @@ function portableRelative(root: string, path: string): string {
 }
 
 function safeArchivePath(path: string): boolean {
-  return path.length > 0 && path.length <= 512 && !path.startsWith("/") && !path.includes("\\") && resolve("/restore", path).startsWith("/restore/");
+  if (path.length === 0 || path.length > 512 || path.startsWith("/") || path.includes("\\")) return false;
+  const segments = path.split("/");
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) return false;
+  if (segments[0] === AUTH_STATE_DIRECTORY_NAME) return false;
+  return resolve("/restore", ...segments).startsWith("/restore/");
 }
 
 function checksum(value: Buffer): string {

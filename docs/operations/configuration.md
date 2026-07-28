@@ -14,18 +14,56 @@
 | Isolated acceptance | port `8877` | operator command only |
 
 State and project directories must be mode `0700`; the environment file must be `0600`.
+Admin credentials default to `~/.config/autopilot/admin-credentials.json` at mode
+`0600`. Durable auth state lives at `<managed-state>/auth`, is mode-private, and
+is excluded from managed-state backup and restore archives.
 
 ## Environment variables
 
 ### `CONTROL_PLANE_TOKEN`
 
 Required non-empty shared operator secret. It authenticates bearer clients and creates browser
-sessions through `POST /auth/login`. Never expose it as a `VITE_*` variable.
+sessions through the legacy `{token}` `POST /auth/login` path. It remains required
+for compatibility readiness in this phase. Never expose it as a `VITE_*` variable.
+
+### `AUTOPILOT_ADMIN_CREDENTIALS_PATH`
+
+Optional override for the admin credential JSON path. The default is
+`~/.config/autopilot/admin-credentials.json`. The configured path must resolve
+outside the managed-state directory; otherwise startup fails and authentication
+readiness reports `admin_credentials_in_managed_state`. Provision or rotate it
+offline:
+
+```bash
+AUTOPILOT_ADMIN_USERNAME=admin \
+AUTOPILOT_ADMIN_PASSWORD='a-password-of-at-least-12-characters' \
+npm run control-plane:set-admin-password
+```
+
+Rotation increments `credential_generation` and invalidates all existing browser
+sessions. The command prints no credential material.
+
+Issue the service bearer offline into the auth state root:
+
+```bash
+npm run control-plane:issue-service-token -- /home/radek/.local/state/autopilot
+```
+
+The command prints `SERVICE_TOKEN=<hex>` exactly once; capture the plaintext in
+the root-held service secret. Only its SHA-256 digest is stored by Autopilot.
 
 ### `CONTROL_PLANE_SECURE_COOKIES`
 
 Accepts only `false`, `true`, or empty/unset. Use `false` for loopback HTTP and `true` only behind the
 reviewed same-origin TLS proxy. Any other non-empty value prevents startup.
+
+### `CONTROL_PLANE_REQUIRE_SECURE_COOKIES`
+
+Accepts only `false`, `true`, or empty/unset (any other value prevents startup). Independent fail-closed
+policy: when `true`, readiness reports the `authentication` component `unavailable`
+(`secure_cookies_required`) unless `CONTROL_PLANE_SECURE_COOKIES` is actually `true`. Kept separate from
+`CONTROL_PLANE_SECURE_COOKIES` so a single flag cannot silently mask its own absence in a TLS-fronted
+production deployment. Set both to `true` in production.
 
 ### `CONTROL_PLANE_USAGE_PROBES`
 
