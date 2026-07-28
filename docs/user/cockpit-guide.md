@@ -7,10 +7,11 @@ authentication, project allowlisting, owner approval, token policy, or provider 
 
 ## Login and session lifetime
 
-Enter the Control Plane token on the login screen. A successful login creates an HttpOnly,
-SameSite=Lax cookie for loopback use; the TLS deployment adds `Secure`. The server stores browser
-sessions in memory for eight hours. A restart logs every browser out. Never put the token in a URL,
-repository file, screenshot, or incident packet.
+Enter your admin username and password on the login screen. A successful login creates an HttpOnly,
+SameSite=Lax cookie for loopback use; the TLS deployment adds `Secure`. The server persists only a hash
+of the session in a separate auth state root with a ~30-day sliding expiry, so a Control Plane restart
+keeps you signed in; an explicit logout or an admin password change invalidates the session. Never put
+your password in a URL, repository file, screenshot, or incident packet.
 
 ## Main destinations
 

@@ -4,11 +4,16 @@ import { join } from "node:path";
 
 const browserStateDir = process.env.AUTOPILOT_BROWSER_STATE_DIR;
 if (browserStateDir === undefined) throw new Error("AUTOPILOT_BROWSER_STATE_DIR is required");
+const username = process.env.AUTOPILOT_PROXY_TEST_USERNAME ?? "";
+const password = process.env.AUTOPILOT_PROXY_TEST_PASSWORD ?? "";
+if (!username) throw new Error("AUTOPILOT_PROXY_TEST_USERNAME is required");
+if (!password) throw new Error("AUTOPILOT_PROXY_TEST_PASSWORD is required");
 
 async function login(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Autopilot cockpit" })).toBeVisible();
-  await page.getByLabel("Control Plane token").fill("browser-test-token");
+  await page.getByLabel("Uživatelské jméno").fill(username);
+  await page.getByLabel("Heslo").fill(password);
   await page.getByRole("button", { name: "Přihlásit" }).click();
   await expect(page.getByRole("heading", { name: "Hybrid Cockpit" })).toBeVisible();
 }
@@ -55,9 +60,10 @@ test("shows approval confirmation and performs a session mutation", async ({ pag
 
 test("surfaces a provider stale/error state without breaking the shell", async ({ page }) => {
   await page.route("**/providers/health", (route) => route.abort("failed"));
+  await page.route("**/providers/quotas", (route) => route.abort("failed"));
   await login(page);
   await expect(page.getByRole("heading", { name: "Hybrid Cockpit" })).toBeVisible();
-  await expect(page.getByLabel("Provider Budget").getByText("No provider data available.")).toBeVisible();
+  await expect(page.getByLabel("Provider Budget").getByText("Unavailable", { exact: true }).first()).toBeVisible();
 });
 
 test("supports keyboard tab navigation on the responsive layout", async ({ page }) => {

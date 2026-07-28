@@ -54,11 +54,33 @@ function git(checkout: string, ...args: string[]): string {
 }
 
 function makeCheckout(
-  options: { distRootSymlink?: boolean; distSymlink?: boolean; emptyDistDir?: boolean } = {},
+  options: { authCli?: boolean; distRootSymlink?: boolean; distSymlink?: boolean; emptyDistDir?: boolean } = {},
 ): { checkout: string; sha: string } {
   const checkout = join(makeTempDir(), "checkout");
   const dist = options.distRootSymlink ? join(makeTempDir(), "external-dist") : join(checkout, "cockpit", "dist");
   mkdirSync(join(dist, "assets"), { recursive: true });
+  if (options.authCli) {
+    const tsx = join(checkout, "node_modules", ".bin", "tsx");
+    mkdirSync(dirname(tsx), { recursive: true });
+    mkdirSync(join(checkout, "scripts"), { recursive: true });
+    writeExecutable(tsx, `
+command="\${2:-}"
+case "$command" in
+  set-admin-password)
+    printf '%s\n' '{"stub":"admin-credentials"}' > "$AUTOPILOT_ADMIN_CREDENTIALS_PATH"
+    chmod 0600 "$AUTOPILOT_ADMIN_CREDENTIALS_PATH"
+    ;;
+  issue-service-token)
+    install -d -m 0700 "$3/auth"
+    printf '%s\n' '{"stub":"service-token-digest"}' > "$3/auth/service-token.json"
+    chmod 0600 "$3/auth/service-token.json"
+    printf '%s\n' 'SERVICE_TOKEN=stub-service-secret'
+    ;;
+  *) exit 1 ;;
+esac
+`);
+    writeFileSync(join(checkout, "scripts", "control-plane-auth.ts"), "// fixture\n");
+  }
   writeFileSync(join(dist, "index.html"), options.distRootSymlink ? "external\n" : "cockpit\n");
   writeFileSync(join(dist, "assets", "app.js"), "app\n");
   if (options.emptyDistDir) {
@@ -585,7 +607,7 @@ if [[ -n "$output" && "$output" == */health.json ]]; then
   esac
 elif [[ -n "$output" && "$output" == */ready.json ]]; then
   case "\${STUB_READY_MODE:-ready}" in
-    ready) printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$output"; printf 200 ;;
+    ready) printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null},"authentication":{"status":"ready","error_code":null},"managed_state":{"status":"ready","error_code":null},"project_registry":{"status":"ready","error_code":null},"supervisor":{"status":"ready","error_code":null},"token_gateway":{"status":"ready","error_code":null}}}' > "$output"; printf 200 ;;
     503) printf '{}' > "$output"; printf 503 ;;
     malformed) printf '{' > "$output"; printf 200 ;;
     missing) printf '%s' '{"ready":true,"components":{"configuration":{"status":"ready","error_code":null}}}' > "$output"; printf 200 ;;
@@ -613,7 +635,7 @@ fi
 }
 
 function prepareIsolatedRun() {
-  const { checkout, sha } = makeCheckout();
+  const { checkout, sha } = makeCheckout({ authCli: true });
   const releaseRoot = makeReleaseRoot();
   const node24ForStaging = join(makeTempDir(), "node24");
   writeExecutable(node24ForStaging, `
@@ -656,6 +678,8 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(result.stdout).toContain("PUBLIC_CA_SHA256_FINGERPRINT=AA:BB:CC:DD");
     expect(result.stdout).toContain("ISOLATED_ACCEPTANCE_READY");
     expect(`${result.stdout}${result.stderr}`).not.toContain("isolated-test-token");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("autopilot-acceptance-test");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("stub-service-secret");
     expect(`${result.stdout}${result.stderr}`).not.toContain("PRIVATE KEY");
     const log = readFileSync(prepared.stubs.log, "utf8");
     expect(log).toMatch(/^setpriv --reuid \d+ --regid \d+ --clear-groups -- .*caddy validate /m);
@@ -666,9 +690,14 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(log).not.toContain("nft delete table");
     expect(statSync(join(prepared.runtime, "state")).mode & 0o777).toBe(0o700);
     expect(statSync(join(prepared.runtime, "projects")).mode & 0o777).toBe(0o700);
+    expect(statSync(join(prepared.runtime, "admin")).mode & 0o777).toBe(0o700);
+    expect(statSync(join(prepared.runtime, "admin", "admin-credentials.json")).mode & 0o777).toBe(0o600);
+    expect(existsSync(join(prepared.runtime, "state", "auth", "service-token.json"))).toBe(true);
     expect(statSync(join(prepared.runtime, "control-plane.env")).mode & 0o777).toBe(0o600);
     expect(readFileSync(join(prepared.runtime, "control-plane.env"), "utf8"))
       .toContain("CONTROL_PLANE_SECURE_COOKIES=true");
+    expect(readFileSync(join(prepared.runtime, "control-plane.env"), "utf8"))
+      .toContain(`AUTOPILOT_ADMIN_CREDENTIALS_PATH=${prepared.runtime}/admin/admin-credentials.json`);
     const isolatedCaddyfile = readFileSync(join(prepared.runtime, "Caddyfile"), "utf8");
     expect(isolatedCaddyfile).toContain("auto_https disable_redirects");
     expect(isolatedCaddyfile).toContain("\n\troute {\n");
@@ -965,7 +994,8 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(config).toMatch(/screenshot:\s*["']off["']/);
     expect(config).not.toContain("webServer");
     expect(spec).toContain('await page.goto("/")');
-    expect(spec).toContain('getByLabel("Control Plane token")');
+    expect(spec).toContain('getByLabel("Uživatelské jméno")');
+    expect(spec).toContain('getByLabel("Heslo")');
     expect(spec).toContain('getByRole("button", { name: "Přihlásit" })');
     expect(spec).toContain('getByRole("heading", { name: "Hybrid Cockpit" })');
     expect(spec).toContain('performance.getEntriesByType("resource")');
@@ -1007,6 +1037,8 @@ fi
 `);
   writeExecutable(join(bin, "npx"), `
 [[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
+[[ "\${AUTOPILOT_PROXY_TEST_USERNAME:-}" == acceptance-admin ]]
+[[ "\${AUTOPILOT_PROXY_TEST_PASSWORD:-}" == autopilot-acceptance-test ]]
 [[ -z "\${AUTOPILOT_PROXY_TEST_SPKI_SHA256:-}" ]]
 [[ "$HOME" == */browser-home ]]
 [[ "\${PLAYWRIGHT_BROWSERS_PATH:-}" == */browser-cache ]]
@@ -1114,6 +1146,8 @@ esac
       AUTOPILOT_PROXY_BASE_URL: "https://autopilot.local:8443",
       AUTOPILOT_PROXY_CA_CERT: caCert,
       AUTOPILOT_PROXY_TOKEN_COMMAND: extraEnv.TEST_TOKEN_COMMAND ?? "printf %s behavioral-secret",
+      AUTOPILOT_PROXY_TEST_USERNAME: extraEnv.AUTOPILOT_PROXY_TEST_USERNAME ?? "acceptance-admin",
+      AUTOPILOT_PROXY_TEST_PASSWORD: extraEnv.AUTOPILOT_PROXY_TEST_PASSWORD ?? "autopilot-acceptance-test",
       AUTOPILOT_PROXY_TEST_MODE: "1",
       AUTOPILOT_PROXY_TEST_CERTUTIL_BIN: join(bin, "certutil"),
     },
@@ -1171,6 +1205,16 @@ describe("Cockpit trusted host acceptance", () => {
     expect(commands).toContain("evil-referer.headers");
     expect(commands).not.toContain("behavioral-secret");
     expect(commands).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
+  });
+
+  it.each([
+    ["AUTOPILOT_PROXY_TEST_USERNAME", { AUTOPILOT_PROXY_TEST_USERNAME: "" }],
+    ["AUTOPILOT_PROXY_TEST_PASSWORD", { AUTOPILOT_PROXY_TEST_PASSWORD: "" }],
+  ])("fails closed when %s is unset", (name, extraEnv) => {
+    const { result } = runHostAcceptance(extraEnv);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(`${name} is required`);
   });
 
   it("accepts a non-API 404 for an unsupported static lookalike POST", () => {
