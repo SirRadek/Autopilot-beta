@@ -48,6 +48,19 @@ function providerTab(scope: HTMLElement, id: string): HTMLButtonElement { return
 function activeProvider(scope: HTMLElement): string | undefined { return scope.querySelector(".provider-heading h3")?.textContent ?? undefined; }
 
 describe("AuthenticatedCockpit provider budget", () => {
+  it("exposes an explicit logout action", async () => {
+    const onLogout = vi.fn().mockResolvedValue(undefined);
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    await act(async () => { root.render(<AuthenticatedCockpit client={fakeClient()} onLogout={onLogout} />); });
+    await act(async () => { await Promise.resolve(); });
+
+    const logout = [...host.querySelectorAll("button")].find((button) => button.textContent === "Odhlásit") as HTMLButtonElement;
+    expect(logout).toBeDefined();
+    await act(async () => logout.click());
+    expect(onLogout).toHaveBeenCalledOnce();
+    act(() => root.unmount()); host.remove();
+  });
+
   it("switches the viewed provider budget when a provider tab is clicked", async () => {
     const { host, root } = await mount(fakeClient());
     const pane = budgetPane(host);

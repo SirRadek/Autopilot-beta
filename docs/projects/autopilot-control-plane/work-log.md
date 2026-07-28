@@ -3293,3 +3293,29 @@ Baseline review repairs:
   bundled dependency.
 - Moved the Task 8 Codex version process probe into the governed delivery-system
   lane so the whole-repository dispatch boundary remains intact.
+
+## 2026-07-28 Additive Admin And Service Authentication
+
+Date: 2026-07-28
+Request or trigger: implement the approved compatibility phase for password-based
+Cockpit login, durable browser sessions, and a separately issued service bearer
+without retiring `CONTROL_PLANE_TOKEN`.
+Mode: WRITE_ALLOWED for local auth storage, offline issuer commands, loopback
+server integration, readiness, backup exclusion, Cockpit UI, documentation, and
+deterministic tests. No live credential provisioning, service restart, remote
+mutation, or compatibility-path removal was performed.
+
+Architecture impact:
+
+- Admin passwords use async scrypt with versioned parameters and a mode-`0600`
+  credential file outside daemon-writable state.
+- Raw session and service tokens are 32 random bytes. Only SHA-256 digests persist;
+  digest comparisons use constant-time equality.
+- Generation-bound browser sessions persist beneath `<state>/auth`, renew on a
+  throttled 30-day sliding window, and are removed on logout.
+- The auth root is excluded from new backups, rejected in archive validation, and
+  therefore cannot be recreated by restore.
+- Same-origin validation covers login and every unsafe cookie-authenticated method;
+  secure-cookie mode accepts only the matching HTTPS origin.
+- The legacy token login, legacy bearer, and readiness `authToken` requirement
+  remain intact for the later retirement phase.

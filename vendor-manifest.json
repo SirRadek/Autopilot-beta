@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 142,
+  "file_count": 144,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -715,6 +715,16 @@
       "patched_by": "F4b,F1"
     },
     {
+      "source_path": "src/data/delivery-system/adminCredentials.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "11cacdb1f1d163a6e24d3eeabba50fd6bb637a076bc1161acce8d2f707ec4ead"
+    },
+    {
+      "source_path": "src/data/delivery-system/authSessionRegistry.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "32a61a6cb4bc86f895ad02c459b20b98822560178ac65cf857e0af69915d0840"
+    },
+    {
       "source_path": "src/data/delivery-system/brainstormBudget.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "4637fcd779a35f10c6d75360d6b2cbfd22849f3eb46af8bf1fddebcb54fb2910"
@@ -834,7 +844,7 @@
     {
       "source_path": "src/data/delivery-system/stateBackup.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "c896b71c74d1638c47ab860d087c28caaf7b2fb6d4f242bcfcfdbc7da5600407"
+      "content_hash": "2c39c5d7fdde2a9d718c72ff8bf87e00c4155e1811a4277b2b21a314662d71dc"
     },
     {
       "source_path": "src/data/delivery-system/stateMaintenance.ts",
@@ -850,7 +860,7 @@
     {
       "source_path": "src/data/delivery-system/stateRecovery.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "3469109cdf32d3dc515b4d812587205610e27f8332f01fa03e2fc953a21ee8ba"
+      "content_hash": "0bcc980eed9fe089d55bb41c13dfaae89207927e786cfb235244957e494296f1"
     },
     {
       "source_path": "src/data/delivery-system/subagentEvidence.ts",

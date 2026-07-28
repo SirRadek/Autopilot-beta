@@ -13,6 +13,11 @@ import type { UsageProbeProvider } from "./providerUsageProbe";
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
 import { validateSupervisorState } from "./supervisorQueue";
 import { validateTokenGatewayState } from "./tokenGateway";
+import {
+  adminCredentialsPathIsOutsideState,
+  AdminCredentialsError,
+  loadAdminCredentials
+} from "./adminCredentials";
 
 export type ReadinessStatus = "ready" | "degraded" | "unavailable";
 export type ProviderId = UsageProbeProvider | "openrouter_api";
@@ -24,6 +29,12 @@ export type ReadinessErrorCode =
   | "invalid_project_registry"
   | "invalid_supervisor_state"
   | "invalid_token_gateway_state"
+  | "admin_credentials_missing"
+  | "invalid_admin_credentials"
+  | "admin_credentials_in_managed_state"
+  | "service_token_missing"
+  | "invalid_service_token"
+  | "secure_cookies_required"
   | "probe_not_configured"
   | "not_observed"
   | ProviderErrorCode;
@@ -35,6 +46,7 @@ export interface ReadinessComponent {
 
 export interface ReadinessComponents {
   readonly configuration: ReadinessComponent;
+  readonly authentication: ReadinessComponent;
   readonly managed_state: ReadinessComponent;
   readonly project_registry: ReadinessComponent;
   readonly supervisor: ReadinessComponent;
@@ -53,6 +65,10 @@ export interface BuildReadinessOptions {
   readonly stateDir: string;
   readonly projectRoot: string;
   readonly authToken: string | undefined;
+  readonly adminCredentialsPath: string;
+  readonly serviceTokenDigest: () => string | null;
+  readonly secureCookies: boolean;
+  readonly secureCookiesRequired: boolean;
   readonly providerCommands: Partial<Record<UsageProbeProvider, ProviderCliCapability>>;
   readonly openRouterConfigured: boolean;
   readonly now?: string;
@@ -65,6 +81,7 @@ const READY: ReadinessComponent = { status: "ready", error_code: null };
 export function buildReadiness(options: BuildReadinessOptions): ReadinessReport {
   const checkedAt = validTimestamp(options.now) ? options.now : new Date().toISOString();
   const configuration = configurationReadiness(options);
+  const authentication = authenticationReadiness(options);
   const managedState = managedStateReadiness(options.stateDir);
   const projectRegistry = projectRegistryReadiness(options.stateDir, options.projectRoot);
   const supervisor = fixedValidation(
@@ -81,7 +98,7 @@ export function buildReadiness(options: BuildReadinessOptions): ReadinessReport 
     providerReadiness(provider, options, providerState.snapshots)
   ])) as Record<ProviderId, ReadinessComponent>;
   const effectiveManagedState = managedState.status === "ready" ? providerState.managedState : managedState;
-  const core = [configuration, effectiveManagedState, projectRegistry, supervisor, tokenGateway];
+  const core = [configuration, authentication, effectiveManagedState, projectRegistry, supervisor, tokenGateway];
   const ready = core.every((component) => component.status === "ready");
   const status: ReadinessStatus = !ready
     ? "unavailable"
@@ -95,6 +112,7 @@ export function buildReadiness(options: BuildReadinessOptions): ReadinessReport 
     checked_at: checkedAt,
     components: {
       configuration,
+      authentication,
       managed_state: effectiveManagedState,
       project_registry: projectRegistry,
       supervisor,
@@ -102,6 +120,30 @@ export function buildReadiness(options: BuildReadinessOptions): ReadinessReport 
       providers
     }
   };
+}
+
+function authenticationReadiness(options: BuildReadinessOptions): ReadinessComponent {
+  if (!adminCredentialsPathIsOutsideState(options.stateDir, options.adminCredentialsPath)) {
+    return unavailable("admin_credentials_in_managed_state");
+  }
+  try {
+    loadAdminCredentials(options.adminCredentialsPath);
+  } catch (error) {
+    if (error instanceof AdminCredentialsError && error.code === "admin_credentials_missing") {
+      return unavailable("admin_credentials_missing");
+    }
+    return unavailable("invalid_admin_credentials");
+  }
+  let digest: string | null;
+  try {
+    digest = options.serviceTokenDigest();
+  } catch {
+    return unavailable("invalid_service_token");
+  }
+  if (digest === null) return unavailable("service_token_missing");
+  if (!/^[a-f0-9]{64}$/.test(digest)) return unavailable("invalid_service_token");
+  if (options.secureCookiesRequired && !options.secureCookies) return unavailable("secure_cookies_required");
+  return READY;
 }
 
 function configurationReadiness(options: BuildReadinessOptions): ReadinessComponent {

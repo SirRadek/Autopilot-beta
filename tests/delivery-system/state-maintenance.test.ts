@@ -17,6 +17,7 @@ import { createStateBackup, validateStateBackup } from "../../src/data/delivery-
 import { performStateMaintenance } from "../../src/data/delivery-system/stateMaintenance";
 import { withStateMaintenanceLock } from "../../src/data/delivery-system/stateMaintenanceLock";
 import { restoreStateBackup } from "../../src/data/delivery-system/stateRecovery";
+import { authStateRoot } from "../../src/data/delivery-system/authSessionRegistry";
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "autopilot-maintenance-"));
@@ -100,6 +101,64 @@ describe("state maintenance transaction", () => {
     const archive = JSON.parse(readFileSync(backup.path, "utf8")) as { manifest: { path: string }[] };
 
     expect(archive.manifest.map((entry) => entry.path)).toEqual(["sessions.json"]);
+  });
+
+  it("excludes the auth state root and restore cannot resurrect sessions or service tokens", () => {
+    const fixture_ = fixture();
+    writeFileSync(join(fixture_.stateDirectory, "sessions.json"), "managed");
+    const authRoot = authStateRoot(fixture_.stateDirectory);
+    mkdirSync(authRoot, { mode: 0o700 });
+    writeFileSync(join(authRoot, "sessions.json"), "logged-in-session", { mode: 0o600 });
+    writeFileSync(join(authRoot, "service-token.json"), "stale-service-digest", { mode: 0o600 });
+
+    const backup = createStateBackup(fixture_.stateDirectory, fixture_.backupDirectory);
+    const archive = JSON.parse(readFileSync(backup.path, "utf8")) as { manifest: { path: string }[] };
+    const restoreDirectory = join(fixture_.root, "restored-without-auth");
+    restoreStateBackup(backup.path, restoreDirectory, { apply: true });
+
+    expect(archive.manifest.map((entry) => entry.path)).toEqual(["sessions.json"]);
+    expect(existsSync(authStateRoot(restoreDirectory))).toBe(false);
+  });
+
+  it("rejects legacy or crafted archives containing auth-root entries", () => {
+    const fixture_ = fixture();
+    writeFileSync(join(fixture_.stateDirectory, "sessions.json"), "stale-auth-record");
+    const backup = createStateBackup(fixture_.stateDirectory, fixture_.backupDirectory);
+    const archive = JSON.parse(readFileSync(backup.path, "utf8")) as {
+      manifest: Array<{ path: string }>;
+      files: Array<{ path: string }>;
+    };
+    archive.manifest[0]!.path = "auth/sessions.json";
+    archive.files[0]!.path = "auth/sessions.json";
+    writeFileSync(backup.path, JSON.stringify(archive), { mode: 0o600 });
+    const restoreDirectory = join(fixture_.root, "crafted-auth-restore");
+
+    expect(validateStateBackup(backup.path).valid).toBe(false);
+    expect(() => restoreStateBackup(backup.path, restoreDirectory, { apply: true }))
+      .toThrow(/backup_validation_failed/);
+    expect(existsSync(authStateRoot(restoreDirectory))).toBe(false);
+  });
+
+  it.each([
+    "padding/../auth/service-token.json",
+    "./auth/sessions.json"
+  ])("rejects non-canonical archive paths that alias the auth root: %s", (craftedPath) => {
+    const fixture_ = fixture();
+    writeFileSync(join(fixture_.stateDirectory, "sessions.json"), "stale-auth-record");
+    const backup = createStateBackup(fixture_.stateDirectory, fixture_.backupDirectory);
+    const archive = JSON.parse(readFileSync(backup.path, "utf8")) as {
+      manifest: Array<{ path: string }>;
+      files: Array<{ path: string }>;
+    };
+    archive.manifest[0]!.path = craftedPath;
+    archive.files[0]!.path = craftedPath;
+    writeFileSync(backup.path, JSON.stringify(archive), { mode: 0o600 });
+    const restoreDirectory = join(fixture_.root, "crafted-auth-alias-restore");
+
+    expect(validateStateBackup(backup.path).valid).toBe(false);
+    expect(() => restoreStateBackup(backup.path, restoreDirectory, { apply: true }))
+      .toThrow(/backup_validation_failed/);
+    expect(existsSync(authStateRoot(restoreDirectory))).toBe(false);
   });
 
   it("does not overwrite or prune when a backup name collides", () => {

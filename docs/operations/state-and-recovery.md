@@ -8,6 +8,11 @@ Managed state lives at `~/.local/state/autopilot`, mode `0700`. Regular state fi
 bounded. The environment file and provider credentials are outside this directory and are never
 included in state backups.
 
+The `auth/` child is a separate, mode-private auth state root. It stores only
+session and service-token digests and is explicitly excluded from backup file
+selection. Archive validation also rejects `auth/` entries, so restore cannot
+resurrect a logged-out session or stale service digest.
+
 ## Principal files
 
 | File | Owner/purpose | Sensitivity and bounds | Backup/retention |
@@ -28,6 +33,7 @@ included in state backups.
 | `cli-call-telemetry.jsonl` | Worker call evidence | Redacted/bounded; maintenance rotation | Included before rotation |
 | `vendor-process-registry.jsonl` | Worker process ownership | PIDs/IDs; operationally sensitive | Included before rotation |
 | `agent-registry.jsonl` | Worker registry evidence | Bounded operational metadata | Included before rotation |
+| `auth/sessions.json` and `auth/service-token.json` | Durable browser sessions and service bearer digest | Token digests only; max 256 sessions | Excluded; never restored |
 
 The external `~/.local/state/.autopilot-incident-spool` is a private lock-timeout fallback, capped at
 256 files of 16 KiB. Maintenance ingests valid records; it is intentionally outside the main state
@@ -69,6 +75,7 @@ checksums without writing the target.
 ## Automated recovery drill
 
 ```bash
+AUTOPILOT_STATE_DIR=~/.local/state/autopilot \
 AUTOPILOT_PROJECTS_DIR=~/projects \
   npm run ops:recovery-drill -- ~/.local/state/autopilot/backups/FILE.apbackup.json
 ```

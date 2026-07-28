@@ -1,6 +1,6 @@
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { execFile } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { appendStateFile } from "../src/data/delivery-system/stateMaintenanceLock";
@@ -31,6 +31,19 @@ import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../s
 import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
 import { STATIC_PROVIDER_MODEL_CATALOG } from "../src/data/delivery-system/providerModelCatalog";
 import type { RunProvider } from "../src/data/delivery-system/runStore";
+import {
+  adminCredentialsPathIsOutsideState,
+  AdminCredentialsError,
+  credentialGeneration,
+  defaultAdminCredentialsPath,
+  loadAdminCredentials,
+  verifyPassword
+} from "../src/data/delivery-system/adminCredentials";
+import {
+  AuthSessionRegistry,
+  SESSION_TTL_MS,
+  authStateRoot
+} from "../src/data/delivery-system/authSessionRegistry";
 
 const execFileAsync = promisify(execFile);
 
@@ -54,12 +67,15 @@ export interface ControlPlaneRuntimeOptions {
   readonly providerCommands?: Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>>;
   /** Add Secure to browser cookies when the public cockpit is served over TLS. */
   readonly secureCookies?: boolean;
+  /** Fail readiness closed unless secure cookies are actually enabled (production policy). */
+  readonly secureCookiesRequired?: boolean;
   readonly openRouterConfigured?: boolean;
   readonly dispatch?: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>;
   /** Test/recovery seam; production omits it and loads the canonical decision mesh. */
   readonly packetBuilder?: RunPacketBuilder;
   readonly supervisorPollMs?: number;
   readonly shutdownDrainMs?: number;
+  readonly auth?: ControlPlaneAuthConfig;
 }
 
 export function providerUsageCommandsFromEnvironment(
@@ -82,42 +98,92 @@ export function secureCookiesFromEnvironment(
   throw new Error("invalid_secure_cookie_configuration");
 }
 
+/**
+ * Independent policy signal: when set, readiness fails closed unless secure cookies
+ * are actually enabled. Kept separate from CONTROL_PLANE_SECURE_COOKIES so a single
+ * flag cannot silently mask its own absence in a TLS-fronted production deployment.
+ */
+export function secureCookiesRequiredFromEnvironment(
+  environment: Readonly<Record<string, string | undefined>>
+): boolean {
+  const value = environment.CONTROL_PLANE_REQUIRE_SECURE_COOKIES?.trim().toLowerCase();
+  if (value === undefined || value === "" || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error("invalid_secure_cookie_configuration");
+}
+
 export interface ControlPlaneServerOptions {
   /** Add Secure to browser cookies; disabled by default for loopback HTTP development. */
   readonly secureCookies?: boolean;
   readonly runOrchestrator?: ReturnType<typeof createRunOrchestrator>;
   readonly projectRoot?: string;
   readonly readiness?: () => ReadinessReport;
+  readonly auth?: ControlPlaneAuthConfig;
+}
+
+export interface ControlPlaneAuthConfig {
+  readonly adminCredentialsPath: string;
+  readonly sessionRegistry: Pick<AuthSessionRegistry, "createSession" | "lookupSession" | "deleteSession">;
+  readonly serviceToken: Pick<AuthSessionRegistry, "verifyServiceToken" | "serviceTokenDigest">;
 }
 
 export function createControlPlaneServer(stateDir: string, authToken: string | undefined, options: ControlPlaneServerOptions = {}) {
-  const browserSessions = new Map<string, number>();
-  const sessionTtlMs = 8 * 60 * 60 * 1000;
+  const defaultRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+  const auth: ControlPlaneAuthConfig = options.auth ?? {
+    adminCredentialsPath: defaultAdminCredentialsPath(),
+    sessionRegistry: defaultRegistry,
+    serviceToken: defaultRegistry
+  };
+  if (!adminCredentialsPathIsOutsideState(stateDir, auth.adminCredentialsPath)) {
+    throw new Error("admin_credentials_in_managed_state");
+  }
+  const secureCookies = options.secureCookies === true;
   return createServer(async (request, response) => {
   const requestId = randomUUID();
   try {
   if (request.method === "GET" && request.url === "/health") returnJson(response, { ok: true });
   else if (request.method === "GET" && request.url === "/ready") return readinessHttp(response, options.readiness);
-  else if (request.method === "POST" && request.url === "/auth/login") await loginBrowser(request, response, authToken, browserSessions, sessionTtlMs, options.secureCookies === true);
+  else if (request.method === "POST" && request.url === "/auth/login") {
+    if (!isSameOriginMutation(request, secureCookies)) returnJson(response, { error: "csrf_origin_required" }, 403);
+    else await loginBrowser(request, response, authToken, auth, secureCookies);
+  }
   else if (request.method === "POST" && request.url === "/auth/logout") {
-    if (cookieValue(request.headers.cookie, "autopilot_session") !== null && !isBearerAuthenticated(request, authToken) && !isSameOriginMutation(request)) returnJson(response, { error: "csrf_origin_required" }, 403);
-    else logoutBrowser(request, response, browserSessions, options.secureCookies === true);
+    if (cookieValue(request.headers.cookie, "autopilot_session") !== null && !isBearerAuthenticated(request, authToken, auth.serviceToken) && !isSameOriginMutation(request, secureCookies)) returnJson(response, { error: "csrf_origin_required" }, 403);
+    else logoutBrowser(request, response, auth.sessionRegistry, secureCookies);
   }
   else if (request.method === "GET" && request.url === "/auth/session") {
-    const authenticated = isAuthenticated(request, authToken, browserSessions);
-    returnJson(response, authenticated ? { authenticated: true, expires_at: sessionExpiry(request, browserSessions) } : { authenticated: false }, authenticated ? 200 : 401);
+    const authentication = authenticateRequest(request, response, authToken, auth, secureCookies);
+    returnJson(response, authentication.authenticated
+      ? { authenticated: true, expires_at: authentication.expiresAt }
+      : { authenticated: false }, authentication.authenticated ? 200 : 401);
   }
-  else if (!isAuthenticated(request, authToken, browserSessions)) returnJson(response, { error: "unauthorized" }, 401);
-  else if (request.method === "POST" && !isBearerAuthenticated(request, authToken) && !isSameOriginMutation(request)) returnJson(response, { error: "csrf_origin_required" }, 403);
-  else if (request.method === "GET" && request.url === "/status") returnJson(response, buildStatus(stateDir));
-  else if (request.method === "GET" && request.url === "/sessions") returnJson(response, readSessionRegistry(stateDir).sessions);
-  else if (request.method === "POST" && request.url === "/sessions") await createSessionHttp(request, response, stateDir);
-  else if (request.method === "POST" && request.url?.startsWith("/sessions/")) await mutateSessionHttp(request, response, stateDir);
-  else if (request.method === "GET" && request.url === "/workers") returnJson(response, workerViews(stateDir));
-  else if (request.method === "GET" && request.url === "/observability/summary") returnJson(response, buildObservability(stateDir).summary);
-  else if (request.method === "GET" && request.url?.startsWith("/observability/timeline")) returnJson(response, observabilityTimeline(stateDir, request.url));
-  else if (request.method === "GET" && request.url === "/approvals") returnJson(response, readApprovalQueue(stateDir).records);
-  else if (request.method === "POST" && request.url?.startsWith("/approvals/")) await decideApprovalHttp(request, response, stateDir);
+  else {
+    const bearerAuthenticated = isBearerAuthenticated(request, authToken, auth.serviceToken);
+    if (isUnsafeMethod(request.method)
+      && cookieValue(request.headers.cookie, "autopilot_session") !== null
+      && !bearerAuthenticated
+      && !isSameOriginMutation(request, secureCookies)) {
+      returnJson(response, { error: "csrf_origin_required" }, 403);
+      return;
+    }
+    const authentication = authenticateRequest(
+      request,
+      response,
+      authToken,
+      auth,
+      secureCookies,
+      bearerAuthenticated
+    );
+    if (!authentication.authenticated) returnJson(response, { error: "unauthorized" }, 401);
+    else if (request.method === "GET" && request.url === "/status") returnJson(response, buildStatus(stateDir));
+    else if (request.method === "GET" && request.url === "/sessions") returnJson(response, readSessionRegistry(stateDir).sessions);
+    else if (request.method === "POST" && request.url === "/sessions") await createSessionHttp(request, response, stateDir);
+    else if (request.method === "POST" && request.url?.startsWith("/sessions/")) await mutateSessionHttp(request, response, stateDir);
+    else if (request.method === "GET" && request.url === "/workers") returnJson(response, workerViews(stateDir));
+    else if (request.method === "GET" && request.url === "/observability/summary") returnJson(response, buildObservability(stateDir).summary);
+    else if (request.method === "GET" && request.url?.startsWith("/observability/timeline")) returnJson(response, observabilityTimeline(stateDir, request.url));
+    else if (request.method === "GET" && request.url === "/approvals") returnJson(response, readApprovalQueue(stateDir).records);
+    else if (request.method === "POST" && request.url?.startsWith("/approvals/")) await decideApprovalHttp(request, response, stateDir);
     else if (request.method === "GET" && request.url === "/providers/quotas") returnJson(response, providerQuotas(stateDir));
     else if (request.method === "GET" && request.url?.startsWith("/providers/") && request.url.endsWith("/quotas")) {
       const result = providerQuota(stateDir, decodeURIComponent(request.url.slice("/providers/".length, -"/quotas".length)));
@@ -128,6 +194,7 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else if (await handleControlPlaneBrainstormRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else returnJson(response, { error: "not_found" }, 404);
+  }
   } catch {
     if (response.writableEnded) return;
     if (response.headersSent) {
@@ -179,6 +246,7 @@ function failedReadinessReport(): ReadinessReport {
     checked_at: new Date().toISOString(),
     components: {
       configuration: { status: "unavailable", error_code: "invalid_configuration" },
+      authentication: { status: "unavailable", error_code: "admin_credentials_missing" },
       managed_state: { status: "unavailable", error_code: "state_unavailable" },
       project_registry: { status: "unavailable", error_code: "invalid_project_registry" },
       supervisor: { status: "unavailable", error_code: "invalid_supervisor_state" },
@@ -205,37 +273,81 @@ function observabilityTimeline(stateDir: string, requestUrl: string) {
   return buildObservability(stateDir, options);
 }
 
-function isAuthenticated(request: IncomingMessage, authToken: string | undefined, browserSessions: Map<string, number>): boolean {
-  if (isBearerAuthenticated(request, authToken)) return true;
-  const sessionId = cookieValue(request.headers.cookie, "autopilot_session");
-  const expires = sessionId === null ? undefined : browserSessions.get(sessionId);
-  if (expires === undefined) return false;
-  if (expires <= Date.now()) { browserSessions.delete(sessionId!); return false; }
-  return true;
-}
+type RequestAuthentication =
+  | { readonly authenticated: false }
+  | { readonly authenticated: true; readonly kind: "bearer"; readonly expiresAt: null }
+  | { readonly authenticated: true; readonly kind: "session"; readonly expiresAt: string };
 
-function sessionExpiry(request: IncomingMessage, browserSessions: Map<string, number>): string | null {
-  const sessionId = cookieValue(request.headers.cookie, "autopilot_session");
-  const expires = sessionId === null ? undefined : browserSessions.get(sessionId);
-  return expires === undefined ? null : new Date(expires).toISOString();
-}
+const LEGACY_UNPROVISIONED_CREDENTIAL_GENERATION = Number.MAX_SAFE_INTEGER;
 
-async function loginBrowser(request: IncomingMessage, response: ServerResponse, authToken: string | undefined, browserSessions: Map<string, number>, ttlMs: number, secureCookies: boolean): Promise<void> {
-  const body = await readBody(request);
-  if (authToken === undefined || typeof body.token !== "string" || body.token.length === 0 || body.token !== authToken) returnJson(response, { error: "invalid_credentials" }, 401);
-  else {
-    const sessionId = randomBytes(32).toString("base64url");
-    const expires = Date.now() + ttlMs;
-    browserSessions.set(sessionId, expires);
-    response.setHeader("Set-Cookie", `autopilot_session=${sessionId}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(ttlMs / 1000)}${secureCookies ? "; Secure" : ""}`);
-    returnJson(response, { authenticated: true, expires_at: new Date(expires).toISOString() });
+function authenticateRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  authToken: string | undefined,
+  auth: ControlPlaneAuthConfig,
+  secureCookies: boolean,
+  bearerAuthenticated = isBearerAuthenticated(request, authToken, auth.serviceToken)
+): RequestAuthentication {
+  if (bearerAuthenticated) {
+    return { authenticated: true, kind: "bearer", expiresAt: null };
+  }
+  const rawToken = cookieValue(request.headers.cookie, "autopilot_session");
+  const generation = currentCredentialGeneration(auth.adminCredentialsPath);
+  if (rawToken === null || generation === null) return { authenticated: false };
+  try {
+    const lookup = auth.sessionRegistry.lookupSession(rawToken, generation, Date.now());
+    if (lookup === null) return { authenticated: false };
+    if (lookup.refreshCookie) {
+      response.setHeader("Set-Cookie", sessionCookie(rawToken, Math.floor(SESSION_TTL_MS / 1_000), secureCookies));
+    }
+    return {
+      authenticated: true,
+      kind: "session",
+      expiresAt: new Date(lookup.record.expires_at_epoch).toISOString()
+    };
+  } catch {
+    return { authenticated: false };
   }
 }
 
-function logoutBrowser(request: IncomingMessage, response: ServerResponse, browserSessions: Map<string, number>, secureCookies: boolean): void {
-  const sessionId = cookieValue(request.headers.cookie, "autopilot_session");
-  if (sessionId !== null) browserSessions.delete(sessionId);
-  response.setHeader("Set-Cookie", `autopilot_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secureCookies ? "; Secure" : ""}`);
+async function loginBrowser(
+  request: IncomingMessage,
+  response: ServerResponse,
+  authToken: string | undefined,
+  auth: ControlPlaneAuthConfig,
+  secureCookies: boolean
+): Promise<void> {
+  const body = await readBody(request);
+  let generation = currentCredentialGeneration(auth.adminCredentialsPath);
+  let valid = false;
+  if (typeof body.username === "string" && typeof body.password === "string") {
+    try {
+      const credentials = loadAdminCredentials(auth.adminCredentialsPath);
+      generation = credentialGeneration(credentials);
+      valid = await verifyPassword(credentials, body.username, body.password);
+    } catch {
+      valid = false;
+    }
+  }
+  if (!valid && typeof body.token === "string" && body.token.length > 0 && authToken !== undefined) {
+    valid = constantTimeTextEqual(body.token, authToken);
+  }
+  if (!valid || generation === null) return returnJson(response, { error: "invalid_credentials" }, 401);
+  const rawToken = randomBytes(32).toString("base64url");
+  const record = auth.sessionRegistry.createSession(rawToken, generation, Date.now());
+  response.setHeader("Set-Cookie", sessionCookie(rawToken, Math.floor(SESSION_TTL_MS / 1_000), secureCookies));
+  returnJson(response, { authenticated: true, expires_at: new Date(record.expires_at_epoch).toISOString() });
+}
+
+function logoutBrowser(
+  request: IncomingMessage,
+  response: ServerResponse,
+  sessionRegistry: ControlPlaneAuthConfig["sessionRegistry"],
+  secureCookies: boolean
+): void {
+  const rawToken = cookieValue(request.headers.cookie, "autopilot_session");
+  if (rawToken !== null) sessionRegistry.deleteSession(rawToken);
+  response.setHeader("Set-Cookie", sessionCookie("", 0, secureCookies));
   returnJson(response, { authenticated: false });
 }
 
@@ -247,19 +359,64 @@ function cookieValue(header: string | undefined, name: string): string | null {
   return null;
 }
 
-function isBearerAuthenticated(request: IncomingMessage, authToken: string | undefined): boolean {
-  return authToken !== undefined && request.headers.authorization === `Bearer ${authToken}`;
+function isBearerAuthenticated(
+  request: IncomingMessage,
+  authToken: string | undefined,
+  serviceToken: ControlPlaneAuthConfig["serviceToken"]
+): boolean {
+  const rawToken = bearerToken(request.headers.authorization);
+  if (rawToken === null) return false;
+  const legacy = authToken !== undefined && constantTimeTextEqual(rawToken, authToken);
+  if (legacy) return true;
+  try {
+    return serviceToken.verifyServiceToken(rawToken);
+  } catch {
+    return false;
+  }
 }
 
-function isSameOriginMutation(request: IncomingMessage): boolean {
+function isSameOriginMutation(request: IncomingMessage, secureCookies: boolean): boolean {
   const host = request.headers.host;
   if (!host) return false;
-  const expected = new Set([`http://${host}`, `https://${host}`]);
+  const expected = secureCookies
+    ? new Set([`https://${host}`])
+    : new Set([`http://${host}`, `https://${host}`]);
   const origin = request.headers.origin;
   if (origin !== undefined) return expected.has(origin.replace(/\/$/, ""));
   const referer = request.headers.referer;
   if (referer === undefined) return false;
   try { return expected.has(new URL(referer).origin); } catch { return false; }
+}
+
+function currentCredentialGeneration(path: string): number | null {
+  try {
+    return credentialGeneration(loadAdminCredentials(path));
+  } catch (error) {
+    if (error instanceof AdminCredentialsError && error.code === "admin_credentials_missing") {
+      return LEGACY_UNPROVISIONED_CREDENTIAL_GENERATION;
+    }
+    return null;
+  }
+}
+
+function bearerToken(header: string | undefined): string | null {
+  if (header === undefined || !header.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length);
+  return token.length > 0 ? token : null;
+}
+
+function constantTimeTextEqual(left: string, right: string): boolean {
+  const leftDigest = createHash("sha256").update(left, "utf8").digest();
+  const rightDigest = createHash("sha256").update(right, "utf8").digest();
+  return timingSafeEqual(leftDigest, rightDigest);
+}
+
+function isUnsafeMethod(method: string | undefined): boolean {
+  return method !== undefined && !["GET", "HEAD", "OPTIONS", "TRACE"].includes(method);
+}
+
+function sessionCookie(rawToken: string, maxAgeSeconds: number, secureCookies: boolean): string {
+  return `autopilot_session=${rawToken}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secureCookies ? "; Secure" : ""}`;
 }
 
 async function createSessionHttp(request: IncomingMessage, response: ServerResponse, directory: string): Promise<void> {
@@ -379,14 +536,25 @@ export function createControlPlaneRuntime(
     ...(options.packetBuilder === undefined ? {} : { packetBuilder: options.packetBuilder }),
     dispatch: options.dispatch ?? ((handoff, directory) => dispatchHandoff(handoff, directory, { reservationOwner: "caller" }))
   });
+  const runtimeAuthRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+  const runtimeAuth: ControlPlaneAuthConfig = options.auth ?? {
+    adminCredentialsPath: defaultAdminCredentialsPath(),
+    sessionRegistry: runtimeAuthRegistry,
+    serviceToken: runtimeAuthRegistry
+  };
   const server = createControlPlaneServer(stateDir, authToken, {
     ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }),
     runOrchestrator: orchestrator,
     projectRoot,
+    auth: runtimeAuth,
     readiness: () => buildReadiness({
       stateDir,
       projectRoot,
       authToken,
+      adminCredentialsPath: runtimeAuth.adminCredentialsPath,
+      serviceTokenDigest: () => runtimeAuth.serviceToken.serviceTokenDigest(),
+      secureCookies: options.secureCookies === true,
+      secureCookiesRequired: options.secureCookiesRequired === true,
       providerCommands,
       openRouterConfigured: options.openRouterConfigured ?? Boolean(process.env.OPENROUTER_API_KEY?.trim())
     })
@@ -473,10 +641,11 @@ const stateDir = process.argv[2] ?? process.env.CONTROL_PLANE_STATE_DIR ?? "";
 const port = Number(process.argv[3] ?? process.env.CONTROL_PLANE_PORT ?? "8787");
 const authToken = process.env.CONTROL_PLANE_TOKEN?.trim();
 const secureCookies = secureCookiesFromEnvironment(process.env);
+const secureCookiesRequired = secureCookiesRequiredFromEnvironment(process.env);
 if (process.argv[1]?.endsWith("control-plane-server.ts")) {
   if (!stateDir || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("usage: control-plane-server STATE_DIR [PORT]");
   const providerCommands = providerUsageCommandsFromEnvironment(process.env);
-  const runtime = createControlPlaneRuntime(stateDir, authToken, { secureCookies, providerCommands });
+  const runtime = createControlPlaneRuntime(stateDir, authToken, { secureCookies, secureCookiesRequired, providerCommands });
   const shutdown = () => { void runtime.stop(); };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);

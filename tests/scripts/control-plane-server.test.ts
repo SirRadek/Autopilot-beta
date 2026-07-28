@@ -1,10 +1,20 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
-import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment, secureCookiesFromEnvironment } from "../../scripts/control-plane-server";
+import { createControlPlaneRuntime, createControlPlaneServer, providerUsageCommandsFromEnvironment, secureCookiesFromEnvironment, secureCookiesRequiredFromEnvironment } from "../../scripts/control-plane-server";
+import {
+  ADMIN_CREDENTIALS_VERSION,
+  hashPassword,
+  writeAdminCredentials
+} from "../../src/data/delivery-system/adminCredentials";
+import {
+  AuthSessionRegistry,
+  SESSION_RENEW_AFTER_MS,
+  authStateRoot
+} from "../../src/data/delivery-system/authSessionRegistry";
 import { readApprovalQueue, writeApprovalQueue } from "../../src/data/delivery-system/approvalQueue";
 import { readBrainstormStore } from "../../src/data/delivery-system/brainstormStore";
 import { readIncidentStore, recordAutopilotIncident } from "../../src/data/delivery-system/incidentStore";
@@ -33,6 +43,7 @@ const readinessReport = (ready: boolean): ReadinessReport => ({
   checked_at: "2026-07-13T12:00:00.000Z",
   components: {
     configuration: { status: ready ? "ready" : "unavailable", error_code: ready ? null : "invalid_configuration" },
+    authentication: { status: ready ? "ready" : "unavailable", error_code: ready ? null : "admin_credentials_missing" },
     managed_state: { status: "ready", error_code: null },
     project_registry: { status: "ready", error_code: null },
     supervisor: { status: "ready", error_code: null },
@@ -47,6 +58,19 @@ const readinessReport = (ready: boolean): ReadinessReport => ({
 });
 
 describe("control plane liveness and readiness", () => {
+  it("fails startup when admin credentials are configured inside managed state", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-unsafe-admin-"));
+    const registry = new AuthSessionRegistry(authStateRoot(stateDir));
+
+    expect(() => createControlPlaneServer(stateDir, "legacy-secret", {
+      auth: {
+        adminCredentialsPath: join(stateDir, "admin-credentials.json"),
+        sessionRegistry: registry,
+        serviceToken: registry
+      }
+    })).toThrow("admin_credentials_in_managed_state");
+  });
+
   async function publicGet(path: string, readiness: () => ReadinessReport) {
     const server = createControlPlaneServer(mkdtempSync(join(tmpdir(), "control-plane-ready-")), "secret-value", { readiness });
     servers.push(server);
@@ -83,8 +107,18 @@ describe("control plane liveness and readiness", () => {
     const projectRoot = join(stateDir, "projects");
     mkdirSync(projectRoot, { mode: 0o700 });
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+    const credentialsPath = `${stateDir}-admin-credentials.json`;
+    writeAdminCredentials(credentialsPath, {
+      version: ADMIN_CREDENTIALS_VERSION,
+      username: "admin",
+      ...await hashPassword("admin", "readiness-password"),
+      credential_generation: 1
+    });
+    const authRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+    authRegistry.storeServiceToken("c".repeat(64));
     const runtime = createControlPlaneRuntime(stateDir, "secret", {
       projectRoot,
+      auth: { adminCredentialsPath: credentialsPath, sessionRegistry: authRegistry, serviceToken: authRegistry },
       scheduler: { start() {}, stop() {} },
       providerCommands: {},
       openRouterConfigured: false,
@@ -678,7 +712,7 @@ describe("control plane governed run API", () => {
   it("keeps authentication and cookie CSRF protection on mutations", async () => {
     const api = await governedApi();
     expect((await fetch(`${api.base}/projects`)).status).toBe(401);
-    const login = await fetch(`${api.base}/auth/login`, { method: "POST", body: JSON.stringify({ token: "secret" }) });
+    const login = await fetch(`${api.base}/auth/login`, { method: "POST", headers: { origin: new URL(api.base).origin }, body: JSON.stringify({ token: "secret" }) });
     const cookie = login.headers.get("set-cookie") ?? "";
     const crossOrigin = await fetch(`${api.base}/runs`, { method: "POST", headers: { cookie, origin: "https://attacker.example", "content-type": "application/json" }, body: JSON.stringify(draft) });
     expect(crossOrigin.status).toBe(403);
@@ -828,6 +862,54 @@ describe("control plane provider endpoints", () => {
     expect(() => secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: "maybe" }))
       .toThrow("invalid_secure_cookie_configuration");
   });
+  it("parses the independent secure-cookie requirement policy strictly", () => {
+    expect(secureCookiesRequiredFromEnvironment({})).toBe(false);
+    expect(secureCookiesRequiredFromEnvironment({ CONTROL_PLANE_REQUIRE_SECURE_COOKIES: "true" })).toBe(true);
+    expect(secureCookiesRequiredFromEnvironment({ CONTROL_PLANE_REQUIRE_SECURE_COOKIES: " FALSE " })).toBe(false);
+    // Independent of CONTROL_PLANE_SECURE_COOKIES so a single flag cannot mask its own absence.
+    expect(secureCookiesRequiredFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: "true" })).toBe(false);
+    expect(() => secureCookiesRequiredFromEnvironment({ CONTROL_PLANE_REQUIRE_SECURE_COOKIES: "maybe" }))
+      .toThrow("invalid_secure_cookie_configuration");
+  });
+  it("fails runtime readiness closed when secure cookies are required but disabled", async () => {
+    // Everything else is provisioned so /ready would be 200; only the independent
+    // secure-cookie policy is violated, isolating the wiring fix (the requirement must
+    // NOT be derived from secureCookies, or it could never fire in production).
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-require-secure-"));
+    const projectRoot = join(stateDir, "projects");
+    mkdirSync(projectRoot, { mode: 0o700 });
+    writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+    const credentialsPath = `${stateDir}-admin-credentials.json`;
+    writeAdminCredentials(credentialsPath, {
+      version: ADMIN_CREDENTIALS_VERSION,
+      username: "admin",
+      ...await hashPassword("admin", "readiness-password"),
+      credential_generation: 1
+    });
+    const authRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+    authRegistry.storeServiceToken("c".repeat(64));
+    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+      projectRoot,
+      auth: { adminCredentialsPath: credentialsPath, sessionRegistry: authRegistry, serviceToken: authRegistry },
+      scheduler: { start() {}, stop() {} },
+      providerCommands: {},
+      openRouterConfigured: false,
+      supervisorPollMs: 60_000,
+      secureCookies: false,
+      secureCookiesRequired: true
+    });
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = runtime.server.address();
+      if (address === null || typeof address === "string") throw new Error("missing address");
+      const response = await fetch(`http://127.0.0.1:${address.port}/ready`);
+      const body = await response.json() as ReadinessReport;
+      expect(response.status).toBe(503);
+      expect(body.components.authentication).toEqual({ status: "unavailable", error_code: "secure_cookies_required" });
+    } finally {
+      await runtime.stop();
+    }
+  });
   it("creates an HttpOnly browser session and accepts it for protected requests", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     const server = createControlPlaneServer(stateDir, "secret");
@@ -838,7 +920,7 @@ describe("control plane provider endpoints", () => {
     const base = `http://127.0.0.1:${address.port}`;
     const unauthorized = await fetch(`${base}/status`);
     expect(unauthorized.status).toBe(401);
-    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "secret" }) });
+    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: new URL(base).origin }, body: JSON.stringify({ token: "secret" }) });
     expect(login.status).toBe(200);
     const cookie = login.headers.get("set-cookie");
     expect(cookie).toContain("autopilot_session=");
@@ -860,13 +942,13 @@ describe("control plane provider endpoints", () => {
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
-    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "secret" }) });
+    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: `https://${new URL(base).host}` }, body: JSON.stringify({ token: "secret" }) });
     const cookie = login.headers.get("set-cookie")!;
     expect(cookie).toContain("Secure");
     const cookieHeader = cookie.split(";")[0]!;
     const csrf = await fetch(`${base}/auth/logout`, { method: "POST", headers: { cookie: cookieHeader, origin: "https://evil.example" } });
     expect(csrf.status).toBe(403);
-    const logout = await fetch(`${base}/auth/logout`, { method: "POST", headers: { cookie: cookieHeader, origin: new URL(base).origin } });
+    const logout = await fetch(`${base}/auth/logout`, { method: "POST", headers: { cookie: cookieHeader, origin: `https://${new URL(base).host}` } });
     expect(logout.status).toBe(200);
   });
 
@@ -877,8 +959,191 @@ describe("control plane provider endpoints", () => {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const response = await fetch(`http://127.0.0.1:${address.port}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "wrong" }) });
+    const base = `http://127.0.0.1:${address.port}`;
+    const response = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: new URL(base).origin }, body: JSON.stringify({ token: "wrong" }) });
     expect(response.status).toBe(401);
+    expect(existsSync(join(authStateRoot(stateDir), "sessions.json"))).toBe(false);
+  });
+
+  it("authenticates an admin password with a durable opaque cookie and invalidates it after a generation bump", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-admin-login-"));
+    const credentialsPath = `${stateDir}-admin-credentials.json`;
+    const sessionRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+    writeAdminCredentials(credentialsPath, {
+      version: ADMIN_CREDENTIALS_VERSION,
+      username: "admin.owner",
+      ...await hashPassword("admin.owner", "correct-password-value"),
+      credential_generation: 1
+    });
+    const auth = { adminCredentialsPath: credentialsPath, sessionRegistry, serviceToken: sessionRegistry };
+    const server = createControlPlaneServer(stateDir, "legacy-secret", { auth });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const base = `http://127.0.0.1:${address.port}`;
+
+    const login = await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: new URL(base).origin },
+      body: JSON.stringify({ username: "admin.owner", password: "correct-password-value" })
+    });
+
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")!;
+    expect(cookie).toMatch(/autopilot_session=[A-Za-z0-9_-]{43};/);
+    const cookieHeader = cookie.split(";")[0]!;
+    expect((await fetch(`${base}/status`, { headers: { cookie: cookieHeader } })).status).toBe(200);
+    expect(readFileSync(join(authStateRoot(stateDir), "sessions.json"), "utf8")).not.toContain(cookieHeader.split("=")[1]);
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    const restarted = createControlPlaneServer(stateDir, "legacy-secret", { auth });
+    servers.push(restarted);
+    await new Promise<void>((resolve) => restarted.listen(0, "127.0.0.1", resolve));
+    const restartedAddress = restarted.address();
+    if (restartedAddress === null || typeof restartedAddress === "string") throw new Error("missing address");
+    expect((await fetch(`http://127.0.0.1:${restartedAddress.port}/status`, { headers: { cookie: cookieHeader } })).status).toBe(200);
+
+    unlinkSync(credentialsPath);
+    expect((await fetch(`http://127.0.0.1:${restartedAddress.port}/status`, { headers: { cookie: cookieHeader } })).status).toBe(401);
+
+    writeAdminCredentials(credentialsPath, {
+      version: ADMIN_CREDENTIALS_VERSION,
+      username: "admin.owner",
+      ...await hashPassword("admin.owner", "replacement-password-value"),
+      credential_generation: 2
+    });
+    expect((await fetch(`http://127.0.0.1:${restartedAddress.port}/status`, { headers: { cookie: cookieHeader } })).status).toBe(401);
+  });
+
+  it("accepts the service bearer alongside the legacy bearer", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-service-bearer-"));
+    const registry = new AuthSessionRegistry(authStateRoot(stateDir));
+    const serviceToken = "a".repeat(64);
+    registry.storeServiceToken(serviceToken, Date.now());
+    const server = createControlPlaneServer(stateDir, "legacy-secret", {
+      auth: { adminCredentialsPath: `${stateDir}-missing.json`, sessionRegistry: registry, serviceToken: registry }
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const base = `http://127.0.0.1:${address.port}`;
+
+    expect((await fetch(`${base}/status`, { headers: { authorization: `Bearer ${serviceToken}` } })).status).toBe(200);
+    expect((await fetch(`${base}/status`, { headers: { authorization: "Bearer legacy-secret" } })).status).toBe(200);
+    expect((await fetch(`${base}/status`, { headers: { authorization: `Bearer ${"b".repeat(64)}` } })).status).toBe(401);
+  });
+
+  it("rejects cross-origin and origin-less login plus every unsafe cross-origin cookie request", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-login-origin-"));
+    const server = createControlPlaneServer(stateDir, "legacy-secret");
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const base = `http://127.0.0.1:${address.port}`;
+    const loginBody = JSON.stringify({ token: "legacy-secret" });
+
+    expect((await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://attacker.example" },
+      body: loginBody
+    })).status).toBe(403);
+    expect((await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: loginBody
+    })).status).toBe(403);
+
+    const login = await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: new URL(base).origin },
+      body: loginBody
+    });
+    const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
+    for (const method of ["POST", "PUT", "PATCH", "DELETE", "PROPPATCH"]) {
+      const response = await fetch(`${base}/status`, {
+        method,
+        headers: { cookie, origin: "https://attacker.example" }
+      });
+      expect(response.status, method).toBe(403);
+    }
+  });
+
+  it("pins secure-cookie same-origin validation to https", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-secure-origin-"));
+    const server = createControlPlaneServer(stateDir, "legacy-secret", { secureCookies: true });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const base = `http://127.0.0.1:${address.port}`;
+    const body = JSON.stringify({ token: "legacy-secret" });
+
+    expect((await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: new URL(base).origin },
+      body
+    })).status).toBe(403);
+    expect((await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: `https://${new URL(base).host}` },
+      body
+    })).status).toBe(200);
+  });
+
+  it("reissues the browser cookie when the durable registry renews sliding expiry", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-session-renew-"));
+    const rawToken = "d".repeat(43);
+    const sessionRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+    sessionRegistry.createSession(rawToken, Number.MAX_SAFE_INTEGER, Date.now() - SESSION_RENEW_AFTER_MS - 1_000);
+    const server = createControlPlaneServer(stateDir, "legacy-secret", {
+      auth: { adminCredentialsPath: `${stateDir}-missing.json`, sessionRegistry, serviceToken: sessionRegistry }
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/auth/session`, {
+      headers: { cookie: `autopilot_session=${rawToken}` }
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain(`autopilot_session=${rawToken}`);
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=2592000");
+    const body = await response.json() as { authenticated: boolean; expires_at: string };
+    expect(body.authenticated).toBe(true);
+    expect(Date.parse(body.expires_at)).toBeGreaterThan(Date.now() + 29 * 24 * 60 * 60 * 1_000);
+  });
+
+  it("rejects cross-origin cookie mutations before durable session renewal", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-csrf-renew-"));
+    const rawToken = "e".repeat(43);
+    const sessionRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+    sessionRegistry.createSession(rawToken, Number.MAX_SAFE_INTEGER, Date.now() - SESSION_RENEW_AFTER_MS - 1_000);
+    const sessionsPath = join(authStateRoot(stateDir), "sessions.json");
+    const before = readFileSync(sessionsPath, "utf8");
+    const server = createControlPlaneServer(stateDir, "legacy-secret", {
+      auth: { adminCredentialsPath: `${stateDir}-missing.json`, sessionRegistry, serviceToken: sessionRegistry }
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/status`, {
+      method: "POST",
+      headers: {
+        cookie: `autopilot_session=${rawToken}`,
+        origin: "https://attacker.example"
+      }
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(readFileSync(sessionsPath, "utf8")).toBe(before);
   });
 
   it("creates and mutates sessions through authenticated endpoints", async () => {

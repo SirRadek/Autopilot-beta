@@ -18,6 +18,14 @@ import {
   buildReadiness,
   type BuildReadinessOptions
 } from "../../src/data/delivery-system/readiness";
+import {
+  ADMIN_CREDENTIALS_VERSION,
+  writeAdminCredentials
+} from "../../src/data/delivery-system/adminCredentials";
+import {
+  AuthSessionRegistry,
+  authStateRoot
+} from "../../src/data/delivery-system/authSessionRegistry";
 import { projectRegistryPath, writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { normalizeQuotaWindow, type ProviderSnapshot } from "../../src/data/delivery-system/providerQuota";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
@@ -53,6 +61,17 @@ function fixture(options: { readonly observations?: boolean } = {}): BuildReadin
   mkdirSync(stateDir, { mode: 0o700 });
   mkdirSync(projectRoot, { mode: 0o700 });
   writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
+  const adminCredentialsPath = join(root, "admin-credentials.json");
+  writeAdminCredentials(adminCredentialsPath, {
+    version: ADMIN_CREDENTIALS_VERSION,
+    username: "admin",
+    salt: "11".repeat(32),
+    params: { N: 2 ** 15, r: 8, p: 1, keylen: 64 },
+    hash: "22".repeat(64),
+    credential_generation: 1
+  });
+  const authRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
+  authRegistry.storeServiceToken("33".repeat(32), Date.parse(NOW));
   if (options.observations !== false) {
     writeProviderQuotaStore(stateDir, {
       schema_version: "v1",
@@ -63,6 +82,10 @@ function fixture(options: { readonly observations?: boolean } = {}): BuildReadin
     stateDir,
     projectRoot,
     authToken: "readiness-secret-token",
+    adminCredentialsPath,
+    serviceTokenDigest: () => authRegistry.serviceTokenDigest(),
+    secureCookies: false,
+    secureCookiesRequired: false,
     providerCommands: PROVIDER_COMMANDS,
     openRouterConfigured: true,
     now: NOW
@@ -71,7 +94,11 @@ function fixture(options: { readonly observations?: boolean } = {}): BuildReadin
 
 function persistedFiles(stateDir: string): Readonly<Record<string, string>> {
   return Object.fromEntries(
-    readdirSync(stateDir).sort().map((name) => [name, readFileSync(join(stateDir, name), "utf8")])
+    readdirSync(stateDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .sort()
+      .map((name) => [name, readFileSync(join(stateDir, name), "utf8")])
   );
 }
 
@@ -85,6 +112,7 @@ describe("buildReadiness", () => {
       checked_at: NOW,
       components: {
         configuration: { status: "ready", error_code: null },
+        authentication: { status: "ready", error_code: null },
         managed_state: { status: "ready", error_code: null },
         project_registry: { status: "ready", error_code: null },
         supervisor: { status: "ready", error_code: null },
@@ -135,6 +163,51 @@ describe("buildReadiness", () => {
       ready: false,
       status: "unavailable",
       components: { project_registry: { status: "unavailable", error_code: "project_registry_missing" } }
+    });
+  });
+
+  it("reports the distinct authentication component without repurposing configuration or token gateway", () => {
+    const missingAdmin = fixture();
+    unlinkSync(missingAdmin.adminCredentialsPath);
+    expect(buildReadiness(missingAdmin)).toMatchObject({
+      ready: false,
+      components: {
+        configuration: { status: "ready", error_code: null },
+        authentication: { status: "unavailable", error_code: "admin_credentials_missing" },
+        token_gateway: { status: "ready", error_code: null }
+      }
+    });
+
+    const missingService = fixture();
+    expect(buildReadiness({ ...missingService, serviceTokenDigest: () => null })).toMatchObject({
+      ready: false,
+      components: {
+        authentication: { status: "unavailable", error_code: "service_token_missing" }
+      }
+    });
+
+    const insecure = fixture();
+    expect(buildReadiness({ ...insecure, secureCookiesRequired: true, secureCookies: false })).toMatchObject({
+      ready: false,
+      components: {
+        authentication: { status: "unavailable", error_code: "secure_cookies_required" }
+      }
+    });
+  });
+
+  it("rejects admin credentials stored inside managed state", () => {
+    const options = fixture();
+    const managedCredentialsPath = join(options.stateDir, "admin-credentials.json");
+    writeFileSync(managedCredentialsPath, readFileSync(options.adminCredentialsPath), { mode: 0o600 });
+
+    expect(buildReadiness({ ...options, adminCredentialsPath: managedCredentialsPath })).toMatchObject({
+      ready: false,
+      components: {
+        authentication: {
+          status: "unavailable",
+          error_code: "admin_credentials_in_managed_state"
+        }
+      }
     });
   });
 

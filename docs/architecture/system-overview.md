@@ -78,8 +78,13 @@ bounded files and emits correlated summaries rather than raw logs.
 
 ### Authentication
 
-The bearer token is a single shared operator secret. Browser cookies are HttpOnly and process-local.
-There are no persistent identities, roles, distributed sessions, or public ingress guarantees.
+Admin passwords are verified with asynchronous scrypt against a mode-private,
+versioned credential file. Browser cookies are opaque 32-byte HttpOnly tokens;
+only SHA-256 digests and generation-bound sliding expiry records persist under
+the separate auth state root. Service callers use a separately issued bearer
+whose backend also stores only a SHA-256 digest. `CONTROL_PLANE_TOKEN` remains
+an additive compatibility path in this phase. There are no roles, distributed
+sessions, or public ingress guarantees.
 
 ### Filesystem
 
@@ -96,9 +101,12 @@ both required; either one alone is insufficient.
 
 ### Secrets and backups
 
-The environment file and provider credentials stay outside managed state and are excluded from state
-backups. Maintenance scans bounded state content for secret-like material and refuses unsafe rotation.
-Backups are local and unencrypted; see [State and recovery](../operations/state-and-recovery.md).
+The environment file and provider credentials stay outside managed state. The
+auth state root is explicitly excluded from backup file selection, archive
+validation, and restore, preventing old sessions or service digests from being
+resurrected. Maintenance scans bounded managed-state content for secret-like
+material and refuses unsafe rotation. Backups are local and unencrypted; see
+[State and recovery](../operations/state-and-recovery.md).
 
 ### MCP and skills
 
