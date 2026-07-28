@@ -71,9 +71,10 @@ Optional providers may be degraded or unavailable while core readiness remains t
 
 ## Login
 
-Open the loopback Cockpit or the reviewed same-origin proxy. Enter the Control Plane token and select
-`Přihlásit`. The browser receives an HttpOnly process-local session cookie. Restarting the Control
-Plane invalidates the browser session.
+Open the loopback Cockpit or the reviewed same-origin proxy. Enter your admin username and password and
+select `Přihlásit`. The browser receives an HttpOnly session cookie backed by a durable, sliding-expiry
+server session that survives a Control Plane restart. An explicit logout — or an admin password change —
+invalidates it.
 
 ## Create/Resume Session
 

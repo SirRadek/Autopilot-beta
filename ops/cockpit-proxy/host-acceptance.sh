@@ -14,6 +14,14 @@ case "$base_url" in
 esac
 [ -n "$token_command" ] || { printf '%s\n' "AUTOPILOT_PROXY_TOKEN_COMMAND is required" >&2; exit 1; }
 [ -n "$ca_cert" ] || { printf '%s\n' "AUTOPILOT_PROXY_CA_CERT is required" >&2; exit 1; }
+[ -n "${AUTOPILOT_PROXY_TEST_USERNAME:-}" ] || {
+	printf '%s\n' "AUTOPILOT_PROXY_TEST_USERNAME is required" >&2
+	exit 1
+}
+[ -n "${AUTOPILOT_PROXY_TEST_PASSWORD:-}" ] || {
+	printf '%s\n' "AUTOPILOT_PROXY_TEST_PASSWORD is required" >&2
+	exit 1
+}
 [[ "$ca_cert" == /* ]] && [ -f "$ca_cert" ] && [ ! -L "$ca_cert" ] || {
 	printf '%s\n' "AUTOPILOT_PROXY_CA_CERT must be an absolute regular non-symlink file" >&2
 	exit 1
@@ -239,6 +247,7 @@ HOME="$browser_home" timeout --signal=TERM --kill-after="$openssl_kill_after" "$
 ' _ "$certutil_bin" "$nss_db" "$ca_cert"
 
 HOME="$browser_home" PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers_path" AUTOPILOT_PROXY_TEST_TOKEN="$token" \
+AUTOPILOT_PROXY_TEST_USERNAME="$AUTOPILOT_PROXY_TEST_USERNAME" AUTOPILOT_PROXY_TEST_PASSWORD="$AUTOPILOT_PROXY_TEST_PASSWORD" \
 	timeout --signal=TERM --kill-after="$playwright_kill_after" "$playwright_timeout" npx --no-install playwright test --config playwright.proxy.config.ts --output "$work/playwright-results"
 unset token TOKEN_TO_ENCODE
 

@@ -12,6 +12,10 @@ control_plane_started=0
 proxy_started=0
 runtime_created=0
 ownership_nonce=""
+acceptance_admin_username="acceptance-admin"
+acceptance_admin_password="autopilot-acceptance-test"
+export AUTOPILOT_PROXY_TEST_USERNAME="$acceptance_admin_username"
+export AUTOPILOT_PROXY_TEST_PASSWORD="$acceptance_admin_password"
 test_mode="${AUTOPILOT_PROXY_TEST_MODE:-0}"
 case "$test_mode" in 0|1) ;; *) exit 1 ;; esac
 expected_runtime_uid=0
@@ -290,9 +294,12 @@ candidate_uid="$(stat -c %u -- "$candidate")"
 candidate_gid="$(stat -c %g -- "$candidate")"
 caddy_uid="$candidate_uid"
 caddy_gid="$candidate_gid"
+setpriv_bin=/usr/bin/setpriv
 if [ "$test_mode" = 0 ]; then
 	caddy_uid="$(id -u caddy)"
 	caddy_gid="$(id -g caddy)"
+else
+	setpriv_bin=setpriv
 fi
 
 mkdir -m 0755 -- "$isolated_runtime"
@@ -309,21 +316,38 @@ ownership_nonce="$(timeout --signal=TERM --kill-after=2s 5s openssl rand -hex 32
 chmod 0600 "$isolated_runtime/.autopilot-cockpit-isolated-owned"
 [ "$(stat -c %u:%g:%a -- "$isolated_runtime/.autopilot-cockpit-isolated-owned")" = "$expected_runtime_uid:$expected_runtime_gid:600" ]
 install -d -m 0700 -o "$candidate_uid" -g "$candidate_gid" "$isolated_runtime/state" "$isolated_runtime/projects"
+install -d -m 0700 -o "$candidate_uid" -g "$candidate_gid" "$isolated_runtime/admin"
 install -d -m 0700 -o "$caddy_uid" -g "$caddy_gid" "$isolated_runtime/caddy-data" "$isolated_runtime/caddy-config"
 printf '%s\n' '{"schema_version":"v1","projects":[]}' > "$isolated_runtime/state/projects.json"
 chown "$candidate_uid:$candidate_gid" "$isolated_runtime/state/projects.json"
 chmod 0600 "$isolated_runtime/state/projects.json"
 
+admin_credentials_path="$isolated_runtime/admin/admin-credentials.json"
 environment_file="$isolated_runtime/control-plane.env"
 (
 	umask 077
 	printf '%s\n' \
 		'CONTROL_PLANE_TOKEN=isolated-test-token' \
 		'CONTROL_PLANE_SECURE_COOKIES=true' \
+		"AUTOPILOT_ADMIN_CREDENTIALS_PATH=$admin_credentials_path" \
 		"AUTOPILOT_PROJECTS_DIR=$isolated_runtime/projects" > "$environment_file"
 )
 chown "$candidate_uid:$candidate_gid" "$environment_file"
 chmod 0600 "$environment_file"
+
+candidate_tsx="$candidate/node_modules/.bin/tsx"
+[ -x "$candidate_tsx" ] && [ -f "$candidate/scripts/control-plane-auth.ts" ]
+AUTOPILOT_ADMIN_USERNAME="$acceptance_admin_username" \
+AUTOPILOT_ADMIN_PASSWORD="$acceptance_admin_password" \
+AUTOPILOT_ADMIN_CREDENTIALS_PATH="$admin_credentials_path" \
+	"$setpriv_bin" --reuid "$candidate_uid" --regid "$candidate_gid" --clear-groups -- \
+	"$candidate_tsx" "$candidate/scripts/control-plane-auth.ts" set-admin-password >/dev/null
+[ -f "$admin_credentials_path" ] && [ ! -L "$admin_credentials_path" ]
+[ "$(stat -c %u:%g:%a -- "$admin_credentials_path")" = "$candidate_uid:$candidate_gid:600" ]
+"$setpriv_bin" --reuid "$candidate_uid" --regid "$candidate_gid" --clear-groups -- \
+	"$candidate_tsx" "$candidate/scripts/control-plane-auth.ts" issue-service-token "$isolated_runtime/state" >/dev/null
+service_token_path="$isolated_runtime/state/auth/service-token.json"
+[ -f "$service_token_path" ] && [ ! -L "$service_token_path" ]
 
 caddyfile="$isolated_runtime/Caddyfile"
 cat > "$caddyfile" <<EOF
@@ -432,7 +456,7 @@ for _ in $(seq 1 12); do
 const fs = require("node:fs");
 const body = JSON.parse(fs.readFileSync(process.env.READY_JSON_PATH, "utf8"));
 if (body?.ready !== true) process.exit(1);
-for (const name of ["configuration", "managed_state", "project_registry", "supervisor", "token_gateway"])
+for (const name of ["configuration", "authentication", "managed_state", "project_registry", "supervisor", "token_gateway"])
   if (body?.components?.[name]?.status !== "ready" || body.components[name].error_code !== null) process.exit(1);
 '; then
 		ready=1
