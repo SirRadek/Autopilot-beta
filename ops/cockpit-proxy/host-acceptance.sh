@@ -173,6 +173,7 @@ TOKEN_TO_ENCODE="$token" node -e \
 	'process.stdout.write(JSON.stringify({token: process.env.TOKEN_TO_ENCODE}))' > "$work/login.json"
 status="$(request login POST "$base_url/auth/login" \
 	--header 'content-type: application/json' \
+	--header "Origin: $base_url" \
 	--data-binary "@$work/login.json" \
 	--cookie-jar "$cookie_jar")"
 rm -f "$work/login.json"
