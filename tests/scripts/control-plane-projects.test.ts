@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createControlPlaneServer } from "../../scripts/control-plane-server";
+import { AuthSessionRegistry, authStateRoot } from "../../src/data/delivery-system/authSessionRegistry";
 import { readProjectRegistry, writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 
+const SERVICE_TOKEN = "c".repeat(64);
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
 
@@ -23,7 +25,8 @@ async function projectsApi() {
       enabled: true
     }]
   });
-  const server = createControlPlaneServer(stateDir, "secret");
+  new AuthSessionRegistry(authStateRoot(stateDir)).storeServiceToken(SERVICE_TOKEN);
+  const server = createControlPlaneServer(stateDir);
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -31,7 +34,7 @@ async function projectsApi() {
   const base = `http://127.0.0.1:${address.port}`;
   const create = (body: unknown) => fetch(`${base}/projects`, {
     method: "POST",
-    headers: { authorization: "Bearer secret", "content-type": "application/json" },
+    headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" },
     body: JSON.stringify(body)
   });
   return { stateDir, existingCwd, base, create };

@@ -211,7 +211,7 @@ describe("operational hardening", () => {
     const state = join(root, "state");
     const environment = join(root, "control-plane.env");
     mkdirSync(state, { mode: 0o755 });
-    writeFileSync(environment, "CONTROL_PLANE_TOKEN=secret\n", { mode: 0o644 });
+    writeFileSync(environment, "AUTOPILOT_STATE_DIR=/state\n", { mode: 0o644 });
     chmodSync(state, 0o755);
     chmodSync(environment, 0o644);
 

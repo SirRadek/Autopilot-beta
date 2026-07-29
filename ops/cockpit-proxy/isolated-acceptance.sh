@@ -327,7 +327,6 @@ environment_file="$isolated_runtime/control-plane.env"
 (
 	umask 077
 	printf '%s\n' \
-		'CONTROL_PLANE_TOKEN=isolated-test-token' \
 		'CONTROL_PLANE_SECURE_COOKIES=true' \
 		"AUTOPILOT_ADMIN_CREDENTIALS_PATH=$admin_credentials_path" \
 		"AUTOPILOT_PROJECTS_DIR=$isolated_runtime/projects" > "$environment_file"

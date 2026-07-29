@@ -25,7 +25,7 @@ function fixture() {
   const backupDirectory = join(stateDirectory, "backups");
   const environmentFile = join(root, "control-plane.env");
   mkdirSync(stateDirectory, { mode: 0o700 });
-  writeFileSync(environmentFile, "CONTROL_PLANE_TOKEN=placeholder\n", { mode: 0o600 });
+  writeFileSync(environmentFile, "AUTOPILOT_STATE_DIR=/state\n", { mode: 0o600 });
   chmodSync(stateDirectory, 0o700);
   chmodSync(environmentFile, 0o600);
   return { root, stateDirectory, backupDirectory, environmentFile };

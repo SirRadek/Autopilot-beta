@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createControlPlaneServer } from "../../scripts/control-plane-server";
 import { classifyBrainstormErrorCode } from "../../scripts/control-plane-brainstorms";
+import { AuthSessionRegistry, authStateRoot } from "../../src/data/delivery-system/authSessionRegistry";
 import { estimateBrainstormTokenEnvelope } from "../../src/data/delivery-system/brainstormBudget";
 import { createBrainstormCoordinator } from "../../src/data/delivery-system/brainstormCoordinator";
 import { createBrainstorm } from "../../src/data/delivery-system/brainstormStore";
@@ -16,6 +17,7 @@ import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue"
 import { TokenGateway } from "../../src/data/delivery-system/tokenGateway";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 
+const SERVICE_TOKEN = "c".repeat(64);
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
 
@@ -56,7 +58,8 @@ async function brainstormApi(options: {
       snapshots: options.snapshots ?? defaultSnapshots()
     });
   }
-  const server = createControlPlaneServer(stateDir, "secret", { projectRoot, ...(options.runOrchestrator === undefined ? {} : { runOrchestrator: options.runOrchestrator }) });
+  new AuthSessionRegistry(authStateRoot(stateDir)).storeServiceToken(SERVICE_TOKEN);
+  const server = createControlPlaneServer(stateDir, { projectRoot, ...(options.runOrchestrator === undefined ? {} : { runOrchestrator: options.runOrchestrator }) });
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -64,7 +67,7 @@ async function brainstormApi(options: {
   const base = `http://127.0.0.1:${address.port}`;
   const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => fetch(`${base}${path}`, {
     method,
-    headers: { authorization: "Bearer secret", ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    headers: { authorization: `Bearer ${SERVICE_TOKEN}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) })
   });
   return { stateDir, projectRoot, base, call };
@@ -167,7 +170,7 @@ describe("control plane governed brainstorm HTTP actions", () => {
   it("rejects a mutating POST with a missing or wrong content type with 415", async () => {
     const api = await brainstormApi();
 
-    const missing = await fetch(`${api.base}/brainstorms`, { method: "POST", headers: { authorization: "Bearer secret" }, body: JSON.stringify(validDraft) });
+    const missing = await fetch(`${api.base}/brainstorms`, { method: "POST", headers: { authorization: `Bearer ${SERVICE_TOKEN}` }, body: JSON.stringify(validDraft) });
     const wrong = await api.call("POST", "/brainstorms", JSON.stringify(validDraft), { "content-type": "text/plain" });
 
     expect(missing.status).toBe(415);

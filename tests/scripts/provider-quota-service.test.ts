@@ -23,14 +23,14 @@ function fakeScheduler(): ControlPlaneScheduler & { starts: number; stops: numbe
 describe("control plane quota service lifecycle", () => {
   it("starts the scheduler with the service state directory", () => {
     const scheduler = fakeScheduler();
-    const runtime = createControlPlaneRuntime(mkdtempSync(join(tmpdir(), "quota-service-")), "secret", { scheduler });
+    const runtime = createControlPlaneRuntime(mkdtempSync(join(tmpdir(), "quota-service-")), { scheduler });
     runtimes.push(runtime);
     expect(scheduler.starts).toBe(1);
   });
 
   it("stops the scheduler and server exactly once", async () => {
     const scheduler = fakeScheduler();
-    const runtime = createControlPlaneRuntime(mkdtempSync(join(tmpdir(), "quota-service-")), "secret", { scheduler });
+    const runtime = createControlPlaneRuntime(mkdtempSync(join(tmpdir(), "quota-service-")), { scheduler });
     runtimes.push(runtime);
     await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
     const close = vi.spyOn(runtime.server, "close");

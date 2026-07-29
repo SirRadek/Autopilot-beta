@@ -5,14 +5,12 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
 unset CURL_CA_BUNDLE SSL_CERT_FILE SSL_CERT_DIR
 
 base_url="${AUTOPILOT_PROXY_BASE_URL:-}"
-token_command="${AUTOPILOT_PROXY_TOKEN_COMMAND:-}"
 ca_cert="${AUTOPILOT_PROXY_CA_CERT:-}"
 case "$base_url" in
 	https://autopilot.local) tls_port=443 ;;
 	https://autopilot.local:8443) tls_port=8443 ;;
 	*) printf '%s\n' "AUTOPILOT_PROXY_BASE_URL must be an approved Autopilot HTTPS origin" >&2; exit 1 ;;
 esac
-[ -n "$token_command" ] || { printf '%s\n' "AUTOPILOT_PROXY_TOKEN_COMMAND is required" >&2; exit 1; }
 [ -n "$ca_cert" ] || { printf '%s\n' "AUTOPILOT_PROXY_CA_CERT is required" >&2; exit 1; }
 [ -n "${AUTOPILOT_PROXY_TEST_USERNAME:-}" ] || {
 	printf '%s\n' "AUTOPILOT_PROXY_TEST_USERNAME is required" >&2
@@ -47,17 +45,13 @@ playwright_browsers_path="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright
 }
 openssl_timeout=5s
 openssl_kill_after=2s
-token_timeout=30s
-token_kill_after=5s
 playwright_timeout=120s
 playwright_kill_after=10s
 if [ "$test_mode" = 1 ]; then
-	token_timeout="${AUTOPILOT_PROXY_TEST_TOKEN_TIMEOUT:-$token_timeout}"
-	token_kill_after="${AUTOPILOT_PROXY_TEST_TOKEN_KILL_AFTER:-$token_kill_after}"
 	playwright_timeout="${AUTOPILOT_PROXY_TEST_PLAYWRIGHT_TIMEOUT:-$playwright_timeout}"
 	playwright_kill_after="${AUTOPILOT_PROXY_TEST_PLAYWRIGHT_KILL_AFTER:-$playwright_kill_after}"
 fi
-for duration in "$openssl_timeout" "$openssl_kill_after" "$token_timeout" "$token_kill_after" "$playwright_timeout" "$playwright_kill_after"; do
+for duration in "$openssl_timeout" "$openssl_kill_after" "$playwright_timeout" "$playwright_kill_after"; do
 	[[ "$duration" =~ ^[1-9][0-9]*s$ ]] || exit 1
 done
 
@@ -66,7 +60,6 @@ cleanup() {
 	local status=$?
 	trap - EXIT INT TERM
 	set +e
-	unset token TOKEN_TO_ENCODE
 	rm -rf -- "$work"
 	exit "$status"
 }
@@ -151,26 +144,8 @@ if grep -Eiq '^content-type:[[:space:]]*application/json([[:space:]]*;|[[:space:
 	exit 1
 fi
 
-token_stdout="$work/token-command.stdout"
-: > "$token_stdout"
-chmod 600 "$token_stdout"
-timeout --signal=TERM --kill-after="$token_kill_after" "$token_timeout" bash -c "$token_command" >"$token_stdout" 2>"$work/token-command.stderr" || {
-	printf '%s\n' "token command failed or timed out" >&2
-	exit 1
-}
-TOKEN_STDOUT_PATH="$token_stdout" node -e '
-const fs = require("node:fs");
-const value = fs.readFileSync(process.env.TOKEN_STDOUT_PATH);
-if (value.length === 0) process.exit(1);
-const body = value.at(-1) === 0x0a ? value.subarray(0, -1) : value;
-if (body.length === 0 || body.includes(0x0a) || body.includes(0x0d) || body.includes(0x00)) process.exit(1);
-' || {
-	printf '%s\n' "token command must return exactly one non-empty line" >&2
-	exit 1
-}
-IFS= read -r token < "$token_stdout" || [ -n "$token" ]
-TOKEN_TO_ENCODE="$token" node -e \
-	'process.stdout.write(JSON.stringify({token: process.env.TOKEN_TO_ENCODE}))' > "$work/login.json"
+AUTOPILOT_LOGIN_USERNAME="$AUTOPILOT_PROXY_TEST_USERNAME" AUTOPILOT_LOGIN_PASSWORD="$AUTOPILOT_PROXY_TEST_PASSWORD" node -e \
+	'process.stdout.write(JSON.stringify({ username: process.env.AUTOPILOT_LOGIN_USERNAME, password: process.env.AUTOPILOT_LOGIN_PASSWORD }))' > "$work/login.json"
 status="$(request login POST "$base_url/auth/login" \
 	--header 'content-type: application/json' \
 	--header "Origin: $base_url" \
@@ -247,9 +222,8 @@ HOME="$browser_home" timeout --signal=TERM --kill-after="$openssl_kill_after" "$
 	"$1" -d "sql:$2" -L -n autopilot-caddy-root >/dev/null
 ' _ "$certutil_bin" "$nss_db" "$ca_cert"
 
-HOME="$browser_home" PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers_path" AUTOPILOT_PROXY_TEST_TOKEN="$token" \
+HOME="$browser_home" PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers_path" \
 AUTOPILOT_PROXY_TEST_USERNAME="$AUTOPILOT_PROXY_TEST_USERNAME" AUTOPILOT_PROXY_TEST_PASSWORD="$AUTOPILOT_PROXY_TEST_PASSWORD" \
 	timeout --signal=TERM --kill-after="$playwright_kill_after" "$playwright_timeout" npx --no-install playwright test --config playwright.proxy.config.ts --output "$work/playwright-results"
-unset token TOKEN_TO_ENCODE
 
 printf '%s\n' "HOST_PROXY_ACCEPTANCE_OK"

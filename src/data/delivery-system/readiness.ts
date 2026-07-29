@@ -64,7 +64,6 @@ export interface ReadinessReport {
 export interface BuildReadinessOptions {
   readonly stateDir: string;
   readonly projectRoot: string;
-  readonly authToken: string | undefined;
   readonly adminCredentialsPath: string;
   readonly serviceTokenDigest: () => string | null;
   readonly secureCookies: boolean;
@@ -149,7 +148,6 @@ function authenticationReadiness(options: BuildReadinessOptions): ReadinessCompo
 function configurationReadiness(options: BuildReadinessOptions): ReadinessComponent {
   if (!isNonEmpty(options.stateDir) || !isAbsolute(options.stateDir) || normalize(options.stateDir) !== options.stateDir ||
     !isNonEmpty(options.projectRoot) || !isAbsolute(options.projectRoot) ||
-    !isNonEmpty(options.authToken) ||
     (options.now !== undefined && !validTimestamp(options.now))) {
     return unavailable("invalid_configuration");
   }

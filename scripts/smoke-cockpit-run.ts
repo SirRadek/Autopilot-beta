@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createControlPlaneRuntime } from "./control-plane-server";
+import { AuthSessionRegistry, authStateRoot } from "../src/data/delivery-system/authSessionRegistry";
 import { readApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { writeProjectRegistry } from "../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
@@ -44,9 +45,11 @@ export async function runCockpitSmoke(options: { readonly mode: SmokeMode; reado
   const projectRoot = join(stateDir, "projects");
   const projectCwd = join(projectRoot, "cockpit-smoke");
   mkdirSync(projectCwd, { recursive: true, mode: 0o700 });
-  const token = "cockpit-smoke-local-token";
+  // Machine caller authenticates with a service bearer (the legacy shared token was retired).
+  const token = "5c".repeat(32);
+  new AuthSessionRegistry(authStateRoot(stateDir)).storeServiceToken(token);
   let dispatchOutput: DispatchResult | undefined;
-  const runtime = createControlPlaneRuntime(stateDir, token, {
+  const runtime = createControlPlaneRuntime(stateDir, {
     projectRoot,
     scheduler: { start() {}, stop() {} },
     supervisorPollMs: 5,
