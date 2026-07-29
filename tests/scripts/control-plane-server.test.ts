@@ -25,11 +25,34 @@ import { createRunDraft, readRunStore, reviseRunDraft } from "../../src/data/del
 import type { ProviderQuotaStoreDocument } from "../../src/data/delivery-system/providerQuotaStore";
 import type { ReadinessReport } from "../../src/data/delivery-system/readiness";
 
+const SERVICE_TOKEN = "c".repeat(64);
+const ADMIN_USERNAME = "admin";
+const ADMIN_PASSWORD = "test-admin-password";
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
 
+function provisionServiceToken(stateDir: string): AuthSessionRegistry {
+  const registry = new AuthSessionRegistry(authStateRoot(stateDir));
+  registry.storeServiceToken(SERVICE_TOKEN);
+  return registry;
+}
+
+async function provisionAdminAuth(stateDir: string) {
+  const sessionRegistry = provisionServiceToken(stateDir);
+  const adminCredentialsPath = `${stateDir}-admin-credentials.json`;
+  writeAdminCredentials(adminCredentialsPath, {
+    version: ADMIN_CREDENTIALS_VERSION,
+    username: ADMIN_USERNAME,
+    ...await hashPassword(ADMIN_USERNAME, ADMIN_PASSWORD),
+    credential_generation: 1
+  });
+  return { adminCredentialsPath, sessionRegistry, serviceToken: sessionRegistry };
+}
+
 async function request(path: string, token?: string) {
-  const server = createControlPlaneServer(mkdtempSync(join(tmpdir(), "control-plane-")), "secret");
+  const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+  provisionServiceToken(stateDir);
+  const server = createControlPlaneServer(stateDir);
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -62,7 +85,7 @@ describe("control plane liveness and readiness", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-unsafe-admin-"));
     const registry = new AuthSessionRegistry(authStateRoot(stateDir));
 
-    expect(() => createControlPlaneServer(stateDir, "legacy-secret", {
+    expect(() => createControlPlaneServer(stateDir, {
       auth: {
         adminCredentialsPath: join(stateDir, "admin-credentials.json"),
         sessionRegistry: registry,
@@ -72,7 +95,7 @@ describe("control plane liveness and readiness", () => {
   });
 
   async function publicGet(path: string, readiness: () => ReadinessReport) {
-    const server = createControlPlaneServer(mkdtempSync(join(tmpdir(), "control-plane-ready-")), "secret-value", { readiness });
+    const server = createControlPlaneServer(mkdtempSync(join(tmpdir(), "control-plane-ready-")), { readiness });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -116,7 +139,7 @@ describe("control plane liveness and readiness", () => {
     });
     const authRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
     authRegistry.storeServiceToken("c".repeat(64));
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       auth: { adminCredentialsPath: credentialsPath, sessionRegistry: authRegistry, serviceToken: authRegistry },
       scheduler: { start() {}, stop() {} },
@@ -154,7 +177,8 @@ async function governedApi() {
   mkdirSync(projectCwd, { recursive: true });
   writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
   writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-  const server = createControlPlaneServer(stateDir, "secret", { projectRoot });
+  const auth = await provisionAdminAuth(stateDir);
+  const server = createControlPlaneServer(stateDir, { projectRoot, auth });
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -162,7 +186,7 @@ async function governedApi() {
   const base = `http://127.0.0.1:${address.port}`;
   const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => fetch(`${base}${path}`, {
     method,
-    headers: { authorization: "Bearer secret", ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    headers: { authorization: `Bearer ${SERVICE_TOKEN}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
     ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) })
   });
   return { stateDir, projectRoot, base, call };
@@ -179,11 +203,12 @@ describe("control plane governed run API", () => {
     mkdirSync(stateDir);
     mkdirSync(projectRoot);
     mkdirSync(outside);
+    provisionServiceToken(stateDir);
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
     const previous = process.env.AUTOPILOT_PROJECTS_DIR;
     process.env.AUTOPILOT_PROJECTS_DIR = projectRoot;
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     try {
@@ -191,7 +216,7 @@ describe("control plane governed run API", () => {
       if (address === null || typeof address === "string") throw new Error("missing address");
       const response = await fetch(`http://127.0.0.1:${address.port}/runs`, {
         method: "POST",
-        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" },
         body: JSON.stringify(draft)
       });
 
@@ -244,7 +269,7 @@ describe("control plane governed run API", () => {
     mkdirSync(projectRoot);
     mkdirSync(outside);
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: outside, enabled: true }] });
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       scheduler: { start() {}, stop() {} },
       supervisorPollMs: 60_000
@@ -259,6 +284,7 @@ describe("control plane governed run API", () => {
 
   it("rejects an out-of-root HTTP revision without mutating revisions or approvals", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-http-revision-root-"));
+    provisionServiceToken(stateDir);
     const projectRoot = join(stateDir, "projects");
     const inside = join(projectRoot, "inside");
     const outside = join(stateDir, "outside");
@@ -266,7 +292,7 @@ describe("control plane governed run API", () => {
     mkdirSync(outside);
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: inside, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       scheduler: { start() {}, stop() {} },
       supervisorPollMs: 60_000
@@ -277,7 +303,7 @@ describe("control plane governed run API", () => {
       if (address === null || typeof address === "string") throw new Error("missing address");
       const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, {
         method: "POST",
-        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" },
         body: JSON.stringify(body)
       });
       const createdResponse = await call("/runs", draft);
@@ -301,14 +327,15 @@ describe("control plane governed run API", () => {
 
   it("reports a non-regular project registry as invalid configuration without leaking paths", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-registry-io-secret-"));
+    provisionServiceToken(stateDir);
     mkdirSync(join(stateDir, "projects.json"));
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
 
-    const response = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: "Bearer secret" } });
+    const response = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
     const body = await response.json() as Record<string, unknown>;
 
     expect(response.status).toBe(409);
@@ -383,7 +410,7 @@ describe("control plane governed run API", () => {
 
   it("requires application/json for every mutation body", async () => {
     const api = await governedApi();
-    const missing = await fetch(`${api.base}/runs`, { method: "POST", headers: { authorization: "Bearer secret" }, body: JSON.stringify(draft) });
+    const missing = await fetch(`${api.base}/runs`, { method: "POST", headers: { authorization: `Bearer ${SERVICE_TOKEN}` }, body: JSON.stringify(draft) });
     expect(missing.status).toBe(415);
     expect(await missing.json()).toEqual({ error: "unsupported_media_type" });
     const wrong = await api.call("POST", "/runs", JSON.stringify(draft), { "content-type": "text/plain" });
@@ -450,17 +477,18 @@ describe("control plane governed run API", () => {
 
   it("runs the production supervisor loop to a terminal result", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runtime-"));
+    provisionServiceToken(stateDir);
     const projectRoot = join(stateDir, "projects");
     const projectCwd = join(projectRoot, "autopilot-beta");
     mkdirSync(projectCwd, { recursive: true });
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-    const runtime = createControlPlaneRuntime(stateDir, "secret", { projectRoot, scheduler: { start() {}, stop() {} }, dispatch: async (handoff) => ({ refused: false, workerRunId: "runtime-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "runtime terminal", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }), supervisorPollMs: 5 });
+    const runtime = createControlPlaneRuntime(stateDir, { projectRoot, scheduler: { start() {}, stop() {} }, dispatch: async (handoff) => ({ refused: false, workerRunId: "runtime-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "runtime terminal", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }), supervisorPollMs: 5 });
     servers.push(runtime.server);
     await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
     const address = runtime.server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" }, body: JSON.stringify(body) });
     const created = await (await call("/runs", draft)).json() as { current: { run_id: string } };
     await call(`/runs/${created.current.run_id}/approve`, { revision: 1, operator: "owner" });
     await vi.waitFor(() => expect(readRunStore(stateDir).runs[0]?.status).toBe("completed"));
@@ -472,7 +500,7 @@ describe("control plane governed run API", () => {
     const projectRoot = join(stateDir, "projects");
     mkdirSync(projectRoot, { recursive: true });
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [] });
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       scheduler: { start() {}, stop() {} },
       supervisorPollMs: 5
@@ -501,7 +529,7 @@ describe("control plane governed run API", () => {
     const { requestRunCancellation, transitionRun } = await import("../../src/data/delivery-system/runStore");
     transitionRun(api.stateDir, draft.current.run_id, "running", new Date().toISOString());
     requestRunCancellation(api.stateDir, draft.current.run_id, new Date().toISOString());
-    const runtime = createControlPlaneRuntime(api.stateDir, "secret", { scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, dispatch: async () => { throw new Error("must_not_dispatch_cancelled_orphan"); } });
+    const runtime = createControlPlaneRuntime(api.stateDir, { scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, dispatch: async () => { throw new Error("must_not_dispatch_cancelled_orphan"); } });
     await vi.waitFor(() => expect(readRunStore(api.stateDir).runs.find((run) => run.current.run_id === draft.current.run_id)?.status).toBe("cancelled"));
     await runtime.stop();
   });
@@ -514,7 +542,7 @@ describe("control plane governed run API", () => {
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
     let finish!: () => void;
-    const runtime = createControlPlaneRuntime(stateDir, "secret", { projectRoot, scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
+    const runtime = createControlPlaneRuntime(stateDir, { projectRoot, scheduler: { start() {}, stop() {} }, supervisorPollMs: 5, shutdownDrainMs: 1_000, dispatch: async (handoff) => { await new Promise<void>((resolve) => { finish = resolve; }); return { refused: false, workerRunId: "drain-worker", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null, exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true }; } });
     const orchestrator = (runtime as any).orchestrator;
     const draft = orchestrator.prepareRun({ project_id: "autopilot-beta", prompt: "drain", provider: "codex_cli", model: "model-a", estimated_tokens: 20_000, requested_artifacts: ["text"], profile: "dev", requested_reasoning_effort: null });
     orchestrator.approveAndQueueRun(draft.current.run_id, 1, "owner");
@@ -530,6 +558,7 @@ describe("control plane governed run API", () => {
 
   it("advances an approved brainstorm to completion through the real supervisor poll without a manual tick", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-brainstorm-poll-"));
+    provisionServiceToken(stateDir);
     const projectRoot = join(stateDir, "projects");
     const projectCwd = join(projectRoot, "autopilot-beta");
     mkdirSync(projectCwd, { recursive: true });
@@ -540,7 +569,7 @@ describe("control plane governed run API", () => {
     });
     const outputs = ["Alpha view", "Beta view", "Gamma view", JSON.stringify({ consensus: ["aligned"], conflicts: [], confidence: 0.9, final: "Winning direction" })];
     let callCount = 0;
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       scheduler: { start() {}, stop() {} },
       supervisorPollMs: 5,
@@ -550,7 +579,7 @@ describe("control plane governed run API", () => {
     await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
     const address = runtime.server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" }, body: JSON.stringify(body) });
     const draftBody = {
       project_id: "autopilot-beta",
       brief: "Compare three provider approaches for the readiness ratchet",
@@ -578,6 +607,7 @@ describe("control plane governed run API", () => {
 
   it("parks a needs_arbitration brainstorm out of automatic polling instead of re-ticking it every cycle", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-brainstorm-park-"));
+    provisionServiceToken(stateDir);
     const projectRoot = join(stateDir, "projects");
     const projectCwd = join(projectRoot, "autopilot-beta");
     mkdirSync(projectCwd, { recursive: true });
@@ -593,7 +623,7 @@ describe("control plane governed run API", () => {
       JSON.stringify({ consensus: [], conflicts: [{ output_labels: ["A", "B"], summary: "diverging recommendation", material: true }], confidence: 0.4, final: "" })
     ];
     let dispatchCalls = 0;
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       scheduler: { start() {}, stop() {} },
       supervisorPollMs: 5,
@@ -606,7 +636,7 @@ describe("control plane governed run API", () => {
     await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
     const address = runtime.server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" }, body: JSON.stringify(body) });
     const draftBody = {
       project_id: "autopilot-beta",
       brief: "Compare three provider approaches for a policy that will need arbitration",
@@ -648,6 +678,7 @@ describe("control plane governed run API", () => {
 
   it("keeps the supervisor poll running and recovers brainstorm progression after the store is repaired following corruption", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-brainstorm-corrupt-"));
+    provisionServiceToken(stateDir);
     const projectRoot = join(stateDir, "projects");
     const projectCwd = join(projectRoot, "autopilot-beta");
     mkdirSync(projectCwd, { recursive: true });
@@ -659,7 +690,7 @@ describe("control plane governed run API", () => {
     writeFileSync(join(stateDir, "brainstorms.json"), "{ not valid json", "utf8");
     const outputs = ["Alpha view", "Beta view", "Gamma view", JSON.stringify({ consensus: ["aligned"], conflicts: [], confidence: 0.9, final: "Winning direction" })];
     let dispatchCalls = 0;
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       scheduler: { start() {}, stop() {} },
       supervisorPollMs: 5,
@@ -672,11 +703,11 @@ describe("control plane governed run API", () => {
     await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
     const address = runtime.server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify(body) });
+    const call = (path: string, body: unknown) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: "POST", headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" }, body: JSON.stringify(body) });
 
     await new Promise((resolve) => setTimeout(resolve, 60));
 
-    const health = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: "Bearer secret" } });
+    const health = await fetch(`http://127.0.0.1:${address.port}/projects`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
     expect(health.status).toBe(200);
     expect(readIncidentStore(stateDir).incidents.length).toBeGreaterThan(0);
     expect(dispatchCalls).toBe(0);
@@ -712,7 +743,11 @@ describe("control plane governed run API", () => {
   it("keeps authentication and cookie CSRF protection on mutations", async () => {
     const api = await governedApi();
     expect((await fetch(`${api.base}/projects`)).status).toBe(401);
-    const login = await fetch(`${api.base}/auth/login`, { method: "POST", headers: { origin: new URL(api.base).origin }, body: JSON.stringify({ token: "secret" }) });
+    const login = await fetch(`${api.base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: new URL(api.base).origin },
+      body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD })
+    });
     const cookie = login.headers.get("set-cookie") ?? "";
     const crossOrigin = await fetch(`${api.base}/runs`, { method: "POST", headers: { cookie, origin: "https://attacker.example", "content-type": "application/json" }, body: JSON.stringify(draft) });
     expect(crossOrigin.status).toBe(403);
@@ -812,14 +847,15 @@ describe("control plane provider endpoints", () => {
     ["approvals", "/approvals", (stateDir: string) => writeFileSync(join(stateDir, "approval-queue.json"), "not-json injected-secret")]
   ])("records a bounded incident when the %s route fails", async (_name, path, injectFailure) => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-route-failure-"));
+    provisionServiceToken(stateDir);
     injectFailure(stateDir);
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
 
-    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { headers: { authorization: "Bearer secret" } });
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
     const body = await response.json() as { error: string; incident_id: string; request_id: string };
 
     expect(response.status).toBe(500);
@@ -829,18 +865,19 @@ describe("control plane provider endpoints", () => {
   });
   it("serves authenticated bounded observability summary and filtered timeline", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-observability-"));
+    provisionServiceToken(stateDir);
     writeFileSync(join(stateDir, "cli-call-telemetry.jsonl"), [
       JSON.stringify({ recorded_at: "2026-07-12T10:00:00Z", worker_run_id: "w-1", handoff_id: "h-1", session_id: "s-1", provider: "openrouter", model: "m-1", total_tokens: 12, attempt_count: 2, prompt: "must stay private" }),
       JSON.stringify({ recorded_at: "2026-07-12T10:00:01Z", worker_run_id: "w-2", handoff_id: "h-2", session_id: "s-2", provider: "anthropic_claude", model: "m-2", total_tokens: 7, attempt_count: 1 })
     ].join("\n"));
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
     expect((await fetch(`${base}/observability/summary`)).status).toBe(401);
-    const headers = { authorization: "Bearer secret" };
+    const headers = { authorization: `Bearer ${SERVICE_TOKEN}` };
     const summary = await (await fetch(`${base}/observability/summary`, { headers })).json() as { events: number; tokens: number; retries: number };
     expect(summary).toMatchObject({ events: 2, tokens: 19, retries: 1 });
     const result = await (await fetch(`${base}/observability/timeline?session_id=s-1&limit=99999`, { headers })).json() as { timeline: unknown[]; limits: { max_events: number } };
@@ -888,7 +925,7 @@ describe("control plane provider endpoints", () => {
     });
     const authRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
     authRegistry.storeServiceToken("c".repeat(64));
-    const runtime = createControlPlaneRuntime(stateDir, "secret", {
+    const runtime = createControlPlaneRuntime(stateDir, {
       projectRoot,
       auth: { adminCredentialsPath: credentialsPath, sessionRegistry: authRegistry, serviceToken: authRegistry },
       scheduler: { start() {}, stop() {} },
@@ -912,7 +949,8 @@ describe("control plane provider endpoints", () => {
   });
   it("creates an HttpOnly browser session and accepts it for protected requests", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
-    const server = createControlPlaneServer(stateDir, "secret");
+    const auth = await provisionAdminAuth(stateDir);
+    const server = createControlPlaneServer(stateDir, { auth });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -920,7 +958,7 @@ describe("control plane provider endpoints", () => {
     const base = `http://127.0.0.1:${address.port}`;
     const unauthorized = await fetch(`${base}/status`);
     expect(unauthorized.status).toBe(401);
-    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: new URL(base).origin }, body: JSON.stringify({ token: "secret" }) });
+    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: new URL(base).origin }, body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }) });
     expect(login.status).toBe(200);
     const cookie = login.headers.get("set-cookie");
     expect(cookie).toContain("autopilot_session=");
@@ -936,13 +974,14 @@ describe("control plane provider endpoints", () => {
 
   it("requires same-origin validation for cookie mutations and supports Secure production cookies", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
-    const server = createControlPlaneServer(stateDir, "secret", { secureCookies: true });
+    const auth = await provisionAdminAuth(stateDir);
+    const server = createControlPlaneServer(stateDir, { auth, secureCookies: true });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
-    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: `https://${new URL(base).host}` }, body: JSON.stringify({ token: "secret" }) });
+    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: `https://${new URL(base).host}` }, body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }) });
     const cookie = login.headers.get("set-cookie")!;
     expect(cookie).toContain("Secure");
     const cookieHeader = cookie.split(";")[0]!;
@@ -954,13 +993,14 @@ describe("control plane provider endpoints", () => {
 
   it("rejects invalid browser credentials", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
-    const server = createControlPlaneServer(stateDir, "secret");
+    const auth = await provisionAdminAuth(stateDir);
+    const server = createControlPlaneServer(stateDir, { auth });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
-    const response = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: new URL(base).origin }, body: JSON.stringify({ token: "wrong" }) });
+    const response = await fetch(`${base}/auth/login`, { method: "POST", headers: { "content-type": "application/json", origin: new URL(base).origin }, body: JSON.stringify({ username: ADMIN_USERNAME, password: "wrong-password" }) });
     expect(response.status).toBe(401);
     expect(existsSync(join(authStateRoot(stateDir), "sessions.json"))).toBe(false);
   });
@@ -976,7 +1016,7 @@ describe("control plane provider endpoints", () => {
       credential_generation: 1
     });
     const auth = { adminCredentialsPath: credentialsPath, sessionRegistry, serviceToken: sessionRegistry };
-    const server = createControlPlaneServer(stateDir, "legacy-secret", { auth });
+    const server = createControlPlaneServer(stateDir, { auth });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -997,7 +1037,7 @@ describe("control plane provider endpoints", () => {
     expect(readFileSync(join(authStateRoot(stateDir), "sessions.json"), "utf8")).not.toContain(cookieHeader.split("=")[1]);
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    const restarted = createControlPlaneServer(stateDir, "legacy-secret", { auth });
+    const restarted = createControlPlaneServer(stateDir, { auth });
     servers.push(restarted);
     await new Promise<void>((resolve) => restarted.listen(0, "127.0.0.1", resolve));
     const restartedAddress = restarted.address();
@@ -1016,12 +1056,12 @@ describe("control plane provider endpoints", () => {
     expect((await fetch(`http://127.0.0.1:${restartedAddress.port}/status`, { headers: { cookie: cookieHeader } })).status).toBe(401);
   });
 
-  it("accepts the service bearer alongside the legacy bearer", async () => {
+  it("accepts the service bearer and rejects other bearers", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-service-bearer-"));
     const registry = new AuthSessionRegistry(authStateRoot(stateDir));
     const serviceToken = "a".repeat(64);
     registry.storeServiceToken(serviceToken, Date.now());
-    const server = createControlPlaneServer(stateDir, "legacy-secret", {
+    const server = createControlPlaneServer(stateDir, {
       auth: { adminCredentialsPath: `${stateDir}-missing.json`, sessionRegistry: registry, serviceToken: registry }
     });
     servers.push(server);
@@ -1031,19 +1071,19 @@ describe("control plane provider endpoints", () => {
     const base = `http://127.0.0.1:${address.port}`;
 
     expect((await fetch(`${base}/status`, { headers: { authorization: `Bearer ${serviceToken}` } })).status).toBe(200);
-    expect((await fetch(`${base}/status`, { headers: { authorization: "Bearer legacy-secret" } })).status).toBe(200);
     expect((await fetch(`${base}/status`, { headers: { authorization: `Bearer ${"b".repeat(64)}` } })).status).toBe(401);
   });
 
   it("rejects cross-origin and origin-less login plus every unsafe cross-origin cookie request", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-login-origin-"));
-    const server = createControlPlaneServer(stateDir, "legacy-secret");
+    const auth = await provisionAdminAuth(stateDir);
+    const server = createControlPlaneServer(stateDir, { auth });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
-    const loginBody = JSON.stringify({ token: "legacy-secret" });
+    const loginBody = JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD });
 
     expect((await fetch(`${base}/auth/login`, {
       method: "POST",
@@ -1073,13 +1113,14 @@ describe("control plane provider endpoints", () => {
 
   it("pins secure-cookie same-origin validation to https", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-secure-origin-"));
-    const server = createControlPlaneServer(stateDir, "legacy-secret", { secureCookies: true });
+    const auth = await provisionAdminAuth(stateDir);
+    const server = createControlPlaneServer(stateDir, { auth, secureCookies: true });
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
-    const body = JSON.stringify({ token: "legacy-secret" });
+    const body = JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD });
 
     expect((await fetch(`${base}/auth/login`, {
       method: "POST",
@@ -1098,7 +1139,7 @@ describe("control plane provider endpoints", () => {
     const rawToken = "d".repeat(43);
     const sessionRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
     sessionRegistry.createSession(rawToken, Number.MAX_SAFE_INTEGER, Date.now() - SESSION_RENEW_AFTER_MS - 1_000);
-    const server = createControlPlaneServer(stateDir, "legacy-secret", {
+    const server = createControlPlaneServer(stateDir, {
       auth: { adminCredentialsPath: `${stateDir}-missing.json`, sessionRegistry, serviceToken: sessionRegistry }
     });
     servers.push(server);
@@ -1125,7 +1166,7 @@ describe("control plane provider endpoints", () => {
     sessionRegistry.createSession(rawToken, Number.MAX_SAFE_INTEGER, Date.now() - SESSION_RENEW_AFTER_MS - 1_000);
     const sessionsPath = join(authStateRoot(stateDir), "sessions.json");
     const before = readFileSync(sessionsPath, "utf8");
-    const server = createControlPlaneServer(stateDir, "legacy-secret", {
+    const server = createControlPlaneServer(stateDir, {
       auth: { adminCredentialsPath: `${stateDir}-missing.json`, sessionRegistry, serviceToken: sessionRegistry }
     });
     servers.push(server);
@@ -1148,13 +1189,14 @@ describe("control plane provider endpoints", () => {
 
   it("creates and mutates sessions through authenticated endpoints", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
-    const server = createControlPlaneServer(stateDir, "secret");
+    provisionServiceToken(stateDir);
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
-    const init = { headers: { authorization: "Bearer secret", "content-type": "application/json" } };
+    const init = { headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" } };
     const created = await (await fetch(`${base}/sessions`, { ...init, method: "POST", body: JSON.stringify({ agent_command: "codex_cli", cwd: "/work" }) })).json() as { session_id: string; status: string };
     expect(created.status).toBe("active");
     const closed = await (await fetch(`${base}/sessions/${created.session_id}`, { ...init, method: "POST", body: JSON.stringify({ action: "close" }) })).json() as { status: string };
@@ -1163,39 +1205,42 @@ describe("control plane provider endpoints", () => {
 
   it("returns authenticated bounded worker records", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
-    const server = createControlPlaneServer(stateDir, "secret");
+    provisionServiceToken(stateDir);
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: "Bearer secret" } });
+    const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([]);
   });
 
   it("reads status telemetry from a bounded tail", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
     writeFileSync(join(stateDir, "cli-call-telemetry.jsonl"), `${"invalid-line\n".repeat(300_000)}${JSON.stringify({ outcome: "success", total_tokens: 7 })}\n`);
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const response = await fetch(`http://127.0.0.1:${address.port}/status`, { headers: { authorization: "Bearer secret" } });
+    const response = await fetch(`http://127.0.0.1:${address.port}/status`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
     const body = await response.json() as { telemetry: { calls: number; total_tokens: number } };
     expect(body.telemetry).toEqual({ calls: 1, successful: 1, total_tokens: 7 });
   });
 
   it("bounds worker output and ignores unsafe worker ids", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
     writeFileSync(join(stateDir, "agent-registry.jsonl"), `${JSON.stringify({ event: "subagent_start", agent_id: "../outside", agent_type: "codex", started_at: new Date().toISOString() })}\n${JSON.stringify({ event: "subagent_start", agent_id: "safe-worker", agent_type: "codex", started_at: new Date().toISOString() })}\n`);
     writeFileSync(join(stateDir, "safe-worker-output.txt"), `${"x".repeat(50_000)}\npassword=worker-secret cookie: session-secret`);
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: "Bearer secret" } });
+    const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
     const workers = await response.json() as Array<{ worker_run_id: string; output: string }>;
     expect(workers.find((worker) => worker.worker_run_id === "../outside")?.output).toBe("");
     const safeOutput = workers.find((worker) => worker.worker_run_id === "safe-worker")?.output ?? "";
@@ -1210,13 +1255,13 @@ describe("control plane provider endpoints", () => {
   });
 
   it("returns an empty authenticated store", async () => {
-    const response = await request("/providers/quotas", "secret");
+    const response = await request("/providers/quotas", SERVICE_TOKEN);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ providers: [] });
   });
 
   it("serves the static fallback model catalog when quota snapshots contain no models", async () => {
-    const response = await request("/providers/models", "secret");
+    const response = await request("/providers/models", SERVICE_TOKEN);
     const body = await response.json() as {
       models: Array<{
         model_id: string;
@@ -1259,6 +1304,7 @@ describe("control plane provider endpoints", () => {
 
   it("keeps a statically known model available when an unusable live row has the same provider/model pair", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
     writeProviderQuotaStore(stateDir, {
       schema_version: "v1",
       snapshots: [{
@@ -1266,14 +1312,14 @@ describe("control plane provider endpoints", () => {
         models: [{ model_id: "gpt-5.6-sol", available: false, health: "unavailable", source: "api" }]
       }]
     });
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
 
     const body = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, {
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` }
     })).json() as { models: Array<{ model_id: string; providers: string[]; available: boolean; source: string }> };
 
     expect(body.models.filter((model) => model.model_id === "gpt-5.6-sol" && model.providers.includes("codex_cli")))
@@ -1282,6 +1328,7 @@ describe("control plane provider endpoints", () => {
 
   it("preserves provider-specific availability when providers share a live model id", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
     writeProviderQuotaStore(stateDir, {
       schema_version: "v1",
       snapshots: [
@@ -1295,14 +1342,14 @@ describe("control plane provider endpoints", () => {
         }
       ]
     });
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
 
     const body = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, {
-      headers: { authorization: "Bearer secret" }
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` }
     })).json() as {
       models: Array<{
         model_id: string;
@@ -1319,15 +1366,16 @@ describe("control plane provider endpoints", () => {
 
   it("returns stale snapshots and filters a provider", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
     const old = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const document: ProviderQuotaStoreDocument = { schema_version: "v1", snapshots: [snapshot("codex_cli", old), snapshot("claude_cli", old)] };
     writeProviderQuotaStore(stateDir, document);
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const response = await fetch(`http://127.0.0.1:${address.port}/providers/codex_cli/quotas`, { headers: { authorization: "Bearer secret" } });
+    const response = await fetch(`http://127.0.0.1:${address.port}/providers/codex_cli/quotas`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
     const body = await response.json() as { provider: string; freshness: string; next_poll_at: string };
     expect(body.provider).toBe("codex_cli");
     expect(body.freshness).toBe("stale");
@@ -1336,13 +1384,14 @@ describe("control plane provider endpoints", () => {
 
   it("aggregates models and exposes health", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
-    const server = createControlPlaneServer(stateDir, "secret");
+    const server = createControlPlaneServer(stateDir);
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("missing address");
-    const init = { headers: { authorization: "Bearer secret" } };
+    const init = { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } };
     const models = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, init)).json() as { models: Array<{ model_id: string }> };
     const health = await (await fetch(`http://127.0.0.1:${address.port}/providers/health`, init)).json() as { providers: Array<{ freshness: string }> };
     expect(models.models).toEqual(expect.arrayContaining([

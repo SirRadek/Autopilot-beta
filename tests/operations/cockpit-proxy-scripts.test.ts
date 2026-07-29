@@ -1036,7 +1036,6 @@ elif [[ "$*" == *' -L '* ]]; then
 fi
 `);
   writeExecutable(join(bin, "npx"), `
-[[ "\${AUTOPILOT_PROXY_TEST_TOKEN:-}" == behavioral-secret ]]
 [[ "\${AUTOPILOT_PROXY_TEST_USERNAME:-}" == acceptance-admin ]]
 [[ "\${AUTOPILOT_PROXY_TEST_PASSWORD:-}" == autopilot-acceptance-test ]]
 [[ -z "\${AUTOPILOT_PROXY_TEST_SPKI_SHA256:-}" ]]
@@ -1051,7 +1050,7 @@ done
 printf 'playwright-output %s\n' "$output" >> "$STUB_LOG"
 if [[ "\${STUB_NPX_FAIL_WITH_ARTIFACT:-0}" == 1 ]]; then
   mkdir -p "$output"
-  printf '%s' "$AUTOPILOT_PROXY_TEST_TOKEN" > "$output/error-context.md"
+  printf '%s' "$AUTOPILOT_PROXY_TEST_PASSWORD" > "$output/error-context.md"
   exit 1
 fi
 if [[ "\${STUB_NPX_IGNORE_TERM:-0}" == 1 ]]; then trap '' TERM; while :; do :; done; fi
@@ -1062,14 +1061,15 @@ printf 'curl %s\\n' "$*" >> "$STUB_LOG"
 [[ "\${1:-}" == --disable && "\${2:-}" == --noproxy && "\${3:-}" == '*' ]] || exit 90
 [[ "$*" == *'--connect-timeout 2'* && "$*" == *'--max-time 5'* ]] || exit 92
 [[ -z "\${http_proxy:-}\${https_proxy:-}\${HTTP_PROXY:-}\${HTTPS_PROXY:-}\${ALL_PROXY:-}\${all_proxy:-}\${CURL_CA_BUNDLE:-}\${SSL_CERT_FILE:-}\${SSL_CERT_DIR:-}" ]] || exit 91
-headers= body= method=GET cookie_jar=
+headers= body= method=GET cookie_jar= data_binary=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dump-header) headers="$2"; shift 2 ;;
     --output) body="$2"; shift 2 ;;
     --request) method="$2"; shift 2 ;;
     --cookie-jar) cookie_jar="$2"; shift 2 ;;
-    --write-out|--header|--data-binary|--cookie|--noproxy) shift 2 ;;
+    --data-binary) data_binary="$2"; shift 2 ;;
+    --write-out|--header|--cookie|--noproxy) shift 2 ;;
     --disable|--silent|--show-error) shift ;;
     *) url="$1"; shift ;;
   esac
@@ -1098,6 +1098,9 @@ case "$name" in
     fi
     printf method > "$body"; printf '%s' "$unsupported_status" ;;
   login)
+    [[ "$method" == POST ]]
+    [[ "$data_binary" == @* ]]
+    [[ "$(cat "\${data_binary#@}")" == '{"username":"acceptance-admin","password":"autopilot-acceptance-test"}' ]]
     case "\${STUB_COOKIE_VARIANT:-valid}" in
       valid) cookie='autopilot_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; HttpOnly; SameSite=Lax; Path=/; Secure' ;;
       empty) cookie='autopilot_session=; HttpOnly; SameSite=Lax; Secure' ;;
@@ -1145,7 +1148,6 @@ esac
       PLAYWRIGHT_BROWSERS_PATH: browserCache,
       AUTOPILOT_PROXY_BASE_URL: "https://autopilot.local:8443",
       AUTOPILOT_PROXY_CA_CERT: caCert,
-      AUTOPILOT_PROXY_TOKEN_COMMAND: extraEnv.TEST_TOKEN_COMMAND ?? "printf %s behavioral-secret",
       AUTOPILOT_PROXY_TEST_USERNAME: extraEnv.AUTOPILOT_PROXY_TEST_USERNAME ?? "acceptance-admin",
       AUTOPILOT_PROXY_TEST_PASSWORD: extraEnv.AUTOPILOT_PROXY_TEST_PASSWORD ?? "autopilot-acceptance-test",
       AUTOPILOT_PROXY_TEST_MODE: "1",
@@ -1156,13 +1158,11 @@ esac
 }
 
 describe("Cockpit trusted host acceptance", () => {
-  it("keeps token, cookies, TLS verification, and cleanup boundaries explicit", () => {
+  it("keeps credentials, cookies, TLS verification, and cleanup boundaries explicit", () => {
     const source = readFileSync(hostAcceptance, "utf8");
 
-    expect(source).toContain("AUTOPILOT_PROXY_TOKEN_COMMAND");
     expect(source).toContain("AUTOPILOT_PROXY_BASE_URL");
     expect(source).toMatch(/chmod 600 .*cookie/);
-    expect(source).toMatch(/unset token/);
     expect(source).toContain("openssl s_client");
     expect(source).toContain("-verify_return_error");
     expect(source).toContain("-checkhost autopilot.local");
@@ -1182,17 +1182,17 @@ describe("Cockpit trusted host acceptance", () => {
     const isolatedSource = readFileSync(isolatedAcceptance, "utf8");
     const timeoutWrappers = `${source}\n${isolatedSource}`.split("\n")
       .filter((line) => /\btimeout\b/.test(line) && !line.includes("--connect-timeout"));
-    expect(timeoutWrappers).toHaveLength(8);
+    expect(timeoutWrappers).toHaveLength(7);
     expect(timeoutWrappers.every((line) => /timeout --signal=TERM --kill-after=/.test(line))).toBe(true);
   });
 
-  it("accepts trusted responses without exposing the token or weakening TLS", () => {
+  it("accepts trusted responses without exposing credentials or weakening TLS", () => {
     const { result, log } = runHostAcceptance();
 
     if (result.status !== 0) throw new Error(`${result.stderr}\n${readFileSync(log, "utf8")}`);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("HOST_PROXY_ACCEPTANCE_OK");
-    expect(`${result.stdout}${result.stderr}`).not.toContain("behavioral-secret");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("autopilot-acceptance-test");
     const commands = readFileSync(log, "utf8");
     expect(commands).toContain("openssl s_client");
     expect(commands).toContain("-verify_return_error");
@@ -1203,7 +1203,7 @@ describe("Cockpit trusted host acceptance", () => {
     expect(commands).toContain("cookie-mode 600");
     expect(commands).toContain("playwright trusted-origin");
     expect(commands).toContain("evil-referer.headers");
-    expect(commands).not.toContain("behavioral-secret");
+    expect(commands).not.toContain("autopilot-acceptance-test");
     expect(commands).not.toMatch(/(?:^|\s)(?:-k|--insecure)(?:\s|$)/m);
   });
 
@@ -1223,7 +1223,7 @@ describe("Cockpit trusted host acceptance", () => {
     expect(result.status).toBe(0);
   });
 
-  it("cleans Playwright failure artifacts that could contain the token", () => {
+  it("cleans Playwright failure artifacts that could contain credentials", () => {
     const { result, log } = runHostAcceptance({ STUB_NPX_FAIL_WITH_ARTIFACT: "1" });
 
     expect(result.status).not.toBe(0);
@@ -1246,29 +1246,6 @@ describe("Cockpit trusted host acceptance", () => {
     ["incomplete Content-Security-Policy", { STUB_INCOMPLETE_CSP: "1" }],
   ])("rejects %s", (_label, extraEnv) => {
     expect(runHostAcceptance(extraEnv).result.status).not.toBe(0);
-  });
-
-  it.each([
-    ["an extra blank token line", "printf 'behavioral-secret\\n\\n'"],
-    ["a NUL byte in token stdout", "printf 'behavioral\\0secret'"],
-  ])("rejects %s", (_label, command) => {
-    const { result, log } = runHostAcceptance({ TEST_TOKEN_COMMAND: command });
-    expect(result.status).not.toBe(0);
-    expect(readFileSync(log, "utf8")).not.toContain("login.headers");
-  });
-  it("hard-kills a token command that ignores TERM", () => {
-    const started = Date.now();
-    const { result, log } = runHostAcceptance({
-      AUTOPILOT_PROXY_TEST_MODE: "1",
-      AUTOPILOT_PROXY_TEST_TOKEN_TIMEOUT: "1s",
-      AUTOPILOT_PROXY_TEST_TOKEN_KILL_AFTER: "1s",
-      TEST_OUTER_TIMEOUT_SECONDS: "4",
-      TEST_TOKEN_COMMAND: "trap '' TERM; while :; do :; done",
-    });
-
-    expect(result.status).not.toBe(0);
-    expect(Date.now() - started).toBeLessThan(3500);
-    expect(readFileSync(log, "utf8")).not.toContain("login.headers");
   });
 
   it("hard-kills Playwright when its runner ignores TERM", () => {
@@ -1334,7 +1311,7 @@ function prepareCutover(options: { finalNewline?: boolean; secureLine?: string; 
   const envPath = join(root, "home", "radek", ".config", "autopilot", "control-plane.env");
   const currentPath = join(releaseRoot, "current");
   mkdirSync(dirname(envPath), { recursive: true });
-  const environmentText = `CONTROL_PLANE_TOKEN=secret-do-not-print\n${options.secureLine ?? "CONTROL_PLANE_SECURE_COOKIES=false"}\nAUTOPILOT_STATE_DIR=/state\nAUTOPILOT_PROJECTS_DIR=/projects${options.finalNewline === false ? "" : "\n"}`;
+  const environmentText = `${options.secureLine ?? "CONTROL_PLANE_SECURE_COOKIES=false"}\nAUTOPILOT_STATE_DIR=/state\nAUTOPILOT_PROJECTS_DIR=/projects${options.finalNewline === false ? "" : "\n"}`;
   const previousEnvironment = Buffer.from(environmentText);
   writeFileSync(envPath, previousEnvironment, { mode: 0o600 });
   chmodSync(envPath, 0o600);

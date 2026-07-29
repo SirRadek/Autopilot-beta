@@ -22,7 +22,6 @@ export default defineConfig({
     {
       command: "tsx scripts/control-plane-auth.ts set-admin-password && tsx scripts/control-plane-auth.ts issue-service-token \"$CONTROL_PLANE_STATE_DIR\" >/dev/null && tsx scripts/control-plane-server.ts",
       env: {
-        CONTROL_PLANE_TOKEN: "browser-test-token",
         CONTROL_PLANE_STATE_DIR: browserStateDir,
         CONTROL_PLANE_PORT: "8878",
         AUTOPILOT_ADMIN_CREDENTIALS_PATH: adminCredentialsPath,

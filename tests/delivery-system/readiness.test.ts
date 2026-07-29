@@ -81,7 +81,6 @@ function fixture(options: { readonly observations?: boolean } = {}): BuildReadin
   return {
     stateDir,
     projectRoot,
-    authToken: "readiness-secret-token",
     adminCredentialsPath,
     serviceTokenDigest: () => authRegistry.serviceTokenDigest(),
     secureCookies: false,
@@ -275,9 +274,9 @@ describe("buildReadiness", () => {
 
   it("fails closed for missing authentication and insecure managed-state permissions", () => {
     const missingCredential = fixture();
-    expect(buildReadiness({ ...missingCredential, authToken: undefined })).toMatchObject({
+    expect(buildReadiness({ ...missingCredential, adminCredentialsPath: `${missingCredential.adminCredentialsPath}.missing` })).toMatchObject({
       ready: false,
-      components: { configuration: { status: "unavailable", error_code: "invalid_configuration" } }
+      components: { authentication: { status: "unavailable", error_code: "admin_credentials_missing" } }
     });
 
     const invalidRoot = fixture();
@@ -352,12 +351,13 @@ describe("buildReadiness", () => {
 
   it("does not expose credentials, paths, exception text, or mutate persisted state", () => {
     const options = fixture();
-    writeFileSync(join(options.stateDir, "supervisor-queue.json"), `malformed ${options.authToken}`, "utf8");
+    const redactionSecret = "readiness-redaction-probe-secret";
+    writeFileSync(join(options.stateDir, "supervisor-queue.json"), `malformed ${redactionSecret}`, "utf8");
     const before = persistedFiles(options.stateDir);
 
     const serialized = JSON.stringify(buildReadiness(options));
 
-    expect(serialized).not.toContain(options.authToken);
+    expect(serialized).not.toContain(redactionSecret);
     expect(serialized).not.toContain(options.stateDir);
     expect(serialized).not.toContain(options.projectRoot);
     expect(serialized).not.toContain("malformed");

@@ -127,7 +127,7 @@ export interface ControlPlaneAuthConfig {
   readonly serviceToken: Pick<AuthSessionRegistry, "verifyServiceToken" | "serviceTokenDigest">;
 }
 
-export function createControlPlaneServer(stateDir: string, authToken: string | undefined, options: ControlPlaneServerOptions = {}) {
+export function createControlPlaneServer(stateDir: string, options: ControlPlaneServerOptions = {}) {
   const defaultRegistry = new AuthSessionRegistry(authStateRoot(stateDir));
   const auth: ControlPlaneAuthConfig = options.auth ?? {
     adminCredentialsPath: defaultAdminCredentialsPath(),
@@ -145,20 +145,20 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
   else if (request.method === "GET" && request.url === "/ready") return readinessHttp(response, options.readiness);
   else if (request.method === "POST" && request.url === "/auth/login") {
     if (!isSameOriginMutation(request, secureCookies)) returnJson(response, { error: "csrf_origin_required" }, 403);
-    else await loginBrowser(request, response, authToken, auth, secureCookies);
+    else await loginBrowser(request, response, auth, secureCookies);
   }
   else if (request.method === "POST" && request.url === "/auth/logout") {
-    if (cookieValue(request.headers.cookie, "autopilot_session") !== null && !isBearerAuthenticated(request, authToken, auth.serviceToken) && !isSameOriginMutation(request, secureCookies)) returnJson(response, { error: "csrf_origin_required" }, 403);
+    if (cookieValue(request.headers.cookie, "autopilot_session") !== null && !isBearerAuthenticated(request, auth.serviceToken) && !isSameOriginMutation(request, secureCookies)) returnJson(response, { error: "csrf_origin_required" }, 403);
     else logoutBrowser(request, response, auth.sessionRegistry, secureCookies);
   }
   else if (request.method === "GET" && request.url === "/auth/session") {
-    const authentication = authenticateRequest(request, response, authToken, auth, secureCookies);
+    const authentication = authenticateRequest(request, response, auth, secureCookies);
     returnJson(response, authentication.authenticated
       ? { authenticated: true, expires_at: authentication.expiresAt }
       : { authenticated: false }, authentication.authenticated ? 200 : 401);
   }
   else {
-    const bearerAuthenticated = isBearerAuthenticated(request, authToken, auth.serviceToken);
+    const bearerAuthenticated = isBearerAuthenticated(request, auth.serviceToken);
     if (isUnsafeMethod(request.method)
       && cookieValue(request.headers.cookie, "autopilot_session") !== null
       && !bearerAuthenticated
@@ -169,7 +169,6 @@ export function createControlPlaneServer(stateDir: string, authToken: string | u
     const authentication = authenticateRequest(
       request,
       response,
-      authToken,
       auth,
       secureCookies,
       bearerAuthenticated
@@ -283,10 +282,9 @@ const LEGACY_UNPROVISIONED_CREDENTIAL_GENERATION = Number.MAX_SAFE_INTEGER;
 function authenticateRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  authToken: string | undefined,
   auth: ControlPlaneAuthConfig,
   secureCookies: boolean,
-  bearerAuthenticated = isBearerAuthenticated(request, authToken, auth.serviceToken)
+  bearerAuthenticated = isBearerAuthenticated(request, auth.serviceToken)
 ): RequestAuthentication {
   if (bearerAuthenticated) {
     return { authenticated: true, kind: "bearer", expiresAt: null };
@@ -313,7 +311,6 @@ function authenticateRequest(
 async function loginBrowser(
   request: IncomingMessage,
   response: ServerResponse,
-  authToken: string | undefined,
   auth: ControlPlaneAuthConfig,
   secureCookies: boolean
 ): Promise<void> {
@@ -328,9 +325,6 @@ async function loginBrowser(
     } catch {
       valid = false;
     }
-  }
-  if (!valid && typeof body.token === "string" && body.token.length > 0 && authToken !== undefined) {
-    valid = constantTimeTextEqual(body.token, authToken);
   }
   if (!valid || generation === null) return returnJson(response, { error: "invalid_credentials" }, 401);
   const rawToken = randomBytes(32).toString("base64url");
@@ -361,13 +355,10 @@ function cookieValue(header: string | undefined, name: string): string | null {
 
 function isBearerAuthenticated(
   request: IncomingMessage,
-  authToken: string | undefined,
   serviceToken: ControlPlaneAuthConfig["serviceToken"]
 ): boolean {
   const rawToken = bearerToken(request.headers.authorization);
   if (rawToken === null) return false;
-  const legacy = authToken !== undefined && constantTimeTextEqual(rawToken, authToken);
-  if (legacy) return true;
   try {
     return serviceToken.verifyServiceToken(rawToken);
   } catch {
@@ -403,12 +394,6 @@ function bearerToken(header: string | undefined): string | null {
   if (header === undefined || !header.startsWith("Bearer ")) return null;
   const token = header.slice("Bearer ".length);
   return token.length > 0 ? token : null;
-}
-
-function constantTimeTextEqual(left: string, right: string): boolean {
-  const leftDigest = createHash("sha256").update(left, "utf8").digest();
-  const rightDigest = createHash("sha256").update(right, "utf8").digest();
-  return timingSafeEqual(leftDigest, rightDigest);
 }
 
 function isUnsafeMethod(method: string | undefined): boolean {
@@ -503,7 +488,6 @@ function audit(directory: string, action: string, details: Record<string, unknow
 
 export function createControlPlaneRuntime(
   stateDir: string,
-  authToken: string | undefined,
   options: ControlPlaneRuntimeOptions = {}
 ): ControlPlaneRuntime {
   const projectRoot = options.projectRoot ?? resolveConfiguredProjectRoot();
@@ -542,7 +526,7 @@ export function createControlPlaneRuntime(
     sessionRegistry: runtimeAuthRegistry,
     serviceToken: runtimeAuthRegistry
   };
-  const server = createControlPlaneServer(stateDir, authToken, {
+  const server = createControlPlaneServer(stateDir, {
     ...(options.secureCookies === undefined ? {} : { secureCookies: options.secureCookies }),
     runOrchestrator: orchestrator,
     projectRoot,
@@ -550,7 +534,6 @@ export function createControlPlaneRuntime(
     readiness: () => buildReadiness({
       stateDir,
       projectRoot,
-      authToken,
       adminCredentialsPath: runtimeAuth.adminCredentialsPath,
       serviceTokenDigest: () => runtimeAuth.serviceToken.serviceTokenDigest(),
       secureCookies: options.secureCookies === true,
@@ -639,13 +622,12 @@ async function runProviderCommand(input: { readonly command: string; readonly ar
 
 const stateDir = process.argv[2] ?? process.env.CONTROL_PLANE_STATE_DIR ?? "";
 const port = Number(process.argv[3] ?? process.env.CONTROL_PLANE_PORT ?? "8787");
-const authToken = process.env.CONTROL_PLANE_TOKEN?.trim();
 const secureCookies = secureCookiesFromEnvironment(process.env);
 const secureCookiesRequired = secureCookiesRequiredFromEnvironment(process.env);
 if (process.argv[1]?.endsWith("control-plane-server.ts")) {
   if (!stateDir || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("usage: control-plane-server STATE_DIR [PORT]");
   const providerCommands = providerUsageCommandsFromEnvironment(process.env);
-  const runtime = createControlPlaneRuntime(stateDir, authToken, { secureCookies, secureCookiesRequired, providerCommands });
+  const runtime = createControlPlaneRuntime(stateDir, { secureCookies, secureCookiesRequired, providerCommands });
   const shutdown = () => { void runtime.stop(); };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);

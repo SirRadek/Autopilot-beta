@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createControlPlaneRuntime, createControlPlaneServer } from "../../scripts/control-plane-server";
+import { AuthSessionRegistry, authStateRoot } from "../../src/data/delivery-system/authSessionRegistry";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { readRunStore } from "../../src/data/delivery-system/runStore";
 import { readPromotionStore } from "../../src/data/delivery-system/promotionPacket";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 
+const SERVICE_TOKEN = "c".repeat(64);
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
 
@@ -23,12 +25,13 @@ async function harness(dispatch?: (handoff: { handoffId: string; vendor: string;
     { provider: "codex_cli", source: "api", fetched_at: now, observed_at: now, five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null }, weekly: { limit: 1_000, used: 0, remaining: 1_000, resets_at: null }, api_spend: 0, currency: "USD", models: [], health: "healthy", error_code: null },
     { provider: "openrouter_api", source: "api", fetched_at: now, observed_at: now, five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null }, weekly: { limit: 1_000, used: 0, remaining: 1_000, resets_at: null }, api_spend: 0, currency: "USD", models: [], health: "healthy", error_code: null }
   ] });
+  new AuthSessionRegistry(authStateRoot(stateDir)).storeServiceToken(SERVICE_TOKEN);
   const workerDispatch = vi.fn(dispatch ?? (async (handoff: { handoffId: string; vendor: string; model?: string | null }) => ({
     refused: false, workerRunId: "worker-1", handoffId: handoff.handoffId, vendor: handoff.vendor, model: handoff.model ?? null,
     exitCode: 0, rawOutput: "done", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn",
     workerOutputPath: null, errorReason: null, tier_id: null, provenance_verified: true
   })));
-  const runtime = createControlPlaneRuntime(stateDir, "secret", {
+  const runtime = createControlPlaneRuntime(stateDir, {
     projectRoot,
     scheduler: { start() {}, stop() {} },
     dispatch: workerDispatch as never,
@@ -42,7 +45,7 @@ async function harness(dispatch?: (handoff: { handoffId: string; vendor: string;
   const request = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${base}${path}`, {
       method,
-      headers: { authorization: "Bearer secret", ...(body === null ? {} : { "content-type": "application/json" }) },
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}`, ...(body === null ? {} : { "content-type": "application/json" }) },
       ...(body === null ? {} : { body: JSON.stringify(body) })
     });
     return { status: response.status, json: await response.json() as never };

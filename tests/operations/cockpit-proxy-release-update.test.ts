@@ -126,7 +126,7 @@ function prepareUpdate(options: { secureLine?: string; alreadyCurrent?: boolean 
   mkdirSync(dirname(envPath), { recursive: true });
   writeFileSync(
     envPath,
-    `CONTROL_PLANE_TOKEN=secret-do-not-print\n${options.secureLine ?? "CONTROL_PLANE_SECURE_COOKIES=true"}\nAUTOPILOT_STATE_DIR=/state\nAUTOPILOT_PROJECTS_DIR=/projects\n`,
+    `${options.secureLine ?? "CONTROL_PLANE_SECURE_COOKIES=true"}\nAUTOPILOT_STATE_DIR=/state\nAUTOPILOT_PROJECTS_DIR=/projects\n`,
     { mode: 0o600 },
   );
   chmodSync(envPath, 0o600);
