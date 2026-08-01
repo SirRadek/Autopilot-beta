@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { flattenFigmaNode, normalizeNodeId, parseFigmaRef } from "../../scripts/figma-fetch";
+import { computeTokensRef, flattenFigmaNode, normalizeNodeId, parseFigmaRef, scaffoldBrief } from "../../scripts/figma-fetch";
+import { validateJsonSchema } from "../../src/lib/delivery-system/validation";
+
+const schema = JSON.parse(readFileSync(join(process.cwd(), "design/briefs/schema/design-brief.schema.json"), "utf8")) as unknown;
 
 describe("figma-fetch", () => {
   it("parses a Figma design URL into fileKey + node id", () => {
@@ -32,5 +38,13 @@ describe("figma-fetch", () => {
     ]);
     // no absolute positions / bounding boxes leak through
     expect(JSON.stringify(nodes)).not.toContain("absoluteBoundingBox");
+  });
+
+  it("scaffolds a schema-valid Design Brief from fetched nodes", () => {
+    const source = { provider: "figma", fileKey: "ABC123", nodeId: "42:7" };
+    const nodes = flattenFigmaNode({ id: "42:7", name: "X", type: "FRAME", layoutMode: "VERTICAL", itemSpacing: 4, children: [] });
+    const brief = scaffoldBrief(source, nodes, computeTokensRef());
+    expect(validateJsonSchema(brief, schema)).toEqual([]);
+    expect((brief.tokensRef as { sha256: string }).sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 });

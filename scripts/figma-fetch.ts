@@ -11,6 +11,7 @@
 //   FIGMA_TOKEN=<pat> tsx scripts/figma-fetch.ts <fileKey> <nodeId>
 // Output: a partial Design Brief (source + nodes) on stdout, ready to merge with
 // intent / tokensRef / components by hand.
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,6 +87,30 @@ export function flattenFigmaNode(raw: Record<string, unknown>, out: BriefNode[] 
   return out;
 }
 
+export interface TokensRef { readonly path: string; readonly sha256: string }
+
+/** Compute the tokensRef for the code design tokens (source of truth). */
+export function computeTokensRef(tokensPath = "cockpit/src/app/tokens.css"): TokensRef {
+  const sha256 = createHash("sha256").update(readFileSync(join(repoRoot, tokensPath))).digest("hex");
+  return { path: tokensPath, sha256 };
+}
+
+/** Assemble a schema-valid Design Brief skeleton with TODO intent/components to fill in. */
+export function scaffoldBrief(source: Record<string, unknown>, nodes: BriefNode[], tokensRef: TokensRef): Record<string, unknown> {
+  return {
+    schemaVersion: "autopilot.design-brief/1",
+    source,
+    intent: {
+      goal: "TODO: describe what this design should do",
+      nonGoals: [],
+      acceptanceCriteria: ["TODO: first acceptance criterion"],
+    },
+    tokensRef,
+    nodes,
+    components: [{ name: "TODO-ComponentName" }],
+  };
+}
+
 async function fetchNode(ref: FigmaRef, token: string): Promise<Record<string, unknown>> {
   if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true });
   const cacheFile = join(cacheDir, `${ref.fileKey}_${ref.nodeId.replace(":", "-")}.json`);
@@ -103,17 +128,18 @@ async function fetchNode(ref: FigmaRef, token: string): Promise<Record<string, u
 }
 
 async function main(): Promise<void> {
-  const [a, b] = process.argv.slice(2);
-  if (!a) { console.error("usage: tsx scripts/figma-fetch.ts <figma-url> | <fileKey> <nodeId>"); process.exitCode = 1; return; }
+  const args = process.argv.slice(2);
+  const brief = args.includes("--brief");
+  const [a, b] = args.filter((arg) => arg !== "--brief");
+  if (!a) { console.error("usage: tsx scripts/figma-fetch.ts [--brief] <figma-url> | <fileKey> <nodeId>"); process.exitCode = 1; return; }
   const token = process.env.FIGMA_TOKEN;
   if (!token) { console.error("FIGMA_TOKEN env var is required (Figma personal access token, read-only)"); process.exitCode = 1; return; }
   const ref = parseFigmaRef(a, b);
   const doc = await fetchNode(ref, token);
-  const partial = {
-    source: { provider: "figma", fileKey: ref.fileKey, nodeId: ref.nodeId, url: a.includes("/") ? a : undefined },
-    nodes: flattenFigmaNode(doc),
-  };
-  console.log(JSON.stringify(partial, null, 2));
+  const nodes = flattenFigmaNode(doc);
+  const source = { provider: "figma", fileKey: ref.fileKey, nodeId: ref.nodeId, ...(a.includes("/") ? { url: a } : {}) };
+  const output = brief ? scaffoldBrief(source, nodes, computeTokensRef()) : { source, nodes };
+  console.log(JSON.stringify(output, null, 2));
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
