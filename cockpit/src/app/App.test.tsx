@@ -43,7 +43,7 @@ async function mount(client: ControlPlaneClient) {
   return { host, root };
 }
 
-function budgetPane(host: HTMLElement): HTMLElement { return host.querySelector('[aria-label="Provider Budget"]') as HTMLElement; }
+function budgetPane(host: HTMLElement): HTMLElement { return host.querySelector(".provider-pane")?.closest(".resources-section") as HTMLElement; }
 function providerTab(scope: HTMLElement, id: string): HTMLButtonElement { return [...scope.querySelectorAll(".provider-tabs button")].find((item) => item.textContent === id) as HTMLButtonElement; }
 function activeProvider(scope: HTMLElement): string | undefined { return scope.querySelector(".provider-heading h3")?.textContent ?? undefined; }
 
