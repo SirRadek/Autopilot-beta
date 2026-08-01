@@ -6,7 +6,7 @@ autopilot.local {
 	tls internal
 	root * /srv/autopilot-cockpit/current
 	header {
-		Content-Security-Policy "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src https://www.figma.com https://embed.figma.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "no-referrer"
 		Strict-Transport-Security "max-age=300"
