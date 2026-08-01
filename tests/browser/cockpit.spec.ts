@@ -15,15 +15,25 @@ async function login(page: import("@playwright/test").Page): Promise<void> {
   await page.getByLabel("Uživatelské jméno").fill(username);
   await page.getByLabel("Heslo").fill(password);
   await page.getByRole("button", { name: "Přihlásit" }).click();
-  await expect(page.getByRole("heading", { name: "Hybrid Cockpit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Autopilot", exact: true, level: 1 })).toBeVisible();
+}
+
+async function goToView(page: import("@playwright/test").Page, label: string): Promise<void> {
+  await page.getByRole("tab", { name: label }).click();
 }
 
 test("logs in and renders the protected cockpit destinations", async ({ page }) => {
   await login(page);
-  await expect(page.getByRole("heading", { name: "Projects & Sessions" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Approval & Workflow" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Live Operations & Provider Budget" })).toBeVisible();
-  await expect(page.getByLabel("Live Operations and Provider").getByText("No workers running.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Command Center", level: 2 })).toBeVisible();
+  await goToView(page, "Detail běhu");
+  await expect(page.getByRole("heading", { name: "Propagace" })).toBeVisible();
+  await goToView(page, "Zdroje & zdraví");
+  await expect(page.getByRole("heading", { name: "Zdroje & zdraví", level: 2 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Workeři" }).getByText("No workers running.")).toBeVisible();
+  await goToView(page, "Nový běh");
+  await expect(page.getByRole("heading", { name: "Nový běh", level: 2 })).toBeVisible();
+  await goToView(page, "Pravidla & Skills");
+  await expect(page.getByRole("heading", { name: "Pravidla & Skills", level: 2 })).toBeVisible();
 });
 
 test("shows approval confirmation and performs a session mutation", async ({ page }) => {
@@ -50,10 +60,12 @@ test("shows approval confirmation and performs a session mutation", async ({ pag
     });
   });
   await login(page);
+  // Approval queue lives in Command Center, which is the default landing view.
   await page.getByRole("button", { name: /codex \/ test-model/ }).click();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect(page.getByText("Approve this prompt for dispatch?")).toBeVisible();
 
+  await goToView(page, "Zdroje & zdraví");
   await page.getByRole("button", { name: "Create session" }).first().click();
   await expect(page.getByText(/session/).first()).toBeVisible();
 });
@@ -62,8 +74,9 @@ test("surfaces a provider stale/error state without breaking the shell", async (
   await page.route("**/providers/health", (route) => route.abort("failed"));
   await page.route("**/providers/quotas", (route) => route.abort("failed"));
   await login(page);
-  await expect(page.getByRole("heading", { name: "Hybrid Cockpit" })).toBeVisible();
-  await expect(page.getByLabel("Provider Budget").getByText("Unavailable", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Autopilot", exact: true, level: 1 })).toBeVisible();
+  await goToView(page, "Zdroje & zdraví");
+  await expect(page.getByRole("region", { name: "Provideři & limity" }).getByText("Unavailable", { exact: true }).first()).toBeVisible();
 });
 
 test("supports keyboard tab navigation on the responsive layout", async ({ page }) => {
@@ -74,10 +87,10 @@ test("supports keyboard tab navigation on the responsive layout", async ({ page 
   await tabs.first().focus();
   await page.keyboard.press("ArrowRight");
   await expect(tabs.nth(1)).toBeFocused();
-  await expect(page.getByRole("tabpanel", { name: "Sessions" })).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: "Detail běhu" })).toBeVisible();
   await page.keyboard.press("End");
   await expect(tabs.nth(4)).toBeFocused();
-  await expect(page.getByRole("tabpanel", { name: "Brainstorm" })).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: "Pravidla & Skills" })).toBeVisible();
 });
 
 test("keeps the cockpit usable at a narrow viewport", async ({ page }) => {
@@ -85,7 +98,7 @@ test("keeps the cockpit usable at a narrow viewport", async ({ page }) => {
   await login(page);
   await expect(page.locator("body")).toHaveCSS("min-width", "320px");
   await expect(page.getByRole("tablist", { name: "Cockpit sections" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Approval" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Command Center" })).toBeVisible();
   await page.screenshot({ path: "test-results/cockpit-mobile.png", fullPage: true });
 });
 
@@ -114,14 +127,20 @@ test("prepares without a worker, approves, and inspects terminal evidence", asyn
   const modelsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/providers/models");
   await login(page);
   expect(await (await modelsResponse).json()).toMatchObject({ freshness: "fresh", models: [{ model_id: "browser-model" }] });
-  await expect(page.getByLabel("Live Operations and Provider").getByText("No workers running.")).toBeVisible();
+  await goToView(page, "Zdroje & zdraví");
+  await expect(page.getByRole("region", { name: "Workeři" }).getByText("No workers running.")).toBeVisible();
+  await goToView(page, "Nový běh");
   await expect(page.getByLabel("Model", { exact: true })).toHaveValue("browser-model");
   await page.getByLabel("Prompt").fill("Inspect the governed path");
   await page.getByRole("button", { name: "Připravit běh" }).click();
   await expect(page.getByText("Revize 1 připravena ke schválení")).toBeVisible();
-  await expect(page.getByLabel("Live Operations and Provider").getByText("No workers running.")).toBeVisible();
+  await goToView(page, "Zdroje & zdraví");
+  await expect(page.getByRole("region", { name: "Workeři" }).getByText("No workers running.")).toBeVisible();
+  await goToView(page, "Nový běh");
   await page.getByRole("button", { name: "Schválit a spustit" }).click();
-  await expect(page.getByRole("button", { name: /browser-run-1 · completed/ })).toBeVisible();
+  // Selecting the run in Command Center navigates the shell to the "Detail běhu" view.
+  await goToView(page, "Command Center");
+  await page.getByRole("button", { name: /browser-run-1/ }).click();
   await expect(page.getByRole("heading", { name: "Časová osa" })).toBeVisible();
   await expect(page.getByLabel("Artefakty").getByText("browser deterministic artifact")).toBeVisible();
 });
@@ -135,7 +154,8 @@ test("persists, redacts, exports, and acknowledges a real internal incident", as
   expect(failureBody.error).toBe("autopilot_internal_error");
   writeFileSync(join(browserStateDir, "runs.json"), `${JSON.stringify({ schema_version: "v1", runs: [] })}\n`, "utf8");
   await page.reload();
-  await page.getByRole("tab", { name: "Chyby" }).click();
+  // Incidents ("Chyby") now render inside the Detail běhu view rather than as a top-level tab.
+  await goToView(page, "Detail běhu");
   const incidentItem = page.getByRole("listitem").filter({ hasText: failureBody.incident_id });
   await expect(incidentItem).toContainText("operational_failure:control_plane_runs");
   await expect(incidentItem).toContainText(failureBody.incident_id);
@@ -152,7 +172,7 @@ test("persists, redacts, exports, and acknowledges a real internal incident", as
   await incidentItem.getByRole("button", { name: "Potvrdit incident" }).click();
   await expect(page.getByText("Incident byl potvrzen.")).toBeVisible();
   await page.reload();
-  await page.getByRole("tab", { name: "Chyby" }).click();
+  await goToView(page, "Detail běhu");
   const acknowledgedIncident = page.getByRole("listitem").filter({ hasText: failureBody.incident_id });
   await expect(acknowledgedIncident).toContainText("Potvrzeno: cockpit-operator");
   await expect(acknowledgedIncident).toContainText(failureBody.incident_id);
@@ -268,16 +288,20 @@ test("moves a reviewed DEV preview into an evidence-gated PROD draft without aut
   });
 
   await login(page);
-  const runWorkspace = page.getByRole("region", { name: "Pracovní plocha běhu" });
+  await goToView(page, "Nový běh");
+  const newRunPanel = page.getByRole("tabpanel", { name: "Nový běh" });
   await expect(page.getByRole("tab", { name: "DEV" })).toHaveAttribute("aria-selected", "true");
-  await expect(runWorkspace.getByRole("combobox", { name: "Projekt" })).toHaveValue(project.project_id);
-  await expect(runWorkspace.getByRole("combobox", { name: "Poskytovatel" })).toHaveValue("openrouter_api");
-  await expect(runWorkspace.getByRole("combobox", { name: "Model" })).toHaveValue("free-model");
-  await expect(runWorkspace.getByText("Doporučení: žádné (shadow-only)")).toBeVisible();
+  await expect(newRunPanel.getByRole("combobox", { name: "Projekt" })).toHaveValue(project.project_id);
+  await expect(newRunPanel.getByRole("combobox", { name: "Poskytovatel" })).toHaveValue("openrouter_api");
+  await expect(newRunPanel.getByRole("combobox", { name: "Model" })).toHaveValue("free-model");
+  await expect(newRunPanel.getByText("Doporučení: žádné (shadow-only)")).toBeVisible();
   await page.getByLabel("Prompt").fill("Prepare the showcase preview");
   await page.getByRole("button", { name: "Připravit běh" }).click();
   expect(workerInvocations).toBe(0);
   await page.getByRole("button", { name: "Schválit a spustit" }).click();
+  // Promotion controls (Propagace) and the run inspector both live in Detail běhu; the composer
+  // state and route.runId set by approval survive the view switch, so the run is auto-selected.
+  await goToView(page, "Detail běhu");
   await expect(page.getByLabel("Artefakty").getByText("Preview ready")).toBeVisible();
   await page.getByLabel("Shrnutí diffu dev-preview-1").fill("Reviewed preview");
   await page.getByLabel("Testy dev-preview-1").fill("npm run browser:qa");
@@ -303,7 +327,10 @@ test("moves a reviewed DEV preview into an evidence-gated PROD draft without aut
   await page.getByRole("button", { name: "Připravit PROD draft" }).click();
   await expect(page.getByRole("tab", { name: "PROD" })).toHaveAttribute("aria-selected", "true");
   expect(workerInvocations).toBe(callsBeforeProdDraft);
-  await expect(page.getByRole("button", { name: /prod-draft-1 · draft/ })).toBeVisible();
+  // Preparing the PROD draft selects it as the current run; Detail běhu stays the active view
+  // and now shows prod-draft-1 in draft status.
+  await expect(page.getByText(/prod-draft-1 · revize/)).toBeVisible();
+  await expect(page.getByText("stav draft")).toBeVisible();
   await page.evaluate(async () => {
     const response = await fetch("/__fixtures__/production-acceptance", { method: "POST" });
     if (!response.ok) throw new Error("fixture_publication_failed");
@@ -450,10 +477,10 @@ test("drives a governed brainstorm from three-provider fan-out through precommit
   });
 
   await login(page);
-  // The Brainstorm workspace is rendered twice in the DOM (a persistent desktop pane plus a
-  // mobile tab-panel copy hidden via CSS at desktop widths); scope every interaction to the
-  // desktop pane so locators never resolve to the CSS-hidden duplicate.
-  const workspace = page.locator('[data-pane="brainstorm"]');
+  await goToView(page, "Pravidla & Skills");
+  // Brainstorm now renders exactly once, inside the Pravidla & Skills view; its root section
+  // already carries aria-label="Brainstorm", so no extra pane-scoping locator is needed.
+  const workspace = page.getByRole("region", { name: "Brainstorm", exact: true });
   await expect(page.getByRole("tab", { name: "DEV" })).toHaveAttribute("aria-selected", "true");
   await expect(workspace.getByRole("heading", { name: "Brainstorm", exact: true })).toBeVisible();
 

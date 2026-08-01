@@ -23,7 +23,7 @@ button { font: inherit; }
 .cockpit-card { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 1rem; background: var(--surface); }
 h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: var(--text-muted); }
 .selection-context { display: flex; align-items: center; gap: .55rem; min-width: 0; color: var(--text-muted); font-size: .85rem; }
-.run-picker button, .incident-actions button, .incident-pane section button { border: 1px solid var(--line); border-radius: 6px; padding: .4rem .6rem; color: var(--text); background: var(--surface); cursor: pointer; }
+.incident-actions button, .incident-pane section button { border: 1px solid var(--line); border-radius: 6px; padding: .4rem .6rem; color: var(--text); background: var(--surface); cursor: pointer; }
 .run-inspector { display: grid; gap: 1rem; font-size: .75rem; }
 .run-inspector section { border-top: 1px solid var(--line); padding-top: .75rem; }
 .run-inspector h3 { margin: 0 0 .5rem; font-size: .78rem; color: var(--text-muted); }
@@ -37,7 +37,6 @@ h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: va
 .run-timeline { display: grid; gap: .4rem; padding-left: 1.2rem; } .run-timeline li { display: grid; gap: .15rem; } .run-timeline time { color: var(--text-faint); font-size: .65rem; }
 .truncation-marker, .visual-unavailable, .manual-only { color: var(--warn-ink); }
 .incident-pane ul { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; } .incident-pane li { border: 1px solid var(--line); border-radius: 8px; padding: .65rem; } .incident-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
-.run-picker { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; } .run-picker h2 { flex-basis: 100%; } .run-picker button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .cockpit-card > h2 { padding-bottom: .8rem; border-bottom: 1px solid var(--line); }
 .status-badge { display: inline-flex; align-items: center; border-radius: 99px; padding: .2rem .55rem; font-size: .72rem; font-weight: 700; }
 .status-running, .status-completed { color: var(--good-ink); background: var(--good-soft); } .status-waiting, .status-stale { color: var(--warn-ink); background: var(--warn-soft); } .status-error, .status-blocked { color: var(--danger-ink); background: var(--danger-soft); } .status-unavailable { color: var(--text-muted); background: var(--surface-2); }
