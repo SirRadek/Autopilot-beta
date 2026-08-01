@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schema/design-brief-1.json",
+  "title": "Autopilot Design Brief",
+  "description": "Lossless carrier of a design idea from Figma to AI workers. Three layers: token references (code is the source of truth), a cleaned Figma node subset, and a component contract. Values for tokens are never duplicated here — only referenced by path + hash.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "source", "intent", "tokensRef", "components"],
+  "properties": {
+    "schemaVersion": {
+      "const": "autopilot.design-brief/1",
+      "description": "Pinned brief contract version."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "fileKey", "nodeId"],
+      "description": "Where the design idea comes from. Figma read is free-tier REST (no Dev Mode).",
+      "properties": {
+        "provider": { "enum": ["figma", "penpot", "manual"] },
+        "fileKey": { "type": "string", "minLength": 1 },
+        "nodeId": { "type": "string", "minLength": 1 },
+        "versionId": { "type": "string" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "acceptanceCriteria"],
+      "description": "Human intent the node tree cannot express.",
+      "properties": {
+        "goal": { "type": "string", "minLength": 1 },
+        "nonGoals": { "type": "array", "items": { "type": "string" } },
+        "acceptanceCriteria": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "tokensRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "description": "Reference to the code design tokens (source of truth). Values are NOT duplicated in the brief; the brief references token names only.",
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Cleaned Figma node subset: layout-relevant fields only (no absolute positions, GUIDs, or render blobs).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "role": { "type": "string" },
+          "layout": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "direction": { "enum": ["row", "column", "none"] },
+              "gap": { "type": "string" },
+              "padding": { "type": "string" },
+              "align": { "type": "string" },
+              "justify": { "type": "string" }
+            }
+          },
+          "text": { "type": "string" },
+          "tokenRefs": {
+            "type": "array",
+            "description": "Token names this node uses, e.g. {color.surface}. References only, never values.",
+            "items": { "type": "string" }
+          },
+          "bindings": { "type": "object" }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Semantics Figma does not know: props, states, a11y, data bindings, acceptance.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "code": { "type": "string", "description": "Repo-relative path of the implementing component, if it exists." },
+          "props": { "type": "object" },
+          "states": { "type": "array", "items": { "type": "string" } },
+          "a11y": { "type": "object" },
+          "dataContract": { "type": "object" }
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "description": "Static assets (images, 3D GLB/glTF). Passed by reference; no pipeline yet.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "uri"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["png", "svg", "glb", "gltf"] },
+          "uri": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "viewports": { "type": "array", "items": { "type": "string" } },
+        "visualThreshold": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

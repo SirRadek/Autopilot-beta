@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "autopilot.design-brief/1",
+  "source": {
+    "provider": "figma",
+    "fileKey": "EXAMPLE-file-key",
+    "nodeId": "42:7",
+    "url": "https://www.figma.com/design/EXAMPLE-file-key/Autopilot-Cockpit?node-id=42-7"
+  },
+  "intent": {
+    "goal": "Run card in the Command Center run list: shows a run's identity, provider/model, token estimate, and status; clicking opens the Run Detail view.",
+    "nonGoals": [
+      "No inline run actions (approve/cancel) — those live in their own views",
+      "No live streaming inside the card"
+    ],
+    "acceptanceCriteria": [
+      "Two rows: line 1 = title + status (right); line 2 = provider·model + tokens (right)",
+      "Status dot colour reflects run state (running=good, waiting=warn, else faint)",
+      "Selected card is visually distinct and exposes aria-pressed=true",
+      "No hardcoded colours or pixel values — tokens only",
+      "Keyboard operable as a button with a visible focus state"
+    ]
+  },
+  "tokensRef": {
+    "path": "cockpit/src/app/tokens.css",
+    "sha256": "bb1a2d5c97e3d1598781f03c42699d8913ff9530d539ae95892e7d1e6cad73da"
+  },
+  "nodes": [
+    {
+      "id": "42:7",
+      "role": "run-card",
+      "layout": { "direction": "row", "gap": ".55rem", "padding": ".55rem .65rem", "align": "center" },
+      "tokenRefs": ["{color.surface}", "{color.line}", "{color.accent}", "{color.accent-soft}"]
+    },
+    {
+      "id": "42:9",
+      "role": "status-dot",
+      "tokenRefs": ["{color.good}", "{color.warn}", "{color.text-faint}"]
+    },
+    {
+      "id": "42:11",
+      "role": "run-title",
+      "text": "run_id",
+      "tokenRefs": ["{color.text}"]
+    }
+  ],
+  "components": [
+    {
+      "name": "RunCard",
+      "code": "cockpit/src/features/command/CommandCenter.tsx",
+      "props": {
+        "run": "RunRecord",
+        "selected": "boolean",
+        "onSelect": "(runId: string) => void"
+      },
+      "states": ["running", "waiting", "completed", "failed", "cancelled", "selected"],
+      "a11y": {
+        "role": "button",
+        "ariaPressed": "reflects selected",
+        "focusVisible": true
+      },
+      "dataContract": {
+        "runId": "run.current.run_id",
+        "provider": "run.current.provider",
+        "model": "run.current.model",
+        "estimatedTokens": "run.current.estimated_tokens",
+        "status": "run.status"
+      }
+    }
+  ],
+  "verification": {
+    "viewports": ["1280x800", "375x812"],
+    "visualThreshold": 0.02
+  }
+}
