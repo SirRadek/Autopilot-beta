@@ -9,6 +9,7 @@ import { CommandCenter } from "../features/command/CommandCenter";
 import { RunComposer } from "../features/runs/RunComposer";
 import { RunInspector } from "../features/runs/RunInspector";
 import { RunDetailView } from "../features/runs/RunDetailView";
+import { NewRunView } from "../features/runs/NewRunView";
 import { PromotionPane } from "../features/promotion/PromotionPane";
 import { BrainstormPane } from "../features/brainstorm/BrainstormPane";
 import { ProjectsPane } from "../features/projects/ProjectsPane";
@@ -99,7 +100,7 @@ export function AuthenticatedCockpit({ client, onLogout }: { readonly client: Re
     commandView={<CommandCenter runs={data.runs} selectedRunId={selectedRun?.current.run_id} onSelectRun={(runId) => { const run = data.runs.find((candidate) => candidate.current.run_id === runId); setRoute({ ...route, projectId: run?.current.project_id ?? route.projectId, runId, view: "run" }); }} telemetry={data.status?.telemetry} loading={data.loading} refreshing={data.refreshing} statusError={data.errors.status?.message} approvalPane={approvalPane} incidentPane={incidentPane} />}
     runView={<RunDetailView run={selectedRun} runInspector={<>{runTimeline.error ? <p role="alert">Časová osa není dostupná: {runTimeline.error.message}</p> : null}<RunInspector run={selectedRun} timeline={runTimeline.data} /></>} promotionPane={promotionPane} incidentPane={incidentPane} />}
     resourcesView={<><section className="cockpit-card" aria-label="Provider Budget"><ProviderPane quotas={data.quotas} models={data.models} health={data.health} selectedProvider={budgetProvider} onSelectProvider={setBudgetProvider} /></section><section className="cockpit-card" aria-label="Workers"><WorkerPane workers={data.workers} error={data.errors.workers?.message} /></section><div className="cockpit-card"><SessionPane sessions={data.sessions} selectedSessionId={route.sessionId} onSelect={chooseSession} onCreate={async (cwd) => { await client.createSession({ agent_command: "codex_cli", cwd: cwd ?? "/home/radek/autopilot-beta" }); await data.refresh(); }} onResume={async (session) => { await client.mutateSession(session.session_id, "resume"); await data.refresh(); }} onClose={async (session) => { await client.mutateSession(session.session_id, "close"); await data.refresh(); }} /></div><div className="cockpit-card"><ProjectsPane projects={data.projects} selectedProjectId={route.projectId} onSelect={(projectId) => setRoute({ ...route, projectId })} onCreate={async (input) => { await client.createProject(input); await data.refresh(); }} error={data.errors.sessions?.message} /></div></>}
-    newRunView={runComposer ? <div className="cockpit-card">{runComposer}</div> : <div className="cockpit-card"><p className="run-detail-empty">Nové běhy se zakládají v prostředí dev.</p></div>}
+    newRunView={<NewRunView environment={route.environment} composer={runComposer} />}
     rulesView={<div className="cockpit-card">{brainstormPane}</div>}
     /></EnvironmentProvider>;
 }
