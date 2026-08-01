@@ -14,6 +14,7 @@ import { PromotionPane } from "../features/promotion/PromotionPane";
 import { BrainstormPane } from "../features/brainstorm/BrainstormPane";
 import { ProjectsPane } from "../features/projects/ProjectsPane";
 import { ResourcesView } from "../features/resources/ResourcesView";
+import { RulesView } from "../features/rules/RulesView";
 import { AppShell } from "./AppShell";
 import { useRouteState } from "./routeState";
 import { useCockpitData, useRunTimeline } from "./useCockpitData";
@@ -107,6 +108,6 @@ export function AuthenticatedCockpit({ client, onLogout }: { readonly client: Re
       projectsPane={<ProjectsPane projects={data.projects} selectedProjectId={route.projectId} onSelect={(projectId) => setRoute({ ...route, projectId })} onCreate={async (input) => { await client.createProject(input); await data.refresh(); }} error={data.errors.sessions?.message} />}
     />}
     newRunView={<NewRunView environment={route.environment} composer={runComposer} />}
-    rulesView={<div className="cockpit-card">{brainstormPane}</div>}
+    rulesView={<RulesView brainstormPane={brainstormPane} />}
     /></EnvironmentProvider>;
 }

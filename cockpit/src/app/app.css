@@ -188,6 +188,20 @@ h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: va
 @media (min-width: 1000px) {
   .resources-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.rules-view { display: grid; gap: 1.05rem; }
+.rules-header { display: grid; gap: .2rem; }
+.rules-header .eyebrow { color: var(--text-faint); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; }
+.rules-header h2 { color: var(--text); font-size: 1.1rem; }
+.rules-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.05rem; align-items: start; }
+.rules-section h3 { display: flex; align-items: center; gap: .45rem; margin: 0 0 .7rem; padding-bottom: .6rem; border-bottom: 1px solid var(--line); color: var(--text-muted); font-size: .82rem; }
+.rules-section.planned { border-style: dashed; }
+.rules-section.planned h3 { color: var(--text-faint); }
+.rules-mesh-categories { display: flex; flex-wrap: wrap; gap: .35rem; margin: .6rem 0 0; padding: 0; list-style: none; }
+.rules-mesh-categories li { border: 1px dashed var(--line); border-radius: 99px; padding: .18rem .55rem; color: var(--text-faint); background: var(--surface-2); font-size: .68rem; }
+@media (min-width: 1000px) {
+  .rules-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rules-section-brainstorm { grid-column: 1 / -1; }
+}
 .new-run { display: grid; gap: 1.05rem; }
 .new-run-header { display: grid; gap: .2rem; }
 .new-run-header .eyebrow { color: var(--text-faint); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; }
