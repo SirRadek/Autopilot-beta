@@ -15,7 +15,7 @@ export function RulesView({ brainstormPane }: RulesViewProps) {
     </header>
     <div className="rules-grid">
       <section className="cockpit-card rules-section rules-section-brainstorm" aria-labelledby={id("brainstorm")}>
-        <h3 id={id("brainstorm")}>Brainstorm</h3>
+        <h3 id={id("brainstorm")}>Brainstorm &amp; fan-out</h3>
         {brainstormPane}
       </section>
       <section className="cockpit-card rules-section planned" aria-labelledby={id("mesh")}>

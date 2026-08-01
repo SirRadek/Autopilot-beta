@@ -12,7 +12,7 @@ function mount(environment: "dev" | "prod" = "dev", composer: React.ReactNode = 
   return { host, root };
 }
 
-function radios(host: HTMLElement) { return [...host.querySelectorAll<HTMLInputElement>('input[type="radio"][name="autonomy"]')]; }
+function radios(host: HTMLElement) { return [...host.querySelectorAll<HTMLInputElement>('.autonomy-cards input[type="radio"]')]; }
 
 describe("NewRunView", () => {
   it("frames the composer inside the wizard header and sections", () => {
@@ -77,6 +77,8 @@ describe("NewRunView", () => {
     act(() => root.render(<><NewRunView environment="dev" composer={null} /><NewRunView environment="dev" composer={null} /></>));
     const ids = [...host.querySelectorAll("[id]")].map((node) => node.id);
     expect(new Set(ids).size).toBe(ids.length);
+    const names = [...new Set([...host.querySelectorAll<HTMLInputElement>('.autonomy-cards input[type="radio"]')].map((radio) => radio.name))];
+    expect(names).toHaveLength(2);
     act(() => root.unmount()); host.remove();
   });
 });

@@ -49,7 +49,7 @@ export function AppShell({ environment, onEnvironmentChange, onLogout, selectedP
     environmentTabRefs.current[next]?.focus();
   };
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    const direction = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
     if (direction === 0 && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
     const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? views.length - 1 : (index + direction + views.length) % views.length;
@@ -64,7 +64,7 @@ export function AppShell({ environment, onEnvironmentChange, onLogout, selectedP
           <span className="cockpit-brand-mark" aria-hidden="true">A</span>
           <h1>Autopilot</h1>
         </div>
-        <nav className="cockpit-nav" aria-label="Cockpit sections" role="tablist">
+        <nav className="cockpit-nav" aria-label="Cockpit sections" role="tablist" aria-orientation="vertical">
           {views.map((view, index) => <button ref={(node) => { if (node) viewTabRefs.current[view.id] = node; }} key={view.id} id={id(`tab-${view.id}`)} data-cockpit-view={view.id} type="button" role="tab" aria-controls={id(`view-panel-${view.id}`)} aria-selected={currentView === view.id} tabIndex={currentView === view.id ? 0 : -1} onClick={() => selectView(view.id)} onKeyDown={(event) => handleTabKeyDown(event, index)}>{view.label}</button>)}
         </nav>
       </header>

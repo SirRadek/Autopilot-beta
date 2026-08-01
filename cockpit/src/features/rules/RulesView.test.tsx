@@ -18,7 +18,7 @@ describe("RulesView", () => {
     expect(host.querySelector(".rules-header .eyebrow")?.textContent).toBe("Governance");
     expect(host.querySelector(".rules-header h2")?.textContent).toBe("Pravidla & Skills");
     expect(host.querySelector(".rules-section-brainstorm")?.textContent).toContain("BRAINSTORM");
-    expect(host.querySelector(".rules-section-brainstorm h3")?.textContent).toBe("Brainstorm");
+    expect(host.querySelector(".rules-section-brainstorm h3")?.textContent).toBe("Brainstorm & fan-out");
     act(() => root.unmount()); host.remove();
   });
 

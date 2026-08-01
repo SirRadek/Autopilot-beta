@@ -39,7 +39,7 @@ export function NewRunView({ composer, environment }: NewRunViewProps) {
           <div className="autonomy-cards">
             {autonomyOptions.map((option) => <label key={option.id} className={option.id === autonomy ? "autonomy-card selected" : "autonomy-card"}>
               <span className="autonomy-card-head">
-                <input type="radio" name="autonomy" value={option.id} checked={option.id === autonomy} onChange={() => setAutonomy(option.id)} />
+                <input type="radio" name={id("autonomy")} value={option.id} checked={option.id === autonomy} onChange={() => setAutonomy(option.id)} />
                 {option.label}
               </span>
               <span className="autonomy-permissions">
@@ -61,7 +61,7 @@ export function NewRunView({ composer, environment }: NewRunViewProps) {
           <div><dt>Orchestrátor</dt><dd>poskytovatel · model · reasoning ze zadání</dd></div>
           <div><dt>Autonomie</dt><dd>{selectedAutonomy.label}</dd></div>
           <div><dt>Sandbox</dt><dd>{selectedAutonomy.sandbox}</dd></div>
-          <div><dt>Odhad</dt><dd>prompt + 8 192 tokenů rezervace</dd></div>
+          <div><dt>Odhad</dt><dd>bude určeno po „Připravit běh“</dd></div>
         </dl>
         <p className="run-envelope-note">Reálné odhady, kvóty a immutable revizi ukáže composer po „Připravit běh“.</p>
       </aside>

@@ -14,6 +14,7 @@ export type CommandCenterProps = {
 };
 
 const WAITING_STATUSES: readonly RunStatus[] = ["draft", "approved", "queued"];
+const MAX_RUNS = 50;
 
 function runPriority(status: RunStatus): number {
   if (status === "running") return 0;
@@ -36,6 +37,7 @@ function telemetryLine({ loading, refreshing, statusError, telemetry }: Pick<Com
 
 export function CommandCenter({ runs, selectedRunId, onSelectRun, telemetry, loading, refreshing, statusError, approvalPane, incidentPane }: CommandCenterProps) {
   const sortedRuns = [...runs].sort((a, b) => runPriority(a.status) - runPriority(b.status));
+  const visibleRuns = sortedRuns.slice(0, MAX_RUNS);
   return <div className="command-center">
     <header className="cc-header">
       <span className="eyebrow">Řízení</span>
@@ -46,10 +48,10 @@ export function CommandCenter({ runs, selectedRunId, onSelectRun, telemetry, loa
       <h3>Čeká na mě</h3>
       {approvalPane}
     </section>
-    <section className="cockpit-card cc-section" aria-label="Aktivní běhy">
-      <h3>Aktivní běhy</h3>
+    <section className="cockpit-card cc-section" aria-label="Běhy">
+      <h3>Běhy</h3>
       {sortedRuns.length === 0 ? <p className="cc-empty">Žádné běhy.</p> : <ul className="cc-run-list">
-        {sortedRuns.map((run) => {
+        {visibleRuns.map((run) => {
           const runId = run.current.run_id;
           const isSelected = runId === selectedRunId;
           return <li key={runId}>
@@ -63,6 +65,7 @@ export function CommandCenter({ runs, selectedRunId, onSelectRun, telemetry, loa
           </li>;
         })}
       </ul>}
+      {sortedRuns.length > MAX_RUNS ? <p className="cc-empty">Zobrazeno {MAX_RUNS} z {sortedRuns.length} běhů.</p> : null}
     </section>
     <section className="cockpit-card cc-section" aria-label="Incidenty">
       <h3>Incidenty</h3>

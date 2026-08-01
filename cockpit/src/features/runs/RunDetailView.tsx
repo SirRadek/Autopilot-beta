@@ -9,7 +9,6 @@ export type RunDetailViewProps = {
   readonly run?: RunRecord;
   readonly runInspector: React.ReactNode;
   readonly promotionPane: React.ReactNode;
-  readonly incidentPane: React.ReactNode;
 };
 
 function runTitle(run: RunRecord): string {
@@ -18,7 +17,7 @@ function runTitle(run: RunRecord): string {
   return firstLine.length > MAX_TITLE_CHARS ? `${firstLine.slice(0, MAX_TITLE_CHARS)}…` : firstLine;
 }
 
-export function RunDetailView({ run, runInspector, promotionPane, incidentPane }: RunDetailViewProps) {
+export function RunDetailView({ run, runInspector, promotionPane }: RunDetailViewProps) {
   const idPrefix = useId(); const id = (suffix: string) => `${idPrefix}-${suffix}`;
   return <div className="run-detail">
     {run ? <>
@@ -30,6 +29,7 @@ export function RunDetailView({ run, runInspector, promotionPane, incidentPane }
           </div>
           <StatusBadge status={badgeByRunStatus[run.status]} />
           <div className="run-status-actions">
+            <span className="planned-badge">Planned</span>
             <button type="button" disabled title="Planned">Pauza</button>
             <button type="button" disabled title="Planned">Zastavit</button>
           </div>
@@ -37,7 +37,7 @@ export function RunDetailView({ run, runInspector, promotionPane, incidentPane }
         <ul className="run-status-facts" aria-label="Fakta běhu">
           <li className="run-fact">stav {run.status}</li>
           <li className="run-fact">{run.current.provider} · {run.current.model ?? "auto"}</li>
-          <li className="run-fact">rezervace {run.current.estimated_tokens.toLocaleString()} tokenů</li>
+          <li className="run-fact">odhad {run.current.estimated_tokens.toLocaleString()} tokenů</li>
           <li className="run-fact">profil {run.current.profile}</li>
         </ul>
       </header>
@@ -49,10 +49,6 @@ export function RunDetailView({ run, runInspector, promotionPane, incidentPane }
     <section className="cockpit-card run-detail-section" aria-labelledby={id("promotion-heading")}>
       <h3 id={id("promotion-heading")}>Propagace</h3>
       {promotionPane}
-    </section>
-    <section className="cockpit-card run-detail-section" aria-labelledby={id("incidents-heading")}>
-      <h3 id={id("incidents-heading")}>Chyby</h3>
-      {incidentPane}
     </section>
   </div>;
 }
