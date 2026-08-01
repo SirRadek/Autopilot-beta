@@ -162,6 +162,10 @@ h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: va
 .cc-run-tokens { grid-column: 3; grid-row: 2; color: var(--text-faint); font-size: .64rem; text-align: right; }
 .run-detail { display: grid; gap: 1.05rem; }
 .run-detail-empty { margin: 0; color: var(--text-faint); font-size: .78rem; }
+.design-pane { display: grid; gap: .5rem; }
+.design-pane-frame { width: 100%; min-height: 22rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-0); }
+.design-pane-link { justify-self: start; color: var(--accent); font-size: .78rem; text-decoration: none; }
+.design-pane-empty { margin: 0; color: var(--text-faint); font-size: .78rem; }
 .run-status-header { display: grid; gap: .7rem; }
 .run-status-heading { display: flex; align-items: flex-start; gap: .7rem; }
 .run-status-title { min-width: 0; margin-right: auto; }

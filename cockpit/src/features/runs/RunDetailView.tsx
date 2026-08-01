@@ -1,6 +1,7 @@
 import React, { useId } from "react";
 import type { RunRecord, RunStatus } from "../../types/controlPlane";
 import { StatusBadge, type StatusBadgeStatus } from "../../components/StatusBadge";
+import { DesignPane, extractFigmaUrl } from "./DesignPane";
 
 const MAX_TITLE_CHARS = 80;
 const badgeByRunStatus: Record<RunStatus, StatusBadgeStatus> = { draft: "waiting", approved: "waiting", queued: "waiting", running: "running", completed: "completed", failed: "error", cancelled: "blocked" };
@@ -41,6 +42,10 @@ export function RunDetailView({ run, runInspector, promotionPane }: RunDetailVie
           <li className="run-fact">profil {run.current.profile}</li>
         </ul>
       </header>
+      <section className="cockpit-card run-detail-section" aria-labelledby={id("design-heading")}>
+        <h3 id={id("design-heading")}>Design</h3>
+        <DesignPane figmaUrl={extractFigmaUrl(run.current.prompt)} />
+      </section>
       <section className="cockpit-card run-detail-section" aria-labelledby={id("progress-heading")}>
         <h3 id={id("progress-heading")}>Průběh &amp; důkazy</h3>
         {runInspector}
