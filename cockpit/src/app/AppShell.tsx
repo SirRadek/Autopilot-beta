@@ -2,6 +2,7 @@ import React, { useId, useRef, useState, type KeyboardEvent, type ReactNode } fr
 
 import { StatusBadge, type StatusBadgeStatus } from "../components/StatusBadge";
 import type { CockpitEnvironment } from "./environment";
+import "./tokens.css";
 import "./app.css";
 
 export type CockpitSession = { id: string; name: string; status: StatusBadgeStatus; agent?: string };

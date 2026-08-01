@@ -18,3 +18,4 @@ docs/autopilot/openrouter-api-attempts.jsonl
 docs/autopilot/openrouter-api-spend.jsonl
 run-codex-*.sh
 test-results/
+cockpit/design/
