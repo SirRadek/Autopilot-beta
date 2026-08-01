@@ -40,7 +40,7 @@ export function AppShell({ environment, onEnvironmentChange, onLogout, selectedP
   const environmentTabRefs = useRef<Partial<Record<CockpitEnvironment, HTMLButtonElement>>>({});
   const id = (suffix: string) => `${idPrefix}-${suffix}`;
   const slots: Record<CockpitView, ReactNode> = { command: commandView, run: runView, resources: resourcesView, "new-run": newRunView, rules: rulesView };
-  const selectView = (view: CockpitView) => { setInternalView(view); onViewChange?.(view); };
+  const selectView = (view: CockpitView) => { if (activeView === undefined) setInternalView(view); onViewChange?.(view); };
   const handleEnvironmentKeyDown = (event: KeyboardEvent<HTMLButtonElement>, current: CockpitEnvironment) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();

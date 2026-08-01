@@ -1,4 +1,5 @@
 import React, { useId, useState } from "react";
+import type { CockpitEnvironment } from "../../app/environment";
 
 export type AutonomyPreset = "propose" | "safe_steps" | "full";
 
@@ -14,7 +15,7 @@ const autonomyOptions: readonly AutonomyOption[] = [autonomyById.propose, autono
 
 export type NewRunViewProps = {
   readonly composer: React.ReactNode;
-  readonly environment: "dev" | "prod";
+  readonly environment: CockpitEnvironment;
 };
 
 export function NewRunView({ composer, environment }: NewRunViewProps) {
@@ -36,18 +37,18 @@ export function NewRunView({ composer, environment }: NewRunViewProps) {
         </section>
         <section className="cockpit-card new-run-section" aria-labelledby={id("autonomy-heading")}>
           <h3 id={id("autonomy-heading")}>Autonomie</h3>
-          <div className="autonomy-cards">
-            {autonomyOptions.map((option) => <label key={option.id} className={option.id === autonomy ? "autonomy-card selected" : "autonomy-card"}>
-              <span className="autonomy-card-head">
+          <div className="autonomy-cards" role="radiogroup" aria-labelledby={id("autonomy-heading")}>
+            {autonomyOptions.map((option) => <div key={option.id} className={option.id === autonomy ? "autonomy-card selected" : "autonomy-card"}>
+              <label className="autonomy-card-head">
                 <input type="radio" name={id("autonomy")} value={option.id} checked={option.id === autonomy} onChange={() => setAutonomy(option.id)} />
                 {option.label}
-              </span>
+              </label>
               <span className="autonomy-permissions">
                 {option.permissions.map((permission) => <span key={permission.label} className="autonomy-permission">
                   {permission.label} <b className={permission.allowed ? "autonomy-yes" : "autonomy-no"} role="img" aria-label={permission.allowed ? "povoleno" : "zakázáno"}>{permission.allowed ? "✓" : "✗"}</b>
                 </span>)}
               </span>
-            </label>)}
+            </div>)}
           </div>
           <p className="autonomy-note">Vynucení autonomie na straně serveru: Planned. Výběr je zatím jen UI preset a neodesílá se do Control Plane.</p>
         </section>

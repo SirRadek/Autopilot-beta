@@ -37,7 +37,6 @@ h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: va
 .run-timeline { display: grid; gap: .4rem; padding-left: 1.2rem; } .run-timeline li { display: grid; gap: .15rem; } .run-timeline time { color: var(--text-faint); font-size: .65rem; }
 .truncation-marker, .visual-unavailable, .manual-only { color: var(--warn-ink); }
 .incident-pane ul { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; } .incident-pane li { border: 1px solid var(--line); border-radius: 8px; padding: .65rem; } .incident-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
-.cockpit-card > h2 { padding-bottom: .8rem; border-bottom: 1px solid var(--line); }
 .status-badge { display: inline-flex; align-items: center; border-radius: 99px; padding: .2rem .55rem; font-size: .72rem; font-weight: 700; }
 .status-running, .status-completed { color: var(--good-ink); background: var(--good-soft); } .status-waiting, .status-stale { color: var(--warn-ink); background: var(--warn-soft); } .status-error, .status-blocked { color: var(--danger-ink); background: var(--danger-soft); } .status-unavailable { color: var(--text-muted); background: var(--surface-2); }
 .session-pane-header, .session-project-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
