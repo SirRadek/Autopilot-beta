@@ -1,4 +1,4 @@
-import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectCreateInput, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectCreateInput, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord, FigmaMutationRecord } from "../types/controlPlane";
 
 export class ControlPlaneApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "ControlPlaneApiError"; }
@@ -48,6 +48,8 @@ export interface ControlPlaneClient {
   cancelRun(id: string): Promise<RunRecord>;
   getIncidents(): Promise<readonly AutopilotIncident[]>;
   acknowledgeIncident(id: string, owner: string): Promise<AutopilotIncident>;
+  listFigmaMutations(): Promise<readonly FigmaMutationRecord[]>;
+  decideFigmaMutation(id: string, decision: "approved" | "rejected", reason?: string): Promise<FigmaMutationRecord>;
   prepareRepairPacket(id: string, input: RepairPacketInput): Promise<AutopilotRepairPacket>;
   listBrainstorms(): Promise<readonly BrainstormRecord[]>;
   getBrainstorm(id: string): Promise<BrainstormRecord>;
@@ -117,6 +119,8 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
     getIncidents: () => request<readonly AutopilotIncident[]>("/incidents"),
     acknowledgeIncident: (id, owner) => request<AutopilotIncident>(`/incidents/${encodeURIComponent(id)}/acknowledge`, jsonPost({ owner })),
     prepareRepairPacket: (id, input) => request<AutopilotRepairPacket>(`/incidents/${encodeURIComponent(id)}/repair-packet`, jsonPost(input)),
+    listFigmaMutations: () => request<readonly FigmaMutationRecord[]>("/figma/mutations"),
+    decideFigmaMutation: (id, decision, reason) => request<FigmaMutationRecord>(`/figma/mutations/${encodeURIComponent(id)}`, jsonPost({ decision, approver: "cockpit-operator", ...(reason ? { reason } : {}) })),
     listBrainstorms: () => request<readonly BrainstormRecord[]>("/brainstorms"),
     getBrainstorm: (id) => request<BrainstormRecord>(`/brainstorms/${encodeURIComponent(id)}`),
     createBrainstorm: (input) => request<BrainstormRecord>("/brainstorms", jsonPost(input)),
