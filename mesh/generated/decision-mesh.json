@@ -67,6 +67,12 @@
       "label": "Execution profile policy"
     },
     {
+      "id": "figma_write_boundary",
+      "group": "risk_detector",
+      "risk": 0.9,
+      "label": "Figma write executor"
+    },
+    {
       "id": "file_upload",
       "group": "risk_detector",
       "risk": 0.9,
