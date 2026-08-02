@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 144,
+  "file_count": 146,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -797,6 +797,16 @@
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "e883f7d3cf258a15661e2e816eb81603f2c9b5d5b4a931099f65be8a53bcf682",
       "patched_by": "C-pass-2a"
+    },
+    {
+      "source_path": "src/data/delivery-system/figmaMutation.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "dca7c5356a0bd9c827445e1e7fb5ecda1c6c7fdf5771726f75f0468b285e4100"
+    },
+    {
+      "source_path": "src/data/delivery-system/figmaMutationStore.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "6506ffe05c21a03e35b8a021be400dc88e6b2187bc2ab282932fc11890d6f953"
     },
     {
       "source_path": "src/data/delivery-system/modelOutputEvaluation.ts",

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "autopilot.figma-mutation/1",
+  "source": { "provider": "figma", "fileKey": "83Vw6HGqbIlBTSTqjPVhq8" },
+  "briefHash": "abf966846dfbeb24e25277e62ce0c6949c8eb1ea75d15e12dc56517b79e89fef",
+  "expectedVersion": "figma-version-EXAMPLE",
+  "ops": [
+    { "op": "createFrame", "args": { "name": "RunCard", "layout": { "direction": "row", "gap": "8px", "padding": "9px 10px" } } },
+    { "op": "applyTokens", "target": "RunCard", "args": { "tokens": ["{color.surface}", "{color.line}", "{color.accent}"] } },
+    { "op": "setText", "target": "RunCard/title", "args": { "text": "run_id" } },
+    { "op": "verificationFrame", "args": { "label": "RunCard · brief abf96684" } },
+    { "op": "addComment", "args": { "text": "Autopilot: generated from Design Brief; review before merge." } }
+  ],
+  "preview": { "summary": "Create the RunCard frame with radeq tokens, title text, and a verification frame." },
+  "rollbackPlan": { "versionCheckpoint": true, "archivePage": "_archive/rollback", "notes": "Named version checkpoint + archived subtree before apply." }
+}

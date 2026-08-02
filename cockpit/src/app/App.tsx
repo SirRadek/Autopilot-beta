@@ -5,11 +5,16 @@ import { ProviderPane } from "../features/providers/ProviderPane";
 import { SessionPane } from "../features/sessions/SessionPane";
 import { WorkerPane } from "../features/workers/WorkerPane";
 import { IncidentPane } from "../features/incidents/IncidentPane";
+import { CommandCenter } from "../features/command/CommandCenter";
 import { RunComposer } from "../features/runs/RunComposer";
 import { RunInspector } from "../features/runs/RunInspector";
+import { RunDetailView } from "../features/runs/RunDetailView";
+import { NewRunView } from "../features/runs/NewRunView";
 import { PromotionPane } from "../features/promotion/PromotionPane";
 import { BrainstormPane } from "../features/brainstorm/BrainstormPane";
 import { ProjectsPane } from "../features/projects/ProjectsPane";
+import { ResourcesView } from "../features/resources/ResourcesView";
+import { RulesView } from "../features/rules/RulesView";
 import { AppShell } from "./AppShell";
 import { useRouteState } from "./routeState";
 import { useCockpitData, useRunTimeline } from "./useCockpitData";
@@ -89,16 +94,20 @@ export function AuthenticatedCockpit({ client, onLogout }: { readonly client: Re
     onArbitrate={async (id, operator, route) => { const record = await client.arbitrateBrainstorm(id, operator, route); await data.refresh(); return record; }}
     onCancel={async (id) => { const record = await client.cancelBrainstorm(id); await data.refresh(); return record; }}
   />;
+  const runComposer = route.environment === "dev" ? <RunComposer projects={data.projects} quotas={data.quotas} models={data.models} onPrepare={async (input) => { const run = await client.createDevRun(input); setRoute({ ...route, projectId: run.current.project_id, runId: run.current.run_id }); await data.refresh(); return run; }} onApprove={async (runId, revision) => { const run = await client.approveRun(runId, revision, "cockpit-operator"); setRoute({ ...route, projectId: run.current.project_id, runId }); await data.refresh(); return run; }} /> : null;
+  const approvalPane = <ApprovalPane approvals={data.approvals} error={data.errors.approvals?.message} onApprove={async (approval) => { await client.decideApproval(approval.approval_id, "approved"); await data.refresh(); }} onReject={async (approval, reason) => { await client.decideApproval(approval.approval_id, "rejected", reason); await data.refresh(); }} />;
+  const incidentPane = <IncidentPane incidents={data.incidents} onAcknowledge={async (id) => { await client.acknowledgeIncident(id, "cockpit-operator"); await data.refresh(); }} onPrepareRepairPacket={(id) => { const incident = data.incidents.find((item) => item.incident_id === id); return client.prepareRepairPacket(id, { expected: incident?.impact ?? "Governed run completes without an internal incident", actual: incident?.summary ?? "Internal incident recorded" }); }} />;
   return <EnvironmentProvider environment={route.environment}><AppShell environment={route.environment} onEnvironmentChange={(environment) => setRoute({ ...route, environment, runId: undefined })} onLogout={onLogout} selectedProject={selectedProject} selectedSession={selectedSession ? { id: selectedSession.session_id, name: selectedSession.name ?? selectedSession.session_id, status: selectedSession.status === "active" ? "running" : "completed", agent: selectedSession.agent_command } : undefined}
-    runWorkspace={<>{route.environment === "dev" ? <RunComposer projects={data.projects} quotas={data.quotas} models={data.models} onPrepare={async (input) => { const run = await client.createDevRun(input); setRoute({ ...route, projectId: run.current.project_id, runId: run.current.run_id }); await data.refresh(); return run; }} onApprove={async (runId, revision) => { const run = await client.approveRun(runId, revision, "cockpit-operator"); setRoute({ ...route, projectId: run.current.project_id, runId }); await data.refresh(); return run; }} /> : null}{promotionPane}{data.runs.length ? <section className="run-picker" aria-label="Běhy"><h2>Běhy</h2>{data.runs.slice(0, 50).map((run) => <button type="button" key={run.current.run_id} aria-pressed={run.current.run_id === selectedRun?.current.run_id} onClick={() => setRoute({ ...route, projectId: run.current.project_id, runId: run.current.run_id })}>{run.current.run_id} · {run.status}</button>)}</section> : null}</>}
-    runInspector={<>{runTimeline.error ? <p role="alert">Časová osa není dostupná: {runTimeline.error.message}</p> : null}<RunInspector run={selectedRun} timeline={runTimeline.data} /></>}
-    incidentPane={<IncidentPane incidents={data.incidents} onAcknowledge={async (id) => { await client.acknowledgeIncident(id, "cockpit-operator"); await data.refresh(); }} onPrepareRepairPacket={(id) => { const incident = data.incidents.find((item) => item.incident_id === id); return client.prepareRepairPacket(id, { expected: incident?.impact ?? "Governed run completes without an internal incident", actual: incident?.summary ?? "Internal incident recorded" }); }} />}
-    projectsPane={<ProjectsPane projects={data.projects} selectedProjectId={route.projectId} onSelect={(projectId) => setRoute({ ...route, projectId })} onCreate={async (input) => { await client.createProject(input); await data.refresh(); }} error={data.errors.sessions?.message} />}
-    sessionsPane={<SessionPane sessions={data.sessions} selectedSessionId={route.sessionId} onSelect={chooseSession} onCreate={async (cwd) => { await client.createSession({ agent_command: "codex_cli", cwd: cwd ?? "/home/radek/autopilot-beta" }); await data.refresh(); }} onResume={async (session) => { await client.mutateSession(session.session_id, "resume"); await data.refresh(); }} onClose={async (session) => { await client.mutateSession(session.session_id, "close"); await data.refresh(); }} />}
-    approvalPane={<ApprovalPane approvals={data.approvals} error={data.errors.approvals?.message} onApprove={async (approval) => { await client.decideApproval(approval.approval_id, "approved"); await data.refresh(); }} onReject={async (approval, reason) => { await client.decideApproval(approval.approval_id, "rejected", reason); await data.refresh(); }} />}
-    operationsPane={<p aria-live="polite">{data.loading ? "Connecting to Control Plane…" : data.refreshing ? "Refreshing…" : data.errors.status ? `Status unavailable: ${data.errors.status.message}` : `${data.status?.telemetry.calls ?? 0} worker calls · ${data.status?.telemetry.total_tokens ?? 0} tokens`}</p>}
-    workersPane={<WorkerPane workers={data.workers} error={data.errors.workers?.message} />}
-    providersPane={<ProviderPane quotas={data.quotas} models={data.models} health={data.health} selectedProvider={budgetProvider} onSelectProvider={setBudgetProvider} />}
-    brainstormPane={brainstormPane}
+    activeView={route.view ?? "command"} onViewChange={(view) => setRoute({ ...route, view })}
+    commandView={<CommandCenter runs={data.runs} selectedRunId={selectedRun?.current.run_id} onSelectRun={(runId) => { const run = data.runs.find((candidate) => candidate.current.run_id === runId); setRoute({ ...route, projectId: run?.current.project_id ?? route.projectId, runId, view: "run" }); }} telemetry={data.status?.telemetry} loading={data.loading} refreshing={data.refreshing} statusError={data.errors.status?.message} approvalPane={approvalPane} incidentPane={incidentPane} />}
+    runView={<RunDetailView run={selectedRun} runInspector={<>{runTimeline.error ? <p role="alert">Časová osa není dostupná: {runTimeline.error.message}</p> : null}<RunInspector run={selectedRun} timeline={runTimeline.data} /></>} promotionPane={promotionPane} />}
+    resourcesView={<ResourcesView
+      providersPane={<ProviderPane quotas={data.quotas} models={data.models} health={data.health} selectedProvider={budgetProvider} onSelectProvider={setBudgetProvider} />}
+      workersPane={<WorkerPane workers={data.workers} error={data.errors.workers?.message} />}
+      sessionsPane={<SessionPane sessions={data.sessions} selectedSessionId={route.sessionId} onSelect={chooseSession} onCreate={async (cwd) => { await client.createSession({ agent_command: "codex_cli", cwd: cwd ?? "/home/radek/autopilot-beta" }); await data.refresh(); }} onResume={async (session) => { await client.mutateSession(session.session_id, "resume"); await data.refresh(); }} onClose={async (session) => { await client.mutateSession(session.session_id, "close"); await data.refresh(); }} />}
+      projectsPane={<ProjectsPane projects={data.projects} selectedProjectId={route.projectId} onSelect={(projectId) => setRoute({ ...route, projectId })} onCreate={async (input) => { await client.createProject(input); await data.refresh(); }} error={data.errors.sessions?.message} />}
+    />}
+    newRunView={<NewRunView environment={route.environment} composer={runComposer} />}
+    rulesView={<RulesView brainstormPane={brainstormPane} />}
     /></EnvironmentProvider>;
 }

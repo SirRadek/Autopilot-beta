@@ -1,0 +1,34 @@
+{
+  "version": "autopilot.mcp-cross/1",
+  "servers": [
+    {
+      "id": "autopilot-decision-mesh",
+      "transport": "stdio",
+      "command": "tsx",
+      "args": ["mcp/server.ts"],
+      "readOnly": true,
+      "toolAllowlist": ["*"],
+      "targets": ["claude", "codex", "agy"],
+      "secretRefs": []
+    },
+    {
+      "id": "context7",
+      "transport": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "readOnly": true,
+      "toolAllowlist": ["resolve-library-id", "query-docs"],
+      "targets": ["claude", "codex", "agy"],
+      "secretRefs": ["${CONTEXT7_API_KEY}"]
+    },
+    {
+      "id": "figma-context",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "figma-developer-mcp", "--stdio"],
+      "readOnly": true,
+      "toolAllowlist": ["get_figma_data", "download_figma_images"],
+      "targets": ["claude", "codex", "agy"],
+      "secretRefs": ["${FIGMA_TOKEN}"]
+    }
+  ]
+}
