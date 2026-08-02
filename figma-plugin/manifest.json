@@ -1,0 +1,12 @@
+{
+  "name": "Autopilot Executor",
+  "id": "autopilot-figma-executor",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["https://autopilot.local"],
+    "reasoning": "Claims owner-approved mutation batches from the Autopilot control plane and reports results. Never sends design content out; read stays on the control plane."
+  }
+}

@@ -1,0 +1,73 @@
+<style>
+  body{font-family:Inter,system-ui,sans-serif;margin:0;padding:16px;background:#181410;color:#F1EDE4;font-size:13px}
+  h1{font-family:Georgia,serif;font-size:16px;margin:0 0 4px}
+  p.sub{color:#C9BFB1;margin:0 0 14px;font-size:12px}
+  label{display:block;color:#C9BFB1;font-size:11px;margin:10px 0 4px}
+  input{width:100%;box-sizing:border-box;background:#120E0A;border:1px solid #362D24;border-radius:7px;padding:8px;color:#F1EDE4;font-size:12px;font-family:ui-monospace,monospace}
+  button{width:100%;margin-top:14px;background:#D97335;color:#1B1109;border:0;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.6;cursor:wait}
+  .status{margin-top:12px;font-size:12px;white-space:pre-wrap;color:#C9BFB1}
+  .ok{color:#7FB093}.err{color:#DC5B54}
+  .note{margin-top:14px;font-size:11px;color:#8C8274;border-top:1px solid #362D24;padding-top:10px}
+</style>
+
+<h1>Autopilot Executor</h1>
+<p class="sub">Aplikuje jen owner-schválené dávky. Nikdy nedostane PAT — jen jednorázový lease.</p>
+
+<label>Control plane URL</label>
+<input id="base" value="https://autopilot.local" />
+<label>Service bearer token</label>
+<input id="token" placeholder="z cockpitu (issue-service-token)" />
+<label>File key</label>
+<input id="fileKey" placeholder="(vyplní se z Figmy)" />
+<label>Lease (z approve v cockpitu)</label>
+<input id="lease" placeholder="jednorázový lease" />
+
+<button id="run">Claim &amp; Apply</button>
+<div class="status" id="status"></div>
+<p class="note">Tok: cockpit approve → lease → sem → claim → apply (s version checkpointem) → report result. Lease je jednorázový a vázaný na file key.</p>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (msg, cls) => { const s = $("status"); s.textContent = msg; s.className = "status " + (cls || ""); };
+  let pending = null; // { base, token, id }
+
+  onmessage = async (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+    if (msg.type === "fileKey" && msg.fileKey) { $("fileKey").value = msg.fileKey; }
+    if (msg.type === "applied") {
+      if (!pending) return;
+      const node_ids = (msg.results || []).filter((r) => r.nodeId).map((r) => r.nodeId);
+      try {
+        const res = await fetch(pending.base + "/figma/mutations/" + pending.id + "/result", {
+          method: "POST", headers: { "content-type": "application/json", "authorization": "Bearer " + pending.token },
+          body: JSON.stringify(msg.error ? { error: msg.error } : { node_ids, digest: "batch-" + pending.id })
+        });
+        const body = await res.json();
+        setStatus((msg.error ? "Apply chyba: " + msg.error + "\n" : "") + "Report: " + body.status + " (" + node_ids.length + " nodes)", msg.error ? "err" : "ok");
+      } catch (e) { setStatus("Report selhal: " + e.message, "err"); }
+      pending = null; $("run").disabled = false;
+    }
+  };
+
+  $("run").onclick = async () => {
+    const base = $("base").value.trim().replace(/\/$/, "");
+    const token = $("token").value.trim();
+    const fileKey = $("fileKey").value.trim();
+    const lease = $("lease").value.trim();
+    if (!base || !token || !fileKey || !lease) { setStatus("Vyplň URL, token, file key a lease.", "err"); return; }
+    $("run").disabled = true; setStatus("Claiming…");
+    try {
+      const res = await fetch(base + "/figma/mutations/claim", {
+        method: "POST", headers: { "content-type": "application/json", "authorization": "Bearer " + token },
+        body: JSON.stringify({ fileKey, lease })
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); setStatus("Claim odmítnut (" + res.status + "): " + (b.error || ""), "err"); $("run").disabled = false; return; }
+      const batch = await res.json();
+      pending = { base, token, id: batch.id };
+      setStatus("Aplikuji " + (batch.ops || []).length + " ops…");
+      parent.postMessage({ pluginMessage: { type: "apply", ops: batch.ops, batchId: batch.id } }, "*");
+    } catch (e) { setStatus("Claim selhal: " + e.message, "err"); $("run").disabled = false; }
+  };
+</script>
