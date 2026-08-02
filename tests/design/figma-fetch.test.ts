@@ -40,6 +40,21 @@ describe("figma-fetch", () => {
     expect(JSON.stringify(nodes)).not.toContain("absoluteBoundingBox");
   });
 
+  it("captures structural frames without auto-layout, plus their text", () => {
+    const raw = {
+      id: "1:1", name: "Hero", type: "FRAME", // no layoutMode
+      children: [
+        { id: "1:2", name: "bg", type: "RECTANGLE" },
+        { id: "1:3", name: "heading", type: "TEXT", characters: "Welcome" },
+        { id: "1:4", name: "Card", type: "COMPONENT", children: [{ id: "1:5", name: "deco", type: "VECTOR" }] },
+      ],
+    };
+    const nodes = flattenFigmaNode(raw);
+    expect(nodes.map((n) => n.id)).toEqual(["1:1", "1:3", "1:4"]); // frame, text, component — rectangle & vector dropped
+    expect(nodes[0]).toEqual({ id: "1:1", role: "Hero" }); // structural, no layout key
+    expect(nodes[1]).toEqual({ id: "1:3", role: "heading", text: "Welcome" });
+  });
+
   it("scaffolds a schema-valid Design Brief from fetched nodes", () => {
     const source = { provider: "figma", fileKey: "ABC123", nodeId: "42:7" };
     const nodes = flattenFigmaNode({ id: "42:7", name: "X", type: "FRAME", layoutMode: "VERTICAL", itemSpacing: 4, children: [] });

@@ -64,14 +64,17 @@ function layoutOf(node: Record<string, unknown>): BriefNode["layout"] | undefine
   return layout;
 }
 
+const STRUCTURAL_TYPES = new Set(["FRAME", "GROUP", "COMPONENT", "INSTANCE", "COMPONENT_SET", "SECTION"]);
+
 /** Recursively flatten a raw Figma node tree into the Design Brief node subset. */
 export function flattenFigmaNode(raw: Record<string, unknown>, out: BriefNode[] = []): BriefNode[] {
   if (out.length >= MAX_NODES) return out;
   const type = raw.type;
   const layout = layoutOf(raw);
   const isText = type === "TEXT" && typeof raw.characters === "string";
-  const isContainer = layout !== undefined;
-  if (isText || isContainer) {
+  // Keep structural containers (even without auto-layout) and text; skip decorative vectors/shapes.
+  const isStructural = typeof type === "string" && STRUCTURAL_TYPES.has(type);
+  if (isText || isStructural) {
     out.push({
       id: String(raw.id),
       ...(typeof raw.name === "string" ? { role: raw.name } : {}),
