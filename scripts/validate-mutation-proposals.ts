@@ -2,22 +2,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ALLOWED_OPS, validateProposalGovernance } from "../src/data/delivery-system/figmaMutation";
 import { validateJsonSchema } from "../src/lib/delivery-system/validation";
 
-/** The closed, typed op allowlist. There is no arbitrary-code op — governance depends on this. */
-export const ALLOWED_OPS = ["createFrame", "applyTokens", "setText", "addComment", "createVariant", "verificationFrame", "placeImage"] as const;
-export type FigmaOp = (typeof ALLOWED_OPS)[number];
-
-const OP_REQUIRED_ARGS: Partial<Record<FigmaOp, readonly string[]>> = {
-  createFrame: ["name"],
-  applyTokens: ["tokens"],
-  setText: ["text"],
-  addComment: ["text"],
-  createVariant: ["component"],
-  verificationFrame: ["label"],
-  placeImage: ["assetRef"],
-};
-const OPS_NEEDING_TARGET: ReadonlySet<FigmaOp> = new Set(["applyTokens", "setText"]);
+export { ALLOWED_OPS };
 
 export interface MutationValidationIssue { readonly file: string; readonly message: string }
 export interface MutationValidationReport { readonly ok: boolean; readonly checkedFiles: readonly string[]; readonly errors: readonly MutationValidationIssue[] }
@@ -46,32 +34,16 @@ export function validateMutationProposals(): MutationValidationReport {
   for (const file of collect(dir)) {
     const rel = relative(repoRoot, file);
     checkedFiles.push(rel);
-    let record: { ops?: Array<{ op?: string; target?: unknown; args?: Record<string, unknown> }>; rollbackPlan?: { versionCheckpoint?: unknown } };
+    let record: unknown;
     try {
       record = JSON.parse(readFileSync(file, "utf8"));
     } catch (error) {
       errors.push({ file: rel, message: `invalid JSON: ${error instanceof Error ? error.message : String(error)}` });
       continue;
     }
+    // File-shape validation against the JSON schema, then shared runtime governance guard.
     for (const issue of validateJsonSchema(record, schema)) errors.push({ file: rel, message: `${issue.path}: ${issue.message}` });
-
-    // Governance: closed op allowlist + per-op required args + mandatory version checkpoint.
-    for (const [index, op] of (record.ops ?? []).entries()) {
-      const name = op.op as FigmaOp | undefined;
-      if (!name || !(ALLOWED_OPS as readonly string[]).includes(name)) {
-        errors.push({ file: rel, message: `ops[${index}]: op "${String(name)}" is outside the allowlist` });
-        continue;
-      }
-      for (const required of OP_REQUIRED_ARGS[name] ?? []) {
-        if (op.args?.[required] === undefined) errors.push({ file: rel, message: `ops[${index}] (${name}): missing args.${required}` });
-      }
-      if (OPS_NEEDING_TARGET.has(name) && typeof op.target !== "string") {
-        errors.push({ file: rel, message: `ops[${index}] (${name}): requires a target node id` });
-      }
-    }
-    if (record.rollbackPlan?.versionCheckpoint !== true) {
-      errors.push({ file: rel, message: "rollbackPlan.versionCheckpoint must be true (a Figma version checkpoint is always required before a write)" });
-    }
+    for (const issue of validateProposalGovernance(record)) errors.push({ file: rel, message: issue });
   }
   return { ok: errors.length === 0, checkedFiles, errors };
 }
