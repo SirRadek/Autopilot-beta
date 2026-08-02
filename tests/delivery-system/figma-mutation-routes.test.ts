@@ -65,6 +65,10 @@ describe("figma mutation routes", () => {
 
     const result = await call(dir, "POST", `/figma/mutations/${id}/result`, { node_ids: ["1:1"], digest: "d" });
     expect(result.json.status).toBe("executed");
+
+    const verify = await call(dir, "POST", `/figma/mutations/${id}/verify`, { ok: true });
+    expect(verify.status).toBe(200);
+    expect(verify.json.status).toBe("verified");
   });
 
   it("rejects a submit with an op outside the allowlist (400)", async () => {

@@ -76,6 +76,13 @@ export async function handleFigmaMutationRoute(request: IncomingMessage, respons
     return true;
   }
 
+  if (method === "POST" && id && parts[4] === "verify") {
+    const body = await readJson(request);
+    try { json(response, store.verify(id, { ok: body.ok === true, ...(typeof body.diff === "string" ? { diff: body.diff } : {}) })); }
+    catch (error) { json(response, { error: messageOf(error) }, 409); }
+    return true;
+  }
+
   if (method === "POST" && id && parts.length === 4) {
     const body = await readJson(request);
     const decision = body.decision === "approved" || body.decision === "rejected" ? body.decision : null;

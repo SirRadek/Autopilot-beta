@@ -14,9 +14,9 @@ export const FIGMA_MUTATIONS_FILE = "figma-mutations.json";
 const LEASE_TTL_MS = 10 * 60 * 1000;
 const MAX_BYTES = 4 * 1024 * 1024;
 
-export type MutationStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
+export type MutationStatus = "pending" | "approved" | "rejected" | "executed" | "failed" | "verified" | "drift";
 export interface MutationLease { readonly digest: string; readonly expires_at: string; readonly used: boolean }
-export interface MutationResult { readonly node_ids?: readonly string[]; readonly digest?: string; readonly error?: string }
+export interface MutationResult { readonly node_ids?: readonly string[]; readonly digest?: string; readonly error?: string; readonly diff?: string }
 export interface MutationRecord {
   readonly id: string;
   readonly proposal: MutationProposal;
@@ -123,6 +123,22 @@ export class FigmaMutationStore {
       const current = index >= 0 ? records[index] : undefined;
       if (!current || current.status !== "approved") throw new Error("mutation_not_claimable");
       const updated: MutationRecord = { ...current, status: result.error ? "failed" : "executed", updated_at: iso(now), result };
+      records[index] = updated;
+      return { records, result: updated };
+    });
+  }
+
+  /**
+   * Anti-drift: an executed mutation is only "done" once an INDEPENDENT re-fetch of the
+   * frame (figma-fetch → regenerated brief) confirms the diff is empty. The plugin's
+   * success narration is not proof; this verdict is. ok=false → drift.
+   */
+  verify(id: string, verdict: { readonly ok: boolean; readonly diff?: string }, now = Date.now()): MutationRecord {
+    return this.mutate((records) => {
+      const index = records.findIndex((candidate) => candidate.id === id);
+      const current = index >= 0 ? records[index] : undefined;
+      if (!current || current.status !== "executed") throw new Error("mutation_not_executed");
+      const updated: MutationRecord = { ...current, status: verdict.ok ? "verified" : "drift", updated_at: iso(now), result: { ...current.result, ...(verdict.diff === undefined ? {} : { diff: verdict.diff }) } };
       records[index] = updated;
       return { records, result: updated };
     });
