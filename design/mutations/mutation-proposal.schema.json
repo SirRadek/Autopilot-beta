@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schema/figma-mutation-1.json",
+  "title": "Autopilot Figma Mutation Proposal",
+  "description": "A proposed Figma write. Workers may ONLY produce proposals; the plugin executor applies an approved proposal behind the control-plane approval queue. Ops are a closed, typed allowlist — there is no arbitrary-code op. See docs/decisions/figma-write-plugin-executor-adr.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "source", "briefHash", "expectedVersion", "ops", "rollbackPlan"],
+  "properties": {
+    "schemaVersion": { "const": "autopilot.figma-mutation/1" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "fileKey"],
+      "properties": {
+        "provider": { "const": "figma" },
+        "fileKey": { "type": "string", "minLength": 1 }
+      }
+    },
+    "briefHash": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "sha256 of the Design Brief this mutation derives from." },
+    "expectedVersion": { "type": "string", "minLength": 1, "description": "Figma document version the proposal was built against; the executor aborts on a mismatch." },
+    "ops": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Typed operations from the closed allowlist. No arbitrary-code op exists.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op"],
+        "properties": {
+          "op": { "enum": ["createFrame", "applyTokens", "setText", "addComment", "createVariant", "verificationFrame", "placeImage"] },
+          "target": { "type": "string", "description": "Node id the op acts on (for ops that modify an existing node)." },
+          "args": { "type": "object", "description": "Op-specific parameters. Token layers reference token names, never raw values." }
+        }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "type": "string" },
+        "imageRef": { "type": "string" }
+      }
+    },
+    "rollbackPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["versionCheckpoint"],
+      "properties": {
+        "versionCheckpoint": { "const": true, "description": "The executor must save a named Figma version-history checkpoint before applying — always required." },
+        "archivePage": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}
