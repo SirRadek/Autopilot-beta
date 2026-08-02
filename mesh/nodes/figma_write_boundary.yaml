@@ -1,0 +1,40 @@
+id: figma_write_boundary
+type: risk_detector
+name: Figma write executor
+question: "Does this change let AI write to Figma, or touch the Figma mutation executor / approval bridge?"
+why: "Writing to Figma is a new mutating connector; it must stay behind the control-plane approval queue with typed ops only, one-time-token auth (no PAT to the plugin), Figma version-history rollback, and post-write re-fetch verification. See docs/decisions/figma-write-plugin-executor-adr.md (ACCEPTED 2026-08-02)."
+signals:
+  - figma write
+  - figma plugin
+  - figma mutation
+  - mutation proposal
+  - plugin executor
+  - approval batch
+  - figma bridge
+related_agents:
+  - architect
+  - security
+  - backend
+  - qa
+related_files:
+  - docs/decisions/figma-write-plugin-executor-adr.md
+  - scripts/figma-fetch.ts
+  - design/briefs
+required_checks:
+  - owner_approval_before_figma_write
+  - only_typed_ops_from_allowlist
+  - one_time_lease_bound_to_proposal_hash
+  - version_history_checkpoint_before_write
+  - post_write_refetch_verification
+  - no_pat_or_session_token_to_plugin_or_worker
+stop_conditions:
+  - worker_writes_to_figma_directly
+  - op_outside_allowlist
+  - missing_owner_approval
+  - missing_version_checkpoint
+  - missing_post_write_refetch
+must_not_assume:
+  - Do not treat the plugin's success narration as proof; the post-write re-fetch is the proof.
+objective:
+  - Keep Figma writes behind the control-plane approval queue with typed, reversible, verified ops.
+  - Workers may only produce proposals; they never execute Figma mutations.

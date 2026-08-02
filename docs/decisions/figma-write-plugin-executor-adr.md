@@ -1,8 +1,9 @@
 # ADR: Figma write — plugin executor behind the approval queue (Stage 2)
 
-**Date:** 2026-08-02 · **Status:** PROPOSED (owner decision pending). This is the "Stage 2
-(write-to-canvas)" ADR that `figma-mcp-readonly-adr.md` explicitly deferred. Nothing here is
-authorized until the owner accepts it and the governing mesh node is added.
+**Date:** 2026-08-02 · **Status:** ACCEPTED (owner decision 2026-08-02: "potvrzuji"). This is the
+"Stage 2 (write-to-canvas)" ADR that `figma-mcp-readonly-adr.md` explicitly deferred. Implementation
+is authorized only after the governing mesh node (`figma_write_boundary`) is added; the phased MVP
+plan follows.
 **Author:** Claude (synthesis of a fable-5 / codex-gpt-5.6 / agy-gemini-3.6 brainstorm, 2026-08-02).
 
 ## Context
