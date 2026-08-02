@@ -118,7 +118,11 @@ async function fetchNode(ref: FigmaRef, token: string): Promise<Record<string, u
   const response = await fetch(url, { headers: { "X-Figma-Token": token } });
   if (!response.ok) {
     if (existsSync(cacheFile)) { console.error(`figma fetch ${response.status}; using cache`); return JSON.parse(readFileSync(cacheFile, "utf8")) as Record<string, unknown>; }
-    throw new Error(`Figma API ${response.status} ${response.statusText}`);
+    const hint = response.status === 404
+      ? " — file not found for this token. Community/template files must be duplicated into YOUR drafts first; also check the fileKey (l vs 1)."
+      : response.status === 403 ? " — token lacks access to this file."
+      : response.status === 401 ? " — invalid or expired FIGMA_TOKEN." : "";
+    throw new Error(`Figma API ${response.status} ${response.statusText}${hint}`);
   }
   const body = (await response.json()) as Record<string, unknown>;
   writeFileSync(cacheFile, JSON.stringify(body));
