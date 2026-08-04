@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { join } from "node:path";
 import { appendStateFile } from "../src/data/delivery-system/stateMaintenanceLock";
 import { sanitizeWorkerOutput } from "../src/data/delivery-system/workerOutputPolicy";
+import { handleFigmaMutationRoute } from "../src/data/delivery-system/figmaMutationRoutes";
 import {
   recordOperationalIncident,
   type OperationalIncidentStage
@@ -190,6 +191,7 @@ export function createControlPlaneServer(stateDir: string, options: ControlPlane
     }
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
     else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
+    else if (request.url?.startsWith("/figma/mutations") && await handleFigmaMutationRoute(request, response, stateDir)) return;
     else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else if (await handleControlPlaneBrainstormRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else returnJson(response, { error: "not_found" }, 404);

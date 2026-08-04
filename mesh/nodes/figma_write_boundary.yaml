@@ -24,6 +24,8 @@ related_files:
   - scripts/validate-mutation-proposals.ts
   - src/data/delivery-system/figmaMutation.ts
   - src/data/delivery-system/figmaMutationStore.ts
+  - src/data/delivery-system/figmaMutationRoutes.ts
+  - figma-plugin
 required_checks:
   - owner_approval_before_figma_write
   - only_typed_ops_from_allowlist

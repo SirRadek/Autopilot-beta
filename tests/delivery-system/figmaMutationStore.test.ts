@@ -70,6 +70,19 @@ describe("FigmaMutationStore", () => {
     expect(done.status).toBe("executed");
   });
 
+  it("verifies an executed mutation (verified) or records drift", () => {
+    const approve = (): string => { const { id } = store.submit(proposal()); const { lease } = store.approve(id, "owner"); store.claim("FILEKEY", lease); store.recordResult(id, { node_ids: ["1:1"] }); return id; };
+    expect(store.verify(approve(), { ok: true }).status).toBe("verified");
+    const drift = store.verify(approve(), { ok: false, diff: "1 node changed" });
+    expect(drift.status).toBe("drift");
+    expect(drift.result?.diff).toBe("1 node changed");
+  });
+
+  it("refuses to verify a mutation that is not executed", () => {
+    const { id } = store.submit(proposal());
+    expect(() => store.verify(id, { ok: true })).toThrow(/mutation_not_executed/);
+  });
+
   it("supports owner rejection of a pending proposal", () => {
     const { id } = store.submit(proposal());
     const rejected = store.reject(id, "owner", "not now");
