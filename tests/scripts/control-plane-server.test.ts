@@ -1216,6 +1216,54 @@ describe("control plane provider endpoints", () => {
     expect(await response.json()).toEqual([]);
   });
 
+  it("marks a worker start older than the lock TTL as stale when no stop exists", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
+    writeFileSync(join(stateDir, "agent-registry.jsonl"), `${JSON.stringify({ event: "subagent_start", agent_id: "stale-worker", agent_type: "codex", started_at: new Date(Date.now() - 31 * 60 * 1000).toISOString() })}\n`);
+    const server = createControlPlaneServer(stateDir);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
+    const workers = await response.json() as Array<{ status: string; error_reason: string | null; finished_at: string | null }>;
+
+    expect(workers[0]).toMatchObject({ status: "error", error_reason: "worker_stale_no_stop_event", finished_at: null });
+  });
+
+  it("keeps a recent worker start running when no stop exists", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
+    writeFileSync(join(stateDir, "agent-registry.jsonl"), `${JSON.stringify({ event: "subagent_start", agent_id: "recent-worker", agent_type: "codex", started_at: new Date(Date.now() - 5_000).toISOString() })}\n`);
+    const server = createControlPlaneServer(stateDir);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
+    const workers = await response.json() as Array<{ status: string; error_reason: string | null }>;
+
+    expect(workers[0]).toMatchObject({ status: "running", error_reason: null });
+  });
+
+  it("fails closed for an unparseable worker start with no stop", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
+    writeFileSync(join(stateDir, "agent-registry.jsonl"), `${JSON.stringify({ event: "subagent_start", agent_id: "invalid-start-worker", agent_type: "codex", started_at: "not-a-date" })}\n`);
+    const server = createControlPlaneServer(stateDir);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/workers`, { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } });
+    const workers = await response.json() as Array<{ status: string; error_reason: string | null }>;
+
+    expect(workers[0]).toMatchObject({ status: "error", error_reason: "worker_stale_no_stop_event" });
+  });
+
   it("reads status telemetry from a bounded tail", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     provisionServiceToken(stateDir);

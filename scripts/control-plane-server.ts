@@ -28,6 +28,7 @@ import { buildReadiness, type ReadinessReport } from "../src/data/delivery-syste
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
 import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
+import { WORKER_LOCK_TTL_MINUTES } from "../src/data/delivery-system/cliWorker";
 import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
 import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
 import { STATIC_PROVIDER_MODEL_CATALOG } from "../src/data/delivery-system/providerModelCatalog";
@@ -436,6 +437,11 @@ async function mutateSessionHttp(request: IncomingMessage, response: ServerRespo
   }
 }
 
+function isStartStale(startedAt: string, now = Date.now()): boolean {
+  const startedMs = Date.parse(startedAt);
+  return !Number.isFinite(startedMs) || now - startedMs > WORKER_LOCK_TTL_MINUTES * 60 * 1000;
+}
+
 function workerViews(directory: string): readonly Record<string, unknown>[] {
   const readJsonl = (name: string, maxBytes = 256 * 1024, maxLines = 2_000): Record<string, unknown>[] => {
     const path = join(directory, name);
@@ -466,10 +472,11 @@ function workerViews(directory: string): readonly Record<string, unknown>[] {
   return [...starts.entries()].slice(-100).map(([id, start]) => {
     const stop = stops.get(id);
     const call = telemetry.get(id);
+    const stale = stop === undefined && isStartStale(String(start.started_at ?? ""));
     const safeId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(id) ? id : null;
     const outputPath = safeId === null ? null : join(directory, `${safeId}-output.txt`);
     const output = outputPath !== null && existsSync(outputPath) ? readBoundedText(outputPath) : "";
-    return { worker_run_id: id, vendor: String(start.agent_type ?? "unknown").replace(/-external$/, ""), model: typeof call?.model === "string" ? call.model : null, session_id: typeof call?.session_id === "string" ? call.session_id : "unknown", status: stop ? (Number(stop.exit_code) === 0 ? "completed" : "error") : "running", started_at: String(start.started_at ?? new Date().toISOString()), finished_at: stop?.stopped_at ?? null, output, error_reason: typeof call?.error_reason === "string" ? call.error_reason : stop && Number(stop.exit_code) !== 0 ? "worker_failed" : null };
+    return { worker_run_id: id, vendor: String(start.agent_type ?? "unknown").replace(/-external$/, ""), model: typeof call?.model === "string" ? call.model : null, session_id: typeof call?.session_id === "string" ? call.session_id : "unknown", status: stop ? (Number(stop.exit_code) === 0 ? "completed" : "error") : stale ? "error" : "running", started_at: String(start.started_at ?? new Date().toISOString()), finished_at: stop?.stopped_at ?? null, output, error_reason: typeof call?.error_reason === "string" ? call.error_reason : stop && Number(stop.exit_code) !== 0 ? "worker_failed" : stale ? "worker_stale_no_stop_event" : null };
   });
 }
 

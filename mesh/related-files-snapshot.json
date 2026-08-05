@@ -99,7 +99,7 @@
   "prompt-library/": "tree:e47503dee3c2836a69e7686f19f1564a4ddc30ec6de258877e7f564bb2429315",
   "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
-  "src/data/delivery-system/cliWorker.ts": "39fde92e9536f0bce7da45ed307fbc95dd9eee26",
+  "src/data/delivery-system/cliWorker.ts": "e6c2c09218a5d11f3249839b56f15de59bc7b719",
   "src/data/delivery-system/cliWorkerCapture.ts": "3863e0e7677632f19611f64dfc9a809769fff855",
   "src/data/delivery-system/efficiencyTelemetry.ts": "ddfb6484bd7fc5abb413dc292ec975d627cbe5f7",
   "src/data/delivery-system/managedStateFile.ts": "0fb776d1aabd72130de5e4e989697ddce09efad9",

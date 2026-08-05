@@ -292,6 +292,8 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
 
 // ─── Worker lock ─────────────────────────────────────────────────────────────
 
+export const WORKER_LOCK_TTL_MINUTES = 30;
+
 export interface WorkerLockRecord {
   readonly schema_version: "v1";
   readonly worker_run_id: string;
@@ -473,7 +475,7 @@ export async function runCliWorker(
     pid: null,
     started_at: startedAt,
     lock_source: lockSource,
-    ttl_minutes: 30
+    ttl_minutes: WORKER_LOCK_TTL_MINUTES
   };
 
   const lockStatus = acquireWorkerLock(lockRecord, stateDir);
