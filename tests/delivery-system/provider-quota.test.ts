@@ -47,4 +47,22 @@ describe("provider quota domain", () => {
     expect(normalizeProviderError({ status: 503, body: "private response" })).toBe("provider_unavailable");
     expect(normalizeProviderError("unexpected secret payload")).toBe("provider_error");
   });
+
+  it("normalizes executable lookup failures to provider_executable_missing", () => {
+    expect(normalizeProviderError(Object.assign(new Error("spawn codex failed"), { code: "ENOENT" })))
+      .toBe("provider_executable_missing");
+    expect(normalizeProviderError(new Error("codex: command not found")))
+      .toBe("provider_executable_missing");
+    expect(normalizeProviderError(new Error("executable_missing: provider_unavailable")))
+      .toBe("provider_executable_missing");
+  });
+
+  it("normalizes runtime permission failures to provider_runtime_denied", () => {
+    expect(normalizeProviderError(Object.assign(new Error("spawn codex failed"), { code: "EACCES" })))
+      .toBe("provider_runtime_denied");
+    expect(normalizeProviderError(new Error("codex: permission denied")))
+      .toBe("provider_runtime_denied");
+    expect(normalizeProviderError(new Error("runtime_denied: operation unsupported")))
+      .toBe("provider_runtime_denied");
+  });
 });

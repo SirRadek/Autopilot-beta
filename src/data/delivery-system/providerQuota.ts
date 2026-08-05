@@ -7,6 +7,8 @@ export type ProviderErrorCode =
   | "timeout"
   | "missing_credential"
   | "malformed_response"
+  | "provider_executable_missing"
+  | "provider_runtime_denied"
   | "provider_unavailable"
   | "provider_error";
 
@@ -85,7 +87,16 @@ export function freshnessForSnapshot(snapshot: ProviderSnapshot, now: string): P
 
 /** Maps provider failures to a small allowlisted code; raw responses are never returned. */
 export function normalizeProviderError(error: unknown): ProviderErrorCode {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  const message = (error instanceof Error ? error.message : typeof error === "string" ? error : "").toLowerCase();
+  const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code.toLowerCase()
+    : "";
+  if (code === "enoent" || message.includes("enoent") || message.includes("command not found") || message.includes("executable_missing")) {
+    return "provider_executable_missing";
+  }
+  if (code === "eacces" || message.includes("eacces") || message.includes("permission denied") || message.includes("runtime_denied")) {
+    return "provider_runtime_denied";
+  }
   if (message.includes("provider_unavailable") || message.includes("unsupported")) {
     return "provider_unavailable";
   }

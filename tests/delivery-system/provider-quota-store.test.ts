@@ -157,6 +157,25 @@ describe("provider quota store", () => {
     expect(document.snapshots[0]).not.toHaveProperty("api_key");
   });
 
+  it.each([
+    "provider_executable_missing",
+    "provider_runtime_denied"
+  ] as const)("round-trips the allowlisted %s error code", (errorCode) => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-store-error-code-"));
+    const document: ProviderQuotaStoreDocument = {
+      schema_version: "v1",
+      snapshots: [{
+        ...minimumSnapshot(),
+        health: "unavailable",
+        error_code: errorCode
+      }]
+    };
+
+    writeProviderQuotaStore(stateDir, document);
+
+    expect(readProviderQuotaStore(stateDir)).toEqual(document);
+  });
+
   it("bounds event fields and never persists raw response text", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "quota-store-"));
     const event: ProviderQuotaEvent = {

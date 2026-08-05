@@ -1338,12 +1338,12 @@ describe("control plane provider endpoints", () => {
         }]
       }),
       expect.objectContaining({
-        model_id: "Sonnet 5",
+        model_id: "claude-opus-4-8",
         providers: ["claude_cli"],
         source: "static_fallback"
       }),
       expect.objectContaining({
-        model_id: "Gemini Flash",
+        model_id: "gemini-3.5-flash-medium",
         providers: ["agy_cli"],
         source: "static_fallback"
       })
