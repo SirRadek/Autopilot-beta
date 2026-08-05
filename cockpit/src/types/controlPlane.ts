@@ -86,3 +86,21 @@ export interface FigmaMutationRecord {
   readonly lease?: string;
   readonly reason?: string;
 }
+
+export type ReadinessStatus = "ready" | "degraded" | "unavailable";
+export interface ReadinessComponent { readonly status: ReadinessStatus; readonly error_code: string | null }
+export type ReadinessProviderId = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
+export interface ReadinessReport {
+  readonly ready: boolean;
+  readonly status: ReadinessStatus;
+  readonly checked_at: string;
+  readonly components: {
+    readonly configuration: ReadinessComponent;
+    readonly authentication: ReadinessComponent;
+    readonly managed_state: ReadinessComponent;
+    readonly project_registry: ReadinessComponent;
+    readonly supervisor: ReadinessComponent;
+    readonly token_gateway: ReadinessComponent;
+    readonly providers: Readonly<Record<ReadinessProviderId, ReadinessComponent>>;
+  };
+}
