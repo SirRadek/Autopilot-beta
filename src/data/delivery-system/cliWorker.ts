@@ -29,7 +29,12 @@ import {
   type VendorProcessRecord,
   writePromptFile
 } from "./cliWorkerCapture";
-import { CLI_CALL_TELEMETRY_PATH, SESSION_LOCK_PATH, VENDOR_PROCESS_REGISTRY_PATH } from "./sessionState";
+import {
+  CLI_CALL_TELEMETRY_PATH,
+  SESSION_LOCK_PATH,
+  VENDOR_PROCESS_REGISTRY_PATH,
+  WORKER_LOCK_TTL_MINUTES
+} from "./sessionState";
 import { appendStateFile, removeStateFile, withStateMaintenanceLock, writeStateFileAtomically } from "./stateMaintenanceLock";
 import { parseSanitizedWorkerJson, sanitizeWorkerError, sanitizeWorkerOutput } from "./workerOutputPolicy";
 import { recordOperationalIncident } from "./operationalIncidents";
@@ -312,8 +317,6 @@ export function buildCliCallTelemetryRecord(input: BuildCliCallTelemetryRecordIn
 }
 
 // ─── Worker lock ─────────────────────────────────────────────────────────────
-
-export const WORKER_LOCK_TTL_MINUTES = 30;
 
 export interface WorkerLockRecord {
   readonly schema_version: "v1";
