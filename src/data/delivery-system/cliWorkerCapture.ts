@@ -15,6 +15,7 @@ import { platform } from "node:process";
 import { contextWidthSpecs } from "./tokenEfficiency";
 import { appendStateFile } from "./stateMaintenanceLock";
 import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "./executionProfile";
+import { resolveProviderCliRuntime } from "./providerCliRuntime";
 
 // ─── Adapter argv safety ──────────────────────────────────────────────────────
 
@@ -339,25 +340,16 @@ export interface CodexDispatchConfig {
 export const DEFAULT_CLI_WORKER_MAX_PROMPT_CHARS =
   contextWidthSpecs.large.maxContextLines * contextWidthSpecs.large.maxFilesInPacket;
 
-export function resolveAgyPath(): string {
-  try {
-    const command = platform === "win32" ? "where agy" : "command -v agy";
-    return execSync(command, { encoding: "utf8" }).trim().split(/\r?\n/)[0]?.trim() ?? "agy";
-  } catch {
-    return "agy";
-  }
+function requireProviderExecutable(provider: "codex_cli" | "claude_cli" | "agy_cli"): string {
+  const runtime = resolveProviderCliRuntime(provider);
+  if (runtime.status === "unavailable") throw new Error(runtime.error_code);
+  return runtime.executable;
 }
 
-function resolveCodexCommand(): { codexPath: string; bashPath: string | null } {
-  let codexPath = "codex";
+function resolveCodexCommand(codexPath: string): { codexPath: string; bashPath: string | null } {
   let bashPath: string | null = null;
 
   if (platform === "win32") {
-    try {
-      const found = execSync("where codex.cmd", { encoding: "utf8" }).trim().split("\n")[0]?.trim();
-      if (found) codexPath = found.replace(/\\/g, "/");
-    } catch { /* fall through */ }
-
     // Prefer Git Bash for reliable stdin piping on Windows
     const candidates = [
       "C:/Program Files/Git/bin/bash.exe",
@@ -372,7 +364,10 @@ function resolveCodexCommand(): { codexPath: string; bashPath: string | null } {
     }
   }
 
-  return { codexPath, bashPath };
+  return {
+    codexPath: platform === "win32" ? codexPath.replace(/\\/g, "/") : codexPath,
+    bashPath
+  };
 }
 
 /**
@@ -868,13 +863,12 @@ export async function captureAgyResponse(
   opts: AgyCaptureOptions = {}
 ): Promise<AgyCaptureResult> {
   assertPromptWithinLimit(prompt, opts);
+  const args = buildAgyArgs(prompt, opts);
+  const agyPath = requireProviderExecutable("agy_cli");
 
   // Dynamic import so TS compile doesn't fail in environments without node-pty
   const ptyModule = await import("node-pty");
   const pty = ptyModule.default ?? ptyModule;
-
-  const agyPath = resolveAgyPath();
-  const args = buildAgyArgs(prompt, opts);
 
   const startedAt = Date.now();
   let collected = "";
@@ -1012,8 +1006,9 @@ export async function captureClaudeResponse(
     ...(opts.model !== undefined ? { model: opts.model } : {}),
     ...(opts.effort !== undefined ? { effort: opts.effort } : {})
   });
+  const claudePath = requireProviderExecutable("claude_cli");
   const startedAt = Date.now();
-  const result = spawnSync("claude", args, {
+  const result = spawnSync(claudePath, args, {
     encoding: "utf8",
     cwd: opts.cwd ?? process.cwd(),
     timeout: opts.timeoutMs ?? 120000,
@@ -1074,7 +1069,7 @@ export async function captureCodexResponse(
   const outputDir = join(tmpdir(), "autopilot-codex-captures");
   mkdirSync(outputDir, { recursive: true });
 
-  const { codexPath, bashPath } = resolveCodexCommand();
+  const { codexPath, bashPath } = resolveCodexCommand(requireProviderExecutable("codex_cli"));
 
   // Write prompt to a temp file — avoids shell quoting issues with JSON prompts.
   const promptFile = join(outputDir, `prompt-${Date.now()}.txt`);
@@ -1111,7 +1106,7 @@ export async function captureCodexResponse(
         });
       } else {
         // POSIX: direct spawnSync with stdin input (dispatch sandbox + never-approve forced)
-        result = spawnSync("codex", buildCodexExecArgs(opts, outputFile), {
+        result = spawnSync(codexPath, buildCodexExecArgs(opts, outputFile), {
           input: prompt,
           encoding: "utf8",
           cwd: opts.cwd ?? process.cwd(),

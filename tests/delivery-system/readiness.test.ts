@@ -33,9 +33,9 @@ import { writeProviderQuotaStore } from "../../src/data/delivery-system/provider
 const NOW = "2026-07-13T12:00:00.000Z";
 const PROVIDERS = ["codex_cli", "claude_cli", "agy_cli", "openrouter_api"] as const;
 const PROVIDER_COMMANDS = {
-  codex_cli: { kind: "tmux_usage" },
-  claude_cli: { kind: "tmux_usage" },
-  agy_cli: { kind: "tmux_usage" }
+  codex_cli: { kind: "tmux_usage", executable: "codex" },
+  claude_cli: { kind: "tmux_usage", executable: "claude" },
+  agy_cli: { kind: "tmux_usage", executable: "agy" }
 } as const;
 
 function snapshot(provider: typeof PROVIDERS[number]): ProviderSnapshot {
@@ -138,6 +138,23 @@ describe("buildReadiness", () => {
       claude_cli: { status: "unavailable", error_code: "probe_not_configured" },
       agy_cli: { status: "unavailable", error_code: "probe_not_configured" },
       openrouter_api: { status: "ready", error_code: null }
+    });
+  });
+
+  it("reports an enabled but missing provider executable before consulting a healthy snapshot", () => {
+    const options = fixture();
+    const report = buildReadiness({
+      ...options,
+      providerCommands: {
+        ...PROVIDER_COMMANDS,
+        codex_cli: { kind: "unavailable", error_code: "provider_executable_missing" }
+      }
+    });
+
+    expect(report).toMatchObject({ ready: true, status: "degraded" });
+    expect(report.components.providers.codex_cli).toEqual({
+      status: "unavailable",
+      error_code: "provider_executable_missing"
     });
   });
 

@@ -17,6 +17,7 @@ import { cancelSession, createSessionRecord, readSessionRegistry, resumeSession,
 import { freshnessForSnapshot, type ProviderSnapshot } from "../src/data/delivery-system/providerQuota";
 import { readProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
 import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderCommandRunner } from "../src/data/delivery-system/providerQuotaAdapters";
+import { resolveProviderCliRuntime } from "../src/data/delivery-system/providerCliRuntime";
 import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
@@ -84,11 +85,20 @@ export function providerUsageCommandsFromEnvironment(
   environment: Readonly<Record<string, string | undefined>>
 ): Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>> {
   const enabled = new Set((environment.CONTROL_PLANE_USAGE_PROBES ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
-  return {
-    ...(enabled.has("codex") ? { codex_cli: { kind: "tmux_usage" as const } } : {}),
-    ...(enabled.has("claude") ? { claude_cli: { kind: "tmux_usage" as const } } : {}),
-    ...(enabled.has("agy") ? { agy_cli: { kind: "tmux_usage" as const } } : {})
-  };
+  const configured: Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>> = {};
+  const providers = [
+    ["codex", "codex_cli"],
+    ["claude", "claude_cli"],
+    ["agy", "agy_cli"]
+  ] as const;
+  for (const [flag, provider] of providers) {
+    if (!enabled.has(flag)) continue;
+    const runtime = resolveProviderCliRuntime(provider, environment);
+    configured[provider] = runtime.status === "available"
+      ? { kind: "tmux_usage", executable: runtime.executable }
+      : { kind: "unavailable", error_code: runtime.error_code };
+  }
+  return configured;
 }
 
 export function secureCookiesFromEnvironment(
