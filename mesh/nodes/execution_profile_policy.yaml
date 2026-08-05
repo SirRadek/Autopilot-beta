@@ -21,6 +21,7 @@ related_files:
   - src/data/delivery-system/runOrchestrator.ts
   - src/data/delivery-system/runRouteEligibility.ts
   - src/data/delivery-system/providerModelCatalog.ts
+  - src/data/delivery-system/providerModelId.ts
   - scripts/verify-scope.ts
   - scripts/control-plane-runs.ts
 required_checks:

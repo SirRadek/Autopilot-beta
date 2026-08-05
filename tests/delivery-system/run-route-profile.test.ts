@@ -79,6 +79,9 @@ describe("profile-aware run route eligibility", () => {
   it.each([
     ["dev", { provider: "codex_cli", model: "unknown-model" }],
     ["prod", { provider: "codex_cli", model: "unknown-model" }],
+    ["dev", { provider: "codex_cli", model: "GPT-5.3-Codex-Spark" }],
+    ["dev", { provider: "claude_cli", model: "Opus 4.8" }],
+    ["dev", { provider: "agy_cli", model: "Gemini Flash" }],
     ["dev", { provider: "unknown_cli", model: "gpt-5.6-sol" }],
     ["prod", { provider: "unknown_cli", model: "gpt-5.6-sol" }],
     ["dev", { provider: "__proto__", model: "gpt-5.6-sol" }],

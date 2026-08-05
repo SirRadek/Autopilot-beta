@@ -55,6 +55,8 @@ export type { CodexDispatchMode, OpenRouterMode };
 export type CliWorkerFailureSignal =
   | "timeout"
   | "auth_error"
+  | "provider_executable_missing"
+  | "provider_runtime_denied"
   | "empty_output"
   | "invalid_json"
   | "non_zero_exit";
@@ -192,10 +194,23 @@ const TIMEOUT_PATTERNS: readonly RegExp[] = [
   /\b(?:timed out|timeout|etimedout)\b/i
 ];
 
+const PROVIDER_EXECUTABLE_MISSING_PATTERNS: readonly RegExp[] = [
+  /\benoent\b/i,
+  /\bcommand not found\b/i,
+  /\b(?:provider_)?executable_missing\b/i
+];
+
+const PROVIDER_RUNTIME_DENIED_PATTERNS: readonly RegExp[] = [
+  /\beacces\b/i,
+  /\bpermission denied\b/i,
+  /\b(?:provider_)?runtime_denied\b/i
+];
+
 export function classifyCliWorkerOutcome(input: CliWorkerOutcomeInput): CliWorkerOutcomeClassification {
   const failureSignals: CliWorkerFailureSignal[] = [];
   const rawOutput = input.rawOutput ?? "";
-  const diagnosticText = `${input.errorText ?? ""}\n${rawOutput}`;
+  const captureErrorText = input.errorText ?? "";
+  const diagnosticText = `${captureErrorText}\n${rawOutput}`;
 
   if (input.timedOut === true || matchesAny(diagnosticText, TIMEOUT_PATTERNS)) {
     failureSignals.push("timeout");
@@ -203,6 +218,12 @@ export function classifyCliWorkerOutcome(input: CliWorkerOutcomeInput): CliWorke
 
   if (matchesAny(diagnosticText, AUTH_ERROR_PATTERNS)) {
     failureSignals.push("auth_error");
+  }
+
+  if (matchesAny(captureErrorText, PROVIDER_EXECUTABLE_MISSING_PATTERNS)) {
+    failureSignals.push("provider_executable_missing");
+  } else if (matchesAny(captureErrorText, PROVIDER_RUNTIME_DENIED_PATTERNS)) {
+    failureSignals.push("provider_runtime_denied");
   }
 
   if (rawOutput.trim() === "") {
@@ -1049,6 +1070,10 @@ function errorReasonForOutcome(outcome: CliWorkerFailureSignal, input: CliWorker
       return "timeout: worker capture timed out";
     case "auth_error":
       return "auth_error: worker output indicates authentication failure";
+    case "provider_executable_missing":
+      return "provider_executable_missing";
+    case "provider_runtime_denied":
+      return "provider_runtime_denied";
     case "empty_output":
       return "empty_output: worker produced no output";
     case "invalid_json":
@@ -1068,6 +1093,9 @@ function signalToAlertTrigger(signal: CliWorkerFailureSignal): AlertTrigger {
       return "timeout";
     case "auth_error":
       return "auth_error";
+    case "provider_executable_missing":
+    case "provider_runtime_denied":
+      return "provider_unavailable";
     case "empty_output":
       return "empty_output";
     case "invalid_json":

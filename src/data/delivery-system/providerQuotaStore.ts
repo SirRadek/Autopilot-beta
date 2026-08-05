@@ -28,7 +28,7 @@ const MAX_CHANGED_FIELDS = 32;
 const MAX_PROVIDER_QUOTA_STORE_BYTES = 2 * 1024 * 1024;
 const SOURCES: readonly ProviderQuotaSource[] = ["cli", "api", "manual-fallback"];
 const HEALTH: readonly ProviderHealth[] = ["healthy", "degraded", "unavailable"];
-const ERRORS: readonly (ProviderErrorCode | null)[] = ["timeout", "missing_credential", "malformed_response", "provider_unavailable", "provider_error", null];
+const ERRORS: readonly (ProviderErrorCode | null)[] = ["timeout", "missing_credential", "malformed_response", "provider_executable_missing", "provider_runtime_denied", "provider_unavailable", "provider_error", null];
 
 export function readProviderQuotaStore(stateDir: string): ProviderQuotaStoreDocument {
   const path = join(stateDir, PROVIDER_QUOTA_SNAPSHOTS_FILE);

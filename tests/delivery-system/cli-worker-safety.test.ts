@@ -92,6 +92,45 @@ describe("CLI worker safety classification", () => {
     expect(result.failure_signals).toEqual(["timeout", "empty_output", "non_zero_exit"]);
   });
 
+  it.each([
+    ["spawn codex ENOENT", "provider_executable_missing"],
+    ["Error: provider_executable_missing", "provider_executable_missing"],
+    ["spawn claude EACCES", "provider_runtime_denied"],
+    ["Error: provider_runtime_denied", "provider_runtime_denied"]
+  ] as const)("prioritizes %s as the bounded %s failure", (errorText, expected) => {
+    const result = classifyCliWorkerOutcome({
+      exitCode: 1,
+      rawOutput: "",
+      parsedJson: null,
+      structuredOutputRequested: false,
+      errorText
+    });
+
+    expect(result).toEqual({
+      outcome: expected,
+      errorReason: expected,
+      failure_signals: [expected, "empty_output", "non_zero_exit"]
+    });
+    expect(alertTriggersForCliWorkerOutcome(result)).toEqual([
+      "provider_unavailable",
+      "empty_output",
+      "non_zero_exit"
+    ]);
+  });
+
+  it("does not infer a spawn failure from worker output alone", () => {
+    expect(classifyCliWorkerOutcome({
+      exitCode: 0,
+      rawOutput: "ENOENT and EACCES are operating-system error codes.",
+      parsedJson: null,
+      structuredOutputRequested: false
+    })).toEqual({
+      outcome: "success",
+      errorReason: null,
+      failure_signals: []
+    });
+  });
+
   it("sets errorReason for empty output", () => {
     const result = classifyCliWorkerOutcome({
       exitCode: 0,
