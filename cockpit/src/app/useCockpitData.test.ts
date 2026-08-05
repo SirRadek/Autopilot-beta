@@ -2,9 +2,30 @@ import { describe, expect, it, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { ControlPlaneClient } from "../api/controlPlaneClient";
+import type { ReadinessReport } from "../types/controlPlane";
 import { loadCockpitData, resolveCockpitDataRequest } from "./useCockpitData";
 import { useCockpitData } from "./useCockpitData";
 import { useRunTimeline } from "./useCockpitData";
+
+const readinessReport: ReadinessReport = {
+  ready: true,
+  status: "ready",
+  checked_at: "2026-08-05T10:00:00Z",
+  components: {
+    configuration: { status: "ready", error_code: null },
+    authentication: { status: "ready", error_code: null },
+    managed_state: { status: "ready", error_code: null },
+    project_registry: { status: "ready", error_code: null },
+    supervisor: { status: "ready", error_code: null },
+    token_gateway: { status: "ready", error_code: null },
+    providers: {
+      codex_cli: { status: "ready", error_code: null },
+      claude_cli: { status: "ready", error_code: null },
+      agy_cli: { status: "ready", error_code: null },
+      openrouter_api: { status: "ready", error_code: null },
+    },
+  },
+};
 
 const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient => ({
   getAuthSession: vi.fn().mockResolvedValue({ authenticated: true }), login: vi.fn(), logout: vi.fn(),
@@ -16,7 +37,7 @@ const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient
   listBrainstorms: vi.fn().mockResolvedValue([]), getBrainstorm: vi.fn(), createBrainstorm: vi.fn(), approveBrainstorm: vi.fn(), arbitrateBrainstorm: vi.fn(), cancelBrainstorm: vi.fn(),
   getObservabilitySummary: vi.fn().mockResolvedValue({ events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }), getObservabilityTimeline: vi.fn().mockResolvedValue({ summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 0, max_lines_per_file: 0, max_events: 100, truncated: false } }),
   createSession: vi.fn(), mutateSession: vi.fn(),
-  getProviderQuotas: vi.fn().mockResolvedValue({ providers: [] }), getProviderModels: vi.fn().mockResolvedValue({ freshness: "fresh", fetched_at: null, next_poll_at: null, models: [] }), getProviderHealth: vi.fn().mockResolvedValue({ providers: [] }),
+  getProviderQuotas: vi.fn().mockResolvedValue({ providers: [] }), getProviderModels: vi.fn().mockResolvedValue({ freshness: "fresh", fetched_at: null, next_poll_at: null, models: [] }), getProviderHealth: vi.fn().mockResolvedValue({ providers: [] }), getReadiness: vi.fn().mockResolvedValue(null),
   decideApproval: vi.fn(), ...overrides,
 });
 
@@ -26,6 +47,30 @@ describe("useCockpitData loader", () => {
   it("preserves the last safe pane snapshot on failure", async () => { const previous = { sessions: [{ session_id: "s1" } as never], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }; const result = await loadCockpitData(client({ getSessions: vi.fn().mockRejectedValue(new Error("offline")) }), previous); expect(result.data.sessions).toBe(previous.sessions); expect(result.errors.sessions?.message).toBe("offline"); });
   it("loads runs and promotions for the selected environment", async () => { const source = client(); await loadCockpitData(source, { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], promotions: [], incidents: [] }, "prod"); expect(source.listRuns).toHaveBeenCalledWith("prod"); expect(source.listPromotions).toHaveBeenCalledOnce(); });
   it("refreshes a recovered pane without discarding other data", async () => { const result = await loadCockpitData(client({ getSessions: vi.fn().mockResolvedValue([{ session_id: "s2" }]) }), { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] }); expect(result.data.sessions[0]?.session_id).toBe("s2"); });
+  it("propagates readiness into the returned data", async () => {
+    const result = await loadCockpitData(client({ getReadiness: vi.fn().mockResolvedValue(readinessReport) }), { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] });
+
+    expect(result.data.readiness).toEqual(readinessReport);
+  });
+  it("ignores a rejected readiness request while preserving other provider data", async () => {
+    const quota = { provider: "codex_cli", source: "cli", fetched_at: "2026-08-05T10:00:00Z", observed_at: "2026-08-05T10:00:00Z", five_hour: { limit: 1, used: 0, remaining: 1, resets_at: null }, weekly: { limit: 2, used: 0, remaining: 2, resets_at: null }, api_spend: null, currency: null, models: [], health: "ok", error_code: null, freshness: "fresh" as const, next_poll_at: null };
+    const models = { freshness: "fresh", fetched_at: "2026-08-05T10:00:00Z", next_poll_at: null, models: [] };
+    const health = { providers: [{ provider: "codex_cli", health: "healthy", freshness: "fresh", fetched_at: "2026-08-05T10:00:00Z", next_poll_at: null, error_code: null }] };
+    const source = client({
+      getProviderQuotas: vi.fn().mockResolvedValue({ providers: [quota] }),
+      getProviderModels: vi.fn().mockResolvedValue(models),
+      getProviderHealth: vi.fn().mockResolvedValue(health),
+      getReadiness: vi.fn().mockRejectedValue(new Error("readiness offline")),
+    });
+
+    const result = await loadCockpitData(source, { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], incidents: [] });
+
+    expect(result.data.quotas).toEqual([quota]);
+    expect(result.data.models).toBe(models);
+    expect(result.data.health).toBe(health);
+    expect(result.data.readiness).toBeUndefined();
+    expect(result.errors).toEqual({});
+  });
 });
 
 describe("useCockpitData hook", () => {

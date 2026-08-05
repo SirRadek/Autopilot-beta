@@ -1,6 +1,7 @@
-import React, { useId } from "react";
+import React, { useId, useState } from "react";
 import type { RunRecord, RunStatus } from "../../types/controlPlane";
 import { StatusBadge, type StatusBadgeStatus } from "../../components/StatusBadge";
+import { CANCELLABLE_STATUSES } from "../command/CommandCenter";
 import { DesignPane, extractFigmaUrl } from "./DesignPane";
 
 const MAX_TITLE_CHARS = 80;
@@ -10,6 +11,7 @@ export type RunDetailViewProps = {
   readonly run?: RunRecord;
   readonly runInspector: React.ReactNode;
   readonly promotionPane: React.ReactNode;
+  readonly onCancelRun?: (run: RunRecord) => Promise<void>;
 };
 
 function runTitle(run: RunRecord): string {
@@ -18,8 +20,24 @@ function runTitle(run: RunRecord): string {
   return firstLine.length > MAX_TITLE_CHARS ? `${firstLine.slice(0, MAX_TITLE_CHARS)}…` : firstLine;
 }
 
-export function RunDetailView({ run, runInspector, promotionPane }: RunDetailViewProps) {
+export function RunDetailView({ run, runInspector, promotionPane, onCancelRun }: RunDetailViewProps) {
   const idPrefix = useId(); const id = (suffix: string) => `${idPrefix}-${suffix}`;
+  const [confirmCancelId, setConfirmCancelId] = useState<string | undefined>();
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<{ readonly runId: string; readonly message: string } | undefined>();
+  const cancelRun = async (selectedRun: RunRecord) => {
+    if (onCancelRun === undefined || !CANCELLABLE_STATUSES.includes(selectedRun.status)) return;
+    setCancelBusy(true);
+    setCancelError(undefined);
+    try {
+      await onCancelRun(selectedRun);
+      setConfirmCancelId(undefined);
+    } catch (caught) {
+      setCancelError({ runId: selectedRun.current.run_id, message: caught instanceof Error ? caught.message : String(caught) });
+    } finally {
+      setCancelBusy(false);
+    }
+  };
   return <div className="run-detail">
     {run ? <>
       <header className="cockpit-card run-status-header" aria-label="Stav běhu">
@@ -32,9 +50,18 @@ export function RunDetailView({ run, runInspector, promotionPane }: RunDetailVie
           <div className="run-status-actions">
             <span className="planned-badge">Planned</span>
             <button type="button" disabled title="Planned">Pauza</button>
-            <button type="button" disabled title="Planned">Zastavit</button>
+            {onCancelRun !== undefined && CANCELLABLE_STATUSES.includes(run.status) && confirmCancelId === run.current.run_id ? <div role="group" aria-label="Potvrzení zastavení běhu">
+              <span>Opravdu zastavit tento běh?</span>
+              <button type="button" disabled={cancelBusy} onClick={() => void cancelRun(run)}>Potvrdit zastavení</button>
+              <button type="button" disabled={cancelBusy} onClick={() => setConfirmCancelId(undefined)}>Ponechat</button>
+            </div> : <button
+              type="button"
+              disabled={onCancelRun === undefined || !CANCELLABLE_STATUSES.includes(run.status)}
+              onClick={() => { setCancelError(undefined); setConfirmCancelId(run.current.run_id); }}
+            >Zastavit</button>}
           </div>
         </div>
+        {cancelError?.runId === run.current.run_id ? <p role="alert">Zastavení selhalo: {cancelError.message}</p> : null}
         <ul className="run-status-facts" aria-label="Fakta běhu">
           <li className="run-fact">stav {run.status}</li>
           <li className="run-fact">{run.current.provider} · {run.current.model ?? "auto"}</li>

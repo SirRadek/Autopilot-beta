@@ -25,4 +25,41 @@ describe("IncidentPane", () => {
     const copied = writeText.mock.calls[0]?.[0] as string; expect(JSON.parse(copied)).toEqual(largePacket); expect(copied.endsWith("}")).toBe(true); expect(host.querySelector("pre")?.textContent?.length).toBeLessThan(copied.length);
     act(() => root.unmount()); host.remove();
   });
+
+  it("renders incidents newest first", () => {
+    const older = { ...incident, incident_id: "incident-older", recorded_at: "2026-07-13T09:00:00Z", summary: "Starší incident" };
+    const newer = { ...incident, incident_id: "incident-newer", recorded_at: "2026-07-13T11:00:00Z", summary: "Novější incident" };
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<IncidentPane incidents={[older, newer]} onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+    expect([...host.querySelectorAll("li strong")].map((summary) => summary.textContent)).toEqual(["Novější incident", "Starší incident"]);
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("keeps the 64 newest incidents and reports truncation", () => {
+    const incidents = Array.from({ length: 65 }, (_, index): AutopilotIncident => ({
+      ...incident,
+      incident_id: `incident-${index}`,
+      recorded_at: new Date(Date.UTC(2026, 6, 13, 10, 0, index)).toISOString(),
+      summary: index === 0 ? "Nejstarší skrytý incident" : `Incident ${index}`,
+    }));
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<IncidentPane incidents={incidents} onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+    expect(host.textContent).not.toContain("Nejstarší skrytý incident");
+    expect(host.textContent).toContain("Zobrazeno 64 nejnovějších z 65 incidentů.");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("renders recorded timestamps in the deterministic UTC format", () => {
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<IncidentPane incidents={[incident]} onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+    expect(host.querySelector('time[datetime="2026-07-13T10:00:00Z"]')?.textContent).toBe("2026-07-13 10:00:00 UTC");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("renders the stale status badge", () => {
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<IncidentPane incidents={[incident]} stale onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+    expect(host.querySelector('[data-status="stale"]')?.textContent).toBe("Stale");
+    act(() => root.unmount()); host.remove();
+  });
 });
