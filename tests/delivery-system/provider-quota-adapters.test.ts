@@ -165,6 +165,43 @@ describe("provider quota adapters", () => {
     expect(snapshot.error_code).toBe("missing_credential");
   });
 
+  it.each(["provider_executable_missing", "provider_runtime_denied"] as const)("preserves the fixed built-in probe error %s", async (errorCode) => {
+    const snapshot = await createProviderQuotaAdapters({
+      runCommand: runnerFor(""),
+      commands: usageCommands,
+      runUsageProbe: async () => ({ stdout: "", stderr: errorCode, exitCode: 1 })
+    }).agy_cli.fetchSnapshot({ now, signal });
+
+    expect(snapshot.health).toBe("unavailable");
+    expect(snapshot.error_code).toBe(errorCode);
+    expect(JSON.stringify(snapshot)).not.toContain("/provider-bin/agy");
+  });
+
+  it("forwards caller abort to a built-in probe without leaking its stderr", async () => {
+    const caller = new AbortController();
+    let forwardedSignal: AbortSignal | undefined;
+    const snapshotPromise = createProviderQuotaAdapters({
+      runCommand: runnerFor(""),
+      commands: usageCommands,
+      timeoutMs: 1_000,
+      runUsageProbe: async (_provider, _executable, probeSignal) => {
+        forwardedSignal = probeSignal;
+        await new Promise<void>((resolve) => {
+          if (probeSignal.aborted) resolve();
+          else probeSignal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return { stdout: "", stderr: "raw provider stderr", exitCode: 1 };
+      }
+    }).codex_cli.fetchSnapshot({ now, signal: caller.signal });
+
+    caller.abort();
+    const snapshot = await snapshotPromise;
+
+    expect(forwardedSignal?.aborted).toBe(true);
+    expect(snapshot.error_code).toBe("timeout");
+    expect(JSON.stringify(snapshot)).not.toContain("raw provider stderr");
+  });
+
   it("preserves an unavailable executable capability without invoking a provider", async () => {
     const runCommand = vi.fn(runnerFor(payload));
     const runUsageProbe = vi.fn(async () => ({ stdout: payload, stderr: "", exitCode: 0 }));
