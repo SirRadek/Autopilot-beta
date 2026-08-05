@@ -157,6 +157,33 @@ describe("provider quota store", () => {
     expect(document.snapshots[0]).not.toHaveProperty("api_key");
   });
 
+  it("filters legacy display-label models when a snapshot round-trips through the store", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-store-model-id-"));
+    const path = join(stateDir, "provider-quota-snapshots.json");
+    const legacyDocument: ProviderQuotaStoreDocument = {
+      schema_version: "v1",
+      snapshots: [{
+        ...minimumSnapshot(),
+        provider: "claude_cli",
+        models: [
+          { model_id: "Opus 4.8", available: true, health: "healthy", source: "cli" },
+          { model_id: "claude-opus-4-8", available: true, health: "healthy", source: "cli" }
+        ]
+      }]
+    };
+    writeFileSync(path, serialized(legacyDocument), "utf8");
+
+    const sanitized = readProviderQuotaStore(stateDir);
+    expect(sanitized.snapshots[0]?.models).toEqual([
+      { model_id: "claude-opus-4-8", available: true, health: "healthy", source: "cli" }
+    ]);
+
+    writeProviderQuotaStore(stateDir, sanitized);
+
+    expect(readProviderQuotaStore(stateDir)).toEqual(sanitized);
+    expect(readFileSync(path, "utf8")).not.toContain("Opus 4.8");
+  });
+
   it.each([
     "provider_executable_missing",
     "provider_runtime_denied"

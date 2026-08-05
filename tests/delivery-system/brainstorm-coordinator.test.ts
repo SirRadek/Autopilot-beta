@@ -8,6 +8,7 @@ import { estimateBrainstormTokenEnvelope } from "../../src/data/delivery-system/
 import { createBrainstormCoordinator } from "../../src/data/delivery-system/brainstormCoordinator";
 import { createBrainstorm, readBrainstormStore } from "../../src/data/delivery-system/brainstormStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
+import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 import { readRunStore, transitionRun } from "../../src/data/delivery-system/runStore";
 import { createRunOrchestrator } from "../../src/data/delivery-system/runOrchestrator";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
@@ -16,12 +17,28 @@ import { TokenGateway } from "../../src/data/delivery-system/tokenGateway";
 const now = "2026-07-22T13:00:00.000Z";
 const brief = "Find the strongest implementation direction without changing the requested route.";
 const routes = [
-  { provider: "codex_cli" as const, model: "gpt-5.5", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
+  { provider: "codex_cli" as const, model: "gpt-5.6-sol", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
   { provider: "claude_cli" as const, model: "claude-opus-4-8", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
   { provider: "agy_cli" as const, model: "gemini-3.1-pro-high", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
 ] as const;
 const synthesizer = { provider: "claude_cli" as const, model: "claude-opus-4-8", reasoning_effort: "high" as const, estimated_tokens: 20_000 };
-const arbitration = { provider: "codex_cli" as const, model: "gpt-5.5", reasoning_effort: "xhigh" as const, estimated_tokens: 16_000 };
+const arbitration = { provider: "codex_cli" as const, model: "gpt-5.6-sol", reasoning_effort: "xhigh" as const, estimated_tokens: 16_000 };
+
+function providerSnapshots(fetchedAt: string) {
+  return routes.map((route) => ({
+    provider: route.provider,
+    source: "api" as const,
+    fetched_at: fetchedAt,
+    observed_at: fetchedAt,
+    five_hour: { limit: 100, used: 20, remaining: 80, resets_at: null },
+    weekly: { limit: 1_000, used: 100, remaining: 900, resets_at: null },
+    api_spend: 1.25,
+    currency: "USD",
+    models: [{ model_id: route.model, available: true, health: "healthy" as const, source: "api" as const }],
+    health: "healthy" as const,
+    error_code: null,
+  }));
+}
 
 function setup(outputs: string[] = []) {
   const root = mkdtempSync(join(tmpdir(), "brainstorm-coordinator-"));
@@ -42,7 +59,13 @@ function setup(outputs: string[] = []) {
       stateDir, projectRoot: projects, tokenGateway: new TokenGateway({ stateDir }), supervisor,
       dispatch: dispatch as never, now: () => now, isRouteAvailable: () => true,
     });
-    return { runOrchestrator, supervisor, coordinator: createBrainstormCoordinator({ stateDir, runOrchestrator, now: () => now, randomBytes: () => Buffer.alloc(16, 0xab) }) };
+    const isRouteEligible = vi.fn(() => true);
+    return {
+      runOrchestrator,
+      supervisor,
+      isRouteEligible,
+      coordinator: createBrainstormCoordinator({ stateDir, runOrchestrator, now: () => now, randomBytes: () => Buffer.alloc(16, 0xab), isRouteEligible }),
+    };
   };
   return { root, stateDir, brainstorm, dispatch, make };
 }
@@ -54,8 +77,10 @@ async function finishQueuedRuns(context: ReturnType<typeof setup>, count: number
 describe("governed brainstorm coordinator", () => {
   it("atomically approves one immutable three-provider fan-out and repairs retries after restart", () => {
     const context = setup();
-    const first = context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
-    const repeated = context.make().coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+    const firstRuntime = context.make();
+    const first = firstRuntime.coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+    const retryRuntime = context.make();
+    const repeated = retryRuntime.coordinator.approve(context.brainstorm.brainstorm_id, "owner");
     const runs = readRunStore(context.stateDir).runs;
 
     expect(first.status).toBe("fanout_running");
@@ -66,6 +91,9 @@ describe("governed brainstorm coordinator", () => {
     expect(runs.every((run) => run.current.profile === "dev")).toBe(true);
     expect(runs.map((run) => run.current.requested_reasoning_effort)).toEqual(routes.map((route) => route.reasoning_effort));
     expect(new TokenGateway({ stateDir: context.stateDir }).snapshot().used["session:brainstorm-parent"]).toBeUndefined();
+    const expectedRoutes = [...routes, synthesizer, arbitration].map((route) => [context.stateDir, route.provider, route.model, now]);
+    expect(firstRuntime.isRouteEligible.mock.calls).toEqual(expectedRoutes);
+    expect(retryRuntime.isRouteEligible.mock.calls).toEqual(expectedRoutes);
   });
 
   it("repairs the reserve/CAS and ensure/bind crash windows without duplicate spend or runs", () => {
@@ -80,7 +108,7 @@ describe("governed brainstorm coordinator", () => {
         return result;
       },
     };
-    const reserveCoordinator = createBrainstormCoordinator({ stateDir: reserveCrash.stateDir, runOrchestrator: reserveCrashOrchestrator, now: () => now });
+    const reserveCoordinator = createBrainstormCoordinator({ stateDir: reserveCrash.stateDir, runOrchestrator: reserveCrashOrchestrator, now: () => now, isRouteEligible: () => true });
     expect(() => reserveCoordinator.approve(reserveCrash.brainstorm.brainstorm_id, "owner")).toThrow("crash:after-reserve");
     expect(readBrainstormStore(reserveCrash.stateDir).brainstorms[0]).toMatchObject({ status: "approved", approval_state: "pending" });
     expect(reserveCrash.make().coordinator.approve(reserveCrash.brainstorm.brainstorm_id, "owner").child_run_ids).toHaveLength(3);
@@ -97,7 +125,7 @@ describe("governed brainstorm coordinator", () => {
         return result;
       },
     };
-    const ensureCoordinator = createBrainstormCoordinator({ stateDir: ensureCrash.stateDir, runOrchestrator: ensureCrashOrchestrator, now: () => now });
+    const ensureCoordinator = createBrainstormCoordinator({ stateDir: ensureCrash.stateDir, runOrchestrator: ensureCrashOrchestrator, now: () => now, isRouteEligible: () => true });
     expect(() => ensureCoordinator.approve(ensureCrash.brainstorm.brainstorm_id, "owner")).toThrow("crash:after-ensure");
     expect(readRunStore(ensureCrash.stateDir).runs).toHaveLength(1);
     expect(ensureCrash.make().coordinator.approve(ensureCrash.brainstorm.brainstorm_id, "owner").child_run_ids).toHaveLength(3);
@@ -283,6 +311,41 @@ describe("governed brainstorm coordinator", () => {
     await expect(context.make().coordinator.tick(context.brainstorm.brainstorm_id)).rejects.toThrow("brainstorm_child_run_mismatch");
   });
 
+  it("fails the brainstorm and releases every slot when strict route eligibility is lost after reservation mid-loop", () => {
+    const context = setup();
+    writeProviderQuotaStore(context.stateDir, { schema_version: "v1", snapshots: providerSnapshots(now) });
+    const strictOrchestrator = createRunOrchestrator({
+      stateDir: context.stateDir,
+      projectRoot: join(context.root, "projects"),
+      tokenGateway: new TokenGateway({ stateDir: context.stateDir }),
+      supervisor: new SupervisorQueue({ stateDir: context.stateDir }),
+      dispatch: context.dispatch as never,
+      now: () => now,
+    });
+    const strictModes: boolean[] = [];
+    const expiringOrchestrator = {
+      ...strictOrchestrator,
+      ensureGroupRun: (input: Parameters<typeof strictOrchestrator.ensureGroupRun>[0]) => {
+        strictModes.push(input.strictRouteEligibility === true);
+        if (input.slotId === "fanout-1") {
+          const expiredAt = new Date(Date.parse(now) - 10 * 60 * 1000).toISOString();
+          writeProviderQuotaStore(context.stateDir, { schema_version: "v1", snapshots: providerSnapshots(expiredAt) });
+        }
+        return strictOrchestrator.ensureGroupRun(input);
+      },
+    };
+    const coordinator = createBrainstormCoordinator({ stateDir: context.stateDir, runOrchestrator: expiringOrchestrator, now: () => now });
+
+    const result = coordinator.approve(context.brainstorm.brainstorm_id, "owner");
+
+    expect(result.status).toBe("failed");
+    expect(strictModes).toEqual([true, true]);
+    expect(readRunStore(context.stateDir).runs).toHaveLength(1);
+    expect(readRunStore(context.stateDir).runs.every((run) => run.status === "cancelled")).toBe(true);
+    const group = new TokenGateway({ stateDir: context.stateDir }).findGroup(result.orchestration_group_id!);
+    expect(group?.slots.every((slot) => slot.state === "released")).toBe(true);
+  });
+
   it.each(["run_token_budget_underestimated", "token_group_slot_mismatch"])(
     "fails closed with idempotent cleanup when fan-out ensure throws %s, but a generic crash still propagates for retry",
     async (code) => {
@@ -295,7 +358,7 @@ describe("governed brainstorm coordinator", () => {
           return runtime.runOrchestrator.ensureGroupRun(input);
         },
       };
-      const coordinator = createBrainstormCoordinator({ stateDir: context.stateDir, runOrchestrator: failingOrchestrator, now: () => now });
+      const coordinator = createBrainstormCoordinator({ stateDir: context.stateDir, runOrchestrator: failingOrchestrator, now: () => now, isRouteEligible: () => true });
       const result = coordinator.approve(context.brainstorm.brainstorm_id, "owner");
       expect(result.status).toBe("failed");
       expect(readRunStore(context.stateDir).runs.every((run) => run.status === "cancelled")).toBe(true);
@@ -311,7 +374,7 @@ describe("governed brainstorm coordinator", () => {
           return crashRuntime.runOrchestrator.ensureGroupRun(input);
         },
       };
-      const crashCoordinator = createBrainstormCoordinator({ stateDir: crashContext.stateDir, runOrchestrator: crashingOrchestrator, now: () => now });
+      const crashCoordinator = createBrainstormCoordinator({ stateDir: crashContext.stateDir, runOrchestrator: crashingOrchestrator, now: () => now, isRouteEligible: () => true });
       expect(() => crashCoordinator.approve(crashContext.brainstorm.brainstorm_id, "owner")).toThrow("crash:generic-dispatch-failure");
       expect(readBrainstormStore(crashContext.stateDir).brainstorms[0]?.status).toBe("approved");
     },

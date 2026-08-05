@@ -36,6 +36,27 @@ describe("provider quota adapters", () => {
     expect(snapshot.error_code).toBeNull();
   });
 
+  it("drops non-canonical CLI model rows without rejecting the snapshot", async () => {
+    const mixedPayload = JSON.stringify({
+      five_hour: { limit: 100, used: 25, remaining: 75 },
+      weekly: { limit: 1000, used: 200, remaining: 800 },
+      models: [
+        { model_id: "gpt-5.6-sol", available: true },
+        { model_id: "Opus 4.8", available: true },
+        { model_id: "-provider-option", available: true }
+      ]
+    });
+
+    const snapshot = await createProviderQuotaAdapters({ runCommand: runnerFor(mixedPayload), commands })
+      .codex_cli.fetchSnapshot({ now, signal });
+
+    expect(snapshot.models).toEqual([
+      { model_id: "gpt-5.6-sol", available: true, health: "healthy", source: "cli" }
+    ]);
+    expect(snapshot.health).toBe("healthy");
+    expect(snapshot.error_code).toBeNull();
+  });
+
   it("normalizes OpenRouter model health through injected fetch", async () => {
     let calls = 0;
     const adapter = createProviderQuotaAdapters({

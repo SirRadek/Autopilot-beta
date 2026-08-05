@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { createApprovalRecord, decideApproval, readApprovalQueue, writeApprovalQueue } from "./approvalQueue";
-import { isRunRouteEligibleForProfile } from "./runRouteEligibility";
+import { isRunRouteEligible, isRunRouteEligibleForProfile } from "./runRouteEligibility";
 import { isProjectConfigurationError, resolveEnabledProject } from "./projectRegistry";
 import { resolveConfiguredProjectRoot } from "./runtimePaths";
 import { appendRunArtifact, approveRunRevision, bindRunToSupervisor, canonicalPromptCommitment, clearRunDispatchFailure, clearRunProviderResultForRetry, clearRunSupervisorBinding, createGroupRunDraft, createRunDraft, finalizeRun, markRunReservationTerminal, readRunStore, recordRunDispatchFailure, recordRunProviderResult, requestRunCancellation, requestRunQueueCompensation, resolveLegacyRequestedReasoning, resolveRunProfile, settleRunReservation, transitionRun, type RunDraftInput, type RunRecord, type RunReservation } from "./runStore";
@@ -72,10 +72,14 @@ export function createRunOrchestrator(options: {
     return value;
   }
 
-  function routeAvailable(input: Pick<RunDraftInput, "provider" | "model" | "profile" | "requested_reasoning_effort">): boolean {
+  function routeAvailable(
+    input: Pick<RunDraftInput, "provider" | "model" | "profile" | "requested_reasoning_effort">,
+    strictRouteEligibility = false
+  ): boolean {
     const profile = input.profile ?? "dev";
     const reasoning = input.requested_reasoning_effort ?? null;
     if (options.isRouteAvailable !== undefined) return options.isRouteAvailable(input.provider, input.model, profile, reasoning);
+    if (strictRouteEligibility) return isRunRouteEligible(options.stateDir, input.provider, input.model, now());
     return isRunRouteEligibleForProfile(options.stateDir, input.provider, input.model, reasoning, profile, now());
   }
 
@@ -104,9 +108,15 @@ export function createRunOrchestrator(options: {
     return options.tokenGateway.releaseGroupSlots(groupId, slotIds);
   }
 
-  function ensureGroupRun(input: { readonly groupId: string; readonly slotId: string; readonly draft: RunDraftInput; readonly operator: string }): QueuedRun {
+  function ensureGroupRun(input: {
+    readonly groupId: string;
+    readonly slotId: string;
+    readonly draft: RunDraftInput;
+    readonly operator: string;
+    readonly strictRouteEligibility?: boolean;
+  }): QueuedRun {
     resolveEnabledProject(options.stateDir, input.draft.project_id, registryOptions);
-    if (!routeAvailable(input.draft)) throw new Error("run_route_unavailable");
+    if (!routeAvailable(input.draft, input.strictRouteEligibility === true)) throw new Error("run_route_unavailable");
     if (options.tokenGateway.findGroup === undefined || options.tokenGateway.claimGroupSlot === undefined) throw new Error("token_group_unsupported");
     const group = options.tokenGateway.findGroup(input.groupId);
     const slot = group?.slots.find((candidate) => candidate.slotId === input.slotId);
