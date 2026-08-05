@@ -18,7 +18,11 @@ import { freshnessForSnapshot, type ProviderModelDiscovery, type ProviderSnapsho
 import { readProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
 import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderCommandRunner } from "../src/data/delivery-system/providerQuotaAdapters";
 import { resolveProviderCliRuntime } from "../src/data/delivery-system/providerCliRuntime";
-import { createProviderQuotaScheduler } from "../src/data/delivery-system/providerQuotaScheduler";
+import {
+  createProviderQuotaScheduler,
+  type ProviderProbeLeaseResult,
+  type ProviderProbeLeaseState
+} from "../src/data/delivery-system/providerQuotaScheduler";
 import { buildObservability, type ObservabilityOptions } from "../src/data/delivery-system/observability";
 import { handleControlPlaneRunRoute } from "./control-plane-runs";
 import { handleControlPlaneBrainstormRoute } from "./control-plane-brainstorms";
@@ -131,6 +135,12 @@ export interface ControlPlaneServerOptions {
   readonly projectRoot?: string;
   readonly readiness?: () => ReadinessReport;
   readonly auth?: ControlPlaneAuthConfig;
+  readonly probeLeases?: ControlPlaneProbeLeases;
+}
+
+export interface ControlPlaneProbeLeases {
+  request(providers: readonly string[]): ProviderProbeLeaseResult;
+  state(provider: string): ProviderProbeLeaseState;
 }
 
 export interface ControlPlaneAuthConfig {
@@ -195,13 +205,14 @@ export function createControlPlaneServer(stateDir: string, options: ControlPlane
     else if (request.method === "GET" && request.url?.startsWith("/observability/timeline")) returnJson(response, observabilityTimeline(stateDir, request.url));
     else if (request.method === "GET" && request.url === "/approvals") returnJson(response, readApprovalQueue(stateDir).records);
     else if (request.method === "POST" && request.url?.startsWith("/approvals/")) await decideApprovalHttp(request, response, stateDir);
+    else if (request.method === "POST" && request.url === "/providers/probes/refresh") await refreshProviderProbesHttp(request, response, stateDir, options.probeLeases);
     else if (request.method === "GET" && request.url === "/providers/quotas") returnJson(response, providerQuotas(stateDir));
     else if (request.method === "GET" && request.url?.startsWith("/providers/") && request.url.endsWith("/quotas")) {
       const result = providerQuota(stateDir, decodeURIComponent(request.url.slice("/providers/".length, -"/quotas".length)));
       returnJson(response, result, "error" in result ? 404 : 200);
     }
     else if (request.method === "GET" && request.url === "/providers/models") returnJson(response, providerModels(stateDir));
-    else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir));
+    else if (request.method === "GET" && request.url === "/providers/health") returnJson(response, providerHealth(stateDir, options.probeLeases));
     else if (request.url?.startsWith("/figma/mutations") && await handleFigmaMutationRoute(request, response, stateDir)) return;
     else if (await handleControlPlaneRunRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
     else if (await handleControlPlaneBrainstormRoute(request, response, stateDir, options.runOrchestrator, options.projectRoot, requestId)) return;
@@ -505,19 +516,53 @@ function readBoundedText(path: string, maxBytes = 16 * 1024): string {
 
 function audit(directory: string, action: string, details: Record<string, unknown>): void { appendStateFile(directory, join(directory, "control-plane-audit.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), action, ...details })}\n`); }
 
+const PROBE_REFRESH_PROVIDERS = ["codex_cli", "claude_cli", "agy_cli"] as const;
+type ProbeRefreshProvider = typeof PROBE_REFRESH_PROVIDERS[number];
+
+function isProbeRefreshProvider(value: unknown): value is ProbeRefreshProvider {
+  return typeof value === "string" && (PROBE_REFRESH_PROVIDERS as readonly string[]).includes(value);
+}
+
+async function refreshProviderProbesHttp(
+  request: IncomingMessage,
+  response: ServerResponse,
+  directory: string,
+  probeLeases: ControlPlaneProbeLeases | undefined
+): Promise<void> {
+  const body = await readBody(request);
+  const providers = body.providers;
+  if (!Array.isArray(providers) || providers.length < 1 || providers.length > 3) {
+    returnJson(response, { error: "invalid_probe_refresh" }, 400);
+    return;
+  }
+  if (!providers.every(isProbeRefreshProvider) || new Set(providers).size !== providers.length) {
+    returnJson(response, { error: "invalid_probe_refresh" }, 400);
+    return;
+  }
+  if (probeLeases === undefined) {
+    returnJson(response, { error: "probe_refresh_unavailable" }, 503);
+    return;
+  }
+  audit(directory, "provider_probe_refresh", { providers });
+  const result = probeLeases.request(providers);
+  returnJson(response, result, 202);
+}
+
 export function createControlPlaneRuntime(
   stateDir: string,
   options: ControlPlaneRuntimeOptions = {}
 ): ControlPlaneRuntime {
   const projectRoot = options.projectRoot ?? resolveConfiguredProjectRoot();
   const providerCommands = options.providerCommands ?? {};
-  const scheduler = options.scheduler ?? createProviderQuotaScheduler({
+  const configuredProbeProviders = Object.entries(providerCommands).flatMap(([provider, capability]) => capability === undefined ? [] : [provider]);
+  const concreteScheduler = options.scheduler === undefined ? createProviderQuotaScheduler({
     sessions: () => readSessionRegistry(stateDir).sessions,
     adapters: createProviderQuotaAdapters({
       runCommand: options.commandRunner ?? runProviderCommand,
       commands: providerCommands,
       environment: process.env
     }),
+    leaseProviders: configuredProbeProviders,
     store: { stateDir },
     onPollFailure: ({ provider }) => {
       try {
@@ -529,7 +574,12 @@ export function createControlPlaneRuntime(
         // Provider polling must remain available when incident persistence is unavailable.
       }
     }
-  });
+  }) : undefined;
+  const scheduler = options.scheduler ?? concreteScheduler!;
+  const probeLeases: ControlPlaneProbeLeases | undefined = concreteScheduler === undefined ? undefined : {
+    request: (providers) => concreteScheduler.requestProbeLease(providers),
+    state: (provider) => concreteScheduler.leaseState(provider)
+  };
   const supervisor = new SupervisorQueue({ stateDir });
   supervisor.recover();
   const orchestrator = createRunOrchestrator({
@@ -551,6 +601,7 @@ export function createControlPlaneRuntime(
     runOrchestrator: orchestrator,
     projectRoot,
     auth: runtimeAuth,
+    ...(probeLeases === undefined ? {} : { probeLeases }),
     readiness: () => buildReadiness({
       stateDir,
       projectRoot,
@@ -833,9 +884,23 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
   };
 }
 
-function providerHealth(directory: string): { providers: readonly Record<string, unknown>[] } {
+function providerHealth(
+  directory: string,
+  probeLeases?: Pick<ControlPlaneProbeLeases, "state">
+): { providers: readonly Record<string, unknown>[] } {
   const now = new Date().toISOString();
-  return { providers: readProviderQuotaStore(directory).snapshots.map((snapshot) => ({ provider: snapshot.provider, health: snapshot.health, freshness: freshnessForSnapshot(snapshot, now), fetched_at: snapshot.fetched_at, next_poll_at: quotaView(snapshot, now).next_poll_at, cli_version: snapshot.cli_version ?? null, error_code: snapshot.error_code })) };
+  return {
+    providers: readProviderQuotaStore(directory).snapshots.map((snapshot) => ({
+      provider: snapshot.provider,
+      health: snapshot.health,
+      freshness: freshnessForSnapshot(snapshot, now),
+      fetched_at: snapshot.fetched_at,
+      next_poll_at: quotaView(snapshot, now).next_poll_at,
+      cli_version: snapshot.cli_version ?? null,
+      error_code: snapshot.error_code,
+      lease: probeLeases?.state(snapshot.provider) ?? { leased: false, expires_at: null }
+    }))
+  };
 }
 
 function returnJson(response: ServerResponse, value: unknown, status = 200): void {

@@ -30,6 +30,7 @@ function fakeClient(overrides: Partial<ControlPlaneClient> = {}): ControlPlaneCl
     getProviderModels: vi.fn().mockResolvedValue({ freshness: "fresh", fetched_at: now, next_poll_at: null, models: [] }),
     getProviderHealth: vi.fn().mockResolvedValue({ providers: [] }),
     getReadiness: vi.fn().mockResolvedValue(null),
+    refreshProviderProbes: vi.fn().mockResolvedValue({ accepted: [], rejected: ["codex_cli", "claude_cli", "agy_cli"], expires_at: now }),
     decideApproval: vi.fn(), ...overrides,
   } as ControlPlaneClient;
 }

@@ -1,5 +1,5 @@
 import React from "react";
-import type { ProviderHealth, ProviderModels, ProviderQuota, ReadinessReport } from "../../types/controlPlane";
+import type { ProbeProviderId, ProbeRefreshResult, ProviderHealth, ProviderModels, ProviderQuota, ReadinessReport } from "../../types/controlPlane";
 import {
   formatQuotaValue,
   formatQuotaWindow,
@@ -12,6 +12,8 @@ import {
   type ProviderModelRow
 } from "./quotaSelectors";
 
+const PROBE_PROVIDERS: readonly ProbeProviderId[] = ["codex_cli", "claude_cli", "agy_cli"];
+
 export type ProviderPaneProps = {
   readonly quotas: readonly ProviderQuota[];
   readonly models?: ProviderModels;
@@ -19,6 +21,7 @@ export type ProviderPaneProps = {
   readonly readiness?: ReadinessReport | null;
   readonly selectedProvider?: string;
   readonly onSelectProvider?: (provider: string) => void;
+  readonly onRefreshProviderStatus?: (providers: readonly ProbeProviderId[]) => Promise<ProbeRefreshResult>;
 };
 
 const CLI_PROVIDERS: readonly string[] = ["agy_cli", "claude_cli", "codex_cli"];
@@ -35,7 +38,9 @@ function timeLabel(value: string | null | undefined): React.ReactNode {
   return <time dateTime={value}>{value}</time>;
 }
 
-export function ProviderPane({ quotas, models, health, readiness, selectedProvider, onSelectProvider }: ProviderPaneProps) {
+export function ProviderPane({ quotas, models, health, readiness, selectedProvider, onSelectProvider, onRefreshProviderStatus }: ProviderPaneProps) {
+  const [refreshPending, setRefreshPending] = React.useState(false);
+  const [refreshMessage, setRefreshMessage] = React.useState<string | null>(null);
   const ids = providerIds(quotas, models, health);
   const provider = selectedProvider && ids.includes(selectedProvider) ? selectedProvider : ids[0];
   const quota = selectProviderQuota(quotas, provider);
@@ -45,8 +50,28 @@ export function ProviderPane({ quotas, models, health, readiness, selectedProvid
   const sourceFreshness = [quota?.freshness, providerHealth?.freshness, models?.freshness].filter((value): value is string => value !== undefined);
   const freshness = sourceFreshness.includes("stale") ? "stale" : sourceFreshness.includes("fresh") ? "fresh" : "unavailable";
   const staleSources = sourceFreshness.filter((value) => value === "stale").length;
+  const refresh = async () => {
+    if (onRefreshProviderStatus === undefined || refreshPending) return;
+    setRefreshPending(true);
+    setRefreshMessage(null);
+    try {
+      const result = await onRefreshProviderStatus(PROBE_PROVIDERS);
+      setRefreshMessage(result.accepted.length > 0
+        ? result.rejected.length > 0
+          ? "Some provider status refresh requests were accepted."
+          : "Provider status refresh requested."
+        : result.rejected.length > 0
+          ? "Provider status refresh request was not accepted."
+          : "Provider status refresh returned no provider results.");
+    } catch {
+      setRefreshMessage("Provider status refresh failed.");
+    } finally {
+      setRefreshPending(false);
+    }
+  };
 
   return <div className="provider-pane">
+    <div className="provider-refresh"><button type="button" disabled={refreshPending || onRefreshProviderStatus === undefined} aria-busy={refreshPending} onClick={() => { void refresh(); }}>Refresh provider status</button>{refreshMessage === null ? null : <p role="status">{refreshMessage}</p>}</div>
     <div className="provider-tabs" role="tablist" aria-label="Providers">
       {ids.map((id) => <button key={id} type="button" role="tab" aria-selected={id === provider} onClick={() => onSelectProvider?.(id)}>{id}</button>)}
     </div>

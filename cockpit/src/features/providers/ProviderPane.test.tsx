@@ -1,8 +1,8 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import axe from "axe-core";
-import type { ProviderHealth, ProviderModels, ProviderQuota, ReadinessProviderId, ReadinessReport, ReadinessStatus } from "../../types/controlPlane";
+import type { ProbeRefreshResult, ProviderHealth, ProviderModels, ProviderQuota, ReadinessProviderId, ReadinessReport, ReadinessStatus } from "../../types/controlPlane";
 import { CANONICAL_PROVIDERS, formatQuotaWindow, providerIds, selectProviderModelRows } from "./quotaSelectors";
 import { ProviderPane } from "./ProviderPane";
 
@@ -312,5 +312,47 @@ describe("ProviderPane", () => {
 
   it("formats null windows as unavailable", () => {
     expect(formatQuotaWindow({ limit: null, used: 1, remaining: null, resets_at: null })).toBe("Unavailable");
+  });
+  it("requests all fixed provider probes and stays disabled while pending", async () => {
+    let resolveRefresh: ((result: ProbeRefreshResult) => void) | undefined;
+    const onRefresh = vi.fn(() => new Promise<ProbeRefreshResult>((resolve) => { resolveRefresh = resolve; }));
+    const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
+    const button = [...host.querySelectorAll("button")].find((item) => item.textContent === "Refresh provider status") as HTMLButtonElement;
+
+    act(() => button.click());
+
+    expect(button.disabled).toBe(true);
+    expect(onRefresh).toHaveBeenCalledWith(["codex_cli", "claude_cli", "agy_cli"]);
+
+    await act(async () => {
+      resolveRefresh?.({ accepted: ["codex_cli"], rejected: ["claude_cli", "agy_cli"], expires_at: "2026-07-11T12:10:00.000Z" });
+      await Promise.resolve();
+    });
+
+    expect(button.disabled).toBe(false);
+    expect(host.textContent).toContain("Some provider status refresh requests were accepted.");
+    act(() => root.unmount()); host.remove();
+  });
+  it("uses neutral fixed copy when cooldown rejects every provider", async () => {
+    const onRefresh = vi.fn().mockResolvedValue({ accepted: [], rejected: ["codex_cli", "claude_cli", "agy_cli"], expires_at: "2026-07-11T12:10:00.000Z" });
+    const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
+    const button = [...host.querySelectorAll("button")].find((item) => item.textContent === "Refresh provider status") as HTMLButtonElement;
+
+    await act(async () => { button.click(); await Promise.resolve(); });
+
+    expect(host.textContent).toContain("Provider status refresh request was not accepted.");
+    expect(host.textContent).not.toContain("not configured");
+    act(() => root.unmount()); host.remove();
+  });
+  it("renders a fixed refresh failure without exposing rejected details", async () => {
+    const onRefresh = vi.fn().mockRejectedValue(new Error("secret provider stderr"));
+    const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
+    const button = [...host.querySelectorAll("button")].find((item) => item.textContent === "Refresh provider status") as HTMLButtonElement;
+
+    await act(async () => { button.click(); await Promise.resolve(); });
+
+    expect(host.textContent).toContain("Provider status refresh failed.");
+    expect(host.textContent).not.toContain("secret provider stderr");
+    act(() => root.unmount()); host.remove();
   });
 });

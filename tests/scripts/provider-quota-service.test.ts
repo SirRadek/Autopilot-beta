@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createControlPlaneRuntime, type ControlPlaneScheduler } from "../../scripts/control-plane-server";
+import { AuthSessionRegistry, authStateRoot } from "../../src/data/delivery-system/authSessionRegistry";
 
 const runtimes: Array<{ stop: () => void }> = [];
 
@@ -38,5 +39,35 @@ describe("control plane quota service lifecycle", () => {
     runtime.stop();
     expect(scheduler.stops).toBe(1);
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes leases from the concrete scheduler for configured provider capabilities only", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-service-leases-"));
+    const serviceToken = "c".repeat(64);
+    new AuthSessionRegistry(authStateRoot(stateDir)).storeServiceToken(serviceToken);
+    const runtime = createControlPlaneRuntime(stateDir, {
+      projectRoot: stateDir,
+      providerCommands: { codex_cli: { command: "codex", args: ["status"] } },
+      commandRunner: vi.fn().mockResolvedValue({ stdout: "{}", exitCode: 0 }),
+      supervisorPollMs: 60_000
+    });
+    runtimes.push(runtime);
+    await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
+    const address = runtime.server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/providers/probes/refresh`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ providers: ["codex_cli", "claude_cli"] })
+    });
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      accepted: ["codex_cli"],
+      rejected: ["claude_cli"],
+      expires_at: expect.any(String)
+    });
+    await runtime.stop();
   });
 });

@@ -907,6 +907,152 @@ describe("control plane provider endpoints", () => {
       claude_cli: { kind: "unavailable", error_code: "provider_executable_missing" }
     });
   });
+  it("validates provider probe refresh bodies and fails closed without a lease controller", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-probe-refresh-unavailable-"));
+    provisionServiceToken(stateDir);
+    const server = createControlPlaneServer(stateDir);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const url = `http://127.0.0.1:${address.port}/providers/probes/refresh`;
+    const post = (body: unknown) => fetch(url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    const unauthorized = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ providers: ["codex_cli"] })
+    });
+    expect(unauthorized.status).toBe(401);
+    expect(await unauthorized.json()).toEqual({ error: "unauthorized" });
+
+    for (const body of [
+      {},
+      { providers: [] },
+      { providers: ["codex_cli", "codex_cli"] },
+      { providers: ["openrouter_api"] },
+      { providers: ["codex_cli", "claude_cli", "agy_cli", "codex_cli"] }
+    ]) {
+      const response = await post(body);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "invalid_probe_refresh" });
+    }
+
+    const unavailable = await post({ providers: ["codex_cli"] });
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.json()).toEqual({ error: "probe_refresh_unavailable" });
+  });
+  it("enforces cookie CSRF, accepts bearer refreshes, and audits only provider ids", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-probe-refresh-auth-"));
+    const auth = await provisionAdminAuth(stateDir);
+    const requestLease = vi.fn().mockReturnValue({
+      accepted: ["codex_cli"],
+      rejected: ["agy_cli"],
+      expires_at: "2026-07-11T12:10:00.000Z"
+    });
+    const server = createControlPlaneServer(stateDir, {
+      auth,
+      probeLeases: {
+        request: requestLease,
+        state: () => ({ leased: false, expires_at: null })
+      }
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const base = `http://127.0.0.1:${address.port}`;
+    const login = await fetch(`${base}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: new URL(base).origin },
+      body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD })
+    });
+    const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
+    const body = JSON.stringify({ providers: ["codex_cli", "agy_cli"] });
+
+    const csrf = await fetch(`${base}/providers/probes/refresh`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body
+    });
+    expect(csrf.status).toBe(403);
+    expect(await csrf.json()).toEqual({ error: "csrf_origin_required" });
+    expect(requestLease).not.toHaveBeenCalled();
+
+    const accepted = await fetch(`${base}/providers/probes/refresh`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" },
+      body
+    });
+    expect(accepted.status).toBe(202);
+    expect(await accepted.json()).toEqual({
+      accepted: ["codex_cli"],
+      rejected: ["agy_cli"],
+      expires_at: "2026-07-11T12:10:00.000Z"
+    });
+    expect(requestLease).toHaveBeenCalledOnce();
+    expect(requestLease).toHaveBeenCalledWith(["codex_cli", "agy_cli"]);
+    const auditRecord = readFileSync(join(stateDir, "control-plane-audit.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>).find((record) => record.action === "provider_probe_refresh");
+    expect(auditRecord).toEqual({ at: expect.any(String), action: "provider_probe_refresh", providers: ["codex_cli", "agy_cli"] });
+    expect(Object.keys(auditRecord ?? {}).sort()).toEqual(["action", "at", "providers"]);
+  });
+  it("does not grant a probe lease when durable audit persistence fails", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-probe-refresh-audit-failure-"));
+    provisionServiceToken(stateDir);
+    mkdirSync(join(stateDir, "control-plane-audit.jsonl"));
+    const requestLease = vi.fn();
+    const server = createControlPlaneServer(stateDir, {
+      probeLeases: {
+        request: requestLease,
+        state: () => ({ leased: false, expires_at: null })
+      }
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/providers/probes/refresh`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ providers: ["codex_cli"] })
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: "autopilot_internal_error" });
+    expect(requestLease).not.toHaveBeenCalled();
+  });
+  it("keeps provider GETs side-effect free and exposes read-only lease health", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-probe-refresh-gets-"));
+    provisionServiceToken(stateDir);
+    writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [snapshot("codex_cli", new Date().toISOString())] });
+    const requestLease = vi.fn();
+    const leaseState = vi.fn().mockReturnValue({ leased: true, expires_at: "2026-07-11T12:10:00.000Z" });
+    const server = createControlPlaneServer(stateDir, {
+      probeLeases: { request: requestLease, state: leaseState }
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+    const base = `http://127.0.0.1:${address.port}`;
+    const init = { headers: { authorization: `Bearer ${SERVICE_TOKEN}` } };
+
+    expect((await fetch(`${base}/providers/quotas`, init)).status).toBe(200);
+    expect((await fetch(`${base}/providers/models`, init)).status).toBe(200);
+    const health = await (await fetch(`${base}/providers/health`, init)).json() as {
+      providers: Array<{ provider: string; lease: { leased: boolean; expires_at: string | null } }>;
+    };
+
+    expect(requestLease).not.toHaveBeenCalled();
+    expect(leaseState).toHaveBeenCalledOnce();
+    expect(leaseState).toHaveBeenCalledWith("codex_cli");
+    expect(health.providers[0]?.lease).toEqual({ leased: true, expires_at: "2026-07-11T12:10:00.000Z" });
+  });
   it("parses secure-cookie configuration strictly", () => {
     expect(secureCookiesFromEnvironment({})).toBe(false);
     expect(secureCookiesFromEnvironment({ CONTROL_PLANE_SECURE_COOKIES: "true" })).toBe(true);

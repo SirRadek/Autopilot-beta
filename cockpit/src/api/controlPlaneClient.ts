@@ -1,4 +1,4 @@
-import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectCreateInput, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, ReadinessReport, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord, FigmaMutationRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProbeProviderId, ProbeRefreshResult, ProjectCreateInput, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, ReadinessReport, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord, FigmaMutationRecord } from "../types/controlPlane";
 
 export const NON_JSON_RESPONSE = "control_plane_non_json_response";
 
@@ -30,6 +30,7 @@ export interface ControlPlaneClient {
   getProviderModels(): Promise<ProviderModels>;
   getProviderHealth(): Promise<ProviderHealth>;
   getReadiness(): Promise<ReadinessReport | null>;
+  refreshProviderProbes(providers: readonly ProbeProviderId[]): Promise<ProbeRefreshResult>;
   decideApproval(id: string, decision: "approved" | "rejected", reason?: string): Promise<ApprovalRecord>;
   getProjects(): Promise<readonly ProjectEntry[]>;
   createProject(input: ProjectCreateInput): Promise<ProjectEntry>;
@@ -132,6 +133,7 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
         return null;
       }
     },
+    refreshProviderProbes: (providers) => request<ProbeRefreshResult>("/providers/probes/refresh", jsonPost({ providers })),
     decideApproval: (id, decision, reason) => request<ApprovalRecord>(`/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, ...(reason === undefined ? {} : { reason }) }) }),
     getProjects: () => request<readonly ProjectEntry[]>("/projects"),
     createProject: (input) => request<ProjectEntry>("/projects", jsonPost(input)),
