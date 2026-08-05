@@ -29,16 +29,31 @@ export interface ProviderQuotaPersistence {
 export interface ProviderQuotaSchedulerOptions {
   readonly sessions: readonly SessionRegistryRecord[] | (() => readonly SessionRegistryRecord[]);
   readonly adapters: Readonly<Record<string, ProviderQuotaAdapter>>;
+  /** Registered probe capabilities; defaults to the explicitly supplied adapter keys. */
+  readonly leaseProviders?: readonly string[];
   readonly clock?: ProviderQuotaClock;
   readonly store: ProviderQuotaPersistence | { readonly stateDir: string };
   readonly pollTimeoutMs?: number;
   readonly onPollFailure?: (failure: { readonly provider: string; readonly error_code: ProviderErrorCode }) => void;
 }
 
+export interface ProviderProbeLeaseResult {
+  readonly accepted: readonly string[];
+  readonly rejected: readonly string[];
+  readonly expires_at: string;
+}
+
+export interface ProviderProbeLeaseState {
+  readonly leased: boolean;
+  readonly expires_at: string | null;
+}
+
 const SUCCESS_INTERVAL_MS = 5 * 60 * 1000;
 const INITIAL_BACKOFF_MS = 60 * 1000;
 const MAX_BACKOFF_MS = 30 * 60 * 1000;
 const RECONCILE_INTERVAL_MS = 1000;
+const PROBE_LEASE_TTL_MS = 10 * 60 * 1000;
+const PROBE_LEASE_COOLDOWN_MS = 30 * 1000;
 
 const systemClock: ProviderQuotaClock = {
   now: () => new Date().toISOString(),
@@ -49,6 +64,7 @@ const systemClock: ProviderQuotaClock = {
 export class ProviderQuotaScheduler {
   private readonly sessions: () => readonly SessionRegistryRecord[];
   private readonly adapters: Readonly<Record<string, ProviderQuotaAdapter>>;
+  private readonly leaseProviders: ReadonlySet<string>;
   private readonly clock: ProviderQuotaClock;
   private readonly store: ProviderQuotaPersistence;
   private readonly pollTimeoutMs: number;
@@ -56,6 +72,9 @@ export class ProviderQuotaScheduler {
   private readonly timers = new Map<string, unknown>();
   private readonly inFlight = new Map<string, AbortController>();
   private readonly failures = new Map<string, number>();
+  /** Owner-requested demand is process-local; a scheduler restart cancels every lease. */
+  private readonly leases = new Map<string, number>();
+  private readonly leaseRequests = new Map<string, number>();
   private running = false;
   private reconcileTimer: unknown;
 
@@ -63,6 +82,7 @@ export class ProviderQuotaScheduler {
     const sessionSource = options.sessions;
     this.sessions = typeof sessionSource === "function" ? sessionSource : () => sessionSource;
     this.adapters = options.adapters;
+    this.leaseProviders = new Set(options.leaseProviders ?? Object.keys(options.adapters));
     this.clock = options.clock ?? systemClock;
     this.pollTimeoutMs = options.pollTimeoutMs ?? 30_000;
     this.onPollFailure = options.onPollFailure;
@@ -84,7 +104,6 @@ export class ProviderQuotaScheduler {
   }
 
   stop(): void {
-    if (!this.running) return;
     this.running = false;
     for (const timer of this.timers.values()) this.clock.clearTimeout(timer);
     this.timers.clear();
@@ -92,6 +111,8 @@ export class ProviderQuotaScheduler {
     this.reconcileTimer = undefined;
     for (const controller of this.inFlight.values()) controller.abort();
     this.inFlight.clear();
+    this.leases.clear();
+    this.leaseRequests.clear();
   }
 
   private reconcile(): void {
@@ -111,9 +132,75 @@ export class ProviderQuotaScheduler {
     }
   }
 
-  /** Re-evaluates active sessions after a registry update. */
-  refresh(): void {
+  /** Re-evaluates session and owner-lease demand after an external state update. */
+  reconcileDemand(): void {
     this.reconcile();
+  }
+
+  requestProbeLease(
+    providers: readonly string[],
+    ttlMs = PROBE_LEASE_TTL_MS
+  ): ProviderProbeLeaseResult {
+    const nowEpoch = this.nowEpoch();
+    const boundedTtlMs = Number.isFinite(ttlMs) && ttlMs > 0
+      ? Math.min(Math.max(1, Math.floor(ttlMs)), PROBE_LEASE_TTL_MS)
+      : PROBE_LEASE_TTL_MS;
+    const expiresAtEpoch = nowEpoch + boundedTtlMs;
+    const accepted: string[] = [];
+    const rejected: string[] = [];
+    const acceptedExpiries: number[] = [];
+    const uniqueProviders = [...new Set(providers)];
+
+    if (!this.running) {
+      return {
+        accepted,
+        rejected: uniqueProviders,
+        expires_at: new Date(expiresAtEpoch).toISOString()
+      };
+    }
+
+    for (const provider of uniqueProviders) {
+      const adapter = Object.prototype.hasOwnProperty.call(this.adapters, provider)
+        ? this.adapters[provider]
+        : undefined;
+      const lastRequestAt = this.leaseRequests.get(provider);
+      if (adapter === undefined || !this.leaseProviders.has(provider)
+        || lastRequestAt !== undefined && nowEpoch - lastRequestAt < PROBE_LEASE_COOLDOWN_MS) {
+        rejected.push(provider);
+        continue;
+      }
+      this.leaseRequests.set(provider, nowEpoch);
+      const actualExpiresAtEpoch = Math.max(this.leases.get(provider) ?? 0, expiresAtEpoch);
+      this.leases.set(provider, actualExpiresAtEpoch);
+      accepted.push(provider);
+      acceptedExpiries.push(actualExpiresAtEpoch);
+    }
+
+    if (accepted.length > 0) this.reconcileDemand();
+    const activeRejectedExpiries = accepted.length === 0
+      ? rejected.flatMap((provider) => {
+          const expiresAt = this.leases.get(provider);
+          return expiresAt !== undefined && expiresAt > nowEpoch ? [expiresAt] : [];
+        })
+      : [];
+    const actualExpiries = acceptedExpiries.length > 0 ? acceptedExpiries : activeRejectedExpiries;
+    const responseExpiresAtEpoch = actualExpiries.length > 0
+      ? Math.min(...actualExpiries)
+      : expiresAtEpoch;
+    return {
+      accepted,
+      rejected,
+      expires_at: new Date(responseExpiresAtEpoch).toISOString()
+    };
+  }
+
+  leaseState(provider: string): ProviderProbeLeaseState {
+    const expiresAtEpoch = this.leases.get(provider);
+    if (expiresAtEpoch === undefined || expiresAtEpoch <= this.nowEpoch()) {
+      this.leases.delete(provider);
+      return { leased: false, expires_at: null };
+    }
+    return { leased: true, expires_at: new Date(expiresAtEpoch).toISOString() };
   }
 
   private scheduleReconcile(): void {
@@ -127,7 +214,25 @@ export class ProviderQuotaScheduler {
 
   private activeProviders(): Set<string> {
     const now = this.clock.now();
-    return new Set(this.sessions().filter((session) => session.status === "active" && !isSessionOwnerExpired(session, now)).map((session) => session.agent_command));
+    const nowEpoch = this.parseEpoch(now);
+    const active = new Set(this.sessions().filter((session) => session.status === "active" && !isSessionOwnerExpired(session, now)).map((session) => session.agent_command));
+    for (const [provider, expiresAtEpoch] of this.leases) {
+      if (expiresAtEpoch <= nowEpoch) this.leases.delete(provider);
+      else active.add(provider);
+    }
+    for (const [provider, requestedAtEpoch] of this.leaseRequests) {
+      if (nowEpoch - requestedAtEpoch >= PROBE_LEASE_COOLDOWN_MS) this.leaseRequests.delete(provider);
+    }
+    return active;
+  }
+
+  private nowEpoch(): number {
+    return this.parseEpoch(this.clock.now());
+  }
+
+  private parseEpoch(value: string): number {
+    const epoch = Date.parse(value);
+    return Number.isFinite(epoch) ? epoch : Date.now();
   }
 
   private async poll(provider: string): Promise<void> {

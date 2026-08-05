@@ -138,6 +138,21 @@ describe("ControlPlaneClient", () => {
     expect(JSON.parse(init.body as string)).toEqual({ name: "Alpha", cwd: "/work/alpha" });
   });
 
+  it("requests a bounded provider probe refresh with credentials", async () => {
+    const result = { accepted: ["codex_cli"], rejected: ["agy_cli"], expires_at: "2026-07-11T12:10:00.000Z" };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(result), { status: 202 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+
+    await expect(client.refreshProviderProbes(["codex_cli", "agy_cli"])).resolves.toEqual(result);
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe("http://cp/providers/probes/refresh");
+    const init = fetcher.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({ providers: ["codex_cli", "agy_cli"] });
+  });
+
   it("uses the governed project, run, and incident routes with exact JSON bodies", async () => {
     const run = { current: { run_id: "run/1", revision: 3 } };
     const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(run), { status: 200 }));

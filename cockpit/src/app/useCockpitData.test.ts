@@ -37,7 +37,7 @@ const client = (overrides: Partial<ControlPlaneClient> = {}): ControlPlaneClient
   listBrainstorms: vi.fn().mockResolvedValue([]), getBrainstorm: vi.fn(), createBrainstorm: vi.fn(), approveBrainstorm: vi.fn(), arbitrateBrainstorm: vi.fn(), cancelBrainstorm: vi.fn(),
   getObservabilitySummary: vi.fn().mockResolvedValue({ events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }), getObservabilityTimeline: vi.fn().mockResolvedValue({ summary: { events: 0, tokens: 0, retries: 0, refusals: 0, openrouter_cost_usd: 0, waste_signals: [] }, timeline: [], limits: { files_scanned: 0, max_bytes_per_file: 0, max_lines_per_file: 0, max_events: 100, truncated: false } }),
   createSession: vi.fn(), mutateSession: vi.fn(),
-  getProviderQuotas: vi.fn().mockResolvedValue({ providers: [] }), getProviderModels: vi.fn().mockResolvedValue({ freshness: "fresh", fetched_at: null, next_poll_at: null, models: [] }), getProviderHealth: vi.fn().mockResolvedValue({ providers: [] }), getReadiness: vi.fn().mockResolvedValue(null),
+  getProviderQuotas: vi.fn().mockResolvedValue({ providers: [] }), getProviderModels: vi.fn().mockResolvedValue({ freshness: "fresh", fetched_at: null, next_poll_at: null, models: [] }), getProviderHealth: vi.fn().mockResolvedValue({ providers: [] }), getReadiness: vi.fn().mockResolvedValue(null), refreshProviderProbes: vi.fn().mockResolvedValue({ accepted: [], rejected: [], expires_at: "2026-07-11T12:10:00.000Z" }),
   decideApproval: vi.fn(), ...overrides,
 });
 

@@ -83,6 +83,172 @@ describe("provider quota scheduler", () => {
     expect(store.document.snapshots).toHaveLength(1);
   });
 
+  it("polls registered providers on a bounded lease and stops after expiry", async () => {
+    const clock = new FakeClock();
+    const store = persistence();
+    const calls: string[] = [];
+    const scheduler = createProviderQuotaScheduler({
+      sessions: [],
+      adapters: {
+        codex_cli: {
+          provider: "codex_cli",
+          fetchSnapshot: async ({ now }) => { calls.push(now); return snapshot("codex_cli", now); }
+        },
+        claude_cli: {
+          provider: "claude_cli",
+          fetchSnapshot: async ({ now }) => { calls.push(now); return snapshot("claude_cli", now); }
+        }
+      },
+      leaseProviders: ["codex_cli"],
+      clock,
+      store
+    });
+    scheduler.start();
+
+    const result = scheduler.requestProbeLease(["codex_cli", "claude_cli"], 2_000);
+    await flush();
+
+    expect(result).toEqual({
+      accepted: ["codex_cli"],
+      rejected: ["claude_cli"],
+      expires_at: "2026-07-11T12:00:02.000Z"
+    });
+    expect(calls).toHaveLength(1);
+    expect(scheduler.leaseState("codex_cli")).toEqual({ leased: true, expires_at: result.expires_at });
+
+    await clock.advance(2_000);
+
+    expect(calls).toHaveLength(1);
+    expect(scheduler.leaseState("codex_cli")).toEqual({ leased: false, expires_at: null });
+  });
+
+  it("deduplicates session and lease demand and aborts only after both disappear", async () => {
+    const clock = new FakeClock();
+    const store = persistence();
+    const sessions = [session("codex_cli")];
+    let calls = 0;
+    let aborted = false;
+    const scheduler = createProviderQuotaScheduler({
+      sessions,
+      adapters: {
+        codex_cli: {
+          provider: "codex_cli",
+          fetchSnapshot: ({ signal }) => {
+            calls += 1;
+            signal.addEventListener("abort", () => { aborted = true; }, { once: true });
+            return new Promise<ProviderSnapshot>(() => undefined);
+          }
+        }
+      },
+      clock,
+      store
+    });
+    scheduler.start();
+    await flush();
+
+    scheduler.requestProbeLease(["codex_cli"], 2_000);
+    sessions[0] = { ...sessions[0]!, status: "closed" };
+    scheduler.reconcileDemand();
+
+    expect(calls).toBe(1);
+    expect(aborted).toBe(false);
+
+    await clock.advance(2_000);
+
+    expect(aborted).toBe(true);
+    scheduler.stop();
+  });
+
+  it("applies a per-provider thirty-second lease request cooldown", async () => {
+    const clock = new FakeClock();
+    const store = persistence();
+    const adapter = (provider: string): ProviderQuotaAdapter => ({
+      provider,
+      fetchSnapshot: async ({ now }) => snapshot(provider, now)
+    });
+    const scheduler = createProviderQuotaScheduler({
+      sessions: [],
+      adapters: { codex_cli: adapter("codex_cli"), claude_cli: adapter("claude_cli") },
+      clock,
+      store
+    });
+    scheduler.start();
+
+    const first = scheduler.requestProbeLease(["codex_cli"]);
+    const cooledDown = scheduler.requestProbeLease(["codex_cli", "claude_cli"]);
+
+    expect(first).toEqual({ accepted: ["codex_cli"], rejected: [], expires_at: "2026-07-11T12:10:00.000Z" });
+    expect(cooledDown).toEqual({ accepted: ["claude_cli"], rejected: ["codex_cli"], expires_at: "2026-07-11T12:10:00.000Z" });
+
+    await flush();
+    await clock.advance(30_000);
+
+    expect(scheduler.requestProbeLease(["codex_cli"])).toEqual({
+      accepted: ["codex_cli"],
+      rejected: [],
+      expires_at: "2026-07-11T12:10:30.000Z"
+    });
+  });
+
+  it("reports the retained expiry when a shorter renewal cannot shorten a lease", async () => {
+    const clock = new FakeClock();
+    const store = persistence();
+    const scheduler = createProviderQuotaScheduler({
+      sessions: [],
+      adapters: {
+        codex_cli: {
+          provider: "codex_cli",
+          fetchSnapshot: async ({ now }) => snapshot("codex_cli", now)
+        }
+      },
+      clock,
+      store
+    });
+    scheduler.start();
+    const first = scheduler.requestProbeLease(["codex_cli"]);
+    await flush();
+    await clock.advance(30_000);
+
+    const renewed = scheduler.requestProbeLease(["codex_cli"], 1_000);
+
+    expect(renewed).toEqual({ accepted: ["codex_cli"], rejected: [], expires_at: first.expires_at });
+    expect(scheduler.leaseState("codex_cli")).toEqual({ leased: true, expires_at: first.expires_at });
+  });
+
+  it("drops in-memory leases when the scheduler restarts", async () => {
+    const clock = new FakeClock();
+    const store = persistence();
+    let calls = 0;
+    const scheduler = createProviderQuotaScheduler({
+      sessions: [],
+      adapters: {
+        codex_cli: {
+          provider: "codex_cli",
+          fetchSnapshot: async ({ now }) => { calls += 1; return snapshot("codex_cli", now); }
+        }
+      },
+      clock,
+      store
+    });
+    scheduler.start();
+    scheduler.requestProbeLease(["codex_cli"]);
+    await flush();
+    scheduler.stop();
+
+    expect(scheduler.leaseState("codex_cli")).toEqual({ leased: false, expires_at: null });
+    expect(scheduler.requestProbeLease(["codex_cli"])).toEqual({
+      accepted: [],
+      rejected: ["codex_cli"],
+      expires_at: "2026-07-11T12:10:00.000Z"
+    });
+
+    scheduler.start();
+    await flush();
+
+    expect(calls).toBe(1);
+    scheduler.stop();
+  });
+
   it("polls a provider activated after start", async () => {
     const clock = new FakeClock();
     const store = persistence();
@@ -151,7 +317,7 @@ describe("provider quota scheduler", () => {
     const scheduler = createProviderQuotaScheduler({ sessions, adapters: { agy_cli: adapter }, clock, store });
     scheduler.start();
     sessions[0] = { ...sessions[0]!, status: "closed" };
-    scheduler.refresh();
+    scheduler.reconcileDemand();
     resolve?.(snapshot("agy_cli", clock.now()));
     await flush();
     expect(store.document.snapshots).toHaveLength(0);
