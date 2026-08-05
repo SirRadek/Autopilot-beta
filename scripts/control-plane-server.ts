@@ -33,7 +33,7 @@ import { buildReadiness, type ReadinessReport } from "../src/data/delivery-syste
 import { SupervisorQueue } from "../src/data/delivery-system/supervisorQueue";
 import { TokenGateway } from "../src/data/delivery-system/tokenGateway";
 import { resolveConfiguredProjectRoot } from "../src/data/delivery-system/runtimePaths";
-import { WORKER_LOCK_TTL_MINUTES } from "../src/data/delivery-system/cliWorker";
+import { WORKER_LOCK_TTL_MINUTES } from "../src/data/delivery-system/sessionState";
 import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
 import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
 import { STATIC_PROVIDER_MODEL_CATALOG } from "../src/data/delivery-system/providerModelCatalog";

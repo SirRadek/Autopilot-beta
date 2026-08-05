@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 147,
+  "file_count": 150,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -732,7 +732,7 @@
     {
       "source_path": "src/data/delivery-system/brainstormCoordinator.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "d9cb53b11fd51387cc203ab6417eaa78dcab3d14eb103ff9705f3b358b51d97a"
+      "content_hash": "69861e70da5d78aef098b6e5abb351e5d02dd1ede1bdb1eb13781d6ba7c926a6"
     },
     {
       "source_path": "src/data/delivery-system/brainstormStore.ts",
@@ -840,9 +840,24 @@
       "content_hash": "c90a0ca144c3e684ecf96677eff6172fd2e1a663aec4b7d4d1abef189560765a"
     },
     {
+      "source_path": "src/data/delivery-system/providerCliRuntime.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "ec20148b4b4865a3fc8175722aa2ff5753f3dd52e640d9ba11494c97f2582fbd"
+    },
+    {
       "source_path": "src/data/delivery-system/providerModelCatalog.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "506f651d352906ec4cda08a61547542c25b4c56000fee9b8a0f1e35524be7556"
+      "content_hash": "fa18001016c9a1fae768db23090a32a690ab4cccd3729a8b06890c39cc3557e5"
+    },
+    {
+      "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "1b0f72304df88033ee7165e43dc8d5c0540dd8a946874523add3b18b4065a74a"
+    },
+    {
+      "source_path": "src/data/delivery-system/providerModelId.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "98b725794a1624558a43249fd165c49fdaad123c5399e5b7f97438aeb7ebde87"
     },
     {
       "source_path": "src/data/delivery-system/routingModes.ts",

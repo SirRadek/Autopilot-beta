@@ -34,6 +34,7 @@ export interface SessionHistoryEntry {
 export const SESSION_STATE_PATH = "docs/autopilot/session-state/session.json";
 export const SESSION_HISTORY_PATH = "docs/autopilot/session-state/history.jsonl";
 export const SESSION_LOCK_PATH = "docs/autopilot/session-state/worker.lock";
+export const WORKER_LOCK_TTL_MINUTES = 30;
 export const AGENT_REGISTRY_PATH = "docs/autopilot/session-state/agent-registry.jsonl";
 export const AGENT_HANDOFF_INDEX_PATH = "docs/autopilot/session-state/agent-handoff-index.jsonl";
 export const SUBAGENT_EVIDENCE_PATH = "docs/autopilot/session-state/subagent-evidence.jsonl";

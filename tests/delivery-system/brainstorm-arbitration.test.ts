@@ -8,6 +8,7 @@ import { estimateBrainstormTokenEnvelope } from "../../src/data/delivery-system/
 import { createBrainstormCoordinator } from "../../src/data/delivery-system/brainstormCoordinator";
 import { createBrainstorm, readBrainstormStore } from "../../src/data/delivery-system/brainstormStore";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
+import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 import { readRunStore } from "../../src/data/delivery-system/runStore";
 import { createRunOrchestrator } from "../../src/data/delivery-system/runOrchestrator";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
@@ -16,12 +17,30 @@ import { TokenGateway } from "../../src/data/delivery-system/tokenGateway";
 const now = "2026-07-22T13:00:00.000Z";
 const brief = "Find the strongest implementation direction without changing the requested route.";
 const routes = [
-  { provider: "codex_cli" as const, model: "gpt-5.5", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
+  { provider: "codex_cli" as const, model: "gpt-5.6-sol", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
   { provider: "claude_cli" as const, model: "claude-opus-4-8", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
   { provider: "agy_cli" as const, model: "gemini-3.1-pro-high", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
 ] as const;
 const synthesizer = { provider: "claude_cli" as const, model: "claude-opus-4-8", reasoning_effort: "high" as const, estimated_tokens: 20_000 };
-const arbitration = { provider: "codex_cli" as const, model: "gpt-5.5", reasoning_effort: "xhigh" as const, estimated_tokens: 16_000 };
+const arbitration = { provider: "codex_cli" as const, model: "gpt-5.6-sol", reasoning_effort: "xhigh" as const, estimated_tokens: 16_000 };
+
+// The synthesizer and arbiter reuse the canonical Claude/Codex pairs above, so
+// these per-provider snapshots cover every route declared by the fixture.
+function providerSnapshots(fetchedAt: string) {
+  return routes.map((route) => ({
+    provider: route.provider,
+    source: "api" as const,
+    fetched_at: fetchedAt,
+    observed_at: fetchedAt,
+    five_hour: { limit: 100, used: 20, remaining: 80, resets_at: null },
+    weekly: { limit: 1_000, used: 100, remaining: 900, resets_at: null },
+    api_spend: 1.25,
+    currency: "USD",
+    models: [{ model_id: route.model, available: true, health: "healthy" as const, source: "api" as const }],
+    health: "healthy" as const,
+    error_code: null,
+  }));
+}
 
 function setup(outputs: string[] = [], brainstormBrief = brief) {
   const root = mkdtempSync(join(tmpdir(), "brainstorm-arbitration-"));
@@ -31,6 +50,7 @@ function setup(outputs: string[] = [], brainstormBrief = brief) {
   mkdirSync(stateDir);
   mkdirSync(cwd, { recursive: true });
   writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "alpha", name: "Alpha", cwd, enabled: true }] });
+  writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: providerSnapshots(now) });
   const brainstorm = createBrainstorm(stateDir, {
     project_id: "alpha", brief: brainstormBrief, routes, synthesizer_route: synthesizer, arbitration_route: arbitration,
     token_envelope: estimateBrainstormTokenEnvelope(routes, synthesizer.estimated_tokens, arbitration.estimated_tokens),

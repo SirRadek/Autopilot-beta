@@ -23,13 +23,19 @@ const laneImportAllowedPrefixes = [
   "tests/",
 ];
 const vendorSpawnAllowedPrefixes = laneImportAllowedPrefixes;
+// P7/P9 made this exact entry point the production host for bounded provider
+// quota, CLI-version, and model-discovery probes. It may reach only the probe
+// lane targets below; it is deliberately not admitted to the worker spawn lane.
+const providerProbeAllowedFiles = new Set(["scripts/control-plane-server.ts"]);
 // This generated, provenance-pinned recovery artifact bundles the governed lane
 // but its execution test proves provider_invoked=false. It is not authored as a
 // second spawn lane and must stay the only exact exception outside the prefixes.
 const generatedTrustedVendorArtifact = "ops/cockpit-proxy/autopilot-cockpit-recovery-smoke.mjs";
 const lanePrefix = "src/data/delivery-system/";
-const forbiddenImportPattern =
+const forbiddenWorkerSpawnImportPattern =
   /\bfrom\s+["'][^"']*(?:cliWorker|cliWorkerCapture)["']|\bimport\s*\(\s*["'][^"']*(?:cliWorker|cliWorkerCapture)["']\s*\)/;
+const forbiddenProviderProbeImportPattern =
+  /\bfrom\s+["'][^"']*(?:providerCliRuntime|providerModelDiscovery)["']|\bimport\s*\(\s*["'][^"']*(?:providerCliRuntime|providerModelDiscovery)["']\s*\)/;
 const forbiddenVendorSpawnPattern =
   /\b(?:spawn|spawnSync|exec|execFile|execFileSync)\s*\(\s*["'`](?:codex|agy|gemini|qwen)["'`]/;
 const forbiddenNodePtyImportPattern =
@@ -40,7 +46,7 @@ const forbiddenFullEnvPatterns = [
 ];
 
 describe("governed dispatch boundary", () => {
-  it("keeps the vendor spawn lane reachable only from governed-core or the lane itself", () => {
+  it("keeps worker spawn imports inside governed-core or the lane and limits provider probes to their exact host", () => {
     const violations = sourceFiles(repoRoot).flatMap((file) => {
       const rel = normalizePath(relative(repoRoot, file));
       if (laneImportAllowedPrefixes.some((prefix) => rel.startsWith(prefix))) {
@@ -49,9 +55,12 @@ describe("governed dispatch boundary", () => {
 
       return readFileSync(file, "utf8")
         .split(/\r?\n/)
-        .flatMap((line, index) =>
-          forbiddenImportPattern.test(line) ? [`${rel}:${index + 1}`] : []
-        );
+        .flatMap((line, index) => {
+          const reachesWorkerSpawn = forbiddenWorkerSpawnImportPattern.test(line);
+          const reachesProviderProbe = forbiddenProviderProbeImportPattern.test(line)
+            && !providerProbeAllowedFiles.has(rel);
+          return reachesWorkerSpawn || reachesProviderProbe ? [`${rel}:${index + 1}`] : [];
+        });
     });
 
     expect(violations).toEqual([]);
