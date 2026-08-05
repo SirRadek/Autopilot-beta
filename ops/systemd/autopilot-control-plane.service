@@ -13,6 +13,7 @@ Environment=TMPDIR=/home/radek/.local/state/.autopilot-runtime-tmp
 Environment=AUTOPILOT_STATE_DIR=/home/radek/.local/state/autopilot
 Environment=AUTOPILOT_PROJECTS_DIR=/home/radek/projects
 EnvironmentFile=/home/radek/.config/autopilot/control-plane.env
+EnvironmentFile=/etc/autopilot/control-plane-probes.env
 ExecStartPre=+/usr/bin/install -d -o radek -g radek -m 0700 /home/radek/.local/state/.autopilot-runtime-tmp
 ExecStartPre=+/usr/bin/install -d -o radek -g radek -m 0700 /home/radek/.local/state/.autopilot-incident-spool
 ExecStartPre=/usr/bin/npm run ops:boundary-check -- /home/radek/autopilot-beta ${AUTOPILOT_STATE_DIR} ${AUTOPILOT_PROJECTS_DIR}

@@ -9,22 +9,19 @@
 | Checkout | `/home/radek/autopilot-beta` | systemd `WorkingDirectory` |
 | Managed state | `/home/radek/.local/state/autopilot` | unit argument and `AUTOPILOT_STATE_DIR` |
 | Project root | `/home/radek/projects` | `AUTOPILOT_PROJECTS_DIR` |
-| Environment file | `/home/radek/.config/autopilot/control-plane.env` | `EnvironmentFile` |
+| Protected runtime environment | `/home/radek/.config/autopilot/control-plane.env` | first `EnvironmentFile` |
+| Nonsecret probe allowlist | `/etc/autopilot/control-plane-probes.env` | second `EnvironmentFile` |
 | Control Plane | `127.0.0.1:8787` | unit command |
 | Isolated acceptance | port `8877` | operator command only |
 
-State and project directories must be mode `0700`; the environment file must be `0600`.
+State and project directories must be mode `0700`; the protected environment file must be
+`0600`. The required probe allowlist file is root-owned, nonsecret, and contains only
+`CONTROL_PLANE_USAGE_PROBES`.
 Admin credentials default to `~/.config/autopilot/admin-credentials.json` at mode
 `0600`. Durable auth state lives at `<managed-state>/auth`, is mode-private, and
 is excluded from managed-state backup and restore archives.
 
 ## Environment variables
-
-### `CONTROL_PLANE_TOKEN`
-
-Required non-empty shared operator secret. It authenticates bearer clients and creates browser
-sessions through the legacy `{token}` `POST /auth/login` path. It remains required
-for compatibility readiness in this phase. Never expose it as a `VITE_*` variable.
 
 ### `AUTOPILOT_ADMIN_CREDENTIALS_PATH`
 
@@ -43,6 +40,8 @@ npm run control-plane:set-admin-password
 Rotation increments `credential_generation` and invalidates all existing browser
 sessions. The command prints no credential material.
 
+### Service bearer
+
 Issue the service bearer offline into the auth state root:
 
 ```bash
@@ -50,7 +49,10 @@ npm run control-plane:issue-service-token -- /home/radek/.local/state/autopilot
 ```
 
 The command prints `SERVICE_TOKEN=<hex>` exactly once; capture the plaintext in
-the root-held service secret. Only its SHA-256 digest is stored by Autopilot.
+the root-held service secret. Only its SHA-256 digest is stored by Autopilot. Machine and
+commissioning API calls authenticate with `Authorization: Bearer $SERVICE_TOKEN`; the retired
+`CONTROL_PLANE_TOKEN` is not an operational bearer. Never expose either credential as a
+`VITE_*` variable.
 
 ### `CONTROL_PLANE_SECURE_COOKIES`
 
@@ -67,9 +69,28 @@ production deployment. Set both to `true` in production.
 
 ### `CONTROL_PLANE_USAGE_PROBES`
 
-Comma-separated allowlist containing only `codex`, `claude`, and/or `agy`. Unknown names are ignored;
-the setting never accepts an arbitrary command, path, or argument. Keep it empty until trusted tmux
-sessions exist. Codex is queried with `/status`; Claude and AGY with `/usage`.
+The required `/etc/autopilot/control-plane-probes.env` file contains only this nonsecret
+setting. It is a comma-separated allowlist containing `codex`, `claude`, and/or `agy`; unset
+or wholly empty disables all probes. Any unknown name or empty comma segment prevents startup
+with `invalid_provider_usage_probe_configuration`. The value never accepts a command, path,
+argument, or `*_cli` provider ID. Codex is queried with `/status`; Claude and AGY with `/usage`.
+
+Configuration makes a provider eligible for probing but does not itself start a provider
+process. An authenticated `POST /providers/probes/refresh` with one to three unique provider
+IDs (`codex_cli`, `claude_cli`, `agy_cli`) requests a process-local lease of at most 10 minutes.
+The response is `202` with `accepted`, `rejected`, and `expires_at`; unconfigured providers are
+rejected. Requests within the 30-second per-provider cooldown do not stack work. Active sessions
+and unexpired leases are demand sources, with at most one in-flight probe per provider. A restart
+cancels leases, lease expiry stops lease-derived demand, and a later refresh must request a new
+lease. Provider GET routes are read-only and never create or extend a lease.
+
+### `AUTOPILOT_PROVIDER_CLI_BIN_DIR`
+
+Production sets this to the normalized absolute directory
+`/opt/autopilot-providers/bin` in the protected environment file. Once configured, every
+provider invocation resolves only the fixed `codex`, `claude`, or `agy` basename beneath that
+root-owned directory; missing, non-executable, or escaping targets fail closed with a bounded
+provider error. There is no production fallback to `~/.local/bin` or ambient `PATH` lookup.
 
 ### `AUTOPILOT_PROJECTS_DIR`
 
@@ -100,9 +121,10 @@ discovery, a session cwd, or a UI selection cannot authorize an unregistered pat
 
 ## Provider freshness
 
-The quota scheduler polls only configured capabilities with active sessions. Snapshots and events are
-persisted under managed state. A five-minute active-session interval is the operating target, but the
-UI must still evaluate each snapshot timestamp and health. Stale evidence disables run preparation.
+The quota scheduler polls only configured capabilities with active-session or unexpired-lease
+demand. Snapshots and events are persisted under managed state. A five-minute success interval is
+the operating target while demand remains, but the UI must still evaluate each snapshot timestamp,
+health, and lease state. Stale evidence disables run preparation.
 
 ## Token policy
 

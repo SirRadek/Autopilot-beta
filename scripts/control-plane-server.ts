@@ -88,13 +88,20 @@ export interface ControlPlaneRuntimeOptions {
 export function providerUsageCommandsFromEnvironment(
   environment: Readonly<Record<string, string | undefined>>
 ): Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>> {
-  const enabled = new Set((environment.CONTROL_PLANE_USAGE_PROBES ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
-  const configured: Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>> = {};
   const providers = [
     ["codex", "codex_cli"],
     ["claude", "claude_cli"],
     ["agy", "agy_cli"]
   ] as const;
+  const rawFlags = (environment.CONTROL_PLANE_USAGE_PROBES ?? "").trim();
+  const flags = rawFlags === ""
+    ? []
+    : rawFlags.split(",").map((value) => value.trim().toLowerCase());
+  if (flags.some((flag) => flag === "" || !providers.some(([allowed]) => flag === allowed))) {
+    throw new Error("invalid_provider_usage_probe_configuration");
+  }
+  const enabled = new Set(flags);
+  const configured: Partial<Record<"codex_cli" | "claude_cli" | "agy_cli", ProviderCliCapability>> = {};
   for (const [flag, provider] of providers) {
     if (!enabled.has(flag)) continue;
     const runtime = resolveProviderCliRuntime(provider, environment);

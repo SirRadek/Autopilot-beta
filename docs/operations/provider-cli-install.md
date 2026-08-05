@@ -2,9 +2,9 @@
 
 Installs the three subscription provider CLI bundles (`codex`, `claude`, `agy`) into
 `/opt/autopilot-providers/` in a single owner-approved `sudo` pass. Install completeness is
-not activation — no probe is enabled and no CLI is logged in by this step. See
-`docs/superpowers/plans/2026-07-23-vm-provider-cli-activation.md` for the full plan and
-`docs/operations/provider-cli-activation-checklist.md` for per-provider probe/login steps.
+not activation — no probe is enabled and no CLI is logged in by this step. Use the
+[provider CLI activation checklist](provider-cli-activation-checklist.md) for the current
+per-provider commissioning procedure.
 
 ## Manifest and guard
 
@@ -52,19 +52,44 @@ one alone falls through to the production path (`/opt/autopilot-providers`, real
 so a stray env var can never silently redirect a production install. See
 `tests/scripts/provider-cli-install.test.ts`.
 
-## PATH via EnvironmentFile
+## Authoritative production runtime
 
-`PATH` is set as `PATH=/opt/autopilot-providers/bin:/usr/bin:/bin` inside
-`~/.config/autopilot/control-plane.env` (the control-plane unit's existing
-`EnvironmentFile=`), which overrides the unit's own `Environment=PATH=` per systemd
-assignment-order precedence. The three canonical systemd units
-(`autopilot-control-plane.service`, `autopilot-control-plane-health.service`,
-`autopilot-state-maintenance.service`) are never edited. Back up the env file first:
+`/opt/autopilot-providers/bin/{codex,claude,agy}` is the sole supported production
+executable source. Set the following runtime values in the protected
+`~/.config/autopilot/control-plane.env` file:
+
+```dotenv
+AUTOPILOT_PROVIDER_CLI_BIN_DIR=/opt/autopilot-providers/bin
+PATH=/opt/autopilot-providers/bin:/usr/bin:/bin
+```
+
+When `AUTOPILOT_PROVIDER_CLI_BIN_DIR` is set, the control plane resolves only the fixed
+provider basename beneath that directory and validates executable access and realpath
+containment. It never falls back to `~/.local/bin` or another ambient `PATH` entry. `PATH`
+is still supplied to sanitized provider child environments, but it is not executable
+authority. User-local CLI copies must not appear in service configuration or commissioning
+commands.
+
+Back up the protected environment file before changing these runtime values:
 
 ```bash
 cp -p ~/.config/autopilot/control-plane.env \
   ~/.local/state/autopilot/backups/control-plane.env.$(date -u +%Y%m%dT%H%M%SZ).bak
 ```
 
-Also record the pre-change state of `/opt/autopilot-providers/bin/*` (absent) as the symlink
-rollback baseline before the first install.
+Probe enablement does not belong in that protected file. The required, root-owned
+`/etc/autopilot/control-plane-probes.env` contains only `CONTROL_PLANE_USAGE_PROBES`; start
+from `ops/config/control-plane-probes.env.example` during first commissioning:
+
+```bash
+sudo install -d -o root -g root -m 0755 /etc/autopilot
+sudo install -o root -g root -m 0644 \
+  ops/config/control-plane-probes.env.example \
+  /etc/autopilot/control-plane-probes.env
+```
+
+Do not recopy the blank example over an already commissioned allowlist; later changes use
+`sudoedit` and the [provider CLI activation checklist](provider-cli-activation-checklist.md).
+Also record the actual pre-change state and targets of
+`/opt/autopilot-providers/bin/{codex,claude,agy}` as the symlink rollback baseline before the
+first install.

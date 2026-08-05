@@ -9,8 +9,10 @@ paste tokens, raw prompts, provider output, cookies, or full state files into a 
 
 1. Run `sudo systemctl status autopilot-control-plane.service --no-pager`.
 2. Confirm `/usr/bin/node` is Node 24 and `/usr/bin/npm` exists.
-3. Validate the environment file exists at mode `0600`.
-4. Look for `installation_write_boundary_not_enforced` or
+3. Validate the protected environment file exists at mode `0600`, and the required root-owned,
+   nonsecret `/etc/autopilot/control-plane-probes.env` exists.
+4. Look for `invalid_provider_usage_probe_configuration`,
+   `installation_write_boundary_not_enforced`, or
    `managed_write_boundary_unavailable`.
 5. Confirm units are root-managed system units, not legacy user units.
 
@@ -29,6 +31,28 @@ Inspect `npm run ops:ready -- 8787`. Fix only the failing core component:
 
 Provider-only unavailable/degraded components do not make core readiness false.
 
+## Verify the live probe configuration safely
+
+For a running service, read only `PATH` and `CONTROL_PLANE_USAGE_PROBES` from the MainPID:
+
+```bash
+main_pid="$(sudo /usr/bin/systemctl show \
+  --property=MainPID --value autopilot-control-plane.service)"
+test "$main_pid" -gt 0
+sudo /usr/bin/awk '
+  BEGIN { RS = "\0" }
+  /^(PATH|CONTROL_PLANE_USAGE_PROBES)=/ { print }
+' "/proc/${main_pid}/environ"
+unset main_pid
+```
+
+Expect only `PATH=/opt/autopilot-providers/bin:/usr/bin:/bin` and the approved probe allowlist.
+Do not print, copy, or transform the complete `/proc/<MainPID>/environ`, and do not use
+`systemctl show --property=Environment`; the service environment can contain credentials. If the
+allowlist is absent, edit the dedicated probe file and restart. If startup reports
+`invalid_provider_usage_probe_configuration`, remove the unknown name or empty comma segment; do
+not weaken validation.
+
 ## Login returns invalid credentials
 
 Confirm the service loaded the expected environment file, then restart after changing the token. Do
@@ -41,9 +65,14 @@ served cross-origin. Fix proxy routing; do not disable CSRF validation.
 
 ## Provider quota is stale or unavailable
 
-Confirm the provider is active, its name is present in `CONTROL_PLANE_USAGE_PROBES`, the trusted tmux
-session is reachable, and the provider command still supports `/status` or `/usage`. For OpenRouter,
-confirm credential presence without disclosure. Do not infer remaining quota from an old snapshot.
+Confirm the provider name is present in `CONTROL_PLANE_USAGE_PROBES`, its executable resolves beneath
+`/opt/autopilot-providers/bin`, and active-session or unexpired 10-minute lease demand exists. Inspect
+the bounded lease state through `GET /providers/health`. If the lease expired, request a new one with
+the service-bearer procedure in the
+[provider CLI commissioning checklist](provider-cli-activation-checklist.md); a GET must never start
+a probe. Confirm the isolated tmux probe cleaned up and the provider still supports `/status` or
+`/usage`. For OpenRouter, confirm credential presence without disclosure. Do not infer remaining
+quota from an old snapshot.
 
 ## Run preparation is disabled
 
