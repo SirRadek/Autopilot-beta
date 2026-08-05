@@ -886,11 +886,26 @@ describe("control plane provider endpoints", () => {
     expect(JSON.stringify(result)).not.toContain("must stay private");
   });
   it("enables only fixed built-in provider usage probes from the explicit allowlist", () => {
-    expect(providerUsageCommandsFromEnvironment({ CONTROL_PLANE_USAGE_PROBES: "codex,agy,unknown" })).toEqual({
+    expect(providerUsageCommandsFromEnvironment({ CONTROL_PLANE_USAGE_PROBES: " CODEX, claude,agy,codex " })).toEqual({
       codex_cli: { kind: "tmux_usage", executable: "codex" },
+      claude_cli: { kind: "tmux_usage", executable: "claude" },
       agy_cli: { kind: "tmux_usage", executable: "agy" }
     });
     expect(providerUsageCommandsFromEnvironment({})).toEqual({});
+    expect(providerUsageCommandsFromEnvironment({ CONTROL_PLANE_USAGE_PROBES: "" })).toEqual({});
+    expect(providerUsageCommandsFromEnvironment({ CONTROL_PLANE_USAGE_PROBES: "  " })).toEqual({});
+  });
+  it.each([
+    "unknown",
+    "codex,unknown",
+    "codex claude",
+    "codex_cli",
+    "codex,",
+    ",codex",
+    "codex,,agy"
+  ])("rejects invalid provider usage probe configuration %s", (value) => {
+    expect(() => providerUsageCommandsFromEnvironment({ CONTROL_PLANE_USAGE_PROBES: value }))
+      .toThrow(/^invalid_provider_usage_probe_configuration$/);
   });
   it("marks an enabled provider unavailable when its configured executable cannot be resolved", () => {
     const binDir = join(mkdtempSync(join(tmpdir(), "control-plane-provider-bin-")), "bin");

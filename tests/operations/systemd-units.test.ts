@@ -66,6 +66,11 @@ describe("systemd unit writable boundaries", () => {
 
     expect(directives.get("User")).toEqual(["radek"]);
     expect(directives.get("Group")).toEqual(["radek"]);
+    expect(directives.get("EnvironmentFile")).toEqual([
+      "/home/radek/.config/autopilot/control-plane.env",
+      "/etc/autopilot/control-plane-probes.env"
+    ]);
+    expect(environmentValue(directives, "PATH")).toBe("/usr/bin:/bin");
     expect(directives.get("ProtectSystem")).toEqual(["strict"]);
     expect(directives.get("ProtectHome")).toEqual(["read-only"]);
     expect(directives.get("PrivateTmp")).toEqual(["false"]);
@@ -83,6 +88,16 @@ describe("systemd unit writable boundaries", () => {
     const projectsRoot = environmentValue(directives, "AUTOPILOT_PROJECTS_DIR");
     expect(projectsRoot).toBe("/home/radek/projects");
     expect(directives.get("ReadWritePaths")?.flatMap((value) => value.split(/\s+/))).toContain(projectsRoot);
+  });
+
+  it("keeps the probe environment example nonsecret and allowlist-only", () => {
+    const source = readFileSync(join(process.cwd(), "ops", "config", "control-plane-probes.env.example"), "utf8");
+    const assignments = source
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line !== "" && !line.startsWith("#"));
+
+    expect(assignments).toEqual(["CONTROL_PLANE_USAGE_PROBES="]);
   });
 
   it("uses the privileged system manager and fails closed when containment is ineffective", () => {

@@ -10,7 +10,9 @@ All commands run in the VM. Persistent units are system units; do not substitute
 2. Back up and validate live state.
 3. Stop legacy user units and the current system service.
 4. Place the exact candidate at `/home/radek/autopilot-beta` with `npm ci` complete.
-5. Copy reviewed units to `/etc/systemd/system`, daemon-reload, then start.
+5. Confirm the required root-owned `/etc/autopilot/control-plane-probes.env` exists with the
+   approved nonsecret allowlist, copy reviewed units to `/etc/systemd/system`, daemon-reload,
+   then start.
 6. Run liveness, readiness, boundary, and Cockpit smoke checks before declaring success.
 
 Never deploy by copying an uncommitted source directory over the live checkout.
@@ -23,7 +25,8 @@ sudo systemctl start autopilot-control-plane-health.timer autopilot-state-mainte
 ```
 
 Start fails when the environment, runtime, state, or write boundary is invalid. Fix the cause; do not
-remove an `ExecStartPre` probe.
+remove an `ExecStartPre` probe. The probe environment file is deliberately required even when
+`CONTROL_PLANE_USAGE_PROBES` is empty.
 
 ## Stop
 
@@ -48,6 +51,27 @@ Restart invalidates process-local browser sessions. Operators must log in again.
 sudo systemctl status autopilot-control-plane.service --no-pager
 sudo systemctl list-timers 'autopilot-*'
 ```
+
+## Verify loaded probe environment
+
+After a start or restart, inspect only the two nonsecret values needed to prove systemd loaded the
+runtime PATH and probe allowlist:
+
+```bash
+main_pid="$(sudo /usr/bin/systemctl show \
+  --property=MainPID --value autopilot-control-plane.service)"
+test "$main_pid" -gt 0
+sudo /usr/bin/awk '
+  BEGIN { RS = "\0" }
+  /^(PATH|CONTROL_PLANE_USAGE_PROBES)=/ { print }
+' "/proc/${main_pid}/environ"
+unset main_pid
+```
+
+The output is limited to `PATH=/opt/autopilot-providers/bin:/usr/bin:/bin` and the approved
+`CONTROL_PLANE_USAGE_PROBES=` value. Never print the full MainPID environment and never use
+`systemctl show --property=Environment`; either can disclose service credentials. An absent key,
+an unexpected PATH, or `invalid_provider_usage_probe_configuration` is a stop condition.
 
 ## Logs
 
@@ -146,8 +170,9 @@ compatibility. If state rollback is required, use the offline staged process in
 ## Provider Failure
 
 Confirm whether the failure is execution, authentication, quota probe, model availability, or stale
-evidence. Do not auto-switch mid-task. Close or pause the affected session, preserve correlation IDs,
-and let the owner select another fresh allowed route.
+evidence. Check whether the provider is configured and whether active-session or unexpired-lease
+demand exists. Do not auto-switch mid-task. Close or pause the affected session, preserve correlation
+IDs, and let the owner select another fresh allowed route.
 
 ## Personal Codex Efficiency Profile
 
@@ -158,14 +183,14 @@ model or reasoning effort.
 Always inspect the read-only plan first with Node 24:
 
 ```bash
-PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
+PATH=/opt/autopilot-providers/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:/usr/bin:/bin \
   node scripts/codex-efficiency-profile.mjs plan --home /home/radek/.codex
 ```
 
 Apply only after the owner reviews the hashes, disabled-skill count, and backup destination:
 
 ```bash
-PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
+PATH=/opt/autopilot-providers/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:/usr/bin:/bin \
   node scripts/codex-efficiency-profile.mjs apply --home /home/radek/.codex
 ```
 
@@ -174,7 +199,7 @@ reports `restart_required: true`. Start a fresh Codex session before evaluating 
 Rollback also uses compare-and-swap and refuses a live config changed after apply:
 
 ```bash
-PATH=/home/radek/.local/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:$PATH \
+PATH=/opt/autopilot-providers/bin:/home/radek/.local/node-v24.18.0-linux-x64/bin:/usr/bin:/bin \
   node scripts/codex-efficiency-profile.mjs rollback --home /home/radek/.codex \
   --backup /home/radek/.codex/config.toml.autopilot-efficiency-<timestamp>.bak
 ```
@@ -200,8 +225,11 @@ restart. Never weaken CSRF or expose the bearer token in browser assets.
 
 ## Quota Stale
 
-Check the active session, configured probe allowlist, trusted tmux target, scheduler logs, and snapshot
-timestamp. Stale data is a refusal condition for preparing a run, not permission to guess.
+Check the configured probe allowlist, absolute `/opt/autopilot-providers/bin` executable, active
+session or unexpired 10-minute lease, isolated tmux cleanup result, scheduler logs, and snapshot
+timestamp. An expired lease is reacquired only through authenticated
+`POST /providers/probes/refresh`; GET routes never refresh it. Stale data is a refusal condition for
+preparing a run, not permission to guess.
 
 ## Incident Repair Packet
 
