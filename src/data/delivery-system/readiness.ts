@@ -207,8 +207,12 @@ function providerReadiness(
 ): ReadinessComponent {
   if (provider === "openrouter_api") {
     if (!options.openRouterConfigured) return unavailable("missing_credential");
-  } else if (options.providerCommands[provider] === undefined) {
-    return unavailable("probe_not_configured");
+  } else {
+    const capability = options.providerCommands[provider];
+    if (capability === undefined) return unavailable("probe_not_configured");
+    if ("kind" in capability && capability.kind === "unavailable") {
+      return unavailable(capability.error_code);
+    }
   }
   const snapshot = snapshots.find((candidate) => candidate.provider === provider);
   if (snapshot === undefined) return { status: "degraded", error_code: "not_observed" };

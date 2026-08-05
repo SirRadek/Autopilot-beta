@@ -11,6 +11,7 @@ import {
   type ProviderSnapshot
 } from "./providerQuota";
 import { isCanonicalModelId } from "./providerModelId";
+import type { ProviderCliRuntimeResult } from "./providerCliRuntime";
 import { runTmuxUsageProbe, type UsageProbeProvider } from "./providerUsageProbe";
 
 export interface ProviderCommandResult {
@@ -27,12 +28,20 @@ export type ProviderCommandRunner = (input: {
 
 export type ProviderCliCapability =
   | { readonly command: string; readonly args: readonly string[] }
-  | { readonly kind: "tmux_usage" };
+  | { readonly kind: "tmux_usage"; readonly executable: string }
+  | {
+      readonly kind: "unavailable";
+      readonly error_code: Extract<ProviderCliRuntimeResult, { readonly status: "unavailable" }>["error_code"];
+    };
 
 export interface ProviderQuotaAdapterDependencies {
   readonly runCommand: ProviderCommandRunner;
   readonly commands?: Partial<Record<UsageProbeProvider, ProviderCliCapability>>;
-  readonly runUsageProbe?: (provider: UsageProbeProvider) => Promise<ProviderCommandResult>;
+  readonly runUsageProbe?: (
+    provider: UsageProbeProvider,
+    executable: string,
+    signal: AbortSignal
+  ) => Promise<ProviderCommandResult>;
   readonly fetchImpl?: OpenRouterHealthFetch;
   readonly timeoutMs?: number;
   readonly environment?: Readonly<Record<string, string | undefined>>;
@@ -61,13 +70,16 @@ function createCliAdapter(
         if (!spec) {
           return errorSnapshot(provider, "cli", now, "provider_unavailable");
         }
+        if ("kind" in spec && spec.kind === "unavailable") {
+          return errorSnapshot(provider, "cli", now, spec.error_code);
+        }
         const controller = new AbortController();
         const onAbort = () => controller.abort();
         signal.addEventListener("abort", onAbort, { once: true });
         let result: ProviderCommandResult;
         try {
           const execution = "kind" in spec
-            ? (dependencies.runUsageProbe ?? runTmuxUsageProbe)(provider)
+            ? (dependencies.runUsageProbe ?? runUsageProbeUntilHardened)(provider, spec.executable, controller.signal)
             : dependencies.runCommand({ command: spec.command, args: spec.args, signal: controller.signal });
           result = await withTimeout(
             execution,
@@ -91,6 +103,16 @@ function createCliAdapter(
       }
     }
   };
+}
+
+// P7 carries the trusted executable and abort signal across the adapter boundary. P8 changes
+// runTmuxUsageProbe itself to consume both while hardening the tmux process and cleanup lifecycle.
+function runUsageProbeUntilHardened(
+  provider: UsageProbeProvider,
+  _executable: string,
+  _signal: AbortSignal
+): Promise<ProviderCommandResult> {
+  return runTmuxUsageProbe(provider);
 }
 
 function createOpenRouterAdapter(dependencies: ProviderQuotaAdapterDependencies): ProviderQuotaAdapter {

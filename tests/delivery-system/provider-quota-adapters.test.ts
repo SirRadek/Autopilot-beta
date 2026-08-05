@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createProviderQuotaAdapters, type ProviderCommandRunner } from "../../src/data/delivery-system/providerQuotaAdapters";
 
@@ -21,9 +21,9 @@ const commands = {
 };
 
 const usageCommands = {
-  codex_cli: { kind: "tmux_usage" as const },
-  claude_cli: { kind: "tmux_usage" as const },
-  agy_cli: { kind: "tmux_usage" as const }
+  codex_cli: { kind: "tmux_usage" as const, executable: "/provider-bin/codex" },
+  claude_cli: { kind: "tmux_usage" as const, executable: "/provider-bin/claude" },
+  agy_cli: { kind: "tmux_usage" as const, executable: "/provider-bin/agy" }
 };
 
 describe("provider quota adapters", () => {
@@ -142,13 +142,18 @@ describe("provider quota adapters", () => {
   });
 
   it("uses only the built-in tmux usage capability when explicitly enabled", async () => {
+    let invocation: { readonly executable: string; readonly signal: AbortSignal } | undefined;
     const snapshot = await createProviderQuotaAdapters({
       runCommand: runnerFor(""),
       commands: usageCommands,
-      runUsageProbe: async (provider) => ({ stdout: provider === "codex_cli" ? payload : "", stderr: "", exitCode: 0 })
+      runUsageProbe: async (provider, executable, forwardedSignal) => {
+        invocation = { executable, signal: forwardedSignal };
+        return { stdout: provider === "codex_cli" ? payload : "", stderr: "", exitCode: 0 };
+      }
     }).codex_cli.fetchSnapshot({ now, signal });
     expect(snapshot.five_hour.remaining).toBe(75);
     expect(snapshot.error_code).toBeNull();
+    expect(invocation).toEqual({ executable: "/provider-bin/codex", signal: expect.any(AbortSignal) });
   });
 
   it("preserves a built-in probe missing-credential result", async () => {
@@ -158,5 +163,22 @@ describe("provider quota adapters", () => {
       runUsageProbe: async () => ({ stdout: "", stderr: "missing_credential", exitCode: 1 })
     }).claude_cli.fetchSnapshot({ now, signal });
     expect(snapshot.error_code).toBe("missing_credential");
+  });
+
+  it("preserves an unavailable executable capability without invoking a provider", async () => {
+    const runCommand = vi.fn(runnerFor(payload));
+    const runUsageProbe = vi.fn(async () => ({ stdout: payload, stderr: "", exitCode: 0 }));
+    const snapshot = await createProviderQuotaAdapters({
+      runCommand,
+      commands: {
+        codex_cli: { kind: "unavailable", error_code: "provider_executable_missing" }
+      },
+      runUsageProbe
+    }).codex_cli.fetchSnapshot({ now, signal });
+
+    expect(snapshot.health).toBe("unavailable");
+    expect(snapshot.error_code).toBe("provider_executable_missing");
+    expect(runCommand).not.toHaveBeenCalled();
+    expect(runUsageProbe).not.toHaveBeenCalled();
   });
 });

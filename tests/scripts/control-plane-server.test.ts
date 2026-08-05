@@ -887,10 +887,25 @@ describe("control plane provider endpoints", () => {
   });
   it("enables only fixed built-in provider usage probes from the explicit allowlist", () => {
     expect(providerUsageCommandsFromEnvironment({ CONTROL_PLANE_USAGE_PROBES: "codex,agy,unknown" })).toEqual({
-      codex_cli: { kind: "tmux_usage" },
-      agy_cli: { kind: "tmux_usage" }
+      codex_cli: { kind: "tmux_usage", executable: "codex" },
+      agy_cli: { kind: "tmux_usage", executable: "agy" }
     });
     expect(providerUsageCommandsFromEnvironment({})).toEqual({});
+  });
+  it("marks an enabled provider unavailable when its configured executable cannot be resolved", () => {
+    const binDir = join(mkdtempSync(join(tmpdir(), "control-plane-provider-bin-")), "bin");
+    mkdirSync(binDir, { mode: 0o700 });
+    const codexPath = join(binDir, "codex");
+    writeFileSync(codexPath, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    expect(providerUsageCommandsFromEnvironment({
+      CONTROL_PLANE_USAGE_PROBES: "codex,claude",
+      AUTOPILOT_PROVIDER_CLI_BIN_DIR: binDir,
+      PATH: "/untrusted/path"
+    })).toEqual({
+      codex_cli: { kind: "tmux_usage", executable: codexPath },
+      claude_cli: { kind: "unavailable", error_code: "provider_executable_missing" }
+    });
   });
   it("parses secure-cookie configuration strictly", () => {
     expect(secureCookiesFromEnvironment({})).toBe(false);
