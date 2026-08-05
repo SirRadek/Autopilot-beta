@@ -1,6 +1,11 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { normalizeProviderError, type ProviderErrorCode } from "./providerQuota";
+import { resolveProviderCliRuntime } from "./providerCliRuntime";
 import { expandQuotaLabel, isCanonicalModelId } from "./providerModelId";
 
 export type UsageProbeProvider = "codex_cli" | "claude_cli" | "agy_cli";
@@ -20,14 +25,17 @@ export interface TmuxCommandResult {
 export type TmuxCommandExecutor = (
   command: "tmux",
   args: readonly string[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>
 ) => Promise<TmuxCommandResult>;
 
 const MAX_CAPTURE_BYTES = 128 * 1024;
-const CLI: Readonly<Record<UsageProbeProvider, { readonly command: string; readonly slashCommand: "/status" | "/usage" }>> = {
-  codex_cli: { command: "codex --no-alt-screen", slashCommand: "/status" },
-  claude_cli: { command: "claude --ax-screen-reader", slashCommand: "/usage" },
-  agy_cli: { command: "agy", slashCommand: "/usage" }
+const CLEANUP_TIMEOUT_MS = 1_000;
+const PROBE_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"] as const;
+const CLI: Readonly<Record<UsageProbeProvider, { readonly args: readonly string[]; readonly slashCommand: "/status" | "/usage" }>> = {
+  codex_cli: { args: ["--no-alt-screen"], slashCommand: "/status" },
+  claude_cli: { args: ["--ax-screen-reader"], slashCommand: "/usage" },
+  agy_cli: { args: [], slashCommand: "/usage" }
 };
 
 export function parseCodexStatus(raw: string): ParsedUsage | null {
@@ -111,60 +119,171 @@ export function parseClaudeUsage(raw: string): ParsedUsage | null {
 export async function runTmuxUsageProbe(
   provider: UsageProbeProvider,
   options: {
+    readonly executable: string;
     readonly execute?: TmuxCommandExecutor;
     readonly timeoutMs?: number;
     readonly sessionId?: string;
+    readonly signal?: AbortSignal;
+    readonly runtimeRoot?: string;
     /** Test-only timing override; production probes use the bounded TUI readiness delays. */
     readonly delayMs?: number;
-  } = {}
+  }
 ): Promise<TmuxCommandResult> {
   const execute = options.execute ?? executeTmux;
   const timeoutMs = options.timeoutMs ?? 20_000;
   const sessionId = options.sessionId ?? `autopilot-quota-${randomBytes(6).toString("hex")}`;
   const delayMs = options.delayMs;
+  const socketName = `autopilot-probe-${sessionId}`;
+  const environment = sanitizedProbeEnvironment(process.env);
+  let workingDirectory: string;
+  try {
+    workingDirectory = await mkdtemp(join(options.runtimeRoot ?? tmpdir(), "autopilot-provider-probe-"));
+  } catch {
+    return failureResult("provider_runtime_denied");
+  }
+
   const controller = new AbortController();
+  const onExternalAbort = () => controller.abort();
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener("abort", onExternalAbort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const target = `${sessionId}:0.0`;
   const spec = CLI[provider];
+  let result: TmuxCommandResult;
   try {
-    await checked(execute, ["new-session", "-d", "-s", sessionId, "-x", "160", "-y", "50", "-c", process.cwd(), spec.command], controller.signal);
+    if (controller.signal.aborted) throw new Error("timeout");
+    if (options.executable.length === 0) throw new Error("provider_executable_missing");
+    await checked(execute, withSocket(socketName, [
+      "new-session",
+      "-d",
+      "-s", sessionId,
+      "-x", "160",
+      "-y", "50",
+      ...sessionEnvironmentArguments(environment),
+      "-c", workingDirectory,
+      options.executable,
+      ...spec.args
+    ]), controller.signal, environment);
     await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
-    await checked(execute, ["send-keys", "-t", target, "-l", spec.slashCommand], controller.signal);
+    await checked(execute, withSocket(socketName, ["send-keys", "-t", target, "-l", spec.slashCommand]), controller.signal, environment);
     await pause(delayMs ?? 250, controller.signal);
-    await checked(execute, ["send-keys", "-t", target, "C-m"], controller.signal);
+    await checked(execute, withSocket(socketName, ["send-keys", "-t", target, "C-m"]), controller.signal, environment);
     await pause(delayMs ?? 4_000, controller.signal);
-    const captured = await checked(execute, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target], controller.signal);
+    const captured = await checked(execute, withSocket(socketName, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target]), controller.signal, environment);
     const stdout = Buffer.from(captured.stdout).subarray(0, MAX_CAPTURE_BYTES).toString("utf8");
     const parsed = provider === "codex_cli" ? parseCodexStatus(stdout) : provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
     if (parsed === null) {
       const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
-      return { stdout: "", stderr: missing ? "missing_credential" : "malformed_response", exitCode: 1 };
+      result = failureResult(missing ? "missing_credential" : "malformed_response");
+    } else {
+      result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
     }
-    return { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
   } catch (error) {
-    return { stdout: "", stderr: controller.signal.aborted ? "timeout" : error instanceof Error ? error.message : "provider_unavailable", exitCode: 1 };
-  } finally {
-    clearTimeout(timer);
-    const cleanup = new AbortController();
-    const cleanupTimer = setTimeout(() => cleanup.abort(), 1_000);
-    try { await execute("tmux", ["kill-session", "-t", sessionId], cleanup.signal); } catch { /* best-effort bounded cleanup */ }
-    finally { clearTimeout(cleanupTimer); }
+    result = failureResult(controller.signal.aborted ? "timeout" : normalizeProviderError(error));
   }
+
+  clearTimeout(timer);
+  options.signal?.removeEventListener("abort", onExternalAbort);
+  const serverTerminated = await terminateAndVerifyServer(execute, socketName, environment);
+  let workingDirectoryRemoved = true;
+  try {
+    await rm(workingDirectory, { recursive: true, force: true });
+  } catch {
+    workingDirectoryRemoved = false;
+  }
+  return serverTerminated && workingDirectoryRemoved
+    ? result
+    : failureResult("provider_runtime_denied");
 }
 
-async function checked(execute: TmuxCommandExecutor, args: readonly string[], signal: AbortSignal): Promise<TmuxCommandResult> {
-  const result = await execute("tmux", args, signal);
-  if (result.exitCode !== 0) throw new Error(result.stderr || "provider_unavailable");
+async function checked(
+  execute: TmuxCommandExecutor,
+  args: readonly string[],
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>
+): Promise<TmuxCommandResult> {
+  // The signal-aware executor settles only after its tmux client has exited. Await that
+  // acknowledgement before cleanup so a late new-session cannot recreate the isolated server.
+  const result = await execute("tmux", args, signal, environment);
+  if (result.exitCode !== 0) throw new Error(normalizeProviderError(result.stderr || "provider_unavailable"));
   return result;
 }
 
-function executeTmux(command: "tmux", args: readonly string[], signal: AbortSignal): Promise<TmuxCommandResult> {
+function executeTmux(
+  command: "tmux",
+  args: readonly string[],
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>
+): Promise<TmuxCommandResult> {
   return new Promise((resolve) => {
-    execFile(command, [...args], { encoding: "utf8", maxBuffer: MAX_CAPTURE_BYTES, signal }, (error, stdout, stderr) => {
+    execFile(command, [...args], { encoding: "utf8", env: { ...environment }, maxBuffer: MAX_CAPTURE_BYTES, signal }, (error, stdout, stderr) => {
       const code = (error as NodeJS.ErrnoException & { code?: number })?.code;
       resolve({ stdout: stdout ?? "", stderr: stderr ?? (error?.message ?? ""), exitCode: typeof code === "number" ? code : error ? 1 : 0 });
     });
   });
+}
+
+async function terminateAndVerifyServer(
+  execute: TmuxCommandExecutor,
+  socketName: string,
+  environment: Readonly<Record<string, string>>
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CLEANUP_TIMEOUT_MS);
+  try {
+    try {
+      await abortable(execute("tmux", withSocket(socketName, ["kill-server"]), controller.signal, environment), controller.signal);
+    } catch {
+      // Verification below is authoritative: kill-server may fail because no server remains.
+    }
+    if (controller.signal.aborted) return false;
+    try {
+      const verification = await abortable(
+        execute("tmux", withSocket(socketName, ["has-session"]), controller.signal, environment),
+        controller.signal
+      );
+      return !controller.signal.aborted && isExpectedAbsentServer(verification);
+    } catch {
+      return false;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isExpectedAbsentServer(result: TmuxCommandResult): boolean {
+  if (result.exitCode === 0) return false;
+  return /^(?:(?:tmux:\s*)?no server(?: running)?(?:\s|$)|failed to connect[^\r\n]*(?:no such file|connection refused))/i.test(result.stderr);
+}
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new Error("timeout"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error("timeout"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
+function sanitizedProbeEnvironment(environment: NodeJS.ProcessEnv): Readonly<Record<string, string>> {
+  const sanitized: Record<string, string> = {};
+  for (const key of PROBE_ENVIRONMENT_KEYS) {
+    const value = environment[key];
+    if (value !== undefined) sanitized[key] = value;
+  }
+  return sanitized;
+}
+
+function sessionEnvironmentArguments(environment: Readonly<Record<string, string>>): string[] {
+  return PROBE_ENVIRONMENT_KEYS.flatMap((key) => environment[key] === undefined ? [] : ["-e", `${key}=${environment[key]}`]);
+}
+
+function withSocket(socketName: string, args: readonly string[]): string[] {
+  return ["-L", socketName, ...args];
+}
+
+function failureResult(errorCode: ProviderErrorCode): TmuxCommandResult {
+  return { stdout: "", stderr: errorCode, exitCode: 1 };
 }
 
 function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
@@ -200,7 +319,10 @@ if (process.argv[1]?.endsWith("providerUsageProbe.ts")) {
   if (provider !== "codex_cli" && provider !== "claude_cli" && provider !== "agy_cli") {
     throw new Error("usage: providerUsageProbe.ts codex_cli|claude_cli|agy_cli");
   }
-  const result = await runTmuxUsageProbe(provider);
+  const runtime = resolveProviderCliRuntime(provider);
+  const result = runtime.status === "available"
+    ? await runTmuxUsageProbe(provider, { executable: runtime.executable })
+    : failureResult(runtime.error_code);
   if (result.stdout) process.stdout.write(`${result.stdout}\n`);
   if (result.stderr) process.stderr.write(`${result.stderr}\n`);
   process.exitCode = result.exitCode;

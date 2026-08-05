@@ -1,7 +1,9 @@
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   parseAgyUsage,
@@ -12,6 +14,22 @@ import {
 } from "../../src/data/delivery-system/providerUsageProbe";
 
 const fixture = (name: string): string => readFileSync(fileURLToPath(new URL(`../fixtures/provider-usage/${name}`, import.meta.url)), "utf8");
+const runtimeRoots: string[] = [];
+
+function temporaryRuntimeRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "provider-usage-probe-"));
+  runtimeRoots.push(root);
+  return root;
+}
+
+function tmuxSubcommand(args: readonly string[]): string | undefined {
+  return args[2];
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  for (const root of runtimeRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
 
 describe("provider usage parsers", () => {
   it("parses Codex five-hour and weekly percentages with reset labels", () => {
@@ -120,27 +138,191 @@ describe("provider usage parsers", () => {
 });
 
 describe("tmux usage probe", () => {
-  it("uses an allowlisted CLI, bounded capture and always removes its session", async () => {
-    const calls: string[][] = [];
-    const execute: TmuxCommandExecutor = async (_command, args) => {
-      calls.push([...args]);
-      return args[0] === "capture-pane" ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 } : { stdout: "", stderr: "", exitCode: 0 };
+  it("isolates every tmux call, launches the resolved executable, sanitizes env, and removes its empty cwd", async () => {
+    vi.stubEnv("CONTROL_PLANE_SECRET", "must-not-reach-tmux");
+    vi.stubEnv("OPENROUTER_API_KEY", "must-not-reach-provider");
+    vi.stubEnv("UNRELATED_PROBE_SECRET", "must-also-be-omitted");
+    const runtimeRoot = temporaryRuntimeRoot();
+    const calls: { readonly args: readonly string[]; readonly env: Readonly<Record<string, string>> }[] = [];
+    let launchCwd: string | undefined;
+    const execute: TmuxCommandExecutor = async (_command, args, _signal, env) => {
+      calls.push({ args: [...args], env: { ...env } });
+      if (tmuxSubcommand(args) === "new-session") {
+        const cwdIndex = args.indexOf("-c");
+        launchCwd = args[cwdIndex + 1];
+        expect(launchCwd).toBeDefined();
+        expect(readdirSync(launchCwd!)).toEqual([]);
+      }
+      if (tmuxSubcommand(args) === "capture-pane") {
+        return { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 };
+      }
+      if (tmuxSubcommand(args) === "has-session") {
+        return { stdout: "", stderr: "no server", exitCode: 1 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
     };
-    const result = await runTmuxUsageProbe("codex_cli", { execute, timeoutMs: 100, sessionId: "autopilot-quota-test", delayMs: 0 });
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "autopilot-quota-test",
+      delayMs: 0,
+      runtimeRoot
+    });
+
     expect(result.exitCode).toBe(0);
     expect(result.stdout.length).toBeLessThanOrEqual(128 * 1024);
-    expect(calls.some((args) => args.includes("/status"))).toBe(true);
-    expect(calls.at(-1)).toEqual(["kill-session", "-t", "autopilot-quota-test"]);
-    const statusIndex = calls.findIndex((args) => args.includes("/status"));
-    const enterSendsAfterStatus = calls.slice(statusIndex + 1).filter((args) => args.includes("C-m")).length;
+    expect(calls.every(({ args }) => args.slice(0, 2).join("\0") === ["-L", "autopilot-probe-autopilot-quota-test"].join("\0"))).toBe(true);
+    const newSession = calls.find(({ args }) => tmuxSubcommand(args) === "new-session");
+    expect(newSession?.args.slice(-2)).toEqual(["/provider-bin/codex", "--no-alt-screen"]);
+    expect(newSession?.args).not.toContain("codex --no-alt-screen");
+    expect(calls.some(({ args }) => args.includes("/status"))).toBe(true);
+    expect(calls.slice(-2).map(({ args }) => tmuxSubcommand(args))).toEqual(["kill-server", "has-session"]);
+    const statusIndex = calls.findIndex(({ args }) => args.includes("/status"));
+    const enterSendsAfterStatus = calls.slice(statusIndex + 1).filter(({ args }) => args.includes("C-m")).length;
     expect(enterSendsAfterStatus).toBe(1);
+    expect(launchCwd).toBeDefined();
+    expect(relative(runtimeRoot, launchCwd!)).not.toMatch(/^\.\.(?:\/|$)/);
+    expect(existsSync(launchCwd!)).toBe(false);
+
+    const allowedEnvironment = new Set(["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"]);
+    for (const call of calls) {
+      expect(Object.keys(call.env).every((key) => allowedEnvironment.has(key))).toBe(true);
+      expect(call.env).not.toHaveProperty("CONTROL_PLANE_SECRET");
+      expect(call.env).not.toHaveProperty("OPENROUTER_API_KEY");
+      expect(call.env).not.toHaveProperty("UNRELATED_PROBE_SECRET");
+    }
+    for (const [key, value] of Object.entries(newSession?.env ?? {})) {
+      expect(newSession?.args).toContain(`${key}=${value}`);
+    }
   });
 
   it("reports missing credentials for Claude login without fabricating quota", async () => {
-    const execute: TmuxCommandExecutor = async (_command, args) => args[0] === "capture-pane"
+    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
       ? { stdout: "Choose a login method\nSign in with Claude.ai", stderr: "", exitCode: 0 }
-      : { stdout: "", stderr: "", exitCode: 0 };
-    const result = await runTmuxUsageProbe("claude_cli", { execute, timeoutMs: 100, sessionId: "autopilot-quota-test", delayMs: 0 });
+      : tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+    const result = await runTmuxUsageProbe("claude_cli", {
+      executable: "/provider-bin/claude",
+      execute,
+      timeoutMs: 100,
+      sessionId: "autopilot-quota-test",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
     expect(result).toMatchObject({ exitCode: 1, stderr: "missing_credential" });
+  });
+
+  it("links an external abort to the in-flight probe and still performs verified cleanup", async () => {
+    const external = new AbortController();
+    const runtimeRoot = temporaryRuntimeRoot();
+    const subcommands: string[] = [];
+    let workingDirectory: string | undefined;
+    let launchSignal: AbortSignal | undefined;
+    let launchSettled = false;
+    let cleanupStartedBeforeLaunchSettled = false;
+    const execute: TmuxCommandExecutor = async (_command, args, commandSignal) => {
+      const subcommand = tmuxSubcommand(args)!;
+      subcommands.push(subcommand);
+      if (subcommand === "new-session") {
+        launchSignal = commandSignal;
+        workingDirectory = args[args.indexOf("-c") + 1];
+        queueMicrotask(() => external.abort());
+        await new Promise<void>((resolve) => {
+          if (commandSignal.aborted) resolve();
+          else commandSignal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        launchSettled = true;
+        return { stdout: "", stderr: "private provider failure", exitCode: 1 };
+      }
+      if (subcommand === "kill-server") cleanupStartedBeforeLaunchSettled = !launchSettled;
+      return subcommand === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("agy_cli", {
+      executable: "/provider-bin/agy",
+      execute,
+      signal: external.signal,
+      timeoutMs: 10_000,
+      sessionId: "abort-test",
+      delayMs: 0,
+      runtimeRoot
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "timeout", exitCode: 1 });
+    expect(launchSignal?.aborted).toBe(true);
+    expect(cleanupStartedBeforeLaunchSettled).toBe(false);
+    expect(subcommands.slice(-2)).toEqual(["kill-server", "has-session"]);
+    expect(workingDirectory).toBeDefined();
+    expect(existsSync(workingDirectory!)).toBe(false);
+  });
+
+  it("fails closed when isolated tmux-server termination cannot be verified", async () => {
+    let workingDirectory: string | undefined;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      if (tmuxSubcommand(args) === "new-session") workingDirectory = args[args.indexOf("-c") + 1];
+      return tmuxSubcommand(args) === "capture-pane"
+        ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "cleanup-failure-test",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "provider_runtime_denied", exitCode: 1 });
+    expect(workingDirectory).toBeDefined();
+    expect(existsSync(workingDirectory!)).toBe(false);
+  });
+
+  it("does not mistake a cleanup permission failure for verified termination", async () => {
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "capture-pane") return { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 };
+      if (subcommand === "kill-server" || subcommand === "has-session") {
+        return { stdout: "", stderr: "permission denied: /private/tmux/socket", exitCode: 1 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "cleanup-denied-test",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "provider_runtime_denied", exitCode: 1 });
+    expect(JSON.stringify(result)).not.toContain("/private/tmux/socket");
+  });
+
+  it("never returns raw tmux stderr", async () => {
+    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "new-session"
+      ? { stdout: "", stderr: "unexpected failure containing /private/provider/path", exitCode: 1 }
+      : tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "stderr-test",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "provider_error", exitCode: 1 });
+    expect(JSON.stringify(result)).not.toContain("/private/provider/path");
   });
 });

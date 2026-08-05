@@ -75,11 +75,12 @@ function createCliAdapter(
         }
         const controller = new AbortController();
         const onAbort = () => controller.abort();
-        signal.addEventListener("abort", onAbort, { once: true });
+        if (signal.aborted) controller.abort();
+        else signal.addEventListener("abort", onAbort, { once: true });
         let result: ProviderCommandResult;
         try {
           const execution = "kind" in spec
-            ? (dependencies.runUsageProbe ?? runUsageProbeUntilHardened)(provider, spec.executable, controller.signal)
+            ? (dependencies.runUsageProbe ?? runUsageProbe)(provider, spec.executable, controller.signal)
             : dependencies.runCommand({ command: spec.command, args: spec.args, signal: controller.signal });
           result = await withTimeout(
             execution,
@@ -91,6 +92,9 @@ function createCliAdapter(
         }
         if ((result.exitCode ?? 0) !== 0) {
           const stderr = result.stderr ?? "";
+          if ("kind" in spec) {
+            return errorSnapshot(provider, "cli", now, normalizeProviderError(stderr || "provider_unavailable"));
+          }
           throw new Error(/login|auth|credential|api[ _-]?key|token/i.test(stderr) ? "missing_credential" : stderr || "provider_unavailable");
         }
         const parsed = parseQuotaPayload(result.stdout);
@@ -105,14 +109,12 @@ function createCliAdapter(
   };
 }
 
-// P7 carries the trusted executable and abort signal across the adapter boundary. P8 changes
-// runTmuxUsageProbe itself to consume both while hardening the tmux process and cleanup lifecycle.
-function runUsageProbeUntilHardened(
+function runUsageProbe(
   provider: UsageProbeProvider,
-  _executable: string,
-  _signal: AbortSignal
+  executable: string,
+  signal: AbortSignal
 ): Promise<ProviderCommandResult> {
-  return runTmuxUsageProbe(provider);
+  return runTmuxUsageProbe(provider, { executable, signal });
 }
 
 function createOpenRouterAdapter(dependencies: ProviderQuotaAdapterDependencies): ProviderQuotaAdapter {
