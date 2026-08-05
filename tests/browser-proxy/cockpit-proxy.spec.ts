@@ -12,7 +12,7 @@ test("uses the trusted same-origin proxy for the complete Cockpit login flow", a
   await page.getByLabel("Uživatelské jméno").fill(username);
   await page.getByLabel("Heslo").fill(password);
   await page.getByRole("button", { name: "Přihlásit" }).click();
-  await expect(page.getByRole("heading", { name: "Hybrid Cockpit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Autopilot", exact: true })).toBeVisible();
   expect(await page.evaluate(() => performance.getEntriesByType("resource").every((entry) => new URL(entry.name).origin === location.origin))).toBe(true);
 
   const logoutStatus = await page.evaluate(async () => {

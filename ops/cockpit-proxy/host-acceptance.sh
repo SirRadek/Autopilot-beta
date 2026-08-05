@@ -106,7 +106,7 @@ require_header() {
 
 status="$(request root GET "$base_url/")"
 require_status "$status" 200 root
-require_header_exact "$work/root.headers" Content-Security-Policy "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+require_header_exact "$work/root.headers" Content-Security-Policy "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src https://www.figma.com https://embed.figma.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 require_header "$work/root.headers" X-Content-Type-Options "nosniff"
 require_header "$work/root.headers" Referrer-Policy "no-referrer"
 require_header "$work/root.headers" Strict-Transport-Security "max-age=300"
