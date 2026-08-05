@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
+import { isRunRouteEligible } from "../../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../../src/data/delivery-system/runOrchestrator";
 import type { RunDraftInput } from "../../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
@@ -59,6 +60,29 @@ function harness() {
 }
 
 describe("profile-aware run route eligibility", () => {
+  it("keeps a fresh healthy snapshot with zero mapped models non-route-ready", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-route-empty-models-"));
+    const window = { limit: null, used: null, remaining: null, resets_at: null };
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [{
+        provider: "claude_cli",
+        source: "cli",
+        fetched_at: now,
+        observed_at: now,
+        five_hour: window,
+        weekly: window,
+        api_spend: null,
+        currency: null,
+        models: [],
+        health: "healthy",
+        error_code: null
+      }]
+    });
+
+    expect(isRunRouteEligible(stateDir, "claude_cli", "claude-opus-4-8", now)).toBe(false);
+  });
+
   it("prepares and approves a known DEV route when its quota snapshot is unavailable", () => {
     const { orchestrator, draft } = harness();
 

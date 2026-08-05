@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
+import { expandQuotaLabel, isCanonicalModelId } from "./providerModelId";
+
 export type UsageProbeProvider = "codex_cli" | "claude_cli" | "agy_cli";
 
 export interface ParsedUsage {
@@ -44,7 +46,8 @@ export function parseCodexStatus(raw: string): ParsedUsage | null {
   const models = [
     ...(activeModel ? [{ model_id: activeModel, available: boundedPercent(activeWeeklyPercent) > 0 }] : []),
     ...namedModels.map((match) => ({ model_id: match[1]!, available: boundedPercent(match[2]!) > 0 }))
-  ].filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)));
+  ].filter((model) => isCanonicalModelId(model.model_id))
+    .filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)));
   return { five_hour, weekly: percentWindow(week[1]!, week[2]!), models };
 }
 
@@ -66,13 +69,20 @@ export function parseAgyUsage(raw: string): ParsedUsage | null {
   if (groups.length !== headings.length) return null;
   const weekly = Math.min(...groups.map((group) => group.weekly));
   const five = Math.min(...groups.map((group) => group.five));
+  const modelAvailability = new Map<string, boolean>();
+  for (const group of groups) {
+    const available = group.weekly > 0 && group.five > 0;
+    for (const label of group.models) {
+      for (const modelId of expandQuotaLabel("agy_cli", label)) {
+        modelAvailability.set(modelId, (modelAvailability.get(modelId) ?? true) && available);
+      }
+    }
+  }
   return {
     five_hour: percentWindow(String(five), null),
     weekly: percentWindow(String(weekly), null),
-    models: groups.flatMap((group) => group.models.map((model_id) => ({
-      model_id: model_id.slice(0, 200),
-      available: group.weekly > 0 && group.five > 0
-    }))).slice(0, 256)
+    models: [...modelAvailability].map(([model_id, available]) => ({ model_id, available }))
+      .slice(0, 256)
   };
 }
 
@@ -87,10 +97,14 @@ export function parseClaudeUsage(raw: string): ParsedUsage | null {
     text.match(/^([A-Za-z]+\s+\d+(?:\.\d+)?)\s+\([^\r\n]*context\)\s+·\s+Claude/im)?.[1],
     text.match(/Extended:\s+([A-Za-z]+\s+\d+(?:\.\d+)?)/i)?.[1]
   ].filter((value): value is string => value !== undefined);
+  const seenModelIds = new Set<string>();
+  const available = weeklyUsed < 100 && sessionUsed < 100;
   return {
     five_hour: usedPercentWindow(sessionUsed, session[2]!),
     weekly: usedPercentWindow(weeklyUsed, week[2]!),
-    models: [...new Set(models)].map((model_id) => ({ model_id, available: weeklyUsed < 100 && sessionUsed < 100 }))
+    models: models.flatMap((label) => expandQuotaLabel("claude_cli", label)
+      .map((model_id) => ({ model_id, available })))
+      .filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)))
   };
 }
 

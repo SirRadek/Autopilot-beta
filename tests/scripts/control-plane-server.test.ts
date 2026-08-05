@@ -1308,16 +1308,26 @@ describe("control plane provider endpoints", () => {
     expect(await response.json()).toEqual({ providers: [] });
   });
 
-  it("serves the static fallback model catalog when quota snapshots contain no models", async () => {
+  it("serves the static model catalog as configured but unobserved and unavailable", async () => {
     const response = await request("/providers/models", SERVICE_TOKEN);
     const body = await response.json() as {
       models: Array<{
         model_id: string;
         providers: string[];
+        configured: boolean;
+        observed: boolean;
         available: boolean;
         health: string[];
         source: string;
-        provider_routes: Array<{ provider: string; reasoning_efforts: string[] }>;
+        provider_routes: Array<{
+          provider: string;
+          configured: boolean;
+          observed: boolean;
+          available: boolean;
+          health: string[];
+          source: string;
+          reasoning_efforts: string[];
+        }>;
       }>;
     };
 
@@ -1326,12 +1336,16 @@ describe("control plane provider endpoints", () => {
       expect.objectContaining({
         model_id: "gpt-5.6-sol",
         providers: ["codex_cli"],
-        available: true,
+        configured: true,
+        observed: false,
+        available: false,
         health: ["unavailable"],
         source: "static_fallback",
         provider_routes: [{
           provider: "codex_cli",
-          available: true,
+          configured: true,
+          observed: false,
+          available: false,
           health: ["unavailable"],
           source: "static_fallback",
           reasoning_efforts: ["low", "medium", "high", "xhigh"]
@@ -1350,7 +1364,7 @@ describe("control plane provider endpoints", () => {
     ]));
   });
 
-  it("keeps a statically known model available when an unusable live row has the same provider/model pair", async () => {
+  it("does not let static configuration override negative live availability", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
     provisionServiceToken(stateDir);
     writeProviderQuotaStore(stateDir, {
@@ -1368,10 +1382,38 @@ describe("control plane provider endpoints", () => {
 
     const body = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, {
       headers: { authorization: `Bearer ${SERVICE_TOKEN}` }
-    })).json() as { models: Array<{ model_id: string; providers: string[]; available: boolean; source: string }> };
+    })).json() as {
+      models: Array<{
+        model_id: string;
+        providers: string[];
+        configured: boolean;
+        observed: boolean;
+        available: boolean;
+        source: string;
+        provider_routes: Array<{
+          provider: string;
+          configured: boolean;
+          observed: boolean;
+          available: boolean;
+          source: string;
+        }>;
+      }>;
+    };
 
     expect(body.models.filter((model) => model.model_id === "gpt-5.6-sol" && model.providers.includes("codex_cli")))
-      .toEqual([expect.objectContaining({ available: true, source: "mixed" })]);
+      .toEqual([expect.objectContaining({
+        configured: true,
+        observed: true,
+        available: false,
+        source: "mixed",
+        provider_routes: [expect.objectContaining({
+          provider: "codex_cli",
+          configured: true,
+          observed: true,
+          available: false,
+          source: "mixed"
+        })]
+      })]);
   });
 
   it("preserves provider-specific availability when providers share a live model id", async () => {
@@ -1401,14 +1443,26 @@ describe("control plane provider endpoints", () => {
     })).json() as {
       models: Array<{
         model_id: string;
-        provider_routes: Array<{ provider: string; available: boolean; health: string[]; source: string }>;
+        configured: boolean;
+        observed: boolean;
+        available: boolean;
+        source: string;
+        provider_routes: Array<{
+          provider: string;
+          configured: boolean;
+          observed: boolean;
+          available: boolean;
+          health: string[];
+          source: string;
+        }>;
       }>;
     };
     const shared = body.models.find((model) => model.model_id === "shared-live-model");
 
+    expect(shared).toMatchObject({ configured: false, observed: true, available: true, source: "live_snapshot" });
     expect(shared?.provider_routes).toEqual([
-      expect.objectContaining({ provider: "claude_cli", available: false, health: ["unavailable"], source: "live_snapshot" }),
-      expect.objectContaining({ provider: "codex_cli", available: true, health: ["healthy"], source: "live_snapshot" })
+      expect.objectContaining({ provider: "claude_cli", configured: false, observed: true, available: false, health: ["unavailable"], source: "live_snapshot" }),
+      expect.objectContaining({ provider: "codex_cli", configured: false, observed: true, available: true, health: ["healthy"], source: "live_snapshot" })
     ]);
   });
 
@@ -1446,18 +1500,29 @@ describe("control plane provider endpoints", () => {
       expect.objectContaining({
         model_id: "model-a",
         providers: ["codex_cli"],
+        configured: false,
+        observed: true,
         available: true,
         health: ["healthy"],
         reasoning_efforts: ["low", "medium", "high", "xhigh"],
         provider_routes: [{
           provider: "codex_cli",
+          configured: false,
+          observed: true,
           available: true,
           health: ["healthy"],
           source: "live_snapshot",
           reasoning_efforts: ["low", "medium", "high", "xhigh"]
         }]
       }),
-      expect.objectContaining({ model_id: "gpt-5.6-sol", providers: ["codex_cli"], source: "static_fallback" })
+      expect.objectContaining({
+        model_id: "gpt-5.6-sol",
+        providers: ["codex_cli"],
+        configured: true,
+        observed: false,
+        available: false,
+        source: "static_fallback"
+      })
     ]));
     expect(health.providers[0]?.freshness).toBe("fresh");
   });

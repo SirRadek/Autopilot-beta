@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import { readManagedStateTextFile } from "./managedStateFile";
+import { isCanonicalModelId } from "./providerModelId";
 import { normalizeQuotaWindow, type ProviderSnapshot, type ProviderErrorCode, type ProviderHealth, type ProviderQuotaSource } from "./providerQuota";
 import { appendStateFile, writeStateFileAtomically } from "./stateMaintenanceLock";
 
@@ -84,7 +85,7 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
   const models = row.models.slice(0, 256).flatMap((model) => {
     if (typeof model !== "object" || model === null || Array.isArray(model)) return [];
     const item = model as Record<string, unknown>;
-    if (typeof item.model_id !== "string" || item.model_id.length === 0 || item.model_id.length > MAX_FIELD_LENGTH || typeof item.available !== "boolean" || !HEALTH.includes(item.health as ProviderHealth) || !SOURCES.includes(item.source as ProviderQuotaSource)) return [];
+    if (typeof item.model_id !== "string" || !isCanonicalModelId(item.model_id) || typeof item.available !== "boolean" || !HEALTH.includes(item.health as ProviderHealth) || !SOURCES.includes(item.source as ProviderQuotaSource)) return [];
     return [{ model_id: item.model_id, available: item.available, health: item.health as ProviderHealth, source: item.source as ProviderQuotaSource }];
   });
   const window = (candidate: unknown) => {

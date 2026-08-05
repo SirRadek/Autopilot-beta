@@ -724,7 +724,14 @@ function providerQuota(directory: string, provider: string): QuotaView | { error
 function providerModels(directory: string): { freshness: string; fetched_at: string | null; next_poll_at: string | null; models: readonly Record<string, unknown>[] } {
   const snapshots = readProviderQuotaStore(directory).snapshots;
   const now = new Date().toISOString();
-  type Route = { available: boolean; health: Set<string>; reasoning_efforts: readonly RunReasoningEffort[]; source: "live_snapshot" | "static_fallback" | "mixed" };
+  type Route = {
+    available: boolean;
+    configured: boolean;
+    observed: boolean;
+    health: Set<string>;
+    reasoning_efforts: readonly RunReasoningEffort[];
+    source: "live_snapshot" | "static_fallback" | "mixed";
+  };
   const byModel = new Map<string, Map<string, Route>>();
   for (const snapshot of snapshots) {
     const supported: readonly RunReasoningEffort[] = snapshot.provider in SUPPORTED_REASONING_EFFORTS
@@ -732,7 +739,14 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
       : [];
     for (const model of snapshot.models) {
       const routes = byModel.get(model.model_id) ?? new Map<string, Route>();
-      const route = routes.get(snapshot.provider) ?? { available: false, health: new Set<string>(), reasoning_efforts: supported, source: "live_snapshot" };
+      const route = routes.get(snapshot.provider) ?? {
+        available: false,
+        configured: false,
+        observed: true,
+        health: new Set<string>(),
+        reasoning_efforts: supported,
+        source: "live_snapshot"
+      };
       route.available ||= model.available;
       route.health.add(model.health);
       routes.set(snapshot.provider, route);
@@ -744,17 +758,17 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
       const routes = byModel.get(modelId) ?? new Map<string, Route>();
       if (!routes.has(provider)) {
         routes.set(provider, {
-          available: true,
+          available: false,
+          configured: true,
+          observed: false,
           health: new Set(["unavailable"]),
           reasoning_efforts: catalog.reasoning_efforts,
           source: "static_fallback"
         });
       } else {
         const route = routes.get(provider)!;
-        if (!route.available) {
-          route.available = true;
-          route.source = "mixed";
-        }
+        route.configured = true;
+        route.source = "mixed";
       }
       byModel.set(modelId, routes);
     }
@@ -773,6 +787,8 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
         const route = byProvider.get(provider)!;
         return {
           provider,
+          configured: route.configured,
+          observed: route.observed,
           available: route.available,
           health: [...route.health].sort(),
           source: route.source,
@@ -784,7 +800,9 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
       return {
         model_id: modelId,
         providers,
-        available: [...byProvider.values()].some((route) => route.available),
+        configured: routes.some((route) => route.configured),
+        observed: routes.some((route) => route.observed),
+        available: routes.some((route) => route.available),
         health: [...new Set([...byProvider.values()].flatMap((route) => [...route.health]))].sort(),
         source: sources.size === 1 ? [...sources][0] : "mixed",
         reasoning_efforts: reasoningEfforts,

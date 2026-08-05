@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { compareAndSwapBrainstorm, readBrainstormStore, type BrainstormConflict, type BrainstormRecord, type BrainstormRoute, type BrainstormSlot } from "./brainstormStore";
 import { recordBrainstormTelemetryLifecycle, type BrainstormTelemetryLifecycle } from "./brainstormTelemetry";
+import { isRunRouteEligible } from "./runRouteEligibility";
 import { readRunStore, type RunDraftInput, type RunProvider, type RunRecord } from "./runStore";
 import type { createRunOrchestrator, QueuedRun } from "./runOrchestrator";
 import type { OrchestrationGroupSpec } from "./tokenGateway";
@@ -32,9 +33,11 @@ export function createBrainstormCoordinator(options: {
   readonly runOrchestrator: RunOrchestrator;
   readonly now?: () => string;
   readonly randomBytes?: (size: number) => Buffer;
+  readonly isRouteEligible?: typeof isRunRouteEligible;
 }): BrainstormCoordinator {
   const now = options.now ?? (() => new Date().toISOString());
   const randomBytes = options.randomBytes ?? cryptoRandomBytes;
+  const isRouteEligible = options.isRouteEligible ?? isRunRouteEligible;
 
   function get(brainstormId: string): BrainstormRecord {
     const record = readBrainstormStore(options.stateDir).brainstorms.find((item) => item.brainstorm_id === brainstormId);
@@ -109,6 +112,10 @@ export function createBrainstormCoordinator(options: {
     emit(record, "created", record.created_at);
     if (record.approved_by !== null && record.approved_by !== operator) throw new Error("brainstorm_operator_mismatch");
     if (["completed", "failed", "cancelled", "needs_arbitration", "arbitrating", "consolidating"].includes(record.status)) throw new Error("brainstorm_not_approvable");
+    const routes = [...record.routes, record.synthesizer_route, ...(record.arbitration_route ? [record.arbitration_route] : [])];
+    for (const route of routes) {
+      if (!isRouteEligible(options.stateDir, route.provider, route.model, now())) throw new Error("brainstorm_route_unavailable");
+    }
     if (record.approval_state === "none") {
       if (record.status !== "draft") throw new Error("brainstorm_not_approvable");
       record = update(record, (current) => ({ ...current, status: "approved", approval_state: "pending", orchestration_group_id: groupId(current), approved_by: operator }));
@@ -123,9 +130,9 @@ export function createBrainstormCoordinator(options: {
       const route = routeForSlot(record, slot);
       let queued: QueuedRun;
       try {
-        queued = options.runOrchestrator.ensureGroupRun({ groupId: reservedGroupId, slotId: slot.slot_id, draft: draft(record, route, record.brief), operator });
+        queued = options.runOrchestrator.ensureGroupRun({ groupId: reservedGroupId, slotId: slot.slot_id, draft: draft(record, route, record.brief), operator, strictRouteEligibility: true });
       } catch (error) {
-        if (error instanceof Error && RECOVERABLE_ENSURE_ERRORS.has(error.message)) return markFailed(get(brainstormId));
+        if (error instanceof Error && (error.message === "run_route_unavailable" || RECOVERABLE_ENSURE_ERRORS.has(error.message))) return markFailed(get(brainstormId));
         throw error;
       }
       record = bindSlot(get(brainstormId), slot.slot_id, queued.current.run_id);
@@ -266,7 +273,7 @@ export function createBrainstormCoordinator(options: {
           prompt_review_acknowledged: existing.current.prompt_review_acknowledged, profile: existing.current.profile,
           requested_reasoning_effort: existing.current.requested_reasoning_effort,
         } satisfies RunDraftInput;
-    const queued = options.runOrchestrator.ensureGroupRun({ groupId: record.orchestration_group_id, slotId: "arbitration", draft: input, operator: record.approved_by });
+    const queued = options.runOrchestrator.ensureGroupRun({ groupId: record.orchestration_group_id, slotId: "arbitration", draft: input, operator: record.approved_by, strictRouteEligibility: true });
     record = bindSlot(get(record.brainstorm_id), "arbitration", queued.current.run_id);
     if (record.status !== "arbitrating") record = update(record, (current) => ({ ...current, status: "arbitrating" }));
     return record;
@@ -314,7 +321,7 @@ export function createBrainstormCoordinator(options: {
           prompt_review_acknowledged: existing.current.prompt_review_acknowledged, profile: existing.current.profile,
           requested_reasoning_effort: existing.current.requested_reasoning_effort,
         } satisfies RunDraftInput;
-    const queued = options.runOrchestrator.ensureGroupRun({ groupId: record.orchestration_group_id, slotId: "consolidation", draft: input, operator: record.approved_by });
+    const queued = options.runOrchestrator.ensureGroupRun({ groupId: record.orchestration_group_id, slotId: "consolidation", draft: input, operator: record.approved_by, strictRouteEligibility: true });
     record = bindSlot(get(record.brainstorm_id), "consolidation", queued.current.run_id);
     if (record.status !== "consolidating") record = update(record, (current) => ({ ...current, status: "consolidating" }));
     return record;

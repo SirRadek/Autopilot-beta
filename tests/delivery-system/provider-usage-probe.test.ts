@@ -33,6 +33,18 @@ describe("provider usage parsers", () => {
     });
   });
 
+  it("drops non-canonical Codex model IDs", () => {
+    const raw = [
+      "OpenAI Codex (v0.144.5)",
+      "",
+      "Model: Opus 4.8 (reasoning low, summaries auto)",
+      "Weekly limit:    [████████████████░░░░] 40% left (resets 12:05 on 18 Jul)",
+      ""
+    ].join("\n");
+
+    expect(parseCodexStatus(raw)?.models).toEqual([]);
+  });
+
   it("deduplicates a model that is both the active model and an explicitly named weekly row, preferring the named row's availability", () => {
     const raw = [
       "OpenAI Codex (v0.144.5)",
@@ -50,29 +62,56 @@ describe("provider usage parsers", () => {
     });
   });
 
-  it("exposes the conservative minimum AGY group balance and group models", () => {
+  it("exposes the conservative minimum AGY group balance and expands group labels to canonical models", () => {
     expect(parseAgyUsage(fixture("agy-usage.txt"))).toEqual({
       five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null },
       weekly: { limit: 100, used: 0, remaining: 100, resets_at: null },
       models: [
-        { model_id: "Gemini Flash", available: true },
-        { model_id: "Gemini Pro", available: true },
-        { model_id: "Claude Opus", available: true },
-        { model_id: "Claude Sonnet", available: true },
-        { model_id: "GPT-OSS", available: true }
+        { model_id: "gemini-3.5-flash-medium", available: true },
+        { model_id: "gemini-3.5-flash-high", available: true },
+        { model_id: "gemini-3.1-pro-high", available: true },
+        { model_id: "claude-4.6-sonnet", available: true },
+        { model_id: "gpt-oss-120b", available: true }
       ]
     });
   });
 
-  it("parses authenticated Claude session and all-model weekly usage", () => {
+  it("deduplicates repeated AGY group labels and preserves negative availability", () => {
+    const raw = [
+      "Models & Quota",
+      "",
+      "GEMINI MODELS",
+      "  Models within this group: Gemini Flash",
+      "  Weekly Limit 100%",
+      "  Five Hour Limit 100%",
+      "",
+      "CLAUDE AND GPT MODELS",
+      "  Models within this group: Gemini Flash",
+      "  Weekly Limit 0%",
+      "  Five Hour Limit 100%",
+      ""
+    ].join("\n");
+
+    expect(parseAgyUsage(raw)?.models).toEqual([
+      { model_id: "gemini-3.5-flash-medium", available: false },
+      { model_id: "gemini-3.5-flash-high", available: false }
+    ]);
+  });
+
+  it("normalizes authenticated Claude model labels and drops unmapped labels", () => {
     expect(parseClaudeUsage(fixture("claude-usage.txt"))).toEqual({
       five_hour: { limit: 100, used: 12, remaining: 88, resets_at: "11:40am (UTC)" },
       weekly: { limit: 100, used: 34, remaining: 66, resets_at: "Jul 17, 6pm (UTC)" },
       models: [
-        { model_id: "Opus 4.8", available: true },
-        { model_id: "Fable 5", available: true }
+        { model_id: "claude-opus-4-8", available: true }
       ]
     });
+  });
+
+  it("returns no Claude models when every extracted label is unmapped", () => {
+    const raw = fixture("claude-usage.txt").replace("Opus 4.8", "Fable 5");
+
+    expect(parseClaudeUsage(raw)?.models).toEqual([]);
   });
 
   it("does not infer Claude quota from an unauthenticated login screen", () => {

@@ -10,6 +10,7 @@ import {
   type ProviderQuotaAdapter,
   type ProviderSnapshot
 } from "./providerQuota";
+import { isCanonicalModelId } from "./providerModelId";
 import { runTmuxUsageProbe, type UsageProbeProvider } from "./providerUsageProbe";
 
 export interface ProviderCommandResult {
@@ -185,7 +186,7 @@ function snapshotFromPayload(provider: string, source: "cli", now: string, paylo
         const row = asRecord(value);
         if (row === null) return [];
         const id = typeof row?.model_id === "string" ? row.model_id : typeof row?.model === "string" ? row.model : null;
-        if (!id || id.length > 200) return [];
+        if (id === null || !isCanonicalModelId(id)) return [];
         const available = row.available !== false && row.health !== "unavailable";
         return [{ model_id: id, available, health: available ? "healthy" : "degraded", source: "cli" }];
       })

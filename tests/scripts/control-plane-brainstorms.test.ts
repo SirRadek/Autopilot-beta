@@ -8,7 +8,7 @@ import { classifyBrainstormErrorCode } from "../../scripts/control-plane-brainst
 import { AuthSessionRegistry, authStateRoot } from "../../src/data/delivery-system/authSessionRegistry";
 import { estimateBrainstormTokenEnvelope } from "../../src/data/delivery-system/brainstormBudget";
 import { createBrainstormCoordinator } from "../../src/data/delivery-system/brainstormCoordinator";
-import { createBrainstorm } from "../../src/data/delivery-system/brainstormStore";
+import { createBrainstorm, readBrainstormStore } from "../../src/data/delivery-system/brainstormStore";
 import { readBrainstormTelemetry } from "../../src/data/delivery-system/brainstormTelemetry";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { createRunOrchestrator } from "../../src/data/delivery-system/runOrchestrator";
@@ -35,10 +35,10 @@ const defaultSnapshots = () => [
   snapshot("agy_cli", new Date().toISOString())
 ];
 
-const lifecycleSnapshots = () => [
-  snapshot("codex_cli", new Date().toISOString(), { modelId: "gpt-5.5" }),
-  snapshot("claude_cli", new Date().toISOString(), { modelId: "claude-opus-4-8" }),
-  snapshot("agy_cli", new Date().toISOString(), { modelId: "gemini-3.1-pro-high" })
+const lifecycleSnapshots = (fetchedAt = new Date().toISOString()) => [
+  snapshot("codex_cli", fetchedAt, { modelId: "gpt-5.6-sol" }),
+  snapshot("claude_cli", fetchedAt, { modelId: "claude-opus-4-8" }),
+  snapshot("agy_cli", fetchedAt, { modelId: "gemini-3.1-pro-high" })
 ];
 
 async function brainstormApi(options: {
@@ -126,12 +126,12 @@ describe("control plane governed brainstorm API (RED)", () => {
 const now = "2026-07-22T13:00:00.000Z";
 const brief = "Find the strongest implementation direction without changing the requested route.";
 const routes = [
-  { provider: "codex_cli" as const, model: "gpt-5.5", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
+  { provider: "codex_cli" as const, model: "gpt-5.6-sol", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
   { provider: "claude_cli" as const, model: "claude-opus-4-8", reasoning_effort: "high" as const, estimated_tokens: 12_000 },
   { provider: "agy_cli" as const, model: "gemini-3.1-pro-high", reasoning_effort: "high" as const, estimated_tokens: 12_000 }
 ] as const;
 const synthesizer = { provider: "claude_cli" as const, model: "claude-opus-4-8", reasoning_effort: "high" as const, estimated_tokens: 20_000 };
-const arbitration = { provider: "codex_cli" as const, model: "gpt-5.5", reasoning_effort: "xhigh" as const, estimated_tokens: 16_000 };
+const arbitration = { provider: "codex_cli" as const, model: "gpt-5.6-sol", reasoning_effort: "xhigh" as const, estimated_tokens: 16_000 };
 
 async function lifecycleApi(outputs: string[] = []) {
   const stateDir = mkdtempSync(join(tmpdir(), "control-plane-brainstorms-lifecycle-"));
@@ -341,6 +341,23 @@ describe("control plane governed brainstorm HTTP actions", () => {
     expect((await get.json() as { error: string }).error).toBe("brainstorm_not_found");
     expect(approve.status).toBe(404);
     expect((await approve.json() as { error: string }).error).toBe("brainstorm_not_found");
+  });
+
+  it("rejects approval after route snapshots expire without changing state or reserving tokens", async () => {
+    const api = await lifecycleApi();
+    const before = readBrainstormStore(api.stateDir).brainstorms.find((candidate) => candidate.brainstorm_id === api.brainstorm.brainstorm_id)!;
+    const reserve = vi.spyOn(api.runOrchestrator, "reserveOrchestrationGroup");
+    const expiredAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    writeProviderQuotaStore(api.stateDir, { schema_version: "v1", snapshots: lifecycleSnapshots(expiredAt) });
+
+    const response = await api.call("POST", `/brainstorms/${api.brainstorm.brainstorm_id}/approve`, { operator: "owner" });
+
+    expect(response.status).toBe(409);
+    expect((await response.json() as { error: string }).error).toBe("brainstorm_route_unavailable");
+    expect(reserve).not.toHaveBeenCalled();
+    expect(readBrainstormStore(api.stateDir).brainstorms.find((candidate) => candidate.brainstorm_id === api.brainstorm.brainstorm_id)).toEqual(before);
+    expect(readRunStore(api.stateDir).runs).toHaveLength(0);
+    expect(new TokenGateway({ stateDir: api.stateDir }).snapshot()).toEqual({ used: {}, activeReservations: 0 });
   });
 
   it("proves one persisted transition, reservation, and child run per provider under concurrent double approval", async () => {
