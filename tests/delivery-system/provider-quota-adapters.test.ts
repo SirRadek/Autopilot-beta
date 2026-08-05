@@ -51,7 +51,7 @@ describe("provider quota adapters", () => {
       .codex_cli.fetchSnapshot({ now, signal });
 
     expect(snapshot.models).toEqual([
-      { model_id: "gpt-5.6-sol", available: true, health: "healthy", source: "cli" }
+      { model_id: "gpt-5.6-sol", available: true, health: "healthy", source: "cli", discovery: "usage_probe" }
     ]);
     expect(snapshot.health).toBe("healthy");
     expect(snapshot.error_code).toBeNull();

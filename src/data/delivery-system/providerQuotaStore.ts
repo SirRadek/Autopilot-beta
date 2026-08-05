@@ -2,7 +2,14 @@ import { join } from "node:path";
 
 import { readManagedStateTextFile } from "./managedStateFile";
 import { isCanonicalModelId } from "./providerModelId";
-import { normalizeQuotaWindow, type ProviderSnapshot, type ProviderErrorCode, type ProviderHealth, type ProviderQuotaSource } from "./providerQuota";
+import {
+  normalizeQuotaWindow,
+  type ProviderSnapshot,
+  type ProviderErrorCode,
+  type ProviderHealth,
+  type ProviderModelDiscovery,
+  type ProviderQuotaSource
+} from "./providerQuota";
 import { appendStateFile, writeStateFileAtomically } from "./stateMaintenanceLock";
 
 export const PROVIDER_QUOTA_SNAPSHOTS_FILE = "provider-quota-snapshots.json";
@@ -29,6 +36,7 @@ const MAX_CHANGED_FIELDS = 32;
 const MAX_PROVIDER_QUOTA_STORE_BYTES = 2 * 1024 * 1024;
 const SOURCES: readonly ProviderQuotaSource[] = ["cli", "api", "manual-fallback"];
 const HEALTH: readonly ProviderHealth[] = ["healthy", "degraded", "unavailable"];
+const DISCOVERIES: readonly ProviderModelDiscovery[] = ["usage_probe", "models_cache", "cli_list", "static"];
 const ERRORS: readonly (ProviderErrorCode | null)[] = ["timeout", "missing_credential", "malformed_response", "provider_executable_missing", "provider_runtime_denied", "provider_unavailable", "provider_error", null];
 
 export function readProviderQuotaStore(stateDir: string): ProviderQuotaStoreDocument {
@@ -86,7 +94,10 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
     if (typeof model !== "object" || model === null || Array.isArray(model)) return [];
     const item = model as Record<string, unknown>;
     if (typeof item.model_id !== "string" || !isCanonicalModelId(item.model_id) || typeof item.available !== "boolean" || !HEALTH.includes(item.health as ProviderHealth) || !SOURCES.includes(item.source as ProviderQuotaSource)) return [];
-    return [{ model_id: item.model_id, available: item.available, health: item.health as ProviderHealth, source: item.source as ProviderQuotaSource }];
+    const discovery = DISCOVERIES.includes(item.discovery as ProviderModelDiscovery)
+      ? item.discovery as ProviderModelDiscovery
+      : "usage_probe";
+    return [{ model_id: item.model_id, available: item.available, health: item.health as ProviderHealth, source: item.source as ProviderQuotaSource, discovery }];
   });
   const window = (candidate: unknown) => {
     if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return null;
@@ -98,7 +109,30 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
   const five = window(row.five_hour);
   const weekly = window(row.weekly);
   if (five === null || weekly === null) return null;
-  return { provider: row.provider, source: row.source as ProviderQuotaSource, fetched_at: row.fetched_at, observed_at: row.observed_at, five_hour: five, weekly, api_spend: row.api_spend as number | null, currency: row.currency as string | null, models, health: row.health as ProviderHealth, error_code: row.error_code as ProviderErrorCode | null };
+  const cliVersion = row.cli_version === undefined ? undefined : sanitizeCliVersion(row.cli_version);
+  return {
+    provider: row.provider,
+    source: row.source as ProviderQuotaSource,
+    fetched_at: row.fetched_at,
+    observed_at: row.observed_at,
+    five_hour: five,
+    weekly,
+    api_spend: row.api_spend as number | null,
+    currency: row.currency as string | null,
+    models,
+    ...(cliVersion === undefined ? {} : { cli_version: cliVersion }),
+    health: row.health as ProviderHealth,
+    error_code: row.error_code as ProviderErrorCode | null
+  };
+}
+
+function sanitizeCliVersion(value: unknown): string | null {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 100
+    && /^[A-Za-z0-9 ._()/-]+$/.test(value)
+    ? value
+    : null;
 }
 
 export function appendProviderQuotaEvent(stateDir: string, event: ProviderQuotaEvent): void {

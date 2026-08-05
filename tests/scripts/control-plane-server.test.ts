@@ -1340,6 +1340,7 @@ describe("control plane provider endpoints", () => {
           observed: boolean;
           available: boolean;
           health: string[];
+          discovery: string;
           source: string;
           reasoning_efforts: string[];
         }>;
@@ -1362,6 +1363,7 @@ describe("control plane provider endpoints", () => {
           observed: false,
           available: false,
           health: ["unavailable"],
+          discovery: "static",
           source: "static_fallback",
           reasoning_efforts: ["low", "medium", "high", "xhigh"]
         }]
@@ -1526,6 +1528,7 @@ describe("control plane provider endpoints", () => {
           observed: true,
           available: true,
           health: ["healthy"],
+          discovery: "usage_probe",
           source: "live_snapshot",
           reasoning_efforts: ["low", "medium", "high", "xhigh"]
         }]
