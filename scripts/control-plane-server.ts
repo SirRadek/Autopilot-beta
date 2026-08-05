@@ -14,7 +14,7 @@ import { promisify } from "node:util";
 
 import { decideApproval, readApprovalQueue, writeApprovalQueue } from "../src/data/delivery-system/approvalQueue";
 import { cancelSession, createSessionRecord, readSessionRegistry, resumeSession, writeSessionRegistry } from "../src/data/delivery-system/sessionRegistry";
-import { freshnessForSnapshot, type ProviderSnapshot } from "../src/data/delivery-system/providerQuota";
+import { freshnessForSnapshot, type ProviderModelDiscovery, type ProviderSnapshot } from "../src/data/delivery-system/providerQuota";
 import { readProviderQuotaStore } from "../src/data/delivery-system/providerQuotaStore";
 import { createProviderQuotaAdapters, type ProviderCliCapability, type ProviderCommandRunner } from "../src/data/delivery-system/providerQuotaAdapters";
 import { resolveProviderCliRuntime } from "../src/data/delivery-system/providerCliRuntime";
@@ -515,7 +515,8 @@ export function createControlPlaneRuntime(
     sessions: () => readSessionRegistry(stateDir).sessions,
     adapters: createProviderQuotaAdapters({
       runCommand: options.commandRunner ?? runProviderCommand,
-      commands: providerCommands
+      commands: providerCommands,
+      environment: process.env
     }),
     store: { stateDir },
     onPollFailure: ({ provider }) => {
@@ -629,9 +630,14 @@ export function createControlPlaneRuntime(
   return { server, scheduler, orchestrator, stop };
 }
 
-async function runProviderCommand(input: { readonly command: string; readonly args: readonly string[]; readonly signal: AbortSignal }): Promise<{ readonly stdout: string; readonly stderr?: string; readonly exitCode?: number | null }> {
+async function runProviderCommand(input: { readonly command: string; readonly args: readonly string[]; readonly signal: AbortSignal; readonly environment?: Readonly<Record<string, string>> }): Promise<{ readonly stdout: string; readonly stderr?: string; readonly exitCode?: number | null }> {
   try {
-    const result = await execFileAsync(input.command, [...input.args], { encoding: "utf8", signal: input.signal, maxBuffer: 128 * 1024 });
+    const result = await execFileAsync(input.command, [...input.args], {
+      encoding: "utf8",
+      signal: input.signal,
+      maxBuffer: 128 * 1024,
+      ...(input.environment === undefined ? {} : { env: { ...input.environment } })
+    });
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
   } catch (error) {
     const result = error as { stdout?: string; stderr?: string; code?: number | string };
@@ -713,6 +719,7 @@ function quotaView(snapshot: ProviderSnapshot, now = new Date().toISOString()): 
   const freshness = freshnessForSnapshot(snapshot, now);
   return {
     ...snapshot,
+    cli_version: snapshot.cli_version ?? null,
     freshness,
     // The snapshot does not encode scheduler backoff/lease state. Never invent a
     // five-minute deadline; the control plane reports unknown until that metadata
@@ -739,6 +746,7 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
     configured: boolean;
     observed: boolean;
     health: Set<string>;
+    discovery: ProviderModelDiscovery;
     reasoning_efforts: readonly RunReasoningEffort[];
     source: "live_snapshot" | "static_fallback" | "mixed";
   };
@@ -754,6 +762,7 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
         configured: false,
         observed: true,
         health: new Set<string>(),
+        discovery: model.discovery ?? "usage_probe",
         reasoning_efforts: supported,
         source: "live_snapshot"
       };
@@ -772,6 +781,7 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
           configured: true,
           observed: false,
           health: new Set(["unavailable"]),
+          discovery: "static",
           reasoning_efforts: catalog.reasoning_efforts,
           source: "static_fallback"
         });
@@ -801,6 +811,7 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
           observed: route.observed,
           available: route.available,
           health: [...route.health].sort(),
+          discovery: route.discovery,
           source: route.source,
           reasoning_efforts: [...route.reasoning_efforts]
         };
@@ -824,7 +835,7 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
 
 function providerHealth(directory: string): { providers: readonly Record<string, unknown>[] } {
   const now = new Date().toISOString();
-  return { providers: readProviderQuotaStore(directory).snapshots.map((snapshot) => ({ provider: snapshot.provider, health: snapshot.health, freshness: freshnessForSnapshot(snapshot, now), fetched_at: snapshot.fetched_at, next_poll_at: quotaView(snapshot, now).next_poll_at, error_code: snapshot.error_code })) };
+  return { providers: readProviderQuotaStore(directory).snapshots.map((snapshot) => ({ provider: snapshot.provider, health: snapshot.health, freshness: freshnessForSnapshot(snapshot, now), fetched_at: snapshot.fetched_at, next_poll_at: quotaView(snapshot, now).next_poll_at, cli_version: snapshot.cli_version ?? null, error_code: snapshot.error_code })) };
 }
 
 function returnJson(response: ServerResponse, value: unknown, status = 200): void {

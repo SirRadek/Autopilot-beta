@@ -175,13 +175,67 @@ describe("provider quota store", () => {
 
     const sanitized = readProviderQuotaStore(stateDir);
     expect(sanitized.snapshots[0]?.models).toEqual([
-      { model_id: "claude-opus-4-8", available: true, health: "healthy", source: "cli" }
+      { model_id: "claude-opus-4-8", available: true, health: "healthy", source: "cli", discovery: "usage_probe" }
     ]);
+    expect(sanitized.snapshots[0]).not.toHaveProperty("cli_version");
 
     writeProviderQuotaStore(stateDir, sanitized);
 
     expect(readProviderQuotaStore(stateDir)).toEqual(sanitized);
     expect(readFileSync(path, "utf8")).not.toContain("Opus 4.8");
+  });
+
+  it("allowlists CLI version and discovery provenance when a snapshot round-trips", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-store-discovery-"));
+    const document: ProviderQuotaStoreDocument = {
+      schema_version: "v1",
+      snapshots: [{
+        ...minimumSnapshot(),
+        cli_version: "codex-cli 1.2.3 (stable)",
+        models: [{
+          model_id: "gpt-5.6-sol",
+          available: true,
+          health: "healthy",
+          source: "cli",
+          discovery: "models_cache"
+        }]
+      }]
+    };
+
+    writeProviderQuotaStore(stateDir, document);
+
+    expect(readProviderQuotaStore(stateDir)).toEqual(document);
+  });
+
+  it("defaults unknown discovery and nulls an overlong CLI version without dropping the snapshot", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-store-discovery-default-"));
+    const path = join(stateDir, "provider-quota-snapshots.json");
+    writeFileSync(path, JSON.stringify({
+      schema_version: "v1",
+      snapshots: [{
+        ...minimumSnapshot(),
+        cli_version: "v".repeat(101),
+        models: [{
+          model_id: "gpt-5.6-sol",
+          available: true,
+          health: "healthy",
+          source: "cli",
+          discovery: "future_discovery"
+        }]
+      }]
+    }), "utf8");
+
+    expect(readProviderQuotaStore(stateDir).snapshots).toEqual([{
+      ...minimumSnapshot(),
+      cli_version: null,
+      models: [{
+        model_id: "gpt-5.6-sol",
+        available: true,
+        health: "healthy",
+        source: "cli",
+        discovery: "usage_probe"
+      }]
+    }]);
   });
 
   it.each([

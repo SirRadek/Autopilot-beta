@@ -3,6 +3,7 @@
 export type ProviderQuotaSource = "cli" | "api" | "manual-fallback";
 export type ProviderHealth = "healthy" | "degraded" | "unavailable";
 export type ProviderFreshness = "fresh" | "stale" | "unavailable";
+export type ProviderModelDiscovery = "usage_probe" | "models_cache" | "cli_list" | "static";
 export type ProviderErrorCode =
   | "timeout"
   | "missing_credential"
@@ -24,6 +25,8 @@ export interface ProviderModelAvailability {
   readonly available: boolean;
   readonly health: ProviderHealth;
   readonly source: ProviderQuotaSource;
+  /** Absent snapshots predate live model-discovery provenance. */
+  readonly discovery?: ProviderModelDiscovery;
 }
 
 export interface ProviderSnapshot {
@@ -36,6 +39,8 @@ export interface ProviderSnapshot {
   readonly api_spend: number | null;
   readonly currency: string | null;
   readonly models: readonly ProviderModelAvailability[];
+  /** Absent snapshots predate CLI version capture. */
+  readonly cli_version?: string | null;
   readonly health: ProviderHealth;
   readonly error_code: ProviderErrorCode | null;
 }

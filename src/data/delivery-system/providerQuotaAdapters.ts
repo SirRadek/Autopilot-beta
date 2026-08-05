@@ -6,11 +6,18 @@ import {
   normalizeProviderError,
   normalizeQuotaWindow,
   type ProviderHealth,
+  type ProviderModelDiscovery,
   type ProviderModelAvailability,
   type ProviderQuotaAdapter,
   type ProviderSnapshot
 } from "./providerQuota";
 import { isCanonicalModelId } from "./providerModelId";
+import {
+  captureCliVersion,
+  discoverAgyModels,
+  discoverCodexModels,
+  type DiscoveredProviderModel
+} from "./providerModelDiscovery";
 import type { ProviderCliRuntimeResult } from "./providerCliRuntime";
 import { runTmuxUsageProbe, type UsageProbeProvider } from "./providerUsageProbe";
 
@@ -24,6 +31,8 @@ export type ProviderCommandRunner = (input: {
   readonly command: string;
   readonly args: readonly string[];
   readonly signal: AbortSignal;
+  /** Present for discovery commands so production runners replace, rather than inherit, env. */
+  readonly environment?: Readonly<Record<string, string>>;
 }) => Promise<ProviderCommandResult>;
 
 export type ProviderCliCapability =
@@ -45,6 +54,9 @@ export interface ProviderQuotaAdapterDependencies {
   readonly fetchImpl?: OpenRouterHealthFetch;
   readonly timeoutMs?: number;
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  readonly captureCliVersion?: typeof captureCliVersion;
+  readonly discoverCodexModels?: typeof discoverCodexModels;
+  readonly discoverAgyModels?: typeof discoverAgyModels;
 }
 
 export function createProviderQuotaAdapters(
@@ -77,36 +89,103 @@ function createCliAdapter(
         const onAbort = () => controller.abort();
         if (signal.aborted) controller.abort();
         else signal.addEventListener("abort", onAbort, { once: true });
-        let result: ProviderCommandResult;
         try {
           const execution = "kind" in spec
             ? (dependencies.runUsageProbe ?? runUsageProbe)(provider, spec.executable, controller.signal)
             : dependencies.runCommand({ command: spec.command, args: spec.args, signal: controller.signal });
-          result = await withTimeout(
+          const result = await withTimeout(
             execution,
             dependencies.timeoutMs ?? ("kind" in spec ? 25_000 : 10_000),
             controller
           );
+          if ((result.exitCode ?? 0) !== 0) {
+            const stderr = result.stderr ?? "";
+            if ("kind" in spec) {
+              return errorSnapshot(provider, "cli", now, normalizeProviderError(stderr || "provider_unavailable"));
+            }
+            throw new Error(/login|auth|credential|api[ _-]?key|token/i.test(stderr) ? "missing_credential" : stderr || "provider_unavailable");
+          }
+          const parsed = parseQuotaPayload(result.stdout);
+          if (parsed === null) {
+            throw new Error("malformed_response");
+          }
+          const snapshot = snapshotFromPayload(provider, "cli", now, parsed);
+          return await enrichCliSnapshot(
+            provider,
+            "kind" in spec ? spec.executable : spec.command,
+            snapshot,
+            dependencies,
+            controller.signal
+          );
         } finally {
           signal.removeEventListener("abort", onAbort);
         }
-        if ((result.exitCode ?? 0) !== 0) {
-          const stderr = result.stderr ?? "";
-          if ("kind" in spec) {
-            return errorSnapshot(provider, "cli", now, normalizeProviderError(stderr || "provider_unavailable"));
-          }
-          throw new Error(/login|auth|credential|api[ _-]?key|token/i.test(stderr) ? "missing_credential" : stderr || "provider_unavailable");
-        }
-        const parsed = parseQuotaPayload(result.stdout);
-        if (parsed === null) {
-          throw new Error("malformed_response");
-        }
-        return snapshotFromPayload(provider, "cli", now, parsed);
       } catch (error) {
         return errorSnapshot(provider, "cli", now, normalizeProviderError(error));
       }
     }
   };
+}
+
+async function enrichCliSnapshot(
+  provider: UsageProbeProvider,
+  executable: string,
+  snapshot: ProviderSnapshot,
+  dependencies: ProviderQuotaAdapterDependencies,
+  signal: AbortSignal
+): Promise<ProviderSnapshot> {
+  const versionPromise = Promise.resolve()
+    .then(() => (dependencies.captureCliVersion ?? captureCliVersion)(executable, dependencies.runCommand, signal))
+    .catch(() => null);
+  const discoveryPromise: Promise<{
+    readonly models: readonly DiscoveredProviderModel[];
+    readonly provenance: Extract<ProviderModelDiscovery, "models_cache" | "cli_list">;
+  } | null> = provider === "codex_cli"
+    ? Promise.resolve()
+      .then(() => (dependencies.discoverCodexModels ?? discoverCodexModels)(dependencies.environment?.HOME ?? ""))
+      .then((models) => ({ models, provenance: "models_cache" as const }))
+      .catch(() => null)
+    : provider === "agy_cli"
+      ? Promise.resolve()
+        .then(() => (dependencies.discoverAgyModels ?? discoverAgyModels)(executable, dependencies.runCommand, signal))
+        .then((models) => ({ models, provenance: "cli_list" as const }))
+        .catch(() => null)
+      : Promise.resolve(null);
+  const [cliVersion, discovered] = await Promise.all([versionPromise, discoveryPromise]);
+  return {
+    ...snapshot,
+    cli_version: cliVersion,
+    models: mergeDiscoveredModels(
+      snapshot.models,
+      discovered?.models ?? [],
+      discovered?.provenance ?? "usage_probe",
+      snapshot.health
+    )
+  };
+}
+
+function mergeDiscoveredModels(
+  probed: readonly ProviderModelAvailability[],
+  discovered: readonly DiscoveredProviderModel[],
+  discovery: ProviderModelDiscovery,
+  snapshotHealth: ProviderHealth
+): readonly ProviderModelAvailability[] {
+  const models = new Map<string, ProviderModelAvailability>();
+  for (const model of probed) {
+    models.set(model.model_id, { ...model, discovery: model.discovery ?? "usage_probe" });
+  }
+  for (const { model_id } of discovered) {
+    if (models.size >= 256 || models.has(model_id) || !isCanonicalModelId(model_id)) continue;
+    const available = snapshotHealth === "healthy";
+    models.set(model_id, {
+      model_id,
+      available,
+      health: available ? "healthy" : snapshotHealth,
+      source: "cli",
+      discovery
+    });
+  }
+  return [...models.values()];
 }
 
 function runUsageProbe(
@@ -212,7 +291,7 @@ function snapshotFromPayload(provider: string, source: "cli", now: string, paylo
         const id = typeof row?.model_id === "string" ? row.model_id : typeof row?.model === "string" ? row.model : null;
         if (id === null || !isCanonicalModelId(id)) return [];
         const available = row.available !== false && row.health !== "unavailable";
-        return [{ model_id: id, available, health: available ? "healthy" : "degraded", source: "cli" }];
+        return [{ model_id: id, available, health: available ? "healthy" : "degraded", source: "cli", discovery: "usage_probe" }];
       })
     : [];
   const unavailable = payload.available === false || payload.status === "unavailable";
