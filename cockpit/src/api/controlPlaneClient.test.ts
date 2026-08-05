@@ -1,6 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ControlPlaneApiError, createControlPlaneClient } from "./controlPlaneClient";
+import type { ReadinessReport } from "../types/controlPlane";
+import { ControlPlaneApiError, createControlPlaneClient, NON_JSON_RESPONSE } from "./controlPlaneClient";
+
+const readinessReport: ReadinessReport = {
+  ready: true,
+  status: "ready",
+  checked_at: "2026-08-05T10:00:00.000Z",
+  components: {
+    configuration: { status: "ready", error_code: null },
+    authentication: { status: "ready", error_code: null },
+    managed_state: { status: "ready", error_code: null },
+    project_registry: { status: "ready", error_code: null },
+    supervisor: { status: "ready", error_code: null },
+    token_gateway: { status: "ready", error_code: null },
+    providers: {
+      codex_cli: { status: "ready", error_code: null },
+      claude_cli: { status: "ready", error_code: null },
+      agy_cli: { status: "ready", error_code: null },
+      openrouter_api: { status: "ready", error_code: null }
+    }
+  }
+};
 
 describe("ControlPlaneClient", () => {
   it("sends bearer auth and returns typed status", async () => {
@@ -31,6 +52,62 @@ describe("ControlPlaneClient", () => {
     const client = createControlPlaneClient({ baseUrl: "http://cp", serviceToken: "secret", fetcher });
     await expect(client.getStatus()).rejects.toMatchObject({ status: 401 });
     await expect(client.getProviderQuotas()).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("returns the readiness report for a 200 JSON response", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(readinessReport), { status: 200 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+
+    await expect(client.getReadiness()).resolves.toEqual(readinessReport);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("http://cp/ready");
+    const init = fetcher.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("Accept")).toBe("application/json");
+    expect(init.credentials).toBe("include");
+  });
+
+  it("returns the readiness report for a 503 JSON response", async () => {
+    const report: ReadinessReport = {
+      ...readinessReport,
+      ready: false,
+      status: "degraded",
+      components: {
+        ...readinessReport.components,
+        providers: {
+          ...readinessReport.components.providers,
+          codex_cli: { status: "unavailable", error_code: "missing_credential" }
+        }
+      }
+    };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(report), { status: 503 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+
+    await expect(client.getReadiness()).resolves.toEqual(report);
+  });
+
+  it("returns null when readiness responds with HTML", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("<!doctype html><html>legacy cockpit</html>", { status: 200 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+
+    await expect(client.getReadiness()).resolves.toBeNull();
+  });
+
+  it("returns null when the readiness request fails", async () => {
+    const fetcher = vi.fn().mockRejectedValue(new TypeError("network unavailable"));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+
+    await expect(client.getReadiness()).resolves.toBeNull();
+  });
+
+  it("classifies an HTML 200 response as a typed non-JSON error", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("<!doctype html><html>legacy cockpit</html>", { status: 200 }));
+    const client = createControlPlaneClient({ baseUrl: "http://cp", fetcher });
+
+    expect(NON_JSON_RESPONSE).toBe("control_plane_non_json_response");
+    await expect(client.getStatus()).rejects.toSatisfy((error: unknown) =>
+      error instanceof ControlPlaneApiError
+      && error.status === 200
+      && error.message === NON_JSON_RESPONSE
+    );
   });
 
   it("bounds error response bodies", async () => {

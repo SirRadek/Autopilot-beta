@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ControlPlaneClient } from "../api/controlPlaneClient";
-import type { ApprovalRecord, AutopilotIncident, BrainstormRecord, ControlPlaneStatus, ObservabilityTimeline, ProjectEntry, ProviderHealth, ProviderModels, ProviderQuota, RunRecord, SessionRecord, WorkerRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, BrainstormRecord, ControlPlaneStatus, ObservabilityTimeline, ProjectEntry, ProviderHealth, ProviderModels, ProviderQuota, ReadinessReport, RunRecord, SessionRecord, WorkerRecord } from "../types/controlPlane";
 import type { PromotionPacket } from "../types/controlPlane";
 import type { CockpitEnvironment } from "./environment";
 
 export type CockpitPane = "status" | "sessions" | "approvals" | "providers" | "workers" | "runs" | "promotions" | "incidents" | "brainstorms";
 export type PaneError = { readonly message: string; readonly at: string };
-export type CockpitData = { readonly status?: ControlPlaneStatus; readonly sessions: readonly SessionRecord[]; readonly approvals: readonly ApprovalRecord[]; readonly quotas: readonly ProviderQuota[]; readonly workers: readonly WorkerRecord[]; readonly projects: readonly ProjectEntry[]; readonly runs: readonly RunRecord[]; readonly promotions: readonly PromotionPacket[]; readonly incidents: readonly AutopilotIncident[]; readonly brainstorms: readonly BrainstormRecord[]; readonly models?: ProviderModels; readonly health?: ProviderHealth };
+export type CockpitData = { readonly status?: ControlPlaneStatus; readonly sessions: readonly SessionRecord[]; readonly approvals: readonly ApprovalRecord[]; readonly quotas: readonly ProviderQuota[]; readonly workers: readonly WorkerRecord[]; readonly projects: readonly ProjectEntry[]; readonly runs: readonly RunRecord[]; readonly promotions: readonly PromotionPacket[]; readonly incidents: readonly AutopilotIncident[]; readonly brainstorms: readonly BrainstormRecord[]; readonly models?: ProviderModels; readonly health?: ProviderHealth; readonly readiness?: ReadinessReport | null };
 export type CockpitDataState = CockpitData & { readonly loading: boolean; readonly refreshing: boolean; readonly errors: Partial<Record<CockpitPane, PaneError>>; readonly stale: Partial<Record<CockpitPane, boolean>>; readonly refreshedAt?: string; readonly refresh: () => Promise<void> };
 
 const EMPTY_DATA: CockpitData = { sessions: [], approvals: [], quotas: [], workers: [], projects: [], runs: [], promotions: [], incidents: [], brainstorms: [] };
@@ -38,8 +38,8 @@ export async function loadCockpitData(client: ControlPlaneClient, previous: Cock
     ["brainstorms", () => client.listBrainstorms(), (value) => { next.brainstorms = value as readonly BrainstormRecord[]; }],
   ];
   await Promise.all(requests.map(async ([pane, request, assign]) => { try { const value = await request(); if (!signal?.aborted) assign(value); } catch (error) { if (!signal?.aborted) errors[pane] = { message: messageFor(error), at: now }; } }));
-  const providerResults = await Promise.allSettled([client.getProviderQuotas(), client.getProviderModels(), client.getProviderHealth()]);
-  if (!signal?.aborted) { const [quotas, models, health] = providerResults; if (quotas.status === "fulfilled") next.quotas = quotas.value.providers; if (models.status === "fulfilled") next.models = models.value; if (health.status === "fulfilled") next.health = health.value; const failed = providerResults.filter((result) => result.status === "rejected"); if (failed.length) errors.providers = { message: failed.map((result) => messageFor(result.reason)).join("; ").slice(0, 300), at: now }; }
+  const providerResults = await Promise.allSettled([client.getProviderQuotas(), client.getProviderModels(), client.getProviderHealth(), client.getReadiness()]);
+  if (!signal?.aborted) { const [quotas, models, health, readiness] = providerResults; if (quotas.status === "fulfilled") next.quotas = quotas.value.providers; if (models.status === "fulfilled") next.models = models.value; if (health.status === "fulfilled") next.health = health.value; if (readiness.status === "fulfilled") next.readiness = readiness.value; const failed = [quotas, models, health].filter((result): result is PromiseRejectedResult => result.status === "rejected"); if (failed.length) errors.providers = { message: failed.map((result) => messageFor(result.reason)).join("; ").slice(0, 300), at: now }; }
   return { data: next, errors };
 }
 

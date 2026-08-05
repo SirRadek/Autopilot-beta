@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { RunRecord } from "../../types/controlPlane";
 import { RunDetailView } from "./RunDetailView";
@@ -16,15 +16,47 @@ const baseRun = {
   retry_input_tokens: 0, retry_output_tokens: 0, artifacts: [], updated_at: "2026-07-13T10:02:00Z",
 } as RunRecord;
 
-function mount(run?: RunRecord) {
+function mount(run?: RunRecord, onCancelRun?: (run: RunRecord) => Promise<void>) {
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
-  act(() => root.render(<RunDetailView run={run} runInspector={<p>inspector-slot</p>} promotionPane={<p>promotion-slot</p>} />));
+  act(() => root.render(<RunDetailView run={run} runInspector={<p>inspector-slot</p>} promotionPane={<p>promotion-slot</p>} onCancelRun={onCancelRun} />));
   return { host, root };
 }
 
 describe("RunDetailView", () => {
   it("renders the status header from real run fields", () => { const { host, root } = mount(baseRun); expect(host.textContent).toContain("run-1 · revize 1 (immutable)"); expect(host.textContent).toContain("Rate-limit /auth/login + testy"); expect(host.textContent).toContain("stav running"); expect(host.textContent).toContain("codex_cli · gpt-5"); expect(host.textContent).toContain("odhad 900 tokenů"); expect(host.textContent).toContain("profil dev"); expect(host.querySelector(".status-badge")?.getAttribute("data-status")).toBe("running"); act(() => root.unmount()); host.remove(); });
-  it("keeps run actions disabled as planned only", () => { const { host, root } = mount(baseRun); const buttons = [...host.querySelectorAll(".run-status-actions button")]; expect(buttons.map((button) => button.textContent)).toEqual(["Pauza", "Zastavit"]); for (const button of buttons) { expect((button as HTMLButtonElement).disabled).toBe(true); expect(button.getAttribute("title")).toBe("Planned"); } act(() => root.unmount()); host.remove(); });
+  it("keeps only pause planned and disables cancel without a handler", () => { const { host, root } = mount(baseRun); const buttons = [...host.querySelectorAll(".run-status-actions button")]; expect(buttons).toHaveLength(2); expect(buttons[0]?.textContent).toContain("Pauza"); expect(buttons[0]?.querySelector(".planned-badge")?.textContent).toBe("Planned"); expect((buttons[0] as HTMLButtonElement).disabled).toBe(true); expect(buttons[0]?.getAttribute("title")).toBe("Planned"); expect(buttons[1]?.textContent).toBe("Zastavit"); expect(buttons[1]?.querySelector(".planned-badge")).toBeNull(); expect((buttons[1] as HTMLButtonElement).disabled).toBe(true); expect(buttons[1]?.getAttribute("title")).toBeNull(); expect(host.querySelectorAll(".planned-badge")).toHaveLength(1); act(() => root.unmount()); host.remove(); });
+  it("confirms cancellation before calling the handler with a cancellable run", async () => {
+    const onCancelRun = vi.fn().mockResolvedValue(undefined);
+    const { host, root } = mount(baseRun, onCancelRun);
+    const stopButton = [...host.querySelectorAll("button")].find((button) => button.textContent === "Zastavit") as HTMLButtonElement;
+    expect(stopButton.disabled).toBe(false);
+    act(() => stopButton.click());
+    const group = host.querySelector('[role="group"]');
+    expect(group?.textContent).toContain("Opravdu zastavit tento běh?");
+    expect(onCancelRun).not.toHaveBeenCalled();
+    const confirmButton = [...group!.querySelectorAll("button")].find((button) => button.textContent === "Potvrdit zastavení") as HTMLButtonElement;
+    await act(async () => { confirmButton.click(); await Promise.resolve(); });
+    expect(onCancelRun).toHaveBeenCalledWith(baseRun);
+    expect(onCancelRun).toHaveBeenCalledTimes(1);
+    act(() => root.unmount()); host.remove();
+  });
+  it("disables cancellation for a completed run", () => {
+    const onCancelRun = vi.fn().mockResolvedValue(undefined);
+    const { host, root } = mount({ ...baseRun, status: "completed" }, onCancelRun);
+    const stopButton = [...host.querySelectorAll("button")].find((button) => button.textContent === "Zastavit") as HTMLButtonElement;
+    expect(stopButton.disabled).toBe(true);
+    act(() => root.unmount()); host.remove();
+  });
+  it("shows a cancellation error when the handler rejects", async () => {
+    const onCancelRun = vi.fn().mockRejectedValue(new Error("server odmítl požadavek"));
+    const { host, root } = mount(baseRun, onCancelRun);
+    const stopButton = [...host.querySelectorAll("button")].find((button) => button.textContent === "Zastavit") as HTMLButtonElement;
+    act(() => stopButton.click());
+    const confirmButton = [...host.querySelectorAll('[role="group"] button')].find((button) => button.textContent === "Potvrdit zastavení") as HTMLButtonElement;
+    await act(async () => { confirmButton.click(); await Promise.resolve(); });
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("Zastavení selhalo: server odmítl požadavek");
+    act(() => root.unmount()); host.remove();
+  });
   it("composes the inspector and promotion slots into labelled sections", () => { const { host, root } = mount(baseRun); expect(host.textContent).toContain("Průběh & důkazy"); expect(host.textContent).toContain("Propagace"); expect(host.textContent).not.toContain("Chyby"); expect(host.textContent).toContain("inspector-slot"); expect(host.textContent).toContain("promotion-slot"); expect(host.querySelectorAll(".run-detail-section[aria-labelledby]")).toHaveLength(3); act(() => root.unmount()); host.remove(); });
   it("falls back to run_id as title when the prompt is empty", () => { const { host, root } = mount({ ...baseRun, current: { ...baseRun.current, prompt: "   " } }); expect(host.querySelector(".run-status-title h2")?.textContent).toBe("run-1"); act(() => root.unmount()); host.remove(); });
   it("shows an empty state without a selected run", () => { const { host, root } = mount(undefined); expect(host.textContent).toContain("Vyber běh v Command Center."); expect(host.textContent).not.toContain("inspector-slot"); act(() => root.unmount()); host.remove(); });

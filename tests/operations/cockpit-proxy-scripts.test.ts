@@ -997,7 +997,7 @@ describe("Cockpit isolated proxy acceptance", () => {
     expect(spec).toContain('getByLabel("Uživatelské jméno")');
     expect(spec).toContain('getByLabel("Heslo")');
     expect(spec).toContain('getByRole("button", { name: "Přihlásit" })');
-    expect(spec).toContain('getByRole("heading", { name: "Hybrid Cockpit" })');
+    expect(spec).toContain('getByRole("heading", { name: "Autopilot", exact: true })');
     expect(spec).toContain('performance.getEntriesByType("resource")');
   });
 });
@@ -1076,7 +1076,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -z "$cookie_jar" ]] || printf 'cookie-mode %s\\n' "$(stat -c %a "$cookie_jar")" >> "$STUB_LOG"
 name="$(basename "$headers" .headers)"
-full_csp="default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+full_csp="default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src https://www.figma.com https://embed.figma.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 case "$name" in
   root|spa|lookalike-*)
     [[ "\${STUB_INCOMPLETE_CSP:-0}" != 1 ]] || full_csp="default-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'"

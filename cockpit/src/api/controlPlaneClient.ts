@@ -1,4 +1,6 @@
-import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectCreateInput, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord, FigmaMutationRecord } from "../types/controlPlane";
+import type { ApprovalRecord, AutopilotIncident, AutopilotRepairPacket, BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, ControlPlaneStatus, ObservabilitySummary, ObservabilityTimeline, ProjectCreateInput, ProjectEntry, PromotionApproval, PromotionDraftInput, PromotionPacket, PromotionPublishEvidence, ProviderHealth, ProviderModels, ProviderQuota, ReadinessReport, RepairPacketInput, RunDraftBody, RunDraftInput, RunProfile, RunRecord, RunStatus, SessionRecord, WorkerRecord, FigmaMutationRecord } from "../types/controlPlane";
+
+export const NON_JSON_RESPONSE = "control_plane_non_json_response";
 
 export class ControlPlaneApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "ControlPlaneApiError"; }
@@ -27,6 +29,7 @@ export interface ControlPlaneClient {
   getProviderQuotas(): Promise<{ readonly providers: readonly ProviderQuota[] }>;
   getProviderModels(): Promise<ProviderModels>;
   getProviderHealth(): Promise<ProviderHealth>;
+  getReadiness(): Promise<ReadinessReport | null>;
   decideApproval(id: string, decision: "approved" | "rejected", reason?: string): Promise<ApprovalRecord>;
   getProjects(): Promise<readonly ProjectEntry[]>;
   createProject(input: ProjectCreateInput): Promise<ProjectEntry>;
@@ -75,7 +78,11 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
       const body = (await response.text()).slice(0, 500);
       throw new ControlPlaneApiError(response.status, body || `control_plane_http_${response.status}`);
     }
-    return await response.json() as T;
+    try {
+      return await response.json() as T;
+    } catch {
+      throw new ControlPlaneApiError(response.status, NON_JSON_RESPONSE);
+    }
   }
   return {
     getAuthSession: () => request<BrowserAuthSession>("/auth/session"),
@@ -98,6 +105,33 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions = {}
     getProviderQuotas: () => request<{ readonly providers: readonly ProviderQuota[] }>("/providers/quotas"),
     getProviderModels: () => request<ProviderModels>("/providers/models"),
     getProviderHealth: () => request<ProviderHealth>("/providers/health"),
+    getReadiness: async () => {
+      try {
+        const response = await fetcher(`${baseUrl}/ready`, { headers: { Accept: "application/json" }, credentials: "include" });
+        if (response.status !== 200 && response.status !== 503) return null;
+        let body: unknown;
+        try {
+          body = await response.json();
+        } catch {
+          return null;
+        }
+        if (
+          typeof body !== "object"
+          || body === null
+          || !("ready" in body)
+          || typeof body.ready !== "boolean"
+          || !("components" in body)
+          || typeof body.components !== "object"
+          || body.components === null
+          || !("providers" in body.components)
+          || typeof body.components.providers !== "object"
+          || body.components.providers === null
+        ) return null;
+        return body as ReadinessReport;
+      } catch {
+        return null;
+      }
+    },
     decideApproval: (id, decision, reason) => request<ApprovalRecord>(`/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, ...(reason === undefined ? {} : { reason }) }) }),
     getProjects: () => request<readonly ProjectEntry[]>("/projects"),
     createProject: (input) => request<ProjectEntry>("/projects", jsonPost(input)),

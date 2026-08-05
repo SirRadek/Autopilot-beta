@@ -5,9 +5,10 @@ export type ResourcesViewProps = {
   readonly workersPane: React.ReactNode;
   readonly sessionsPane: React.ReactNode;
   readonly projectsPane: React.ReactNode;
+  readonly diagnosticsPane?: React.ReactNode;
 };
 
-export function ResourcesView({ providersPane, workersPane, sessionsPane, projectsPane }: ResourcesViewProps) {
+export function ResourcesView({ providersPane, workersPane, sessionsPane, projectsPane, diagnosticsPane }: ResourcesViewProps) {
   const idPrefix = useId(); const id = (suffix: string) => `${idPrefix}-${suffix}`;
   return <div className="resources-view">
     <header className="resources-header">
@@ -30,6 +31,10 @@ export function ResourcesView({ providersPane, workersPane, sessionsPane, projec
       <section className="cockpit-card resources-section" aria-labelledby={id("projects")}>
         <h3 id={id("projects")}>Projekty</h3>
         {projectsPane}
+      </section>
+      <section className="cockpit-card resources-section" aria-labelledby={id("diagnostics")}>
+        <h3 id={id("diagnostics")}>Diagnostika nástroje</h3>
+        {diagnosticsPane ?? <p className="planned-note">Bez dat o incidentech.</p>}
       </section>
       <section className="cockpit-card resources-section planned" aria-labelledby={id("routing")}>
         <h3 id={id("routing")}>Rozdělení práce <span className="planned-badge">Planned</span></h3>

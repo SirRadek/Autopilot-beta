@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 
-import type { ControlPlaneClient } from "../../api/controlPlaneClient";
+import { ControlPlaneApiError, NON_JSON_RESPONSE, type ControlPlaneClient } from "../../api/controlPlaneClient";
 import type { FigmaMutationRecord } from "../../types/controlPlane";
 
 export type FigmaMutationsPaneProps = { readonly client: ControlPlaneClient };
@@ -12,10 +12,25 @@ export function FigmaMutationsPane({ client }: FigmaMutationsPaneProps) {
   const [lease, setLease] = useState<{ readonly id: string; readonly value: string }>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<string>();
+  const [unavailable, setUnavailable] = useState(false);
 
   const load = useCallback(async () => {
-    try { setRecords(await client.listFigmaMutations()); setError(undefined); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Načtení návrhů selhalo."); }
+    try {
+      setRecords(await client.listFigmaMutations());
+      setUnavailable(false);
+      setError(undefined);
+    } catch (caught) {
+      if (
+        caught instanceof ControlPlaneApiError
+        && (caught.status === 404 || caught.status === 405 || caught.message === NON_JSON_RESPONSE)
+      ) {
+        setUnavailable(true);
+        setError(undefined);
+      } else {
+        setUnavailable(false);
+        setError(caught instanceof Error ? caught.message : "Načtení návrhů selhalo.");
+      }
+    }
   }, [client]);
   useEffect(() => { void load(); }, [load]);
 
@@ -31,6 +46,11 @@ export function FigmaMutationsPane({ client }: FigmaMutationsPaneProps) {
   };
 
   const pendingRecords = records.filter((record) => record.status === "pending");
+  if (unavailable) return <section className="figma-mutations" aria-label="Pending Figma mutations">
+    <h3>Figma návrhy ke schválení</h3>
+    <p className="fm-unavailable">Figma návrhy nejsou na tomto serveru k dispozici (starší nasazení).</p>
+  </section>;
+
   return <section className="figma-mutations" aria-label="Pending Figma mutations">
     <h3>Figma návrhy ke schválení</h3>
     <p className="fm-hint">Worker navrhl zápis do Figmy. Schválením vydáš jednorázový lease pro plugin; typed ops, version checkpoint a re-fetch verifikaci hlídá control plane.</p>
