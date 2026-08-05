@@ -85,7 +85,7 @@ export function ProviderPane({ quotas, models, health, readiness, selectedProvid
               <small>{timeLabel(model.updated_at)}</small>
             </div>
           </li>)}</ul>
-          {modelRows.length > MAX_VISIBLE_MODELS ? <p className="provider-model-truncation">Zobrazeno 20 z {modelRows.length} modelů.</p> : null}
+          {modelRows.length > MAX_VISIBLE_MODELS ? <p className="provider-model-truncation">Zobrazeno {MAX_VISIBLE_MODELS} z {modelRows.length} modelů.</p> : null}
         </> : <p>Žádné modely k zobrazení.</p>}
       </section>
     </section> : null}

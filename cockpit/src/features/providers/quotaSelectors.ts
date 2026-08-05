@@ -1,4 +1,4 @@
-import type { ProviderHealth, ProviderModel, ProviderModels, ProviderQuota, ProviderQuotaWindow, ReadinessComponent, ReadinessReport, RunReasoningEffort } from "../../types/controlPlane";
+import type { ProviderHealth, ProviderModels, ProviderQuota, ProviderQuotaWindow, ReadinessComponent, ReadinessReport, RunReasoningEffort } from "../../types/controlPlane";
 
 export const CANONICAL_PROVIDERS = ["agy_cli", "claude_cli", "codex_cli", "openrouter_api"] as const;
 
@@ -24,11 +24,6 @@ export function selectProviderQuota(quotas: readonly ProviderQuota[], provider: 
 
 export function selectProviderHealth(health: ProviderHealth | undefined, provider: string | undefined) {
   return health?.providers.find((item) => item.provider === provider);
-}
-
-export function selectProviderModels(quota: ProviderQuota | undefined, models: ProviderModels | undefined, provider?: string): readonly ProviderModel[] {
-  if (quota?.models.length) return quota.models;
-  return (models?.models ?? []).filter((model) => model.providers.includes(quota?.provider ?? provider ?? "")).map((model) => ({ model_id: model.model_id, available: model.available, health: model.health.join(", "), source: model.providers.join(", "), fetched_at: model.fetched_at, updated_at: model.updated_at }));
 }
 
 export type ProviderDiagnosis = {

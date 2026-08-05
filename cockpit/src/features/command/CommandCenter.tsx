@@ -25,10 +25,15 @@ export const CANCELLABLE_STATUSES: readonly RunStatus[] = ["draft", "approved", 
 
 const MAX_PENDING_RUNS = 10;
 
+type RunAction = "approve" | "cancel";
+
 type RunActionState = {
   readonly busyRunId?: string;
   readonly actionError?: string;
-  readonly confirmCancelId?: string;
+  readonly confirmation?: {
+    readonly action: RunAction;
+    readonly runId: string;
+  };
 };
 
 function runPriority(status: RunStatus): number {
@@ -78,22 +83,22 @@ export function CommandCenter({
   const nowMs = (now ?? new Date()).getTime();
   const actionsBusy = runAction.busyRunId !== undefined;
 
-  const performRunAction = async (run: RunRecord, action: "approve" | "cancel") => {
+  const performRunAction = async (run: RunRecord, action: RunAction) => {
     const handler = action === "approve" ? onApproveRun : onCancelRun;
     if (handler === undefined || actionInFlight.current) return;
     actionInFlight.current = true;
-    setRunAction((current) => ({
-      confirmCancelId: current.confirmCancelId,
+    setRunAction({
+      confirmation: { action, runId: run.current.run_id },
       busyRunId: run.current.run_id,
-    }));
+    });
     try {
       await handler(run);
       setRunAction({});
     } catch (caught) {
-      setRunAction((current) => ({
-        confirmCancelId: action === "cancel" ? run.current.run_id : current.confirmCancelId,
+      setRunAction({
+        confirmation: { action, runId: run.current.run_id },
         actionError: actionErrorMessage(caught),
-      }));
+      });
     } finally {
       actionInFlight.current = false;
     }
@@ -123,7 +128,9 @@ export function CommandCenter({
         {visiblePendingRuns.map((run) => {
           const runId = run.current.run_id;
           const isSelected = runId === selectedRunId;
-          const confirmingCancel = runAction.confirmCancelId === runId;
+          const confirmingAction = runAction.confirmation?.runId === runId ? runAction.confirmation.action : undefined;
+          const confirmingApprove = confirmingAction === "approve";
+          const confirmingCancel = confirmingAction === "cancel";
           return <li className="cc-pending-run" key={runId}>
             <div className="cc-pending-summary">
               <button type="button" className={isSelected ? "cc-pending-select selected" : "cc-pending-select"} aria-pressed={isSelected} onClick={() => onSelectRun(runId)}>{runId}</button>
@@ -131,17 +138,21 @@ export function CommandCenter({
             </div>
             <span className="cc-pending-status">{run.status}</span>
             <div className="cc-pending-actions">
-              {run.status === "draft" && onApproveRun ? <button type="button" disabled={actionsBusy} onClick={() => void performRunAction(run, "approve")}>Schválit</button> : null}
+              {run.status === "draft" && onApproveRun ? confirmingApprove ? <div className="cc-pending-confirm" role="group" aria-label={`Potvrzení schválení běhu ${runId}`}>
+                <span>Opravdu schválit a spustit běh?</span>
+                <button type="button" disabled={actionsBusy} onClick={() => void performRunAction(run, "approve")}>Potvrdit schválení</button>
+                <button type="button" disabled={actionsBusy} onClick={() => setRunAction({})}>Ponechat</button>
+              </div> : <button type="button" disabled={actionsBusy} onClick={() => setRunAction({ confirmation: { action: "approve", runId } })}>Schválit</button> : null}
               {CANCELLABLE_STATUSES.includes(run.status) && onCancelRun ? confirmingCancel ? <div className="cc-pending-confirm" role="group" aria-label={`Potvrzení zrušení běhu ${runId}`}>
                 <span>Opravdu zrušit běh?</span>
                 <button type="button" disabled={actionsBusy} onClick={() => void performRunAction(run, "cancel")}>Potvrdit zrušení</button>
                 <button type="button" disabled={actionsBusy} onClick={() => setRunAction({})}>Ponechat</button>
-              </div> : <button type="button" disabled={actionsBusy} onClick={() => setRunAction({ confirmCancelId: runId })}>Zrušit</button> : null}
+              </div> : <button type="button" disabled={actionsBusy} onClick={() => setRunAction({ confirmation: { action: "cancel", runId } })}>Zrušit</button> : null}
             </div>
           </li>;
         })}
       </ul>}
-      {pendingRuns.length > MAX_PENDING_RUNS ? <p className="cc-empty">Zobrazeno 10 z {pendingRuns.length} čekajících běhů.</p> : null}
+      {pendingRuns.length > MAX_PENDING_RUNS ? <p className="cc-empty">Zobrazeno {MAX_PENDING_RUNS} z {pendingRuns.length} čekajících běhů.</p> : null}
       {runAction.actionError !== undefined ? <p className="cc-action-error" role="alert">Akce selhala: {runAction.actionError}</p> : null}
       <h4 className="cc-subheading">Schválení promptů</h4>
       {approvalPane}

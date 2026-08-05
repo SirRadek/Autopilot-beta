@@ -145,8 +145,11 @@ describe("AuthenticatedCockpit pending-run action wiring", () => {
     const { host, root } = await mount(source);
 
     const approve = [...host.querySelectorAll("button")].find((item) => item.textContent === "Schválit") as HTMLButtonElement;
+    act(() => approve.click());
+    expect(approveRun).not.toHaveBeenCalled();
+    const confirmApprove = [...host.querySelectorAll("button")].find((item) => item.textContent === "Potvrdit schválení") as HTMLButtonElement;
     await act(async () => {
-      approve.click();
+      confirmApprove.click();
       await Promise.resolve();
       await Promise.resolve();
     });

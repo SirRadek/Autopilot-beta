@@ -136,8 +136,15 @@ describe("CommandCenter", () => {
       <CommandCenter runs={[draftRun]} onSelectRun={vi.fn()} onApproveRun={onApproveRun} approvalPane={null} />,
     );
 
+    act(() => button(host, "Schválit").click());
+    const confirmation = host.querySelector('[role="group"]');
+    expect(confirmation?.textContent).toContain("Opravdu schválit a spustit běh?");
+    expect(button(host, "Potvrdit schválení")).toBeDefined();
+    expect(button(host, "Ponechat")).toBeDefined();
+    expect(onApproveRun).not.toHaveBeenCalled();
+
     await act(async () => {
-      button(host, "Schválit").click();
+      button(host, "Potvrdit schválení").click();
       await Promise.resolve();
     });
     expect(onApproveRun).toHaveBeenCalledWith(draftRun);

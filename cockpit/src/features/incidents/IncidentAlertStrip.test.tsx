@@ -47,6 +47,28 @@ describe("IncidentAlertStrip", () => {
     host.remove();
   });
 
+  it("uses the correct singular and genitive plural incident counts", () => {
+    const cases: readonly [number, string][] = [
+      [1, "1 otevřený incident"],
+      [5, "5 otevřených incidentů"],
+    ];
+
+    for (const [count, expected] of cases) {
+      const incidents: AutopilotIncident[] = Array.from({ length: count }, (_, index) => ({
+        ...incident,
+        incident_id: `incident-${index + 1}`,
+      }));
+      const { host, root } = mount(
+        <IncidentAlertStrip incidents={incidents} onOpenDiagnostics={vi.fn()} />,
+      );
+
+      expect(host.querySelector("strong")?.textContent).toBe(expected);
+
+      act(() => root.unmount());
+      host.remove();
+    }
+  });
+
   it("renders the open count and newest open incident and opens diagnostics", () => {
     const older = {
       ...incident,
@@ -77,7 +99,7 @@ describe("IncidentAlertStrip", () => {
       />,
     );
 
-    expect(host.querySelector("strong")?.textContent).toBe("2 otevřených incidentů");
+    expect(host.querySelector("strong")?.textContent).toBe("2 otevřené incidenty");
     expect(host.querySelector(".incident-alert-summary")?.textContent).toBe(
       "Nejnovější otevřený incident",
     );

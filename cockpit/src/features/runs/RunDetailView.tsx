@@ -48,8 +48,7 @@ export function RunDetailView({ run, runInspector, promotionPane, onCancelRun }:
           </div>
           <StatusBadge status={badgeByRunStatus[run.status]} />
           <div className="run-status-actions">
-            <span className="planned-badge">Planned</span>
-            <button type="button" disabled title="Planned">Pauza</button>
+            <button type="button" disabled title="Planned">Pauza <span className="planned-badge">Planned</span></button>
             {onCancelRun !== undefined && CANCELLABLE_STATUSES.includes(run.status) && confirmCancelId === run.current.run_id ? <div role="group" aria-label="Potvrzení zastavení běhu">
               <span>Opravdu zastavit tento běh?</span>
               <button type="button" disabled={cancelBusy} onClick={() => void cancelRun(run)}>Potvrdit zastavení</button>

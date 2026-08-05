@@ -1,6 +1,6 @@
 import React from "react";
 import type { AutopilotIncident } from "../../types/controlPlane";
-import { formatRecordedAt, sortIncidentsNewestFirst } from "./incidentSelectors";
+import { czechIncidentCount, formatRecordedAt, sortIncidentsNewestFirst } from "./incidentSelectors";
 
 const severityRank: Readonly<Record<AutopilotIncident["severity"], number>> = {
   low: 0,
@@ -26,7 +26,7 @@ export function IncidentAlertStrip({ incidents, onOpenDiagnostics }: IncidentAle
 
   return (
     <div role="alert" className={`incident-alert-strip incident-alert-${topSeverity}`}>
-      <strong>{open.length} otevřených incidentů</strong>
+      <strong>{czechIncidentCount(open.length)}</strong>
       <span className="incident-alert-summary">{newest.summary.slice(0, 120)}</span>
       <time dateTime={newest.recorded_at}>{formatRecordedAt(newest.recorded_at)}</time>
       <button type="button" onClick={onOpenDiagnostics}>Otevřít diagnostiku</button>

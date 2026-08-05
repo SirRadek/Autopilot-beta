@@ -2,6 +2,12 @@ import type { AutopilotIncident } from "../../types/controlPlane";
 
 export const MAX_VISIBLE_INCIDENTS = 64;
 
+export function czechIncidentCount(n: number): string {
+  if (n === 1) return `${n} otevřený incident`;
+  if (n >= 2 && n <= 4) return `${n} otevřené incidenty`;
+  return `${n} otevřených incidentů`;
+}
+
 export function sortIncidentsNewestFirst(
   incidents: readonly AutopilotIncident[],
 ): readonly AutopilotIncident[] {
