@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyWorkUnitForProfile, resolveVerificationMode, assertNoSilentRouteChange, DEV_DEFAULT_COST_TIERS } from "../../src/data/delivery-system/executionProfile";
+import { classifyWorkUnitForProfile, resolveVerificationMode, assertNoSilentRouteChange, DEV_DEFAULT_COST_TIERS, RUN_REASONING_EFFORTS, SUPPORTED_REASONING_EFFORTS } from "../../src/data/delivery-system/executionProfile";
 
 describe("executionProfile", () => {
   it("uses diff-scoped verification only for ordinary DEV work", () => {
@@ -19,5 +19,12 @@ describe("executionProfile", () => {
     expect(DEV_DEFAULT_COST_TIERS).toContain("free");
     expect(() => assertNoSilentRouteChange({ provider: "codex_cli", model: "gpt-5", reasoning: "high" }, { provider: "codex_cli", model: "gpt-5", reasoning: "high" })).not.toThrow();
     expect(() => assertNoSilentRouteChange({ provider: "codex_cli", model: "gpt-5", reasoning: "high" }, { provider: "codex_cli", model: "gpt-5", reasoning: "xhigh" })).toThrow("silent_route_change_forbidden");
+  });
+
+  it("exposes the verified max and delegation-capable ultra levels only on Codex", () => {
+    expect(RUN_REASONING_EFFORTS).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+    expect(SUPPORTED_REASONING_EFFORTS.codex_cli).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+    expect(SUPPORTED_REASONING_EFFORTS.claude_cli).not.toContain("ultra");
+    expect(SUPPORTED_REASONING_EFFORTS.agy_cli).not.toContain("ultra");
   });
 });

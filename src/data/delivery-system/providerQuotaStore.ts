@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { RUN_REASONING_EFFORTS, SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "./executionProfile";
 import { readManagedStateTextFile } from "./managedStateFile";
 import { isCanonicalModelId } from "./providerModelId";
 import {
@@ -84,7 +85,8 @@ export function writeProviderQuotaStore(stateDir: string, document: ProviderQuot
 export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
-  if (typeof row.provider !== "string" || row.provider.length === 0 || row.provider.length > MAX_PROVIDER_LENGTH) return null;
+  const provider = row.provider;
+  if (typeof provider !== "string" || provider.length === 0 || provider.length > MAX_PROVIDER_LENGTH) return null;
   if (!SOURCES.includes(row.source as ProviderQuotaSource) || !HEALTH.includes(row.health as ProviderHealth) || !ERRORS.includes(row.error_code as ProviderErrorCode | null)) return null;
   if (typeof row.fetched_at !== "string" || row.fetched_at.length > MAX_FIELD_LENGTH || typeof row.observed_at !== "string" || row.observed_at.length > MAX_FIELD_LENGTH) return null;
   if ((typeof row.api_spend === "number" && !Number.isFinite(row.api_spend)) || (typeof row.api_spend !== "number" && row.api_spend !== null)) return null;
@@ -97,7 +99,15 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
     const discovery = DISCOVERIES.includes(item.discovery as ProviderModelDiscovery)
       ? item.discovery as ProviderModelDiscovery
       : "usage_probe";
-    return [{ model_id: item.model_id, available: item.available, health: item.health as ProviderHealth, source: item.source as ProviderQuotaSource, discovery }];
+    const reasoningEfforts = sanitizeReasoningEfforts(item.reasoning_efforts, provider);
+    return [{
+      model_id: item.model_id,
+      available: item.available,
+      health: item.health as ProviderHealth,
+      source: item.source as ProviderQuotaSource,
+      discovery,
+      ...(reasoningEfforts === undefined ? {} : { reasoning_efforts: reasoningEfforts })
+    }];
   });
   const window = (candidate: unknown) => {
     if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return null;
@@ -111,7 +121,7 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
   if (five === null || weekly === null) return null;
   const cliVersion = row.cli_version === undefined ? undefined : sanitizeCliVersion(row.cli_version);
   return {
-    provider: row.provider,
+    provider,
     source: row.source as ProviderQuotaSource,
     fetched_at: row.fetched_at,
     observed_at: row.observed_at,
@@ -124,6 +134,21 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
     health: row.health as ProviderHealth,
     error_code: row.error_code as ProviderErrorCode | null
   };
+}
+
+function sanitizeReasoningEfforts(value: unknown, provider: string): readonly RunReasoningEffort[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return [];
+  const supported = Object.hasOwn(SUPPORTED_REASONING_EFFORTS, provider)
+    ? SUPPORTED_REASONING_EFFORTS[provider as keyof typeof SUPPORTED_REASONING_EFFORTS] as readonly RunReasoningEffort[]
+    : [];
+  const advertised = new Set<RunReasoningEffort>();
+  for (const effort of value.slice(0, 32)) {
+    if (typeof effort === "string" && supported.includes(effort as RunReasoningEffort)) {
+      advertised.add(effort as RunReasoningEffort);
+    }
+  }
+  return RUN_REASONING_EFFORTS.filter((effort) => advertised.has(effort));
 }
 
 function sanitizeCliVersion(value: unknown): string | null {

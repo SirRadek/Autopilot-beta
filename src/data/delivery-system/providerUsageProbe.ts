@@ -12,7 +12,7 @@ export type UsageProbeProvider = "codex_cli" | "claude_cli" | "agy_cli";
 
 export interface ParsedUsage {
   readonly five_hour: { readonly limit: number | null; readonly used: number | null; readonly remaining: number | null; readonly resets_at: string | null };
-  readonly weekly: { readonly limit: number; readonly used: number; readonly remaining: number; readonly resets_at: string | null };
+  readonly weekly: { readonly limit: number | null; readonly used: number | null; readonly remaining: number | null; readonly resets_at: string | null };
   readonly models: readonly { readonly model_id: string; readonly available: boolean }[];
 }
 
@@ -40,23 +40,39 @@ const CLI: Readonly<Record<UsageProbeProvider, { readonly args: readonly string[
 
 export function parseCodexStatus(raw: string): ParsedUsage | null {
   const text = terminalText(raw);
-  const five = text.match(/5h\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left\s*\(resets\s+([^\r\n)]+)\)/i);
-  const week = text.match(/weekly\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left\s*\(resets\s+([^\r\n)]+)\)/i);
-  if (!week) return null;
+  if (codexStatusFailure(text) !== null) return null;
+  const five = text.match(/^\s*(?:[│|]\s*)?5h\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left(?:\s*\(resets\s+([^\r\n)]+)\))?/im);
+  const week = text.match(/^\s*(?:[│|]\s*)?weekly\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left(?:\s*\(resets\s+([^\r\n)]+)\))?/im);
+  const namedModels = [...text.matchAll(/^\s*(?:[│|]\s*)?([A-Za-z][A-Za-z0-9.-]*)\s+Weekly limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left(?:\s*\(resets\s+([^\r\n)]+)\))?/gim)];
+  const alternativeWindows = [...text.matchAll(/^\s*(?:[│|]\s*)?(?:(?:primary|secondary)\s+)?(?:usage|monthly(?:\s+credit)?|daily|annual)\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left/gim)];
+  if (!five && !week && namedModels.length === 0 && alternativeWindows.length === 0) return null;
   const five_hour = five
-    ? percentWindow(five[1]!, five[2]!)
-    : { limit: null, used: null, remaining: null, resets_at: null };
-  const activeModel = text.match(/Model:\s*([^\r\n(]+?)\s*\(/i)?.[1];
-  const namedModels = [...text.matchAll(/^(?:\s*\S\s+)?([A-Za-z][A-Za-z0-9.-]*)(?:\r?\n\s*|\s+)Weekly limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left/gim)];
-  const activeNamedRow = activeModel ? namedModels.find((match) => match[1] === activeModel) : undefined;
-  const activeWeeklyPercent = activeNamedRow ? activeNamedRow[2]! : week[1]!;
+    ? percentWindow(five[1]!, five[2] ?? null)
+    : unknownWindow();
+  const weekly = week
+    ? percentWindow(week[1]!, week[2] ?? null)
+    : unknownWindow();
+  const activeModel = text.match(/Model:\s*([^\r\n(]+?)\s*\(/i)?.[1]?.trim();
+  const activeNamedRow = activeModel
+    ? namedModels.find((match) => match[1]?.toLowerCase() === activeModel.toLowerCase())
+    : undefined;
+  const activePercents = [
+    five?.[1],
+    activeNamedRow?.[2] ?? week?.[1],
+    ...(five === null && week === null ? alternativeWindows.map((match) => match[1]) : [])
+  ].filter((value): value is string => value !== undefined);
   const seenModelIds = new Set<string>();
   const models = [
-    ...(activeModel ? [{ model_id: activeModel, available: boundedPercent(activeWeeklyPercent) > 0 }] : []),
-    ...namedModels.map((match) => ({ model_id: match[1]!, available: boundedPercent(match[2]!) > 0 }))
+    ...(activeModel && activePercents.length > 0
+      ? [{ model_id: activeModel, available: activePercents.every((percent) => boundedPercent(percent) > 0) }]
+      : []),
+    ...namedModels.map((match) => ({
+      model_id: match[1]!,
+      available: boundedPercent(match[2]!) > 0 && (five === null || boundedPercent(five[1]!) > 0)
+    }))
   ].filter((model) => isCanonicalModelId(model.model_id))
     .filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)));
-  return { five_hour, weekly: percentWindow(week[1]!, week[2]!), models };
+  return { five_hour, weekly, models };
 }
 
 export function parseAgyUsage(raw: string): ParsedUsage | null {
@@ -174,7 +190,8 @@ export async function runTmuxUsageProbe(
     const parsed = provider === "codex_cli" ? parseCodexStatus(stdout) : provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
     if (parsed === null) {
       const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
-      result = failureResult(missing ? "missing_credential" : "malformed_response");
+      const codexFailure = provider === "codex_cli" ? codexStatusFailure(terminalText(stdout)) : null;
+      result = failureResult(missing ? "missing_credential" : codexFailure ?? "malformed_response");
     } else {
       result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
     }
@@ -308,6 +325,18 @@ function boundedPercent(value: string): number {
 function percentWindow(value: string, resetsAt: string | null) {
   const remaining = boundedPercent(value);
   return { limit: 100, used: 100 - remaining, remaining, resets_at: resetsAt?.trim().slice(0, 200) ?? null };
+}
+
+function unknownWindow() {
+  return { limit: null, used: null, remaining: null, resets_at: null };
+}
+
+function codexStatusFailure(text: string): ProviderErrorCode | null {
+  return /limits may be stale/i.test(text)
+    || /Limits:\s*(?:not available for this account|data not available yet)/i.test(text)
+    || /refresh requested;\s*run \/status again shortly/i.test(text)
+    ? "provider_unavailable"
+    : null;
 }
 
 function usedPercentWindow(used: number, resetsAt: string | null) {

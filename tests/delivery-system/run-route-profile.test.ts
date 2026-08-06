@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
-import { isRunRouteEligible } from "../../src/data/delivery-system/runRouteEligibility";
+import { isRunRouteEligible, isRunRouteEligibleForProfile } from "../../src/data/delivery-system/runRouteEligibility";
 import { createRunOrchestrator } from "../../src/data/delivery-system/runOrchestrator";
 import type { RunDraftInput } from "../../src/data/delivery-system/runStore";
 import { SupervisorQueue } from "../../src/data/delivery-system/supervisorQueue";
@@ -98,6 +98,38 @@ describe("profile-aware run route eligibility", () => {
 
     expect(() => orchestrator.prepareRun({ ...draft, profile: "prod", promotion_packet_id: "packet-1" }))
       .toThrow("run_route_unavailable");
+  });
+
+  it("rejects a Codex effort that the selected live model does not advertise", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-route-model-effort-"));
+    const window = { limit: null, used: null, remaining: null, resets_at: null };
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [{
+        provider: "codex_cli",
+        source: "cli",
+        fetched_at: now,
+        observed_at: now,
+        five_hour: window,
+        weekly: window,
+        api_spend: null,
+        currency: null,
+        models: [{
+          model_id: "gpt-5.6-luna",
+          available: true,
+          health: "healthy",
+          source: "cli",
+          discovery: "models_cache",
+          reasoning_efforts: ["low", "medium", "high", "xhigh", "max"]
+        }],
+        health: "healthy",
+        error_code: null
+      }]
+    });
+
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-luna", "max", "dev", now)).toBe(true);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-luna", "ultra", "dev", now)).toBe(false);
+    expect(isRunRouteEligible(stateDir, "codex_cli", "gpt-5.6-luna", now, "ultra")).toBe(false);
   });
 
   it.each([

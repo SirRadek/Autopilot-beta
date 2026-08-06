@@ -27,7 +27,7 @@ function change(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElem
 function button(host: HTMLElement, text: string) { return [...host.querySelectorAll("button")].find((item) => item.textContent === text) as HTMLButtonElement; }
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 
-function makeRunComposerProps(overrides: { readonly reasoning_efforts?: readonly ("low" | "medium" | "high" | "xhigh" | "max")[] } = {}): React.ComponentProps<typeof RunComposer> & { readonly onPrepare: ReturnType<typeof vi.fn> } {
+function makeRunComposerProps(overrides: { readonly reasoning_efforts?: readonly ("low" | "medium" | "high" | "xhigh" | "max" | "ultra")[] } = {}): React.ComponentProps<typeof RunComposer> & { readonly onPrepare: ReturnType<typeof vi.fn> } {
   const reasoningEfforts = overrides.reasoning_efforts ?? ["low", "medium", "high"];
   const scopedModels: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli"], configured: false, observed: true, available: true, health: ["healthy"], reasoning_efforts: reasoningEfforts, provider_routes: [{ provider: "codex_cli", configured: false, observed: true, available: true, health: ["healthy"], discovery: "usage_probe", source: "live_snapshot", reasoning_efforts: reasoningEfforts }] }] };
   const onPrepare = vi.fn(async (input) => ({ ...prepared, current: { ...prepared.current, ...input } }));
@@ -307,16 +307,17 @@ describe("RunComposer", () => {
     expect(host.querySelector('[aria-live="polite"]')?.textContent).not.toContain("obsolete failure"); act(() => root.unmount()); host.remove();
   });
 
-  it("exposes only server-advertised reasoning efforts, binds the owner's choice, and shows the static shadow-only label", async () => {
-    const runComposerProps = makeRunComposerProps({ reasoning_efforts: ["low", "medium", "high"] });
+  it("exposes server-advertised Codex ultra, binds the owner's choice, and shows the static shadow-only label", async () => {
+    const runComposerProps = makeRunComposerProps({ reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] });
     const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
     act(() => root.render(<RunComposer {...runComposerProps} />));
     change(host.querySelector('[aria-label="Prompt"]')!, "Inspect status");
     const reasoningSelect = host.querySelector('[aria-label="Reasoning"]') as HTMLSelectElement;
-    expect([...reasoningSelect.options].map((option) => option.value)).toEqual(["low", "medium", "high"]);
-    change(reasoningSelect, "high");
+    expect([...reasoningSelect.options].map((option) => option.value)).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+    expect([...reasoningSelect.options].find((option) => option.value === "ultra")?.textContent).toContain("automatická delegace");
+    change(reasoningSelect, "ultra");
     await act(async () => button(host, "Připravit běh").click());
-    expect(runComposerProps.onPrepare).toHaveBeenCalledWith(expect.objectContaining({ requested_reasoning_effort: "high" }));
+    expect(runComposerProps.onPrepare).toHaveBeenCalledWith(expect.objectContaining({ requested_reasoning_effort: "ultra" }));
     expect(host.textContent).toContain("Doporučení: žádné (shadow-only)");
     act(() => root.unmount()); host.remove();
   });

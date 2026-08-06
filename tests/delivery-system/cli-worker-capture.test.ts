@@ -25,19 +25,19 @@ describe("adapter argv builders — owner-selected model/reasoning enforcement",
     expect(args).toContain("medium");
   });
 
-  it("codex carries --model plus -c model_reasoning_effort=\"xhigh\"", () => {
-    const args = buildCodexExecArgs({ model: "gpt-5.5", effort: "xhigh" }, "/tmp/out.json");
+  it.each(["max", "ultra"] as const)("codex carries --model plus the verified %s reasoning config", (effort) => {
+    const args = buildCodexExecArgs({ model: "gpt-5.6-sol", effort }, "/tmp/out.json");
     expect(args.filter((value) => value === "--model")).toHaveLength(1);
     expect(args).not.toContain("-m");
-    expect(args).toContain("gpt-5.5");
+    expect(args).toContain("gpt-5.6-sol");
     expect(args).toContain("-c");
-    expect(args).toContain('model_reasoning_effort="xhigh"');
+    expect(args).toContain(`model_reasoning_effort="${effort}"`);
   });
 
-  it("codex bash-command path also carries the reasoning-effort config", () => {
-    const cmd = buildCodexBashCommand("codex", { model: "gpt-5.5", effort: "xhigh" }, "/tmp/out.json", "/tmp/p.txt");
-    expect(cmd).toContain('-c model_reasoning_effort="xhigh"');
-    expect(cmd).toContain("--model 'gpt-5.5'");
+  it("codex bash-command path also carries the delegation-capable ultra config", () => {
+    const cmd = buildCodexBashCommand("codex", { model: "gpt-5.6-sol", effort: "ultra" }, "/tmp/out.json", "/tmp/p.txt");
+    expect(cmd).toContain('-c model_reasoning_effort="ultra"');
+    expect(cmd).toContain("--model 'gpt-5.6-sol'");
   });
 
   it("never emits a fallback model flag when no model is supplied", () => {

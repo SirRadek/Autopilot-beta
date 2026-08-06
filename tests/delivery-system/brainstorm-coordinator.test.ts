@@ -34,7 +34,13 @@ function providerSnapshots(fetchedAt: string) {
     weekly: { limit: 1_000, used: 100, remaining: 900, resets_at: null },
     api_spend: 1.25,
     currency: "USD",
-    models: [{ model_id: route.model, available: true, health: "healthy" as const, source: "api" as const }],
+    models: [{
+      model_id: route.model,
+      available: true,
+      health: "healthy" as const,
+      source: "api" as const,
+      ...(route.provider === "codex_cli" ? { reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] as const } : {})
+    }],
     health: "healthy" as const,
     error_code: null,
   }));
@@ -91,7 +97,7 @@ describe("governed brainstorm coordinator", () => {
     expect(runs.every((run) => run.current.profile === "dev")).toBe(true);
     expect(runs.map((run) => run.current.requested_reasoning_effort)).toEqual(routes.map((route) => route.reasoning_effort));
     expect(new TokenGateway({ stateDir: context.stateDir }).snapshot().used["session:brainstorm-parent"]).toBeUndefined();
-    const expectedRoutes = [...routes, synthesizer, arbitration].map((route) => [context.stateDir, route.provider, route.model, now]);
+    const expectedRoutes = [...routes, synthesizer, arbitration].map((route) => [context.stateDir, route.provider, route.model, now, route.reasoning_effort]);
     expect(firstRuntime.isRouteEligible.mock.calls).toEqual(expectedRoutes);
     expect(retryRuntime.isRouteEligible.mock.calls).toEqual(expectedRoutes);
   });

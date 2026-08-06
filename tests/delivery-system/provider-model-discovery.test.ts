@@ -15,6 +15,8 @@ import {
 
 const now = "2026-08-05T12:00:00.000Z";
 const signal = new AbortController().signal;
+const codexCacheNow = new Date("2026-08-06T10:04:00.000Z");
+const codexCacheVersion = "0.144.5";
 
 function usagePayload(models: readonly Record<string, unknown>[], status?: "unavailable"): string {
   return JSON.stringify({
@@ -23,6 +25,25 @@ function usagePayload(models: readonly Record<string, unknown>[], status?: "unav
     models,
     ...(status === undefined ? {} : { status })
   });
+}
+
+function writeCodexCache(
+  homeDir: string,
+  models: readonly Record<string, unknown>[],
+  padding = ""
+): void {
+  const cacheDir = join(homeDir, ".codex");
+  mkdirSync(cacheDir);
+  writeFileSync(join(cacheDir, "models_cache.json"), JSON.stringify({
+    fetched_at: "2026-08-06T10:00:00.123456789Z",
+    client_version: "0.144.5",
+    models,
+    padding
+  }), "utf8");
+}
+
+function reasoningLevels(...efforts: string[]): readonly Record<string, string>[] {
+  return efforts.map((effort) => ({ effort, description: `${effort} reasoning` }));
 }
 
 describe("provider model discovery", () => {
@@ -76,7 +97,7 @@ describe("provider model discovery", () => {
   it("returns no Codex models when models_cache.json is missing", () => {
     const homeDir = mkdtempSync(join(tmpdir(), "provider-model-discovery-missing-"));
 
-    expect(discoverCodexModels(homeDir)).toEqual([]);
+    expect(discoverCodexModels(homeDir, codexCacheVersion, codexCacheNow)).toEqual([]);
   });
 
   it("returns no Codex models when models_cache.json is malformed", () => {
@@ -85,7 +106,77 @@ describe("provider model discovery", () => {
     mkdirSync(cacheDir);
     writeFileSync(join(cacheDir, "models_cache.json"), "{not-json", "utf8");
 
-    expect(discoverCodexModels(homeDir)).toEqual([]);
+    expect(discoverCodexModels(homeDir, codexCacheVersion, codexCacheNow)).toEqual([]);
+  });
+
+  it("parses every picker-visible model and its reasoning levels from the verified Codex cache shape", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "provider-model-discovery-codex-"));
+    writeCodexCache(homeDir, [
+      { slug: "gpt-5.6-sol", visibility: "list", supported_in_api: true, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh", "max", "ultra") },
+      { slug: "gpt-5.6-sol-wm", visibility: "hide", supported_in_api: false, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh", "max", "ultra") },
+      { slug: "gpt-5.6-terra", visibility: "list", supported_in_api: true, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh", "max", "ultra") },
+      { slug: "gpt-5.6-luna", visibility: "list", supported_in_api: true, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh", "max") },
+      { slug: "gpt-5.5", visibility: "list", supported_in_api: true, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh") },
+      { slug: "gpt-5.4", visibility: "list", supported_in_api: true, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh") },
+      { slug: "gpt-5.4-mini", visibility: "list", supported_in_api: true, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh") },
+      { slug: "gpt-5.3-codex-spark", visibility: "list", supported_in_api: false, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh") },
+      { slug: "codex-auto-review", visibility: "hide", supported_in_api: true, supported_reasoning_levels: reasoningLevels("low", "medium", "high", "xhigh", "max") },
+      { slug: "-not-a-model", visibility: "list", supported_in_api: true, supported_reasoning_levels: reasoningLevels("ultra") }
+    ], "x".repeat(350 * 1024));
+
+    expect(discoverCodexModels(homeDir, codexCacheVersion, codexCacheNow)).toEqual([
+      { model_id: "gpt-5.6-sol", reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] },
+      { model_id: "gpt-5.6-terra", reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] },
+      { model_id: "gpt-5.6-luna", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
+      { model_id: "gpt-5.5", reasoning_efforts: ["low", "medium", "high", "xhigh"] },
+      { model_id: "gpt-5.4", reasoning_efforts: ["low", "medium", "high", "xhigh"] },
+      { model_id: "gpt-5.4-mini", reasoning_efforts: ["low", "medium", "high", "xhigh"] },
+      { model_id: "gpt-5.3-codex-spark", reasoning_efforts: ["low", "medium", "high", "xhigh"] }
+    ]);
+  });
+
+  it("drops unknown or malformed per-model effort values without exposing raw cache fields", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "provider-model-discovery-efforts-"));
+    writeCodexCache(homeDir, [{
+      slug: "gpt-5.6-sol",
+      visibility: "list",
+      secret_provider_metadata: "must-not-cross-module-boundary",
+      supported_reasoning_levels: [
+        { effort: "ultra", description: "Maximum reasoning with automatic task delegation" },
+        { effort: "future-effort", description: "unknown" },
+        { effort: 42, description: "invalid" },
+        { effort: "ultra", description: "duplicate" }
+      ]
+    }]);
+
+    const models = discoverCodexModels(homeDir, codexCacheVersion, codexCacheNow);
+    expect(models).toEqual([{ model_id: "gpt-5.6-sol", reasoning_efforts: ["ultra"] }]);
+    expect(JSON.stringify(models)).not.toContain("secret_provider_metadata");
+    expect(JSON.stringify(models)).not.toContain("automatic task delegation");
+  });
+
+  it("returns no Codex models when the cache exceeds the bounded one-megabyte read", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "provider-model-discovery-oversized-"));
+    writeCodexCache(homeDir, [{ slug: "gpt-5.6-sol", visibility: "list", supported_reasoning_levels: reasoningLevels("low") }], "x".repeat(1024 * 1024));
+
+    expect(discoverCodexModels(homeDir, codexCacheVersion, codexCacheNow)).toEqual([]);
+  });
+
+  it.each([
+    ["stale", "0.144.5", "2026-08-06T09:58:59.000Z"],
+    ["wrong-client", "0.143.0", "2026-08-06T10:00:00.000Z"],
+    ["future-dated", "0.144.5", "2026-08-06T10:04:01.000Z"]
+  ])("returns no Codex models for a %s cache", (_label, clientVersion, fetchedAt) => {
+    const homeDir = mkdtempSync(join(tmpdir(), "provider-model-discovery-invalid-cache-"));
+    const cacheDir = join(homeDir, ".codex");
+    mkdirSync(cacheDir);
+    writeFileSync(join(cacheDir, "models_cache.json"), JSON.stringify({
+      fetched_at: fetchedAt,
+      client_version: clientVersion,
+      models: [{ slug: "gpt-5.6-sol", visibility: "list", supported_reasoning_levels: reasoningLevels("ultra") }]
+    }), "utf8");
+
+    expect(discoverCodexModels(homeDir, codexCacheVersion, codexCacheNow)).toEqual([]);
   });
 
   it("parses canonical agy model IDs and expands known display labels", async () => {
@@ -131,11 +222,15 @@ describe("provider model discovery", () => {
         codex_cli: { command: "/provider-bin/codex", args: ["quota"] }
       },
       captureCliVersion: async () => "codex-cli 1.2.3",
-      discoverCodexModels: () => [
-        { model_id: "gpt-5.6-sol" },
-        { model_id: "codex-discovered" },
-        { model_id: "codex-discovered" }
-      ],
+      discoverCodexModels: (homeDir, expectedClientVersion) => {
+        expect(homeDir).toBe("/provider-home");
+        expect(expectedClientVersion).toBe("1.2.3");
+        return [
+          { model_id: "gpt-5.6-sol", reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] },
+          { model_id: "codex-discovered", reasoning_efforts: ["low", "medium"] },
+          { model_id: "codex-discovered", reasoning_efforts: ["low"] }
+        ];
+      },
       environment: { HOME: "/provider-home" }
     }).codex_cli.fetchSnapshot({ now, signal });
 
@@ -146,14 +241,16 @@ describe("provider model discovery", () => {
         available: false,
         health: "degraded",
         source: "cli",
-        discovery: "usage_probe"
+        discovery: "usage_probe",
+        reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"]
       },
       {
         model_id: "codex-discovered",
         available: true,
         health: "healthy",
         source: "cli",
-        discovery: "models_cache"
+        discovery: "models_cache",
+        reasoning_efforts: ["low", "medium"]
       }
     ]);
   });
@@ -186,7 +283,7 @@ describe("provider model discovery", () => {
         codex_cli: { kind: "tmux_usage", executable: "/provider-bin/codex" }
       },
       runUsageProbe: async () => ({ stdout: usagePayload([], "unavailable"), exitCode: 0 }),
-      captureCliVersion: async () => null,
+      captureCliVersion: async () => "codex-cli 1.2.3",
       discoverCodexModels: () => [{ model_id: "codex-discovered" }]
     }).codex_cli.fetchSnapshot({ now, signal });
 

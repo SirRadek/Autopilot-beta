@@ -36,7 +36,13 @@ function providerSnapshots(fetchedAt: string) {
     weekly: { limit: 1_000, used: 100, remaining: 900, resets_at: null },
     api_spend: 1.25,
     currency: "USD",
-    models: [{ model_id: route.model, available: true, health: "healthy" as const, source: "api" as const }],
+    models: [{
+      model_id: route.model,
+      available: true,
+      health: "healthy" as const,
+      source: "api" as const,
+      ...(route.provider === "codex_cli" ? { reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] as const } : {})
+    }],
     health: "healthy" as const,
     error_code: null,
   }));

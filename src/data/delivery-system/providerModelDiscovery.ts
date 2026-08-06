@@ -1,19 +1,22 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { RUN_REASONING_EFFORTS, type RunReasoningEffort } from "./executionProfile";
 import type { ProviderCommandResult, ProviderCommandRunner } from "./providerQuotaAdapters";
 import { expandQuotaLabel, isCanonicalModelId } from "./providerModelId";
 
 const COMMAND_TIMEOUT_MS = 5_000;
-const MAX_DISCOVERY_BYTES = 256 * 1024;
+const MAX_DISCOVERY_BYTES = 1024 * 1024;
 const MAX_DISCOVERED_MODELS = 256;
+const CODEX_MODEL_CACHE_TTL_MS = 300_000;
 const COMMAND_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"] as const;
 
-// Phase 3 must verify both the ~/.codex/models_cache.json shape and the `agy models`
-// output format on the production VM; these parsers intentionally fail closed until then.
+// The Codex cache shape was verified against CLI 0.144.5 and its ModelInfo source.
+// `agy models` still fails closed on any decorated or unrecognized output.
 
 export interface DiscoveredProviderModel {
   readonly model_id: string;
+  readonly reasoning_efforts?: readonly RunReasoningEffort[];
 }
 
 export async function captureCliVersion(
@@ -35,8 +38,13 @@ export async function captureCliVersion(
   }
 }
 
-export function discoverCodexModels(homeDir: string): readonly DiscoveredProviderModel[] {
+export function discoverCodexModels(
+  homeDir: string,
+  expectedClientVersion: string,
+  now = new Date()
+): readonly DiscoveredProviderModel[] {
   try {
+    if (homeDir.length === 0 || expectedClientVersion.length === 0 || !Number.isFinite(now.getTime())) return [];
     const path = join(homeDir, ".codex", "models_cache.json");
     const metadata = statSync(path);
     if (!metadata.isFile() || metadata.size > MAX_DISCOVERY_BYTES) return [];
@@ -44,18 +52,41 @@ export function discoverCodexModels(homeDir: string): readonly DiscoveredProvide
     if (Buffer.byteLength(contents, "utf8") > MAX_DISCOVERY_BYTES) return [];
     const parsed = asRecord(JSON.parse(contents));
     if (parsed === null || !Array.isArray(parsed.models)) return [];
+    if (parsed.client_version !== expectedClientVersion || typeof parsed.fetched_at !== "string") return [];
+    const fetchedAt = Date.parse(parsed.fetched_at.replace(/(\.\d{3})\d+(?=Z$)/, "$1"));
+    const age = now.getTime() - fetchedAt;
+    if (!Number.isFinite(fetchedAt) || age < 0 || age > CODEX_MODEL_CACHE_TTL_MS) return [];
 
-    // Until VM verification, accept only bounded canonical identifiers from known fields.
+    // This mirrors Codex model/list's default picker view. Hidden internal rows are
+    // not proof of an owner-selectable dispatch route and remain excluded. The
+    // quota probe is a ChatGPT-account surface, so picker-visible ChatGPT-only rows
+    // (`supported_in_api: false`) remain valid for this CLI lane.
     return uniqueModels(parsed.models.flatMap((value) => {
-      if (typeof value === "string") return isCanonicalModelId(value) ? [{ model_id: value }] : [];
       const row = asRecord(value);
-      if (row === null) return [];
-      const modelId = [row.slug, row.model_id, row.id].find((candidate): candidate is string => typeof candidate === "string");
-      return modelId !== undefined && isCanonicalModelId(modelId) ? [{ model_id: modelId }] : [];
+      if (row === null || row.visibility !== "list") return [];
+      const modelId = row.slug;
+      if (typeof modelId !== "string" || !isCanonicalModelId(modelId)) return [];
+      return [{
+        model_id: modelId,
+        reasoning_efforts: codexReasoningEfforts(row.supported_reasoning_levels)
+      }];
     }));
   } catch {
     return [];
   }
+}
+
+function codexReasoningEfforts(value: unknown): readonly RunReasoningEffort[] {
+  if (!Array.isArray(value)) return [];
+  const advertised = new Set<RunReasoningEffort>();
+  for (const candidate of value) {
+    const row = asRecord(candidate);
+    if (row === null || typeof row.effort !== "string") continue;
+    if (RUN_REASONING_EFFORTS.includes(row.effort as RunReasoningEffort)) {
+      advertised.add(row.effort as RunReasoningEffort);
+    }
+  }
+  return RUN_REASONING_EFFORTS.filter((effort) => advertised.has(effort));
 }
 
 export async function discoverAgyModels(

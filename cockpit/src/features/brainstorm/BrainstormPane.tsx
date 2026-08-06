@@ -63,10 +63,19 @@ function estimateBriefTokens(brief: string): number {
   return brief.trim() === "" ? 0 : new TextEncoder().encode(brief).length;
 }
 
+function reasoningEffortLabel(provider: string, effort: RunReasoningEffort): string {
+  return provider === "codex_cli" && effort === "ultra" ? "ultra (automatická delegace)" : effort;
+}
+
 function availableModelsFor(provider: string, quota: ProviderQuota | undefined, models: ProviderModels | undefined) {
   if (quota === undefined || quota.freshness !== "fresh" || quota.health === "unavailable") return [];
   const catalog = (Array.isArray(models?.models) ? models.models : [])
-    .filter((model) => Array.isArray(model.providers) && model.providers.includes(provider));
+    .filter((model) => {
+      if (!Array.isArray(model.providers) || !model.providers.includes(provider)) return false;
+      if (provider !== "codex_cli") return true;
+      const route = (Array.isArray(model.provider_routes) ? model.provider_routes : []).find((candidate) => candidate.provider === provider);
+      return Array.isArray(route?.reasoning_efforts) && route.reasoning_efforts.length > 0;
+    });
   return (Array.isArray(quota.models) ? quota.models : [])
     .filter((model) => typeof model.model_id === "string" && model.available && model.health !== "unavailable" && catalog.some((candidate) => candidate.model_id === model.model_id));
 }
@@ -113,8 +122,8 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
   const arbitrateActive = useRef(false);
   const cancelActive = useRef(false);
 
-  function resolveReasoning(selection: ReasoningSelection, efforts: readonly RunReasoningEffort[]): { readonly value: RunReasoningEffort | null; readonly explicit: boolean } {
-    if (efforts.length === 0) return { value: null, explicit: selection === NO_REASONING };
+  function resolveReasoning(provider: string, selection: ReasoningSelection, efforts: readonly RunReasoningEffort[]): { readonly value: RunReasoningEffort | null; readonly explicit: boolean } {
+    if (efforts.length === 0) return { value: null, explicit: provider === "openrouter_api" && selection === NO_REASONING };
     return { value: selection === "" || selection === NO_REASONING ? null : selection, explicit: selection !== "" && selection !== NO_REASONING };
   }
 
@@ -122,7 +131,7 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
     const provider = quota.provider as RunProvider;
     const model = routeModel[provider] ?? "";
     const efforts = model ? reasoningEffortsFor(provider, model, models) : [];
-    const reasoning = resolveReasoning(routeReasoning[provider] ?? "", efforts);
+    const reasoning = resolveReasoning(provider, routeReasoning[provider] ?? "", efforts);
     return {
       provider,
       model,
@@ -134,7 +143,7 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
 
   const routesComplete = routes.length >= 3 && routes.length <= 4 && routes.every((route) => route.model !== "" && route.reasoningExplicit);
   const arbitrationEfforts = arbitrationModel ? reasoningEffortsFor(arbitrationProvider, arbitrationModel, models) : [];
-  const arbitrationReasoningResolved = resolveReasoning(arbitrationReasoning, arbitrationEfforts);
+  const arbitrationReasoningResolved = resolveReasoning(arbitrationProvider, arbitrationReasoning, arbitrationEfforts);
   const arbitrationRoute: BrainstormRouteDraft | null = arbitrationProvider === "" || arbitrationProvider === ARBITRATION_OPT_OUT ? null : { provider: arbitrationProvider as RunProvider, model: arbitrationModel, requested_reasoning_effort: arbitrationReasoningResolved.value };
   const arbitrationDecided = arbitrationProvider === ARBITRATION_OPT_OUT || (arbitrationProvider !== "" && arbitrationModel !== "" && arbitrationReasoningResolved.explicit);
 
@@ -256,8 +265,8 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
                 </select></label>
                 <label>Reasoning<select aria-label={`Reasoning ${provider}`} value={routeReasoning[provider] ?? ""} disabled={anyMutationPending || !model} onChange={(event) => { setRouteReasoning({ ...routeReasoning, [provider]: event.target.value as ReasoningSelection }); invalidate(); }}>
                   <option value="">Vyberte reasoning</option>
-                  {reasoningEfforts.length === 0 ? <option value={NO_REASONING}>Bez reasoning (poskytovatel nepodporuje)</option> : null}
-                  {reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+                  {reasoningEfforts.length === 0 && provider === "openrouter_api" ? <option value={NO_REASONING}>Bez reasoning (poskytovatel nepodporuje)</option> : null}
+                  {reasoningEfforts.map((effort) => <option key={effort} value={effort}>{reasoningEffortLabel(provider, effort)}</option>)}
                 </select></label>
               </fieldset>
             );
@@ -282,8 +291,8 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
             </select></label>
             <label>Reasoning arbitra<select aria-label="Reasoning arbitra" value={arbitrationReasoning} disabled={anyMutationPending || !arbitrationModel} onChange={(event) => { setArbitrationReasoning(event.target.value as ReasoningSelection); invalidate(); }}>
               <option value="">Vyberte reasoning</option>
-              {arbitrationEfforts.length === 0 ? <option value={NO_REASONING}>Bez reasoning (poskytovatel nepodporuje)</option> : null}
-              {arbitrationEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+              {arbitrationEfforts.length === 0 && arbitrationProvider === "openrouter_api" ? <option value={NO_REASONING}>Bez reasoning (poskytovatel nepodporuje)</option> : null}
+              {arbitrationEfforts.map((effort) => <option key={effort} value={effort}>{reasoningEffortLabel(arbitrationProvider, effort)}</option>)}
             </select></label>
           </> : null}
           {arbitrationProvider === ARBITRATION_OPT_OUT ? <p className="provider-warning" role="alert">Bez arbitra: materiální konflikty selžou uzavřeně (brainstorm_no_independent_arbiter).</p> : null}

@@ -7,7 +7,7 @@ import { resolveEnabledProject, type ProjectRegistryOptions } from "./projectReg
 import type { CliWorkerResult } from "./cliWorker";
 import { assertRunPromptPolicy, canonicalRunTokenBudget, conservativeRunPromptTokens, RUN_OUTPUT_TOKEN_ALLOWANCE, RUN_OUTPUT_TOKEN_ALLOWANCE_MAX } from "./runPromptPolicy";
 import { writeStateFileAtomically } from "./stateMaintenanceLock";
-import { SUPPORTED_REASONING_EFFORTS, type RunProfile, type RunReasoningEffort, type StoredRunProfile } from "./executionProfile";
+import { RUN_REASONING_EFFORTS, SUPPORTED_REASONING_EFFORTS, type RunProfile, type RunReasoningEffort, type StoredRunProfile } from "./executionProfile";
 
 export type RunStatus = "draft" | "approved" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunProvider = "codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api";
@@ -120,7 +120,7 @@ const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
 const PROMPT_COMMITMENT_PATTERN = /^[a-f0-9]{64}$/;
 const PROVIDERS = new Set<RunProvider>(["codex_cli", "claude_cli", "agy_cli", "openrouter_api"]);
 const PROFILES = new Set<RunProfile>(["dev", "prod"]);
-const REASONING_EFFORTS = new Set<RunReasoningEffort>(["low", "medium", "high", "xhigh", "max"]);
+const REASONING_EFFORTS = new Set<RunReasoningEffort>(RUN_REASONING_EFFORTS);
 const ARTIFACT_TYPES = new Set<RunArtifactType>(["text", "visual"]);
 const STATUSES = new Set<RunStatus>(["draft", "approved", "queued", "running", "completed", "failed", "cancelled"]);
 const transitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
