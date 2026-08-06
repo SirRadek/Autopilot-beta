@@ -74,6 +74,20 @@ async function mount(client: ControlPlaneClient) {
 function budgetPane(host: HTMLElement): HTMLElement { return [...host.querySelectorAll(".resources-section")].find((section) => section.querySelector("h3")?.textContent?.includes("Provideři")) as HTMLElement; }
 function providerTab(scope: HTMLElement, id: string): HTMLButtonElement { return [...scope.querySelectorAll(".provider-tabs button")].find((item) => item.textContent === id) as HTMLButtonElement; }
 function activeProvider(scope: HTMLElement): string | undefined { return scope.querySelector(".provider-heading h3")?.textContent ?? undefined; }
+function changeInput(element: HTMLInputElement, value: string) {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setter?.call(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+function changeSelect(element: HTMLSelectElement, value: string) {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+    setter?.call(element, value);
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
 
 describe("AuthenticatedCockpit provider budget", () => {
   it("exposes an explicit logout action", async () => {
@@ -109,6 +123,26 @@ describe("AuthenticatedCockpit provider budget", () => {
     await act(async () => { root.render(<AuthenticatedCockpit client={fakeClient()} />); });
     await act(async () => { await Promise.resolve(); });
     expect(activeProvider(budgetPane(host))).toBe("codex_cli");
+    act(() => root.unmount()); host.remove();
+  });
+});
+
+describe("AuthenticatedCockpit session creation wiring", () => {
+  it("passes the provider selected in the sessions pane to createSession", async () => {
+    const createSession = vi.fn().mockResolvedValue(undefined);
+    const source = fakeClient({ createSession });
+    const { host, root } = await mount(source);
+    const pane = host.querySelector<HTMLElement>(".session-pane")!;
+    changeSelect(pane.querySelector<HTMLSelectElement>("#session-provider")!, "openrouter_api");
+    changeInput(pane.querySelector<HTMLInputElement>("#session-cwd")!, "/work/openrouter");
+
+    await act(async () => {
+      pane.querySelector<HTMLFormElement>(".session-create")?.requestSubmit();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(createSession).toHaveBeenCalledWith({ agent_command: "openrouter_api", cwd: "/work/openrouter" });
     act(() => root.unmount()); host.remove();
   });
 });

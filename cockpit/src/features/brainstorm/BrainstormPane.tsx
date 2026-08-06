@@ -2,13 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 
 import type { BrainstormArbitrationInput, BrainstormDraftInput, BrainstormRecord, BrainstormRouteDraft, ProjectEntry, ProviderModels, ProviderQuota, RunProvider, RunReasoningEffort, RunRecord } from "../../types/controlPlane";
 import type { CockpitEnvironment } from "../../app/environment";
+import { KNOWN_PROVIDERS } from "../providers/knownProviders";
 
 const CONSOLIDATION_TOKENS = 10_000;
 const ARBITRATION_TOKENS = 8_000;
 const OUTPUT_ALLOWANCE = 8_192;
 const ARBITRATION_OPT_OUT = "__opt_out__";
 const NO_REASONING = "__no_reasoning__";
-const KNOWN_PROVIDERS: readonly RunProvider[] = ["codex_cli", "claude_cli", "agy_cli", "openrouter_api"];
 
 type ReasoningSelection = RunReasoningEffort | typeof NO_REASONING | "";
 

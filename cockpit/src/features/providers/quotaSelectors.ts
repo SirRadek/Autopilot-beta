@@ -1,6 +1,7 @@
-import type { ProviderHealth, ProviderModels, ProviderQuota, ProviderQuotaWindow, ReadinessComponent, ReadinessReport, RunReasoningEffort } from "../../types/controlPlane";
+import type { ProviderHealth, ProviderModels, ProviderQuota, ProviderQuotaWindow, ReadinessComponent, ReadinessReport, RunProvider, RunReasoningEffort } from "../../types/controlPlane";
+import { KNOWN_PROVIDERS } from "./knownProviders";
 
-export const CANONICAL_PROVIDERS = ["agy_cli", "claude_cli", "codex_cli", "openrouter_api"] as const;
+export const CANONICAL_PROVIDERS: readonly RunProvider[] = [...KNOWN_PROVIDERS].sort();
 
 const DIAGNOSIS_MESSAGES: Readonly<Record<string, string>> = {
   probe_not_configured: "Sonda využití není na serveru nakonfigurována — CLI není v konfiguraci control plane.",

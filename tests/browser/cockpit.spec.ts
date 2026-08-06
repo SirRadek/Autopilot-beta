@@ -67,10 +67,12 @@ test("shows approval confirmation and performs a session mutation", async ({ pag
 
   await goToView(page, "Zdroje & zdraví");
   const sessions = page.getByRole("region", { name: "Relace" });
+  await sessions.getByRole("combobox", { name: "Poskytovatel relace" }).selectOption("openrouter_api");
   const sessionResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/sessions" && response.request().method() === "POST");
   await sessions.getByRole("button", { name: "Vytvořit relaci" }).first().click();
   const createdResponse = await sessionResponse;
   expect(createdResponse.status()).toBe(201);
+  expect(createdResponse.request().postDataJSON()).toEqual({ agent_command: "openrouter_api", cwd: "/home/radek/autopilot-beta" });
   const created = await createdResponse.json() as { readonly session_id: string };
   await expect(sessions.getByRole("button", { name: `Vybrat relaci ${created.session_id}` })).toBeVisible();
 });
