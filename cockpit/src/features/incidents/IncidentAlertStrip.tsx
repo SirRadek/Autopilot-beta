@@ -15,7 +15,8 @@ export type IncidentAlertStripProps = {
 };
 
 export function IncidentAlertStrip({ incidents, onOpenDiagnostics }: IncidentAlertStripProps) {
-  const open = sortIncidentsNewestFirst(incidents).filter((incident) => incident.status === "open");
+  const incidentEntries = (Array.isArray(incidents) ? incidents : []).filter((incident) => typeof incident === "object" && incident !== null);
+  const open = sortIncidentsNewestFirst(incidentEntries).filter((incident) => incident.status === "open");
   if (open.length === 0) return null;
 
   const newest = open[0];
@@ -27,7 +28,7 @@ export function IncidentAlertStrip({ incidents, onOpenDiagnostics }: IncidentAle
   return (
     <div role="alert" className={`incident-alert-strip incident-alert-${topSeverity}`}>
       <strong>{czechIncidentCount(open.length)}</strong>
-      <span className="incident-alert-summary">{newest.summary.slice(0, 120)}</span>
+      {typeof newest.summary === "string" ? <span className="incident-alert-summary">{newest.summary.slice(0, 120)}</span> : null}
       <time dateTime={newest.recorded_at}>{formatRecordedAt(newest.recorded_at)}</time>
       <button type="button" onClick={onOpenDiagnostics}>Otevřít diagnostiku</button>
     </div>

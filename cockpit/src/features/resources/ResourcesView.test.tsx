@@ -27,11 +27,11 @@ describe("ResourcesView", () => {
     expect([...host.querySelectorAll(".resources-section h3")].map((heading) => heading.textContent?.trim())).toEqual([
       "Provideři & limity",
       "Workeři",
-      "Sessions",
+      "Relace",
       "Projekty",
       "Diagnostika nástroje",
-      "Rozdělení práce Planned",
-      "MCP servery (cross) Planned",
+      "Rozdělení práce Plánováno",
+      "MCP servery (napříč) Plánováno",
     ]);
     act(() => root.unmount()); host.remove();
   });
@@ -59,7 +59,7 @@ describe("ResourcesView", () => {
     const { host, root } = mount();
     const planned = [...host.querySelectorAll(".resources-section.planned")];
     expect(planned).toHaveLength(2);
-    expect(planned.every((card) => card.querySelector(".planned-badge")?.textContent === "Planned")).toBe(true);
+    expect(planned.every((card) => card.querySelector(".planned-badge")?.textContent === "Plánováno")).toBe(true);
     expect(planned[0]?.textContent).toContain("Vyžaduje kapacitní routing na straně serveru.");
     expect(planned[1]?.textContent).toContain("Kanonická MCP konfigurace syncovaná do CLI — připravováno.");
     act(() => root.unmount()); host.remove();

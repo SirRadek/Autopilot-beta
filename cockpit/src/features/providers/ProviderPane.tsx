@@ -4,8 +4,10 @@ import {
   formatQuotaValue,
   formatQuotaWindow,
   freshnessLabel,
+  healthLabel,
   providerDiagnosis,
   providerIds,
+  selectActiveProviderId,
   selectProviderHealth,
   selectProviderModelRows,
   selectProviderQuota,
@@ -30,11 +32,11 @@ const MODEL_SOURCE_LABELS: Readonly<Record<ProviderModelRow["source"], string>> 
   live_snapshot: "Živě",
   static_fallback: "Katalog",
   mixed: "Kombinace",
-  quota_snapshot: "Snapshot"
+  quota_snapshot: "Snímek"
 };
 
 function timeLabel(value: string | null | undefined): React.ReactNode {
-  if (!value) return <span>Unavailable</span>;
+  if (!value) return <span>Nedostupné</span>;
   return <time dateTime={value}>{value}</time>;
 }
 
@@ -42,9 +44,11 @@ export function ProviderPane({ quotas, models, health, readiness, selectedProvid
   const [refreshPending, setRefreshPending] = React.useState(false);
   const [refreshMessage, setRefreshMessage] = React.useState<string | null>(null);
   const ids = providerIds(quotas, models, health);
-  const provider = selectedProvider && ids.includes(selectedProvider) ? selectedProvider : ids[0];
+  const provider = selectActiveProviderId(ids, quotas, health, selectedProvider);
   const quota = selectProviderQuota(quotas, provider);
   const providerHealth = selectProviderHealth(health, provider);
+  const providerHealthValue = providerHealth?.health ?? quota?.health;
+  const cliVersion = providerHealth?.cli_version ?? quota?.cli_version ?? "Není hlášeno";
   const modelRows = provider === undefined ? [] : selectProviderModelRows(provider, quota, models);
   const diagnosis = provider === undefined ? undefined : providerDiagnosis(provider, quota, health, readiness);
   const sourceFreshness = [quota?.freshness, providerHealth?.freshness, models?.freshness].filter((value): value is string => value !== undefined);
@@ -58,21 +62,21 @@ export function ProviderPane({ quotas, models, health, readiness, selectedProvid
       const result = await onRefreshProviderStatus(PROBE_PROVIDERS);
       setRefreshMessage(result.accepted.length > 0
         ? result.rejected.length > 0
-          ? "Some provider status refresh requests were accepted."
-          : "Provider status refresh requested."
+          ? "Některé požadavky na obnovení stavu poskytovatelů byly přijaty."
+          : "Obnovení stavu poskytovatelů bylo vyžádáno."
         : result.rejected.length > 0
-          ? "Provider status refresh request was not accepted."
-          : "Provider status refresh returned no provider results.");
+          ? "Požadavek na obnovení stavu poskytovatelů nebyl přijat."
+          : "Obnovení stavu poskytovatelů nevrátilo žádné výsledky.");
     } catch {
-      setRefreshMessage("Provider status refresh failed.");
+      setRefreshMessage("Obnovení stavu poskytovatelů selhalo.");
     } finally {
       setRefreshPending(false);
     }
   };
 
   return <div className="provider-pane">
-    <div className="provider-refresh"><button type="button" disabled={refreshPending || onRefreshProviderStatus === undefined} aria-busy={refreshPending} onClick={() => { void refresh(); }}>Refresh provider status</button>{refreshMessage === null ? null : <p role="status">{refreshMessage}</p>}</div>
-    <div className="provider-tabs" role="tablist" aria-label="Providers">
+    <div className="provider-refresh"><button type="button" disabled={refreshPending || onRefreshProviderStatus === undefined} aria-busy={refreshPending} onClick={() => { void refresh(); }}>Obnovit stav poskytovatelů</button>{refreshMessage === null ? null : <p role="status">{refreshMessage}</p>}</div>
+    <div className="provider-tabs" role="tablist" aria-label="Poskytovatelé">
       {ids.map((id) => <button key={id} type="button" role="tab" aria-selected={id === provider} onClick={() => onSelectProvider?.(id)}>{id}</button>)}
     </div>
     {provider ? <section aria-labelledby="provider-heading">
@@ -81,32 +85,32 @@ export function ProviderPane({ quotas, models, health, readiness, selectedProvid
           <h3 id="provider-heading">{provider}</h3>
           <span className={`provider-freshness provider-freshness-${freshness}`}>{freshnessLabel(freshness)}</span>
         </div>
-        <span className={`provider-health provider-health-${providerHealth?.health ?? quota?.health ?? "unavailable"}`}>{providerHealth?.health ?? quota?.health ?? "Unavailable"}</span>
+        <span className={`provider-health provider-health-${providerHealthValue ?? "unavailable"}`}>{healthLabel(providerHealthValue)}</span>
       </div>
       <dl className="provider-meta">
-        <div><dt>Fetched</dt><dd>{timeLabel(quota?.fetched_at ?? providerHealth?.fetched_at)}</dd></div>
-        <div><dt>Next poll</dt><dd>{timeLabel(quota?.next_poll_at ?? providerHealth?.next_poll_at)}</dd></div>
-        {CLI_PROVIDERS.includes(provider) ? <div><dt>CLI verze</dt><dd>zatím nehlášeno <span className="planned-badge">Phase 2</span></dd></div> : null}
+        <div><dt>Načteno</dt><dd>{timeLabel(quota?.fetched_at ?? providerHealth?.fetched_at)}</dd></div>
+        <div><dt>Další dotaz</dt><dd>{timeLabel(quota?.next_poll_at ?? providerHealth?.next_poll_at)}</dd></div>
+        {CLI_PROVIDERS.includes(provider) ? <div><dt>CLI verze</dt><dd>{cliVersion}</dd></div> : null}
       </dl>
       {diagnosis ? <p className="provider-diagnosis" role="status" data-diagnosis-code={diagnosis.code}>{diagnosis.message}</p> : null}
-      {freshness === "stale" ? <p className="provider-warning" role="status">{staleSources > 1 ? "Some provider data is stale; last known values shown." : "Provider data is stale; last known values shown."}</p> : null}
+      {freshness === "stale" ? <p className="provider-warning" role="status">{staleSources > 1 ? "Některá data poskytovatele jsou zastaralá; zobrazeny jsou poslední známé hodnoty." : "Data poskytovatele jsou zastaralá; zobrazeny jsou poslední známé hodnoty."}</p> : null}
       <div className="provider-quota-grid">
-        <article><h4>5-hour window</h4><p>{quota ? formatQuotaWindow(quota.five_hour) : "Unavailable"}</p><small>Remaining: {quota ? formatQuotaValue(quota.five_hour.remaining) : "Unavailable"}</small></article>
-        <article><h4>Weekly window</h4><p>{quota ? formatQuotaWindow(quota.weekly) : "Unavailable"}</p><small>Remaining: {quota ? formatQuotaValue(quota.weekly.remaining) : "Unavailable"}</small></article>
-        <article><h4>API spend</h4><p>{quota?.api_spend === null || quota?.api_spend === undefined ? "Unavailable" : `${quota.api_spend.toLocaleString()} ${quota.currency ?? ""}`}</p></article>
+        <article><h4>5hodinové okno</h4><p>{formatQuotaWindow(quota?.five_hour)}</p><small>Zbývá: {formatQuotaValue(quota?.five_hour?.remaining)}</small></article>
+        <article><h4>Týdenní okno</h4><p>{formatQuotaWindow(quota?.weekly)}</p><small>Zbývá: {formatQuotaValue(quota?.weekly?.remaining)}</small></article>
+        <article><h4>Útrata API</h4><p>{typeof quota?.api_spend === "number" ? `${quota.api_spend.toLocaleString()} ${quota.currency ?? ""}` : "Nedostupné"}</p></article>
       </div>
       <section className="provider-models" aria-labelledby="provider-models-heading">
-        <h4 id="provider-models-heading">Available models</h4>
+        <h4 id="provider-models-heading">Dostupné modely</h4>
         {modelRows.length > 0 ? <>
           <ul>{modelRows.slice(0, MAX_VISIBLE_MODELS).map((model) => <li key={model.model_id}>
             <div>
               <span>{model.model_id}</span>
               <span className={`model-source-badge model-source-badge-${model.source}`}>{MODEL_SOURCE_LABELS[model.source]}</span>
-              {model.reasoning_efforts.length > 0 ? <small className="model-efforts">efforts: {model.reasoning_efforts.join(", ")}</small> : null}
+              {model.reasoning_efforts.length > 0 ? <small className="model-efforts">Uvažování: {model.reasoning_efforts.join(", ")}</small> : null}
             </div>
             <div className="model-state">
               <span className={`model-availability ${model.available ? "model-available" : "model-unavailable"}`}>{model.available ? "Dostupný" : "Nedostupný"}</span>
-              <span className="model-health">{model.health || "Health unavailable"}</span>
+              <span className="model-health">{healthLabel(model.health, "Stav nedostupný")}</span>
               <small>{timeLabel(model.updated_at)}</small>
             </div>
           </li>)}</ul>

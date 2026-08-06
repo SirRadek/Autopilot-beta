@@ -6,7 +6,7 @@ import { createControlPlaneClient } from "./controlPlaneClient";
 describe("ControlPlaneClient configuration", () => {
   it("proxies every governed same-origin API family", () => {
     const config = readFileSync("vite.config.ts", "utf8");
-    for (const path of ["/projects", "/runs", "/incidents", "/observability"]) expect(config).toContain(`"${path}"`);
+    for (const path of ["/projects", "/runs", "/incidents", "/observability", "/promotions", "/brainstorms", "/figma"]) expect(config).toContain(`"${path}"`);
   });
 
   it("defaults to same-origin without requiring a browser secret", async () => {

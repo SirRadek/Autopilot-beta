@@ -27,9 +27,14 @@ describe("Cockpit production proxy boundary", () => {
     expect(caddy).toContain("\n\troute {\n");
     expect(caddy).toContain("Strict-Transport-Security \"max-age=300\"");
     expect(caddy).not.toMatch(/0\.0\.0\.0|on_demand|cors|log\s*\{/i);
-    for (const root of ["auth", "status", "sessions", "approvals", "workers", "providers", "projects", "runs", "incidents", "observability"]) {
+    for (const root of [
+      "auth", "status", "sessions", "approvals", "workers", "providers", "projects", "runs", "incidents",
+      "observability", "figma", "promotions", "brainstorms",
+    ]) {
       expect(caddy).toContain(`/${root} /${root}/*`);
     }
+    expect(caddy).toMatch(/@api path .*\/ready(?:\s|$)/);
+    expect(caddy).not.toMatch(/@api path .*\/ready\/\*/);
     expect(caddy).not.toContain("/auth*");
     expect(caddy.indexOf("handle @api")).toBeLessThan(caddy.indexOf("rewrite @spa /index.html"));
     expect(caddy.indexOf("rewrite @spa /index.html")).toBeLessThan(caddy.indexOf("file_server"));

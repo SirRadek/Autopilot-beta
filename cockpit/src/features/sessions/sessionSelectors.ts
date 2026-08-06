@@ -2,6 +2,11 @@ import type { SessionRecord } from "../../types/controlPlane";
 
 export type SessionDisplayState = "active" | "expired" | "closed";
 
+export function czechSessionCount(n: number): string {
+  if (n >= 1 && n <= 4) return `${n} relace`;
+  return `${n} relací`;
+}
+
 export type SessionProjectGroup = {
   readonly cwd: string;
   readonly label: string;

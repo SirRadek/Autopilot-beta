@@ -9,6 +9,37 @@ const incident: AutopilotIncident = { incident_id: "incident-1", recorded_at: "2
 const packet = { schema_version: "v1", intent: "external_autopilot_repair", execution: "manual", incident, expected: "Expected", actual: "Actual", reproduction_steps: [], verification_commands: [] } as AutopilotRepairPacket;
 
 describe("IncidentPane", () => {
+  it("renders an empty incident state when the collection is missing", () => {
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<IncidentPane incidents={undefined as never} onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+
+    expect(host.textContent).toContain("0 otevřených incidentů · 0 celkem");
+
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("uses Czech incident plurals and separates refreshed metadata", () => {
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<IncidentPane incidents={[incident]} refreshedAt="2026-08-05T22:26:50Z" onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+
+    expect(host.querySelector(".incident-pane-header")?.textContent).toBe("1 otevřený incident · 1 celkem · Obnoveno 2026-08-05 22:26:50 UTC");
+
+    act(() => root.render(<IncidentPane incidents={[incident, { ...incident, incident_id: "incident-2" }]} onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+    expect(host.querySelector(".incident-pane-header")?.textContent).toBe("2 otevřené incidenty · 2 celkem");
+
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("omits the incident detail line when its fields are absent", () => {
+    const partial = { ...incident, stage: undefined, impact: "" } as unknown as AutopilotIncident;
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
+    act(() => root.render(<IncidentPane incidents={[partial]} onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
+
+    expect(host.querySelector("li > p")).toBeNull();
+
+    act(() => root.unmount()); host.remove();
+  });
+
   it("acknowledges an incident and displays a manual repair packet without dispatch controls", async () => {
     const host = document.createElement("div"); document.body.append(host); const root = createRoot(host); const onAcknowledge = vi.fn().mockResolvedValue({ ...incident, status: "acknowledged" }); const onPrepareRepairPacket = vi.fn().mockResolvedValue(packet);
     act(() => root.render(<IncidentPane incidents={[incident]} onAcknowledge={onAcknowledge} onPrepareRepairPacket={onPrepareRepairPacket} />));
@@ -59,7 +90,7 @@ describe("IncidentPane", () => {
   it("renders the stale status badge", () => {
     const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
     act(() => root.render(<IncidentPane incidents={[incident]} stale onAcknowledge={vi.fn()} onPrepareRepairPacket={vi.fn()} />));
-    expect(host.querySelector('[data-status="stale"]')?.textContent).toBe("Stale");
+    expect(host.querySelector('[data-status="stale"]')?.textContent).toBe("Zastaralé");
     act(() => root.unmount()); host.remove();
   });
 });

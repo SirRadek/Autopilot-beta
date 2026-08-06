@@ -25,6 +25,16 @@ export const CANCELLABLE_STATUSES: readonly RunStatus[] = ["draft", "approved", 
 
 const MAX_PENDING_RUNS = 10;
 
+export const RUN_STATUS_LABELS: Readonly<Record<RunStatus, string>> = {
+  draft: "Koncept",
+  approved: "Schváleno",
+  queued: "Ve frontě",
+  running: "Běží",
+  completed: "Dokončeno",
+  failed: "Selhalo",
+  cancelled: "Zrušeno",
+};
+
 type RunAction = "approve" | "cancel";
 
 type RunActionState = {
@@ -51,6 +61,11 @@ function runDotClass(status: RunStatus): string {
 
 function actionErrorMessage(caught: unknown): string {
   return (caught instanceof Error ? caught.message : String(caught)).slice(0, 300);
+}
+
+function staleRunAge(updatedAt: string, nowMs: number): string {
+  const wholeMinutes = Math.max(0, Math.floor((nowMs - Date.parse(updatedAt)) / 60_000));
+  return wholeMinutes >= 60 ? `${Math.floor(wholeMinutes / 60)} h` : `${wholeMinutes} min`;
 }
 
 export function CommandCenter({
@@ -113,9 +128,9 @@ export function CommandCenter({
         {loading ? <li>Připojuji Control Plane…</li> : <>
           {statusError ? <li><span className="cc-status-error">Stav není dostupný: {statusError}</span></li> : null}
           {status ? <>
-            <li>Sessions {status.sessions.active}/{status.sessions.total}</li>
-            <li>Approvals čeká: {status.approvals.pending}</li>
-            <li>{status.telemetry.calls} volání · {status.telemetry.total_tokens.toLocaleString()} tokenů</li>
+            {typeof status?.sessions?.active === "number" && typeof status?.sessions?.total === "number" ? <li>Relace {status.sessions.active}/{status.sessions.total}</li> : null}
+            {typeof status?.approvals?.pending === "number" ? <li>Schválení čeká: {status.approvals.pending}</li> : null}
+            {typeof status?.telemetry?.calls === "number" && typeof status?.telemetry?.total_tokens === "number" ? <li>{status.telemetry.calls} volání · {status.telemetry.total_tokens.toLocaleString()} tokenů</li> : null}
           </> : null}
           {refreshedAt ? <li>Obnoveno {refreshedAt.slice(11, 19)} UTC</li> : null}
           {refreshing ? <li>Obnovuji…</li> : null}
@@ -136,7 +151,7 @@ export function CommandCenter({
               <button type="button" className={isSelected ? "cc-pending-select selected" : "cc-pending-select"} aria-pressed={isSelected} onClick={() => onSelectRun(runId)}>{runId}</button>
               <span>{run.current.provider} · {run.current.model ?? "auto"}</span>
             </div>
-            <span className="cc-pending-status">{run.status}</span>
+            <span className="cc-pending-status">{RUN_STATUS_LABELS[run.status]}</span>
             <div className="cc-pending-actions">
               {run.status === "draft" && onApproveRun ? confirmingApprove ? <div className="cc-pending-confirm" role="group" aria-label={`Potvrzení schválení běhu ${runId}`}>
                 <span>Opravdu schválit a spustit běh?</span>
@@ -171,13 +186,13 @@ export function CommandCenter({
               <span className="cc-run-title">{runId}</span>
               <span className="cc-run-meta">
                 <span>{run.current.provider} · {run.current.model ?? "auto"}</span>
-                {stale ? <span className="cc-run-chip cc-run-chip-stale">stale</span> : null}
+                {stale ? <span className="cc-run-chip cc-run-chip-stale">Zastaralé {staleRunAge(run.updated_at, nowMs)}</span> : null}
                 {run.dispatch_failure !== null ? <span className="cc-run-chip cc-run-chip-failed">dispatch selhal</span> : null}
                 {run.cancellation_requested && run.status !== "cancelled" ? <span className="cc-run-chip cc-run-chip-cancelling">ruší se…</span> : null}
                 {run.status === "failed" && run.terminal_reason !== null ? <span className="cc-run-terminal-reason">{run.terminal_reason.slice(0, 80)}</span> : null}
               </span>
               <span className="cc-run-tokens">{run.current.estimated_tokens.toLocaleString()} tokens</span>
-              <span className="cc-run-status">{run.status}</span>
+              <span className="cc-run-status">{RUN_STATUS_LABELS[run.status]}</span>
             </button>
           </li>;
         })}

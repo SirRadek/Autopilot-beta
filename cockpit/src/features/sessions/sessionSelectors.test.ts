@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SessionRecord } from "../../types/controlPlane";
-import { groupSessionsByProject, getSessionDisplayState } from "./sessionSelectors";
+import { czechSessionCount, groupSessionsByProject, getSessionDisplayState } from "./sessionSelectors";
 
 const session = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   session_id: "s-1", agent_command: "claude_cli", cwd: "/work/alpha", name: "Manager", status: "active",
@@ -9,6 +9,16 @@ const session = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
 });
 
 describe("session selectors", () => {
+  it("formats Czech session counts", () => {
+    expect([0, 1, 2, 4, 5].map(czechSessionCount)).toEqual([
+      "0 relací",
+      "1 relace",
+      "2 relace",
+      "4 relace",
+      "5 relací",
+    ]);
+  });
+
   it("groups sessions by cwd and exposes active, expired, and closed states", () => {
     const groups = groupSessionsByProject([
       session(),

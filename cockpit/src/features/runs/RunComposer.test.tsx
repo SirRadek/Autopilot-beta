@@ -9,7 +9,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const projects: readonly ProjectEntry[] = [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: "/private/not-submitted", enabled: true }];
 const quota: ProviderQuota = { provider: "codex_cli", source: "cli", fetched_at: "2026-07-13T10:00:00.000Z", observed_at: "2026-07-13T10:00:00.000Z", five_hour: { limit: 1000, used: 200, remaining: 800, resets_at: null }, weekly: { limit: 5000, used: 1000, remaining: 4000, resets_at: null }, api_spend: 1.25, currency: "USD", models: [{ model_id: "gpt-5", available: true, health: "healthy", source: "cli" }], health: "healthy", error_code: null, freshness: "fresh", next_poll_at: null };
-const models: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low", "medium", "high"], provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low", "medium", "high"] }] }] };
+const models: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli"], configured: false, observed: true, available: true, health: ["healthy"], reasoning_efforts: ["low", "medium", "high"], provider_routes: [{ provider: "codex_cli", configured: false, observed: true, available: true, health: ["healthy"], discovery: "usage_probe", source: "live_snapshot", reasoning_efforts: ["low", "medium", "high"] }] }] };
 const prepared: RunRecord = {
   schema_version: "v1",
   current: { run_id: "run-1", revision: 1, project_id: "autopilot-beta", prompt: "Inspect status", provider: "codex_cli", model: "gpt-5", estimated_tokens: 8_206, input_token_bound: 14, output_token_allowance: 8_192, requested_artifacts: ["text"], prompt_review_acknowledged: false, profile: "dev", requested_reasoning_effort: "low", promotion_packet_id: null, created_at: quota.fetched_at },
@@ -29,13 +29,23 @@ function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason:
 
 function makeRunComposerProps(overrides: { readonly reasoning_efforts?: readonly ("low" | "medium" | "high" | "xhigh" | "max")[] } = {}): React.ComponentProps<typeof RunComposer> & { readonly onPrepare: ReturnType<typeof vi.fn> } {
   const reasoningEfforts = overrides.reasoning_efforts ?? ["low", "medium", "high"];
-  const scopedModels: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: reasoningEfforts, provider_routes: [{ provider: "codex_cli", reasoning_efforts: reasoningEfforts }] }] };
+  const scopedModels: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli"], configured: false, observed: true, available: true, health: ["healthy"], reasoning_efforts: reasoningEfforts, provider_routes: [{ provider: "codex_cli", configured: false, observed: true, available: true, health: ["healthy"], discovery: "usage_probe", source: "live_snapshot", reasoning_efforts: reasoningEfforts }] }] };
   const onPrepare = vi.fn(async (input) => ({ ...prepared, current: { ...prepared.current, ...input } }));
   const onApprove = vi.fn().mockResolvedValue(prepared);
   return { projects, quotas: [quota], models: scopedModels, onPrepare, onApprove };
 }
 
 describe("RunComposer", () => {
+  it("treats missing top-level project and quota collections as empty", () => {
+    const { host, root } = mount({ projects: undefined as never, quotas: undefined as never, models: undefined as never });
+
+    expect((host.querySelector('[aria-label="Projekt"]') as HTMLSelectElement).options).toHaveLength(0);
+    expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).options).toHaveLength(0);
+    expect(button(host, "Připravit běh").disabled).toBe(true);
+
+    act(() => root.unmount()); host.remove();
+  });
+
   it("adopts the first allowlisted route when cockpit data arrives asynchronously", () => {
     const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
     act(() => root.render(<RunComposer projects={[]} quotas={[]} onPrepare={vi.fn()} onApprove={vi.fn()} />));
@@ -45,6 +55,59 @@ describe("RunComposer", () => {
     expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).value).toBe("codex_cli");
     expect((host.querySelector('[aria-label="Model"]') as HTMLSelectElement).value).toBe("gpt-5");
     expect(button(host, "Připravit běh").disabled).toBe(false);
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("treats incomplete model and quota snapshots as unavailable", () => {
+    const partialQuota = { provider: "codex_cli", freshness: "fresh", health: "healthy", api_spend: "invalid" } as unknown as ProviderQuota;
+    const partialModels = { models: [{ model_id: "incomplete-model" }] } as unknown as ProviderModels;
+    const { host, root } = mount({ quotas: [partialQuota], models: partialModels });
+
+    expect((host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement).value).toBe("codex_cli");
+    expect((host.querySelector('[aria-label="Model"]') as HTMLSelectElement).options).toHaveLength(0);
+    expect(host.textContent).toContain("Nedostupné");
+    expect(host.textContent).not.toContain("invalid");
+
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("selects a route that states configured true and available false", () => {
+    const routeModels: ProviderModels = { ...models, models: [{ ...models.models[0]!, configured: false, available: false, provider_routes: [{ provider: "codex_cli", configured: true, available: false, reasoning_efforts: ["low"] }] }] };
+    const { host, root } = mount({ models: routeModels });
+    const modelSelect = host.querySelector('[aria-label="Model"]') as HTMLSelectElement;
+
+    expect([...modelSelect.options].map((option) => option.value)).toEqual(["gpt-5"]);
+    expect(modelSelect.value).toBe("gpt-5");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("does not select a route that states configured false and available false", () => {
+    const routeModels: ProviderModels = { ...models, models: [{ ...models.models[0]!, configured: false, available: true, provider_routes: [{ provider: "codex_cli", configured: false, available: false, reasoning_efforts: ["low"] }] }] };
+    const { host, root } = mount({ models: routeModels });
+    const modelSelect = host.querySelector('[aria-label="Model"]') as HTMLSelectElement;
+
+    expect(modelSelect.options).toHaveLength(0);
+    expect(modelSelect.value).toBe("");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("falls back to an available model aggregate when the matching route states no eligibility fields", () => {
+    const routeModels: ProviderModels = { ...models, models: [{ ...models.models[0]!, configured: false, available: true, provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low"] }] }] };
+    const { host, root } = mount({ models: routeModels });
+    const modelSelect = host.querySelector('[aria-label="Model"]') as HTMLSelectElement;
+
+    expect([...modelSelect.options].map((option) => option.value)).toEqual(["gpt-5"]);
+    expect(modelSelect.value).toBe("gpt-5");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("falls back to an available model aggregate when there is no matching route", () => {
+    const routeModels: ProviderModels = { ...models, models: [{ ...models.models[0]!, configured: false, available: true, provider_routes: [] }] };
+    const { host, root } = mount({ models: routeModels });
+    const modelSelect = host.querySelector('[aria-label="Model"]') as HTMLSelectElement;
+
+    expect([...modelSelect.options].map((option) => option.value)).toEqual(["gpt-5"]);
+    expect(modelSelect.value).toBe("gpt-5");
     act(() => root.unmount()); host.remove();
   });
 
@@ -62,15 +125,19 @@ describe("RunComposer", () => {
     act(() => root.unmount()); host.remove();
   });
 
-  it("uses catalog models and allows preparation when the selected provider quota is unavailable", async () => {
+  it("selects a configured static-fallback route and allows preparation when live quota evidence is unavailable", async () => {
     const unavailable: ProviderQuota = { ...quota, freshness: "unavailable", health: "unavailable", models: [] };
     const fallbackModels: ProviderModels = {
       ...models,
       freshness: "unavailable",
       models: [{
         ...models.models[0]!,
+        configured: true,
+        observed: false,
+        available: false,
         health: ["unavailable"],
-        provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low", "medium", "high"] }]
+        source: "static_fallback",
+        provider_routes: [{ provider: "codex_cli", configured: true, observed: false, available: false, health: ["unavailable"], source: "static_fallback", discovery: "static", reasoning_efforts: ["low", "medium", "high"] }]
       }]
     };
     const { host, root, onPrepare } = mount({ quotas: [unavailable], models: fallbackModels });
@@ -93,10 +160,13 @@ describe("RunComposer", () => {
         {
           model_id: "Sonnet 5",
           providers: ["claude_cli"],
-          available: true,
+          configured: true,
+          observed: false,
+          available: false,
           health: ["unavailable"],
+          source: "static_fallback",
           reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
-          provider_routes: [{ provider: "claude_cli", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] }]
+          provider_routes: [{ provider: "claude_cli", configured: true, observed: false, available: false, health: ["unavailable"], discovery: "static", source: "static_fallback", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] }]
         }
       ]
     };
@@ -109,19 +179,21 @@ describe("RunComposer", () => {
     act(() => root.unmount()); host.remove();
   });
 
-  it("does not offer a shared model on a provider whose exact catalog route is unavailable", () => {
+  it("does not offer a live-observed mixed route with negative provider-specific availability", () => {
     const sharedModels: ProviderModels = {
       ...models,
       models: [{
         model_id: "shared-live-model",
         providers: ["claude_cli", "codex_cli"],
+        configured: true,
+        observed: true,
         available: true,
         health: ["healthy", "unavailable"],
         source: "live_snapshot",
         reasoning_efforts: ["low", "medium", "high"],
         provider_routes: [
-          { provider: "claude_cli", reasoning_efforts: ["low", "medium", "high"], available: false, health: ["unavailable"], source: "live_snapshot" },
-          { provider: "codex_cli", reasoning_efforts: ["low", "medium", "high"], available: true, health: ["healthy"], source: "live_snapshot" }
+          { provider: "claude_cli", reasoning_efforts: ["low", "medium", "high"], observed: true, available: false, health: ["unavailable"], source: "mixed" },
+          { provider: "codex_cli", reasoning_efforts: ["low", "medium", "high"], configured: false, observed: true, available: true, health: ["healthy"], source: "live_snapshot" }
         ]
       }]
     };
@@ -180,9 +252,9 @@ describe("RunComposer", () => {
     act(() => root.unmount()); host.remove();
   });
 
-  it("requires an available catalog model with an advertised reasoning route", () => {
+  it("requires an eligible catalog model with an advertised reasoning route", () => {
     const missing = mount({ models: { ...models, models: [] } }); change(missing.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(missing.host, "Připravit běh").disabled).toBe(true); act(() => missing.root.unmount()); missing.host.remove();
-    const unavailable = mount({ models: { ...models, models: [{ ...models.models[0]!, available: false }] } }); change(unavailable.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(unavailable.host, "Připravit běh").disabled).toBe(true); act(() => unavailable.root.unmount()); unavailable.host.remove();
+    const unavailable = mount({ models: { ...models, models: [{ ...models.models[0]!, configured: false, available: false, provider_routes: [{ ...models.models[0]!.provider_routes![0]!, configured: false, available: false }] }] } }); change(unavailable.host.querySelector('[aria-label="Prompt"]')!, "Inspect"); expect(button(unavailable.host, "Připravit běh").disabled).toBe(true); act(() => unavailable.root.unmount()); unavailable.host.remove();
   });
 
   it("invalidates a prepared revision when refreshed route props change", async () => {
@@ -257,7 +329,7 @@ describe("RunComposer", () => {
     change(host.querySelector('[aria-label="Reasoning"]') as HTMLSelectElement, "high");
     await act(async () => button(host, "Připravit běh").click());
     expect(button(host, "Schválit a spustit").disabled).toBe(false);
-    const narrowedModels: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low"] }] }] };
+    const narrowedModels: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli"], configured: false, observed: true, available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: "codex_cli", configured: false, observed: true, available: true, health: ["healthy"], discovery: "usage_probe", source: "live_snapshot", reasoning_efforts: ["low"] }] }] };
     act(() => root.render(<RunComposer {...runComposerProps} models={narrowedModels} />));
     expect(button(host, "Schválit a spustit").disabled).toBe(true);
     expect((host.querySelector('[aria-label="Reasoning"]') as HTMLSelectElement).value).toBe("low");
@@ -292,7 +364,7 @@ describe("RunComposer", () => {
 
   it("uses the exact provider route for a model shared by multiple providers", () => {
     const claudeQuota: ProviderQuota = { ...quota, provider: "claude_cli", models: [{ model_id: "gpt-5", available: true, health: "healthy", source: "cli" }] };
-    const sharedModels: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli", "claude_cli"], available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: "codex_cli", reasoning_efforts: ["low"] }, { provider: "claude_cli", reasoning_efforts: ["high", "max"] }] }] };
+    const sharedModels: ProviderModels = { freshness: "fresh", fetched_at: quota.fetched_at, next_poll_at: null, models: [{ model_id: "gpt-5", providers: ["codex_cli", "claude_cli"], configured: false, observed: true, available: true, health: ["healthy"], reasoning_efforts: ["low"], provider_routes: [{ provider: "codex_cli", configured: false, observed: true, available: true, health: ["healthy"], discovery: "usage_probe", source: "live_snapshot", reasoning_efforts: ["low"] }, { provider: "claude_cli", configured: false, observed: true, available: true, health: ["healthy"], discovery: "usage_probe", source: "live_snapshot", reasoning_efforts: ["high", "max"] }] }] };
     const { host, root } = mount({ quotas: [quota, claudeQuota], models: sharedModels });
     expect([...((host.querySelector('[aria-label="Reasoning"]') as HTMLSelectElement).options)].map((option) => option.value)).toEqual(["low"]);
     change(host.querySelector('[aria-label="Poskytovatel"]') as HTMLSelectElement, "claude_cli");

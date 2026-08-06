@@ -26,9 +26,9 @@ describe("RulesView", () => {
     const { host, root } = mount();
     const planned = [...host.querySelectorAll(".rules-section.planned")];
     expect(planned).toHaveLength(2);
-    expect(planned.every((card) => card.querySelector(".planned-badge")?.textContent === "Planned")).toBe(true);
-    expect(planned[0]?.textContent).toContain("Živý stav pravidel z mesh: Planned (bez endpointu).");
-    expect(planned[1]?.textContent).toContain("Katalog skills a per-run výběr: Planned. Skills se dnes vážou k běhům přes approval evidence.");
+    expect(planned.every((card) => card.querySelector(".planned-badge")?.textContent === "Plánováno")).toBe(true);
+    expect(planned[0]?.textContent).toContain("Živý stav pravidel z mesh: plánováno (bez endpointu).");
+    expect(planned[1]?.textContent).toContain("Katalog skills a výběr pro jednotlivé běhy: plánováno. Skills se dnes vážou k běhům přes důkazy schválení.");
     act(() => root.unmount()); host.remove();
   });
 

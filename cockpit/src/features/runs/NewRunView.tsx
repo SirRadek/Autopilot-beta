@@ -50,7 +50,7 @@ export function NewRunView({ composer, environment }: NewRunViewProps) {
               </span>
             </div>)}
           </div>
-          <p className="autonomy-note">Vynucení autonomie na straně serveru: Planned. Výběr je zatím jen UI preset a neodesílá se do Control Plane.</p>
+          <p className="autonomy-note">Vynucení autonomie na straně serveru: plánováno. Výběr je zatím jen UI předvolba a neodesílá se do Control Plane.</p>
         </section>
       </div>
       <aside className="cockpit-card run-envelope" aria-label="Obálka běhu">
@@ -64,7 +64,7 @@ export function NewRunView({ composer, environment }: NewRunViewProps) {
           <div><dt>Sandbox</dt><dd>{selectedAutonomy.sandbox}</dd></div>
           <div><dt>Odhad</dt><dd>bude určeno po „Připravit běh“</dd></div>
         </dl>
-        <p className="run-envelope-note">Reálné odhady, kvóty a immutable revizi ukáže composer po „Připravit běh“.</p>
+        <p className="run-envelope-note">Reálné odhady, kvóty a neměnnou revizi ukáže composer po „Připravit běh“.</p>
       </aside>
     </div>
   </div>;

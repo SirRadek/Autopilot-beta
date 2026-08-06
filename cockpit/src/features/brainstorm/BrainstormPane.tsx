@@ -37,6 +37,13 @@ function parseConsolidationSummary(raw: string): ConsolidationSummary | undefine
   return { consensus, confidence };
 }
 
+function tokenRange(envelope: BrainstormRecord["token_envelope"] | null | undefined): { readonly minimum: number; readonly maximum: number } | undefined {
+  const minimum = envelope?.minimum_tokens;
+  const maximum = envelope?.maximum_tokens;
+  if (typeof minimum !== "number" || !Number.isFinite(minimum) || typeof maximum !== "number" || !Number.isFinite(maximum)) return undefined;
+  return { minimum, maximum };
+}
+
 export interface BrainstormPaneProps {
   readonly environment: CockpitEnvironment;
   readonly projects: readonly ProjectEntry[];
@@ -57,21 +64,30 @@ function estimateBriefTokens(brief: string): number {
 }
 
 function availableModelsFor(provider: string, quota: ProviderQuota | undefined, models: ProviderModels | undefined) {
-  const catalog = (models?.models ?? []).filter((model) => model.providers.includes(provider) && model.available && !model.health.includes("unavailable"));
-  return (quota?.models ?? []).filter((model) => model.available && model.health !== "unavailable" && catalog.some((candidate) => candidate.model_id === model.model_id));
+  if (quota === undefined || quota.freshness !== "fresh" || quota.health === "unavailable") return [];
+  const catalog = (Array.isArray(models?.models) ? models.models : [])
+    .filter((model) => Array.isArray(model.providers) && model.providers.includes(provider));
+  return (Array.isArray(quota.models) ? quota.models : [])
+    .filter((model) => typeof model.model_id === "string" && model.available && model.health !== "unavailable" && catalog.some((candidate) => candidate.model_id === model.model_id));
 }
 
 function reasoningEffortsFor(provider: string, modelId: string, models: ProviderModels | undefined): readonly RunReasoningEffort[] {
-  const entry = (models?.models ?? []).find((candidate) => candidate.model_id === modelId && candidate.providers.includes(provider));
-  return entry?.provider_routes?.find((route) => route.provider === provider)?.reasoning_efforts ?? [];
+  const entry = (Array.isArray(models?.models) ? models.models : [])
+    .find((candidate) => candidate.model_id === modelId && Array.isArray(candidate.providers) && candidate.providers.includes(provider));
+  const route = (Array.isArray(entry?.provider_routes) ? entry.provider_routes : []).find((candidate) => candidate.provider === provider);
+  return Array.isArray(route?.reasoning_efforts) ? route.reasoning_efforts : [];
 }
 
 export function BrainstormPane({ environment, projects, quotas, models, brainstorms, runs, onCreate, onApprove, onArbitrate, onCancel }: BrainstormPaneProps) {
-  const enabledProjects = projects.filter((project) => project.enabled);
+  const projectEntries = (Array.isArray(projects) ? projects : []).filter((project) => typeof project === "object" && project !== null);
+  const quotaEntries = (Array.isArray(quotas) ? quotas : []).filter((quota) => typeof quota === "object" && quota !== null);
+  const brainstormEntries = (Array.isArray(brainstorms) ? brainstorms : []).filter((record) => typeof record === "object" && record !== null);
+  const runEntries = (Array.isArray(runs) ? runs : []).filter((run) => typeof run === "object" && run !== null);
+  const enabledProjects = projectEntries.filter((project) => project.enabled);
   const [projectId, setProjectId] = useState(enabledProjects[0]?.project_id ?? "");
   useEffect(() => { if (!enabledProjects.some((project) => project.project_id === projectId)) setProjectId(enabledProjects[0]?.project_id ?? ""); }, [enabledProjects, projectId]);
 
-  const eligibleQuotas = quotas.filter((quota) => quota.freshness === "fresh" && quota.health !== "unavailable" && KNOWN_PROVIDERS.includes(quota.provider as RunProvider));
+  const eligibleQuotas = quotaEntries.filter((quota) => quota.freshness === "fresh" && quota.health !== "unavailable" && KNOWN_PROVIDERS.includes(quota.provider as RunProvider));
 
   const [brief, setBrief] = useState("");
   const [routeModel, setRouteModel] = useState<Record<string, string>>({});
@@ -143,6 +159,7 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
   const anyMutationPending = otherMutationPending || cancelPendingId !== undefined;
   const canCreate = environment === "dev" && draftInput !== undefined && !anyMutationPending;
   const validPrepared = prepared?.key === boundKey ? prepared.record : undefined;
+  const validPreparedRange = tokenRange(validPrepared?.token_envelope);
 
   const invalidate = () => { generation.current += 1; setPrepared(undefined); setAckMaxTokens(false); setMessage(""); };
 
@@ -168,7 +185,7 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
   }
 
   async function approve() {
-    if (validPrepared === undefined || !ackMaxTokens || approveActive.current) return;
+    if (validPrepared === undefined || validPreparedRange === undefined || !ackMaxTokens || approveActive.current) return;
     approveActive.current = true; setApprovePending(true); setMessage("Spouštím fan-out…");
     try {
       await onApprove(validPrepared.brainstorm_id, "cockpit-operator");
@@ -209,8 +226,11 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
     }
   }
 
-  const projectBrainstorms = brainstorms.filter((record) => record.project_id === projectId);
-  const runsById = new Map(runs.map((run) => [run.current.run_id, run]));
+  const projectBrainstorms = brainstormEntries.filter((record) => record.project_id === projectId);
+  const runsById = new Map<string, RunRecord>();
+  for (const run of runEntries) {
+    if (typeof run?.current?.run_id === "string") runsById.set(run.current.run_id, run);
+  }
 
   return (
     <section aria-label="Brainstorm" className="brainstorm-pane">
@@ -274,15 +294,20 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
         <p aria-live="polite">{message}</p>
         {validPrepared ? <>
           <p>Brainstorm {validPrepared.brainstorm_id} připraven ke schválení</p>
-          <p>Uložený rozsah: {validPrepared.token_envelope.minimum_tokens.toLocaleString("cs-CZ")}–{validPrepared.token_envelope.maximum_tokens.toLocaleString("cs-CZ")} tokenů</p>
-          <label><input type="checkbox" aria-label="Potvrzuji maximální tokenový rozsah" checked={ackMaxTokens} disabled={anyMutationPending} onChange={(event) => setAckMaxTokens(event.target.checked)} /> Potvrzuji maximální tokenový rozsah</label>
-          <button type="button" disabled={!ackMaxTokens || anyMutationPending} onClick={() => void approve()}>Spustit fan-out</button>
+          {validPreparedRange ? <>
+            <p>Uložený rozsah: {validPreparedRange.minimum.toLocaleString("cs-CZ")}–{validPreparedRange.maximum.toLocaleString("cs-CZ")} tokenů</p>
+            <label><input type="checkbox" aria-label="Potvrzuji maximální tokenový rozsah" checked={ackMaxTokens} disabled={anyMutationPending} onChange={(event) => setAckMaxTokens(event.target.checked)} /> Potvrzuji maximální tokenový rozsah</label>
+            <button type="button" disabled={!ackMaxTokens || anyMutationPending} onClick={() => void approve()}>Spustit fan-out</button>
+          </> : <p role="alert">Uložený tokenový rozsah není dostupný.</p>}
         </> : null}
       </> : null}
       <div className="brainstorm-list">
         <h3>Brainstormy projektu</h3>
-        {projectBrainstorms.map((record) => (
-          <article key={record.brainstorm_id} className="incident-pane brainstorm-record" aria-label={`Brainstorm ${record.brainstorm_id}`}>
+        {projectBrainstorms.map((record) => {
+          const recordRange = tokenRange(record.token_envelope);
+          const childRunIds = Array.isArray(record.child_run_ids) ? record.child_run_ids.filter((id): id is string => typeof id === "string") : [];
+          const conflicts = Array.isArray(record.conflicts) ? record.conflicts : [];
+          return <article key={record.brainstorm_id} className="incident-pane brainstorm-record" aria-label={`Brainstorm ${record.brainstorm_id}`}>
             <header><strong>{record.brainstorm_id}</strong><span>{record.status}</span></header>
             {environment === "dev" && onCancel !== undefined && CANCELLABLE_STATUSES.includes(record.status) ? (
               confirmCancelId === record.brainstorm_id ? (
@@ -296,21 +321,21 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
               )
             ) : null}
             {cancelError?.id === record.brainstorm_id ? <p role="alert">{cancelError.message}</p> : null}
-            <p>{record.token_envelope.minimum_tokens.toLocaleString("cs-CZ")}–{record.token_envelope.maximum_tokens.toLocaleString("cs-CZ")} tokenů</p>
+            {recordRange ? <p>{recordRange.minimum.toLocaleString("cs-CZ")}–{recordRange.maximum.toLocaleString("cs-CZ")} tokenů</p> : null}
             <ul>
-              {record.child_run_ids.map((runId) => {
+              {childRunIds.map((runId) => {
                 const run = runsById.get(runId);
                 return (
                   <li key={runId}>
                     <p>{run ? `${run.current.provider} · ${run.current.model ?? "?"}` : runId}</p>
-                    <pre>{(run?.artifacts[0]?.preview ?? run?.provider_result?.raw_output ?? "").slice(0, 500)}</pre>
+                    <pre>{(run?.artifacts?.[0]?.preview ?? run?.provider_result?.raw_output ?? "").slice(0, 500)}</pre>
                   </li>
                 );
               })}
             </ul>
             {(() => {
               const consolidationRun = record.consolidation_run_id ? runsById.get(record.consolidation_run_id) : undefined;
-              const rawConsolidation = consolidationRun?.artifacts[0]?.preview ?? consolidationRun?.provider_result?.raw_output ?? "";
+              const rawConsolidation = consolidationRun?.artifacts?.[0]?.preview ?? consolidationRun?.provider_result?.raw_output ?? "";
               const summary = record.consolidation_run_id ? parseConsolidationSummary(rawConsolidation) : undefined;
               return (
                 <section aria-label="Konsenzus a jistota">
@@ -321,9 +346,9 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
                 </section>
               );
             })()}
-            {record.conflicts.length ? <section aria-label="Konflikty">
+            {conflicts.length ? <section aria-label="Konflikty">
               <h4>Konflikty</h4>
-              <ul>{record.conflicts.map((conflict) => <li key={conflict.conflict_id}>{conflict.summary}{conflict.material ? " (materiální)" : ""}</li>)}</ul>
+              <ul>{conflicts.map((conflict) => <li key={conflict.conflict_id}>{conflict.summary}{conflict.material ? " (materiální)" : ""}</li>)}</ul>
             </section> : null}
             {record.status === "needs_arbitration" && record.arbitration_route ? <section aria-label="Precommitted arbiter">
               <p>Předem určený arbitr: {record.arbitration_route.provider} · {record.arbitration_route.model}</p>
@@ -333,13 +358,13 @@ export function BrainstormPane({ environment, projects, quotas, models, brainsto
                 </button>
               ) : null}
             </section> : null}
-            {record.final_artifact !== null ? <section aria-label="Výsledek">
+            {typeof record.final_artifact === "string" ? <section aria-label="Výsledek">
               <h4>Výsledný artefakt</h4>
               <pre>{record.final_artifact}</pre>
-              <p>Provenience: {[...record.child_run_ids, record.consolidation_run_id, record.arbitration_run_id].filter((id): id is string => id !== null).join(", ")}</p>
+              <p>Provenience: {[...childRunIds, record.consolidation_run_id, record.arbitration_run_id].filter((id): id is string => typeof id === "string").join(", ")}</p>
             </section> : null}
           </article>
-        ))}
+        })}
       </div>
     </section>
   );
