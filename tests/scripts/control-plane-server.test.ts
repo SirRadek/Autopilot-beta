@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reviseRunWithApproval } from "../../scripts/control-plane-runs";
@@ -908,7 +908,8 @@ describe("control plane provider endpoints", () => {
       .toThrow(/^invalid_provider_usage_probe_configuration$/);
   });
   it("marks an enabled provider unavailable when its configured executable cannot be resolved", () => {
-    const binDir = join(mkdtempSync(join(tmpdir(), "control-plane-provider-bin-")), "bin");
+    const installRoot = realpathSync(mkdtempSync(join(tmpdir(), "control-plane-provider-bin-")));
+    const binDir = join(installRoot, "bin");
     mkdirSync(binDir, { mode: 0o700 });
     const codexPath = join(binDir, "codex");
     writeFileSync(codexPath, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
@@ -916,6 +917,8 @@ describe("control plane provider endpoints", () => {
     expect(providerUsageCommandsFromEnvironment({
       CONTROL_PLANE_USAGE_PROBES: "codex,claude",
       AUTOPILOT_PROVIDER_CLI_BIN_DIR: binDir,
+      AUTOPILOT_PROVIDER_CLI_TEST_MODE: "1",
+      AUTOPILOT_PROVIDER_CLI_TEST_ROOT: dirname(binDir),
       PATH: "/untrusted/path"
     })).toEqual({
       codex_cli: { kind: "tmux_usage", executable: codexPath },

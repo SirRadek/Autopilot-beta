@@ -1,5 +1,5 @@
 import { accessSync, constants, realpathSync, statSync, type Stats } from "node:fs";
-import { isAbsolute, join, normalize, relative, sep } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 
 type ProviderCli = "codex_cli" | "claude_cli" | "agy_cli";
 type ProviderCliRuntimeError = "provider_executable_missing" | "provider_runtime_denied";
@@ -41,14 +41,21 @@ export function resolveProviderCliRuntime(
     return unavailable("provider_runtime_denied");
   }
 
+  const configuredInstallRoot = dirname(configuredDirectory);
+  let realInstallRoot: string;
   let realDirectory: string;
   try {
     if (!statSync(configuredDirectory).isDirectory()) {
       return unavailable("provider_runtime_denied");
     }
+    realInstallRoot = realpathSync(configuredInstallRoot);
     realDirectory = realpathSync(configuredDirectory);
   } catch (error) {
     return unavailable(runtimePathError(error));
+  }
+
+  if (configuredInstallRoot !== realInstallRoot || !isContainedPath(realInstallRoot, realDirectory)) {
+    return unavailable("provider_runtime_denied");
   }
 
   const executable = join(configuredDirectory, basename);
@@ -59,8 +66,29 @@ export function resolveProviderCliRuntime(
     return unavailable(runtimePathError(error));
   }
 
-  if (!isContainedPath(realDirectory, realExecutable)) {
+  if (!isContainedPath(realInstallRoot, realExecutable)) {
     return unavailable("provider_runtime_denied");
+  }
+
+  const expectedOwnerUid = trustedOwnerUid(environment, realInstallRoot);
+  const publishedDirectories = containedDirectories(realInstallRoot, realDirectory);
+  const targetDirectories = containedDirectories(realInstallRoot, dirname(realExecutable));
+  if (publishedDirectories === null || targetDirectories === null) {
+    return unavailable("provider_runtime_denied");
+  }
+  const trustedDirectories = new Set([
+    ...publishedDirectories,
+    ...targetDirectories
+  ]);
+  try {
+    for (const directory of trustedDirectories) {
+      const metadata = statSync(directory);
+      if (!metadata.isDirectory() || !hasTrustedOwnershipAndMode(metadata, expectedOwnerUid)) {
+        return unavailable("provider_runtime_denied");
+      }
+    }
+  } catch (error) {
+    return unavailable(runtimePathError(error));
   }
 
   let executableMetadata: Stats;
@@ -71,6 +99,9 @@ export function resolveProviderCliRuntime(
   }
   if (!executableMetadata.isFile()) {
     return unavailable("provider_executable_missing");
+  }
+  if (!hasTrustedOwnershipAndMode(executableMetadata, expectedOwnerUid)) {
+    return unavailable("provider_runtime_denied");
   }
 
   try {
@@ -93,6 +124,47 @@ function isContainedPath(directory: string, candidate: string): boolean {
     && child !== ".."
     && !child.startsWith(`..${sep}`)
     && !isAbsolute(child);
+}
+
+function containedDirectories(root: string, directory: string): readonly string[] | null {
+  const child = relative(root, directory);
+  if (child.length === 0) return [root];
+  if (!isContainedPath(root, directory)) return null;
+
+  const directories = [root];
+  let current = root;
+  for (const segment of child.split(sep)) {
+    current = join(current, segment);
+    directories.push(current);
+  }
+  return directories;
+}
+
+function trustedOwnerUid(
+  environment: Readonly<Record<string, string | undefined>>,
+  realInstallRoot: string
+): number {
+  const testRoot = environment.AUTOPILOT_PROVIDER_CLI_TEST_ROOT;
+  if (
+    environment.AUTOPILOT_PROVIDER_CLI_TEST_MODE !== "1"
+    || testRoot === undefined
+    || testRoot.length === 0
+    || !isAbsolute(testRoot)
+    || normalize(testRoot) !== testRoot
+  ) {
+    return 0;
+  }
+
+  try {
+    if (realpathSync(testRoot) !== realInstallRoot) return 0;
+  } catch {
+    return 0;
+  }
+  return process.getuid?.() ?? 0;
+}
+
+function hasTrustedOwnershipAndMode(metadata: Stats, expectedOwnerUid: number): boolean {
+  return metadata.uid === expectedOwnerUid && (metadata.mode & 0o022) === 0;
 }
 
 function runtimePathError(error: unknown): ProviderCliRuntimeError {

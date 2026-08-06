@@ -1,14 +1,16 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const RUNTIME_MODULE = "../../src/data/delivery-system/providerCliRuntime";
 const originalBinDir = process.env.AUTOPILOT_PROVIDER_CLI_BIN_DIR;
+const originalTestMode = process.env.AUTOPILOT_PROVIDER_CLI_TEST_MODE;
+const originalTestRoot = process.env.AUTOPILOT_PROVIDER_CLI_TEST_ROOT;
 const roots: string[] = [];
 
 function temporaryRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "cli-worker-paths-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cli-worker-paths-")));
   roots.push(root);
   return root;
 }
@@ -18,9 +20,21 @@ function writeExecutable(path: string): void {
   chmodSync(path, 0o700);
 }
 
+function configureProviderRuntime(binDir: string): void {
+  process.env.AUTOPILOT_PROVIDER_CLI_BIN_DIR = binDir;
+  process.env.AUTOPILOT_PROVIDER_CLI_TEST_MODE = "1";
+  process.env.AUTOPILOT_PROVIDER_CLI_TEST_ROOT = join(binDir, "..");
+}
+
+function restoreEnvironment(name: string, original: string | undefined): void {
+  if (original === undefined) delete process.env[name];
+  else process.env[name] = original;
+}
+
 afterEach(() => {
-  if (originalBinDir === undefined) delete process.env.AUTOPILOT_PROVIDER_CLI_BIN_DIR;
-  else process.env.AUTOPILOT_PROVIDER_CLI_BIN_DIR = originalBinDir;
+  restoreEnvironment("AUTOPILOT_PROVIDER_CLI_BIN_DIR", originalBinDir);
+  restoreEnvironment("AUTOPILOT_PROVIDER_CLI_TEST_MODE", originalTestMode);
+  restoreEnvironment("AUTOPILOT_PROVIDER_CLI_TEST_ROOT", originalTestRoot);
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
   vi.doUnmock("node:child_process");
   vi.doUnmock("node:process");
@@ -40,7 +54,7 @@ describe("CLI worker provider executable resolution", () => {
       agy_cli: join(binDir, "agy")
     } as const;
     for (const path of Object.values(executables)) writeExecutable(path);
-    process.env.AUTOPILOT_PROVIDER_CLI_BIN_DIR = binDir;
+    configureProviderRuntime(binDir);
     const spawnSyncMock = vi.fn((_command: string, _args: readonly string[], _options: unknown) => ({
       status: 0,
       stdout: "ok",
@@ -119,10 +133,12 @@ describe("CLI worker provider executable resolution", () => {
     const ptySpawnMock = vi.fn();
     if (errorCode === "provider_runtime_denied") {
       process.env.AUTOPILOT_PROVIDER_CLI_BIN_DIR = "relative/bin";
+      delete process.env.AUTOPILOT_PROVIDER_CLI_TEST_MODE;
+      delete process.env.AUTOPILOT_PROVIDER_CLI_TEST_ROOT;
     } else {
       const binDir = join(temporaryRoot(), "bin");
       mkdirSync(binDir, { mode: 0o700 });
-      process.env.AUTOPILOT_PROVIDER_CLI_BIN_DIR = binDir;
+      configureProviderRuntime(binDir);
     }
     vi.resetModules();
     vi.doMock("node:child_process", async (importOriginal) => ({

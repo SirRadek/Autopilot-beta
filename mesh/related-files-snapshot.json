@@ -101,7 +101,7 @@
   "src/data/delivery-system/subscriptionBudget.ts": "63a63554e4fc9e71652f5b827bdf1f22ff9ccbdd",
   "src/data/delivery-system/fallbackChains.ts": "2992ae7e5296721e5ecd4cdf3a33ecf7cd341fd3",
   "src/data/delivery-system/cliWorker.ts": "ec33daa5495cf1aa6ef816ed8147647965db36ba",
-  "src/data/delivery-system/providerCliRuntime.ts": "8df8b1a60149969eaf0f898bb7acdf9fb8129d60",
+  "src/data/delivery-system/providerCliRuntime.ts": "a4f85d6094babe4a7152b3cd21f68005e2969d16",
   "src/data/delivery-system/providerModelDiscovery.ts": "a5abecd721958711a1fd0870894573d5c9c90aec",
   "src/data/delivery-system/cliWorkerCapture.ts": "14497f8225f4921206e0abda280c3db1374924f6",
   "src/data/delivery-system/efficiencyTelemetry.ts": "ddfb6484bd7fc5abb413dc292ec975d627cbe5f7",
