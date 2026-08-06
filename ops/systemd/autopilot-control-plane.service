@@ -24,7 +24,7 @@ KillSignal=SIGTERM
 TimeoutStopSec=15
 UMask=0077
 NoNewPrivileges=true
-# tmux usage probes communicate through /tmp/tmux-$UID; a private /tmp would hide that socket.
+# Provider CLIs retain host /tmp visibility; isolated probe sockets are pinned beneath writable TMPDIR.
 PrivateTmp=false
 PrivateUsers=true
 ProtectSystem=strict
