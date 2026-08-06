@@ -33,18 +33,21 @@ the audited binary if PATH ordering ever regresses.
    Tests point it at a fixture dir — mirroring the existing dual-flag test-mode pattern in
    `provider-cli-install.md:46-53`.
 3. **Fail-closed resolver:** a single shared resolver returns the absolute path
-   `<BIN_DIR>/<cli>` only if it exists and is executable; otherwise it throws. **No fallback to
-   `~/.local/bin`, no `command -v`, no bare-name PATH resolution in production.** All four call
-   sites migrate to it: the tmux probe command table (`providerUsageProbe.ts:25-29`),
-   `resolveAgyPath`/`resolveCodexCommand`/the `claude` spawn in `cliWorkerCapture.ts`. When
-   `AUTOPILOT_PROVIDER_CLI_BIN_DIR` is unset, provider CLI execution is unavailable and reported
-   as `provider_unavailable` — never silently resolved via PATH.
+   `<BIN_DIR>/<cli>` only if it exists and is executable, its real path remains within the provider
+   install root (the real parent of `<BIN_DIR>`), and the resolved executable plus every directory
+   on its path inside that root are owned by uid 0 and are neither group- nor world-writable;
+   otherwise it throws. **No fallback to `~/.local/bin`, no `command -v`, no bare-name PATH
+   resolution in production.** All four call sites migrate to it: the tmux probe command table
+   (`providerUsageProbe.ts:25-29`), `resolveAgyPath`/`resolveCodexCommand`/the `claude` spawn in
+   `cliWorkerCapture.ts`. When `AUTOPILOT_PROVIDER_CLI_BIN_DIR` is unset, provider CLI execution is
+   unavailable and reported as `provider_unavailable` — never silently resolved via PATH.
 
 ## Consequences
 
 - **Security:** the provider-invocation trust boundary moves from "whatever PATH finds" (user-writable `~/.local/bin`, mutable by any process running as `radek`) to a root-owned, checksummed, `ProtectSystem=strict`-covered directory. A compromised user account can no longer swap the binary the control plane executes. Misconfiguration surfaces as an explicit resolver error instead of executing an unintended binary.
 - **Deployment surface:** none of the systemd units change for this ADR (the env var rides the OG-3 env file), but the operational contract in `provider-cli-install.md:55-70` ("PATH via EnvironmentFile") is superseded and the doc must be rewritten.
 - **Availability:** fail-closed means a missing symlink makes the provider unavailable rather than falling back to a working `~/.local/bin` copy. Accepted: unavailable-and-honest beats available-and-unaudited.
+- **Published layout:** install-root containment is required because `bin/<cli>` is a stable symlink into the sibling `<provider>/<version>/` tree.
 - Windows dev paths in `resolveCodexCommand` remain for local development only, gated behind the env var being unset outside production.
 
 ## Alternatives considered
@@ -56,4 +59,3 @@ the audited binary if PATH ordering ever regresses.
 ## Hard boundary and why owner approval is required
 
 CLAUDE.md forbids changing a **deployment surface** or creating a **provider gateway** without an explicit architecture decision. This ADR redefines the trust boundary for every production provider-CLI execution (probes and workers alike) and retires the documented PATH-prepend activation mechanism. Whether production may ever execute a provider binary from outside the checksummed root-owned tree is an owner-level trust decision, not an implementation detail.
-
