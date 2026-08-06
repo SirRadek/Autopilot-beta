@@ -50,6 +50,20 @@ describe("adapter argv builders — owner-selected model/reasoning enforcement",
     expect(codexArgs).not.toContain("-m");
   });
 
+  it("accepts every CLI-verified claude effort level", () => {
+    // `claude --help` documents `--effort <level>` with exactly (low, medium, high, xhigh, max).
+    for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+      const args = buildClaudeArgs("do it", { effort });
+      expect(args.slice(-2)).toEqual(["--effort", effort]);
+    }
+  });
+
+  it("rejects the claude `ultracode` mode alias as a reasoning effort before any spawn", () => {
+    // The CLI accepts `--effort ultracode`, but it is a mode alias (xhigh + ultracode
+    // orchestration), not an effort level; the lane must refuse it rather than dispatch it.
+    expect(() => buildClaudeArgs("do it", { effort: "ultracode" })).toThrow("unsupported_reasoning_effort");
+  });
+
   it("rejects an unsupported agy reasoning effort before any spawn", () => {
     expect(() => buildAgyArgs("ping", { effort: "xhigh" })).toThrow("unsupported_reasoning_effort");
   });

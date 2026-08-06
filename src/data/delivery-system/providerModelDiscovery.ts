@@ -35,6 +35,13 @@ export async function captureCliVersion(
   }
 }
 
+// There is deliberately no discoverClaudeModels here. The installed Claude CLI exposes no
+// non-interactive model listing: `claude --help` has no `models` subcommand (only `agents`,
+// `auth`, `mcp`, `doctor`, …), the model picker is the interactive `/model` command, and the
+// CLI keeps no on-disk models cache equivalent to ~/.codex/models_cache.json. Claude model
+// discovery therefore flows exclusively from the tmux usage probe, whose screen labels are
+// normalised through expandQuotaLabel("claude_cli", …) — provenance "usage_probe".
+
 export function discoverCodexModels(homeDir: string): readonly DiscoveredProviderModel[] {
   try {
     const path = join(homeDir, ".codex", "models_cache.json");
