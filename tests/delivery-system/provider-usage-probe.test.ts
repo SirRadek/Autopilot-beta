@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -172,7 +172,7 @@ describe("tmux usage probe", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.length).toBeLessThanOrEqual(128 * 1024);
-    expect(calls.every(({ args }) => args.slice(0, 2).join("\0") === ["-L", "autopilot-probe-autopilot-quota-test"].join("\0"))).toBe(true);
+    expect(calls.every(({ args }) => args[0] === "-S" && args[1] === join(launchCwd!, "tmux.sock"))).toBe(true);
     const newSession = calls.find(({ args }) => tmuxSubcommand(args) === "new-session");
     expect(newSession?.args.slice(-2)).toEqual(["/provider-bin/codex", "--no-alt-screen"]);
     expect(newSession?.args).not.toContain("codex --no-alt-screen");
@@ -195,6 +195,83 @@ describe("tmux usage probe", () => {
     for (const [key, value] of Object.entries(newSession?.env ?? {})) {
       expect(newSession?.args).toContain(`${key}=${value}`);
     }
+  });
+
+  it("preserves a successful probe when tmux 3.4 reports the removed socket as absent", async () => {
+    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
+      ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
+      : tmuxSubcommand(args) === "has-session"
+        ? {
+            stdout: "",
+            stderr: `error connecting to ${args[1]} (No such file or directory)`,
+            exitCode: 1
+          }
+        : { stdout: "", stderr: "", exitCode: 0 };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "vm-tmux-3-4",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      five_hour: { remaining: 98 },
+      weekly: { remaining: 93 }
+    });
+  });
+
+  it("creates the isolated tmux socket inside the service writable runtime directory", async () => {
+    const runtimeRoot = temporaryRuntimeRoot();
+    const socketPaths = new Set<string>();
+    let launchCwd: string | undefined;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "new-session") launchCwd = args[args.indexOf("-c") + 1];
+      const socketPath = args[1]!;
+      const relativeSocketPath = launchCwd === undefined ? ".." : relative(launchCwd, socketPath);
+      const socketIsWritable = args[0] === "-S"
+        && isAbsolute(socketPath)
+        && relativeSocketPath !== ""
+        && !relativeSocketPath.match(/^\.\.(?:\/|$)/);
+
+      if (subcommand === "has-session") {
+        return {
+          stdout: "",
+          stderr: `error connecting to ${socketPath} (No such file or directory)`,
+          exitCode: 1
+        };
+      }
+      if (!socketIsWritable) {
+        return {
+          stdout: "",
+          stderr: "error creating /tmp/tmux-1000/autopilot-probe-systemd (Read-only file system)",
+          exitCode: 1
+        };
+      }
+      socketPaths.add(socketPath);
+      return subcommand === "capture-pane"
+        ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "systemd-read-only-tmp",
+      delayMs: 0,
+      runtimeRoot
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(socketPaths.size).toBe(1);
+    expect([...socketPaths][0]).toMatch(/\/autopilot-provider-probe-[^/]+\/tmux\.sock$/);
   });
 
   it("reports missing credentials for Claude login without fabricating quota", async () => {
@@ -260,7 +337,7 @@ describe("tmux usage probe", () => {
     expect(existsSync(workingDirectory!)).toBe(false);
   });
 
-  it("fails closed when isolated tmux-server termination cannot be verified", async () => {
+  it("fails closed and retains the socket when isolated tmux-server termination cannot be verified", async () => {
     let workingDirectory: string | undefined;
     const execute: TmuxCommandExecutor = async (_command, args) => {
       if (tmuxSubcommand(args) === "new-session") workingDirectory = args[args.indexOf("-c") + 1];
@@ -280,7 +357,7 @@ describe("tmux usage probe", () => {
 
     expect(result).toEqual({ stdout: "", stderr: "provider_runtime_denied", exitCode: 1 });
     expect(workingDirectory).toBeDefined();
-    expect(existsSync(workingDirectory!)).toBe(false);
+    expect(existsSync(workingDirectory!)).toBe(true);
   });
 
   it("does not mistake a cleanup permission failure for verified termination", async () => {
@@ -288,7 +365,7 @@ describe("tmux usage probe", () => {
       const subcommand = tmuxSubcommand(args);
       if (subcommand === "capture-pane") return { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 };
       if (subcommand === "kill-server" || subcommand === "has-session") {
-        return { stdout: "", stderr: "permission denied: /private/tmux/socket", exitCode: 1 };
+        return { stdout: "", stderr: "error connecting to /private/tmux/socket (Permission denied)", exitCode: 1 };
       }
       return { stdout: "", stderr: "", exitCode: 0 };
     };

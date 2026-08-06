@@ -133,7 +133,6 @@ export async function runTmuxUsageProbe(
   const timeoutMs = options.timeoutMs ?? 20_000;
   const sessionId = options.sessionId ?? `autopilot-quota-${randomBytes(6).toString("hex")}`;
   const delayMs = options.delayMs;
-  const socketName = `autopilot-probe-${sessionId}`;
   const environment = sanitizedProbeEnvironment(process.env);
   let workingDirectory: string;
   try {
@@ -141,6 +140,7 @@ export async function runTmuxUsageProbe(
   } catch {
     return failureResult("provider_runtime_denied");
   }
+  const socketPath = join(workingDirectory, "tmux.sock");
 
   const controller = new AbortController();
   const onExternalAbort = () => controller.abort();
@@ -153,7 +153,7 @@ export async function runTmuxUsageProbe(
   try {
     if (controller.signal.aborted) throw new Error("timeout");
     if (options.executable.length === 0) throw new Error("provider_executable_missing");
-    await checked(execute, withSocket(socketName, [
+    await checked(execute, withSocket(socketPath, [
       "new-session",
       "-d",
       "-s", sessionId,
@@ -165,11 +165,11 @@ export async function runTmuxUsageProbe(
       ...spec.args
     ]), controller.signal, environment);
     await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
-    await checked(execute, withSocket(socketName, ["send-keys", "-t", target, "-l", spec.slashCommand]), controller.signal, environment);
+    await checked(execute, withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]), controller.signal, environment);
     await pause(delayMs ?? 250, controller.signal);
-    await checked(execute, withSocket(socketName, ["send-keys", "-t", target, "C-m"]), controller.signal, environment);
+    await checked(execute, withSocket(socketPath, ["send-keys", "-t", target, "C-m"]), controller.signal, environment);
     await pause(delayMs ?? 4_000, controller.signal);
-    const captured = await checked(execute, withSocket(socketName, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target]), controller.signal, environment);
+    const captured = await checked(execute, withSocket(socketPath, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target]), controller.signal, environment);
     const stdout = Buffer.from(captured.stdout).subarray(0, MAX_CAPTURE_BYTES).toString("utf8");
     const parsed = provider === "codex_cli" ? parseCodexStatus(stdout) : provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
     if (parsed === null) {
@@ -184,12 +184,16 @@ export async function runTmuxUsageProbe(
 
   clearTimeout(timer);
   options.signal?.removeEventListener("abort", onExternalAbort);
-  const serverTerminated = await terminateAndVerifyServer(execute, socketName, environment);
-  let workingDirectoryRemoved = true;
-  try {
-    await rm(workingDirectory, { recursive: true, force: true });
-  } catch {
-    workingDirectoryRemoved = false;
+  const serverTerminated = await terminateAndVerifyServer(execute, socketPath, environment);
+  let workingDirectoryRemoved = false;
+  // The socket is inside this directory; keep it reachable if the server may still be alive.
+  if (serverTerminated) {
+    try {
+      await rm(workingDirectory, { recursive: true, force: true });
+      workingDirectoryRemoved = true;
+    } catch {
+      // A private runtime artifact is safer than claiming cleanup succeeded.
+    }
   }
   return serverTerminated && workingDirectoryRemoved
     ? result
@@ -225,21 +229,21 @@ function executeTmux(
 
 async function terminateAndVerifyServer(
   execute: TmuxCommandExecutor,
-  socketName: string,
+  socketPath: string,
   environment: Readonly<Record<string, string>>
 ): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CLEANUP_TIMEOUT_MS);
   try {
     try {
-      await abortable(execute("tmux", withSocket(socketName, ["kill-server"]), controller.signal, environment), controller.signal);
+      await abortable(execute("tmux", withSocket(socketPath, ["kill-server"]), controller.signal, environment), controller.signal);
     } catch {
       // Verification below is authoritative: kill-server may fail because no server remains.
     }
     if (controller.signal.aborted) return false;
     try {
       const verification = await abortable(
-        execute("tmux", withSocket(socketName, ["has-session"]), controller.signal, environment),
+        execute("tmux", withSocket(socketPath, ["has-session"]), controller.signal, environment),
         controller.signal
       );
       return !controller.signal.aborted && isExpectedAbsentServer(verification);
@@ -253,7 +257,7 @@ async function terminateAndVerifyServer(
 
 function isExpectedAbsentServer(result: TmuxCommandResult): boolean {
   if (result.exitCode === 0) return false;
-  return /^(?:(?:tmux:\s*)?no server(?: running)?(?:\s|$)|failed to connect[^\r\n]*(?:no such file|connection refused))/i.test(result.stderr);
+  return /^(?:(?:tmux:\s*)?no server(?: running)?(?:\s|$)|(?:failed to connect|error connecting to)[^\r\n]*(?:no such file|connection refused))/i.test(result.stderr);
 }
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -278,8 +282,8 @@ function sessionEnvironmentArguments(environment: Readonly<Record<string, string
   return PROBE_ENVIRONMENT_KEYS.flatMap((key) => environment[key] === undefined ? [] : ["-e", `${key}=${environment[key]}`]);
 }
 
-function withSocket(socketName: string, args: readonly string[]): string[] {
-  return ["-L", socketName, ...args];
+function withSocket(socketPath: string, args: readonly string[]): string[] {
+  return ["-S", socketPath, ...args];
 }
 
 function failureResult(errorCode: ProviderErrorCode): TmuxCommandResult {
