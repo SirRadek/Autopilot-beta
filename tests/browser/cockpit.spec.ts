@@ -29,7 +29,7 @@ test("logs in and renders the protected cockpit destinations", async ({ page }) 
   await expect(page.getByRole("heading", { name: "Propagace" })).toBeVisible();
   await goToView(page, "Zdroje & zdraví");
   await expect(page.getByRole("heading", { name: "Zdroje & zdraví", level: 2 })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Workeři" }).getByText("No workers running.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Workeři" }).getByText("Žádní běžící workeři.")).toBeVisible();
   await goToView(page, "Nový běh");
   await expect(page.getByRole("heading", { name: "Nový běh", level: 2 })).toBeVisible();
   await goToView(page, "Pravidla & Skills");
@@ -60,14 +60,19 @@ test("shows approval confirmation and performs a session mutation", async ({ pag
     });
   });
   await login(page);
-  // Approval queue lives in Command Center, which is the default landing view.
+  // The approval queue lives in Command Center, which is the default landing view.
   await page.getByRole("button", { name: /codex \/ test-model/ }).click();
-  await page.getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByText("Approve this prompt for dispatch?")).toBeVisible();
+  await page.getByRole("button", { name: "Schválit" }).click();
+  await expect(page.getByText("Schválit tento prompt ke spuštění?")).toBeVisible();
 
   await goToView(page, "Zdroje & zdraví");
-  await page.getByRole("button", { name: "Create session" }).first().click();
-  await expect(page.getByText(/session/).first()).toBeVisible();
+  const sessions = page.getByRole("region", { name: "Relace" });
+  const sessionResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/sessions" && response.request().method() === "POST");
+  await sessions.getByRole("button", { name: "Vytvořit relaci" }).first().click();
+  const createdResponse = await sessionResponse;
+  expect(createdResponse.status()).toBe(201);
+  const created = await createdResponse.json() as { readonly session_id: string };
+  await expect(sessions.getByRole("button", { name: `Vybrat relaci ${created.session_id}` })).toBeVisible();
 });
 
 test("surfaces a provider stale/error state without breaking the shell", async ({ page }) => {
@@ -76,7 +81,7 @@ test("surfaces a provider stale/error state without breaking the shell", async (
   await login(page);
   await expect(page.getByRole("heading", { name: "Autopilot", exact: true, level: 1 })).toBeVisible();
   await goToView(page, "Zdroje & zdraví");
-  await expect(page.getByRole("region", { name: "Provideři & limity" }).getByText("Unavailable", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Provideři & limity" }).getByText("Nedostupné", { exact: true }).first()).toBeVisible();
 });
 
 test("supports keyboard tab navigation on the responsive layout", async ({ page }) => {
@@ -128,14 +133,14 @@ test("prepares without a worker, approves, and inspects terminal evidence", asyn
   await login(page);
   expect(await (await modelsResponse).json()).toMatchObject({ freshness: "fresh", models: [{ model_id: "browser-model" }] });
   await goToView(page, "Zdroje & zdraví");
-  await expect(page.getByRole("region", { name: "Workeři" }).getByText("No workers running.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Workeři" }).getByText("Žádní běžící workeři.")).toBeVisible();
   await goToView(page, "Nový běh");
   await expect(page.getByLabel("Model", { exact: true })).toHaveValue("browser-model");
-  await page.getByLabel("Prompt").fill("Inspect the governed path");
+  await page.getByLabel("Prompt", { exact: true }).fill("Inspect the governed path");
   await page.getByRole("button", { name: "Připravit běh" }).click();
   await expect(page.getByText("Revize 1 připravena ke schválení")).toBeVisible();
   await goToView(page, "Zdroje & zdraví");
-  await expect(page.getByRole("region", { name: "Workeři" }).getByText("No workers running.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Workeři" }).getByText("Žádní běžící workeři.")).toBeVisible();
   await goToView(page, "Nový běh");
   await page.getByRole("button", { name: "Schválit a spustit" }).click();
   // Selecting the run in Command Center navigates the shell to the "Detail běhu" view.
@@ -154,9 +159,11 @@ test("persists, redacts, exports, and acknowledges a real internal incident", as
   expect(failureBody.error).toBe("autopilot_internal_error");
   writeFileSync(join(browserStateDir, "runs.json"), `${JSON.stringify({ schema_version: "v1", runs: [] })}\n`, "utf8");
   await page.reload();
-  // Incidents ("Chyby") now render inside the Detail běhu view rather than as a top-level tab.
-  await goToView(page, "Detail běhu");
-  const incidentItem = page.getByRole("listitem").filter({ hasText: failureBody.incident_id });
+  // Incidents render under "Diagnostika nástroje" in the "Zdroje & zdraví" view.
+  await goToView(page, "Zdroje & zdraví");
+  const diagnostics = page.getByRole("region", { name: "Diagnostika nástroje" });
+  await expect(diagnostics).toBeVisible();
+  const incidentItem = diagnostics.getByRole("listitem").filter({ hasText: failureBody.incident_id });
   await expect(incidentItem).toContainText("operational_failure:control_plane_runs");
   await expect(incidentItem).toContainText(failureBody.incident_id);
   await expect(page.locator("body")).not.toContainText("secret-value");
@@ -166,14 +173,15 @@ test("persists, redacts, exports, and acknowledges a real internal incident", as
   expect(repairText).toContain("[REDACTED]");
   expect(repairText).not.toContain("secret-value");
   await incidentItem.getByRole("button", { name: "Připravit balíček pro opravu" }).click();
-  const packet = page.getByLabel("Ruční balíček pro opravu").first();
+  const packet = diagnostics.getByLabel("Ruční balíček pro opravu").first();
   await expect(packet).toContainText("external_autopilot_repair");
   await expect(packet).not.toContainText("secret-value");
   await incidentItem.getByRole("button", { name: "Potvrdit incident" }).click();
   await expect(page.getByText("Incident byl potvrzen.")).toBeVisible();
   await page.reload();
-  await goToView(page, "Detail běhu");
-  const acknowledgedIncident = page.getByRole("listitem").filter({ hasText: failureBody.incident_id });
+  await goToView(page, "Zdroje & zdraví");
+  const acknowledgedDiagnostics = page.getByRole("region", { name: "Diagnostika nástroje" });
+  const acknowledgedIncident = acknowledgedDiagnostics.getByRole("listitem").filter({ hasText: failureBody.incident_id });
   await expect(acknowledgedIncident).toContainText("Potvrzeno: cockpit-operator");
   await expect(acknowledgedIncident).toContainText(failureBody.incident_id);
 });
@@ -295,7 +303,7 @@ test("moves a reviewed DEV preview into an evidence-gated PROD draft without aut
   await expect(newRunPanel.getByRole("combobox", { name: "Poskytovatel" })).toHaveValue("openrouter_api");
   await expect(newRunPanel.getByRole("combobox", { name: "Model" })).toHaveValue("free-model");
   await expect(newRunPanel.getByText("Doporučení: žádné (shadow-only)")).toBeVisible();
-  await page.getByLabel("Prompt").fill("Prepare the showcase preview");
+  await page.getByLabel("Prompt", { exact: true }).fill("Prepare the showcase preview");
   await page.getByRole("button", { name: "Připravit běh" }).click();
   expect(workerInvocations).toBe(0);
   await page.getByRole("button", { name: "Schválit a spustit" }).click();
@@ -330,7 +338,7 @@ test("moves a reviewed DEV preview into an evidence-gated PROD draft without aut
   // Preparing the PROD draft selects it as the current run; Detail běhu stays the active view
   // and now shows prod-draft-1 in draft status.
   await expect(page.getByText(/prod-draft-1 · revize/)).toBeVisible();
-  await expect(page.getByText("stav draft")).toBeVisible();
+  await expect(page.getByText("stav Koncept")).toBeVisible();
   await page.evaluate(async () => {
     const response = await fetch("/__fixtures__/production-acceptance", { method: "POST" });
     if (!response.ok) throw new Error("fixture_publication_failed");

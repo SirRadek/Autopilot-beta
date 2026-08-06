@@ -52,7 +52,7 @@ describe("NewRunView", () => {
 
   it("marks server-side autonomy enforcement as planned", () => {
     const { host, root } = mount();
-    expect(host.querySelector(".autonomy-note")?.textContent).toContain("Vynucení autonomie na straně serveru: Planned.");
+    expect(host.querySelector(".autonomy-note")?.textContent).toContain("Vynucení autonomie na straně serveru: plánováno.");
     act(() => root.unmount()); host.remove();
   });
 

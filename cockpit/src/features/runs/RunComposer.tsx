@@ -12,33 +12,49 @@ export interface RunComposerProps {
 }
 
 export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: RunComposerProps) {
-  const enabledProjects = projects.filter((project) => project.enabled);
+  const projectEntries = useMemo(
+    () => (Array.isArray(projects) ? projects : []).filter((project) => typeof project === "object" && project !== null),
+    [projects],
+  );
+  const quotaEntries = useMemo(
+    () => (Array.isArray(quotas) ? quotas : []).filter((candidate) => typeof candidate === "object" && candidate !== null),
+    [quotas],
+  );
+  const enabledProjects = projectEntries.filter((project) => project.enabled);
   const [projectId, setProjectId] = useState(enabledProjects[0]?.project_id ?? "");
   const selectedProject = enabledProjects.find((project) => project.project_id === projectId);
+  const modelCatalog = useMemo(() => Array.isArray(models?.models) ? models.models : [], [models]);
   const providers = useMemo(() => {
-    const union = new Set(quotas.map((candidate) => candidate.provider));
-    for (const model of models?.models ?? []) {
-      for (const candidate of model.providers) union.add(candidate);
+    const union = new Set(quotaEntries.flatMap((candidate) => typeof candidate.provider === "string" ? [candidate.provider] : []));
+    for (const model of modelCatalog) {
+      for (const candidate of Array.isArray(model.providers) ? model.providers : []) {
+        if (typeof candidate === "string") union.add(candidate);
+      }
     }
     return [...union];
-  }, [models, quotas]);
+  }, [modelCatalog, quotaEntries]);
   const [provider, setProvider] = useState(providers[0] ?? "");
   useEffect(() => {
     if (!enabledProjects.some((project) => project.project_id === projectId)) setProjectId(enabledProjects[0]?.project_id ?? "");
     if (!providers.includes(provider)) setProvider(providers[0] ?? "");
   }, [enabledProjects, projectId, provider, providers]);
-  const quota = quotas.find((candidate) => candidate.provider === provider);
+  const quota = quotaEntries.find((candidate) => candidate.provider === provider);
   const quotaFresh = quota?.freshness === "fresh" && quota.health !== "unavailable";
   const availableModels = useMemo(() => {
-    return (models?.models ?? []).filter((candidate) => {
-      const route = candidate.provider_routes?.find((item) => item.provider === provider);
-      return candidate.providers.includes(provider) && (route?.available ?? candidate.available);
+    return modelCatalog.filter((candidate) => {
+      const route = (Array.isArray(candidate.provider_routes) ? candidate.provider_routes : []).find((item) => item.provider === provider);
+      const routeStatesEligibility = route?.configured !== undefined || route?.available !== undefined;
+      const eligible = routeStatesEligibility
+        ? (route?.configured ?? false) || (route?.available ?? false)
+        : (candidate.configured ?? false) || candidate.available;
+      return Array.isArray(candidate.providers) && candidate.providers.includes(provider) && eligible;
     });
-  }, [models, provider]);
+  }, [modelCatalog, provider]);
   const [model, setModel] = useState("");
   const selectedModel = availableModels.some((candidate) => candidate.model_id === model) ? model : availableModels[0]?.model_id ?? "";
-  const selectedModelEntry = (models?.models ?? []).find((candidate) => candidate.model_id === selectedModel && candidate.providers.includes(provider));
-  const reasoningEfforts = selectedModelEntry?.provider_routes?.find((route) => route.provider === provider)?.reasoning_efforts ?? [];
+  const selectedModelEntry = modelCatalog.find((candidate) => candidate.model_id === selectedModel && Array.isArray(candidate.providers) && candidate.providers.includes(provider));
+  const selectedRoute = (Array.isArray(selectedModelEntry?.provider_routes) ? selectedModelEntry.provider_routes : []).find((route) => route.provider === provider);
+  const reasoningEfforts = Array.isArray(selectedRoute?.reasoning_efforts) ? selectedRoute.reasoning_efforts : [];
   const [reasoningEffort, setReasoningEffort] = useState<RunReasoningEffort | null>(null);
   const selectedReasoningEffort = reasoningEfforts.includes(reasoningEffort as RunReasoningEffort) ? reasoningEffort : reasoningEfforts[0] ?? null;
   const [prompt, setPrompt] = useState("");
@@ -98,7 +114,7 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
     {promptTokens >= 9_000 ? <p role="alert">Prompt překračuje pevný limit modelového kontextu.</p> : null}
     <label><input type="checkbox" aria-label="Vizuální výstup" checked={visual} onChange={(event) => { setVisual(event.target.checked); invalidate(); }} /> Vizuální výstup</label>
     <p>Odhad tokenů: {estimatedTokens.toLocaleString()}</p>
-    {quota ? <dl><dt>5 hodin</dt><dd>{formatQuotaWindow(quota.five_hour)}</dd><dt>Týden</dt><dd>{formatQuotaWindow(quota.weekly)}</dd><dt>Útrata API</dt><dd>{quota.api_spend === null ? "Nedostupná" : `${quota.api_spend.toLocaleString()} ${quota.currency ?? ""}`.trim()}</dd></dl> : null}
+    {quota ? <dl><dt>5 hodin</dt><dd>{formatQuotaWindow(quota.five_hour)}</dd><dt>Týden</dt><dd>{formatQuotaWindow(quota.weekly)}</dd><dt>Útrata API</dt><dd>{typeof quota.api_spend === "number" ? `${quota.api_spend.toLocaleString()} ${quota.currency ?? ""}`.trim() : "Nedostupná"}</dd></dl> : null}
     <button type="button" disabled={!canPrepare} onClick={() => void prepare()}>Připravit běh</button>
     <p aria-live="polite">{message}</p>
     {validPrepared ? <p>Revize {validPrepared.current.revision} připravena ke schválení</p> : null}

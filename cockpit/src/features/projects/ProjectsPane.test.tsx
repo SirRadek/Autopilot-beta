@@ -43,7 +43,7 @@ describe("ProjectsPane", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const root = createRoot(host);
-    act(() => root.render(<ProjectsPane projects={[]} onSelect={() => undefined} onCreate={create} error="Sessions unavailable" />));
+    act(() => root.render(<ProjectsPane projects={[]} onSelect={() => undefined} onCreate={create} error="server relací neodpovídá" />));
     const name = host.querySelector<HTMLInputElement>("#project-name")!;
     const cwd = host.querySelector<HTMLInputElement>("#project-cwd")!;
     change(name, "Crypto Analyzer");
@@ -57,7 +57,7 @@ describe("ProjectsPane", () => {
     });
     expect(name.value).toBe("");
     expect(cwd.value).toBe("");
-    expect(host.querySelector("[role='alert']")?.textContent).toContain("Sessions unavailable");
+    expect(host.querySelector("[role='alert']")?.textContent).toContain("server relací neodpovídá");
 
     act(() => root.unmount());
     host.remove();

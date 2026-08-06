@@ -12,7 +12,7 @@ autopilot.local {
 		Strict-Transport-Security "max-age=300"
 	}
 	route {
-		@api path /auth /auth/* /status /status/* /sessions /sessions/* /approvals /approvals/* /workers /workers/* /providers /providers/* /projects /projects/* /runs /runs/* /incidents /incidents/* /observability /observability/*
+		@api path /auth /auth/* /status /status/* /sessions /sessions/* /approvals /approvals/* /workers /workers/* /providers /providers/* /projects /projects/* /runs /runs/* /incidents /incidents/* /observability /observability/* /ready /figma /figma/* /promotions /promotions/* /brainstorms /brainstorms/*
 		handle @api {
 			header Cache-Control "no-store"
 			reverse_proxy 127.0.0.1:8787

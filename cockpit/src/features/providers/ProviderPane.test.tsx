@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import axe from "axe-core";
 import type { ProbeRefreshResult, ProviderHealth, ProviderModels, ProviderQuota, ReadinessProviderId, ReadinessReport, ReadinessStatus } from "../../types/controlPlane";
-import { CANONICAL_PROVIDERS, formatQuotaWindow, providerIds, selectProviderModelRows } from "./quotaSelectors";
+import { CANONICAL_PROVIDERS, formatQuotaWindow, healthLabel, providerIds, selectProviderModelRows } from "./quotaSelectors";
 import { ProviderPane } from "./ProviderPane";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -129,15 +129,77 @@ describe("quotaSelectors", () => {
       { model_id: "nvidia/nemotron", available: true, health: "healthy", source: "quota_snapshot", reasoning_efforts: [], updated_at: quota.fetched_at }
     ]);
   });
+
+  it("localizes known health values and the missing-health fallback", () => {
+    expect(healthLabel("healthy, ok, degraded, error, unavailable")).toBe("V pořádku, V pořádku, Omezené, Chyba, Nedostupné");
+    expect(healthLabel(undefined, "Stav nedostupný")).toBe("Stav nedostupný");
+  });
 });
 
 describe("ProviderPane", () => {
+  it("defaults to the first provider with a quota snapshot and usable health", () => {
+    const unknownHealthQuota = { provider: "claude_cli" } as ProviderQuota;
+    const healthyByProviderHealth: ProviderQuota = { ...quota, health: "unavailable" };
+    const providerHealth: ProviderHealth = {
+      providers: [
+        { ...health.providers[0], provider: "agy_cli", health: "unavailable", freshness: "unavailable" },
+        health.providers[0]
+      ]
+    };
+    const { host, root } = mount(<ProviderPane quotas={[unknownHealthQuota, healthyByProviderHealth]} health={providerHealth} />);
+
+    expect([...host.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([...CANONICAL_PROVIDERS]);
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("openrouter_api");
+    expect(host.querySelector(".provider-heading h3")?.textContent).toBe("openrouter_api");
+
+    unmount(host, root);
+  });
+
+  it("falls back to the first alphabetical tab when no provider has quota data", () => {
+    const { host, root } = mount(<ProviderPane quotas={[]} health={health} />);
+
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("agy_cli");
+    expect(host.querySelector(".provider-heading h3")?.textContent).toBe("agy_cli");
+
+    unmount(host, root);
+  });
+
+  it("falls back to the first quota snapshot when every snapshot is unavailable", () => {
+    const unavailableCodexQuota: ProviderQuota = {
+      ...quota,
+      provider: "codex_cli",
+      health: "unavailable",
+      freshness: "unavailable"
+    };
+    const { host, root } = mount(<ProviderPane quotas={[unavailableCodexQuota]} />);
+
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("codex_cli");
+    expect(host.querySelector(".provider-heading h3")?.textContent).toBe("codex_cli");
+
+    unmount(host, root);
+  });
+
+  it("keeps an explicit provider selection even when that provider is unavailable", () => {
+    const unavailableAgyQuota: ProviderQuota = {
+      ...quota,
+      provider: "agy_cli",
+      health: "unavailable",
+      freshness: "unavailable"
+    };
+    const { host, root } = mount(<ProviderPane quotas={[unavailableAgyQuota, quota]} selectedProvider="agy_cli" />);
+
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("agy_cli");
+    expect(host.querySelector(".provider-heading h3")?.textContent).toBe("agy_cli");
+
+    unmount(host, root);
+  });
+
   it("always renders all canonical tabs and explains an absent readiness endpoint", () => {
     const { host, root } = mount(<ProviderPane quotas={[]} readiness={null} />);
 
     expect([...host.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([...CANONICAL_PROVIDERS]);
     expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("agy_cli");
-    expect(host.querySelector('[data-diagnosis-code="not_observed"]')?.textContent).toBe("Diagnostika není dostupná: endpoint /ready není na tomto nasazení publikován a server nehlásí žádný snapshot.");
+    expect(host.querySelector('[data-diagnosis-code="not_observed"]')?.textContent).toBe("Diagnostika není dostupná: endpoint /ready není na tomto nasazení publikován a server nehlásí žádný snímek.");
 
     unmount(host, root);
   });
@@ -153,7 +215,7 @@ describe("ProviderPane", () => {
   it("renders the missing-credential diagnosis for OpenRouter", () => {
     const { host, root } = mount(<ProviderPane quotas={[]} readiness={readinessWith("openrouter_api", "unavailable", "missing_credential")} selectedProvider="openrouter_api" />);
 
-    expect(host.querySelector('[data-diagnosis-code="missing_credential"]')?.textContent).toBe("Chybí přihlašovací údaje (credential) pro tohoto providera.");
+    expect(host.querySelector('[data-diagnosis-code="missing_credential"]')?.textContent).toBe("Chybí přihlašovací údaje (credential) pro tohoto poskytovatele.");
 
     unmount(host, root);
   });
@@ -191,11 +253,13 @@ describe("ProviderPane", () => {
 
     expect(catalogRow?.textContent).toContain("Katalog");
     expect(catalogRow?.textContent).toContain("Nedostupný");
-    expect(catalogRow?.textContent).toContain("efforts: low");
+    expect(catalogRow?.querySelector(".model-health")?.textContent).toBe("Nedostupné");
+    expect(catalogRow?.textContent).toContain("Uvažování: low");
     expect(catalogRow?.querySelector("time")?.dateTime).toBe("2026-07-11T10:03:00.000Z");
     expect(liveRow?.textContent).toContain("Živě");
     expect(liveRow?.textContent).toContain("Dostupný");
-    expect(liveRow?.textContent).toContain("efforts: medium, high");
+    expect(liveRow?.querySelector(".model-health")?.textContent).toBe("V pořádku");
+    expect(liveRow?.textContent).toContain("Uvažování: medium, high");
     expect(liveRow?.querySelector("time")?.dateTime).toBe("2026-07-11T10:04:00.000Z");
 
     unmount(host, root);
@@ -221,46 +285,88 @@ describe("ProviderPane", () => {
     unmount(host, root);
   });
 
-  it("shows the Phase 2 CLI-version slot only for CLI providers", () => {
-    const cli = mount(<ProviderPane quotas={[]} selectedProvider="codex_cli" />);
-    expect(cli.host.textContent).toContain("CLI verze");
-    expect(cli.host.textContent).toContain("zatím nehlášeno");
-    expect(cli.host.textContent).toContain("Phase 2");
+  it("renders the reported CLI version only for CLI providers", () => {
+    const cliHealth: ProviderHealth = {
+      providers: [{ ...health.providers[0], provider: "codex_cli", cli_version: "codex-cli 1.2.3" }]
+    };
+    const cli = mount(<ProviderPane quotas={[]} health={cliHealth} selectedProvider="codex_cli" />);
+    const cliVersion = [...cli.host.querySelectorAll(".provider-meta > div")].find((row) => row.querySelector("dt")?.textContent === "CLI verze");
+    expect(cliVersion?.querySelector("dd")?.textContent).toBe("codex-cli 1.2.3");
+    expect(cli.host.querySelector(".planned-badge")).toBeNull();
     unmount(cli.host, cli.root);
 
-    const api = mount(<ProviderPane quotas={[]} selectedProvider="openrouter_api" />);
+    const api = mount(<ProviderPane quotas={[{ ...quota, cli_version: "openrouter 9.9.9" }]} selectedProvider="openrouter_api" />);
     expect(api.host.textContent).not.toContain("CLI verze");
+    expect(api.host.textContent).not.toContain("openrouter 9.9.9");
     unmount(api.host, api.root);
+  });
+
+  it("renders a clear Czech fallback when the CLI version is null", () => {
+    const cliQuota: ProviderQuota = { ...quota, provider: "claude_cli", cli_version: null };
+    const { host, root } = mount(<ProviderPane quotas={[cliQuota]} selectedProvider="claude_cli" />);
+    const cliVersion = [...host.querySelectorAll(".provider-meta > div")].find((row) => row.querySelector("dt")?.textContent === "CLI verze");
+
+    expect(cliVersion?.querySelector("dd")?.textContent).toBe("Není hlášeno");
+    expect(host.querySelector(".planned-badge")).toBeNull();
+
+    unmount(host, root);
   });
 
   it("renders fresh windows, zero usage, spend and quota snapshot models", () => {
     const { host, root } = mount(<ProviderPane quotas={[quota]} selectedProvider="openrouter_api" />);
-    expect(host.textContent).toContain("Fresh");
+    expect(host.textContent).toContain("Čerstvé");
+    expect(host.textContent).toContain("V pořádku");
+    expect(host.textContent).toContain("Načteno");
+    expect(host.textContent).toContain("Další dotaz");
+    expect(host.textContent).toContain("5hodinové okno");
+    expect(host.textContent).toContain("Zbývá: 1,000");
+    expect(host.textContent).toContain("Týdenní okno");
+    expect(host.textContent).toContain("Útrata API");
+    expect(host.textContent).toContain("Dostupné modely");
     expect(host.textContent).toContain("0 / 1,000 (0%)");
     expect(host.textContent).toContain("1.25 USD");
     expect(host.textContent).toContain("nvidia/nemotron");
-    expect(host.textContent).toContain("Snapshot");
+    expect(host.textContent).toContain("Snímek");
     unmount(host, root);
   });
 
   it("renders stale warning", () => {
     const { host, root } = mount(<ProviderPane quotas={[staleQuota]} health={health} selectedProvider="openrouter_api" />);
-    expect(host.textContent).toContain("Stale");
-    expect(host.textContent).toContain("Provider data is stale");
+    expect(host.textContent).toContain("Zastaralé");
+    expect(host.textContent).toContain("Data poskytovatele jsou zastaralá");
     unmount(host, root);
   });
 
   it("does not hide stale model or health data behind a fresh quota", () => {
     const { host, root } = mount(<ProviderPane quotas={[quota]} models={{ ...models, freshness: "stale" }} health={{ ...health, providers: [{ ...health.providers[0], freshness: "stale" }] }} selectedProvider="openrouter_api" />);
-    expect(host.textContent).toContain("Some provider data is stale");
+    expect(host.textContent).toContain("Některá data poskytovatele jsou zastaralá");
     expect(host.querySelector(".provider-freshness-stale")).not.toBeNull();
     unmount(host, root);
   });
 
   it("renders unavailable or null values and model API data", () => {
     const { host, root } = mount(<ProviderPane quotas={[]} models={models} health={health} selectedProvider="openrouter_api" />);
-    expect(host.textContent).toContain("Unavailable");
+    expect(host.textContent).toContain("Nedostupné");
     expect(host.textContent).toContain("fallback-model");
+    unmount(host, root);
+  });
+
+  it("renders unavailable values when provider snapshots are partial", () => {
+    const partialQuota = { provider: "openrouter_api" } as ProviderQuota;
+    const { host, root } = mount(
+      <ProviderPane
+        quotas={[partialQuota]}
+        models={{} as ProviderModels}
+        health={{} as ProviderHealth}
+        readiness={{} as ReadinessReport}
+        selectedProvider="openrouter_api"
+      />,
+    );
+
+    expect(host.querySelector(".provider-heading h3")?.textContent).toBe("openrouter_api");
+    expect(host.textContent).toContain("Nedostupné");
+    expect(host.textContent).toContain("Žádné modely k zobrazení.");
+
     unmount(host, root);
   });
 
@@ -268,17 +374,17 @@ describe("ProviderPane", () => {
     const { host, root } = mount(<ProviderPane quotas={[]} models={models} health={health} selectedProvider="openrouter_api" />);
     expect(host.textContent).toContain("openrouter_api");
     expect(host.textContent).toContain("Dostupný");
-    expect(host.textContent).toContain("healthy");
+    expect(host.textContent).toContain("V pořádku");
     expect(host.textContent).toContain("2026-07-11T10:01:00.000Z");
-    expect(host.textContent).toContain("Fetched");
-    expect(host.textContent).toContain("Next poll");
+    expect(host.textContent).toContain("Načteno");
+    expect(host.textContent).toContain("Další dotaz");
     unmount(host, root);
   });
 
   it("maps unavailable provider-health error codes without leaking implementation detail", () => {
     const { host, root } = mount(<ProviderPane quotas={[]} health={{ providers: [{ provider: "codex_cli", health: "unavailable", freshness: "unavailable", fetched_at: "", next_poll_at: null, error_code: "provider_unavailable" }] }} selectedProvider="codex_cli" />);
-    expect(host.textContent).toContain("unavailable");
-    expect(host.textContent).toContain("Provider je aktuálně nedostupný.");
+    expect(host.textContent).toContain("Nedostupné");
+    expect(host.textContent).toContain("Poskytovatel je aktuálně nedostupný.");
     expect(host.textContent).not.toContain("provider_unavailable");
     unmount(host, root);
   });
@@ -299,7 +405,7 @@ describe("ProviderPane", () => {
     unmount(kept.host, kept.root);
 
     const vanished = mount(<ProviderPane quotas={[quota]} selectedProvider="zeta_cli" />);
-    expect(vanished.host.querySelector(".provider-heading h3")?.textContent).toBe("agy_cli");
+    expect(vanished.host.querySelector(".provider-heading h3")?.textContent).toBe("openrouter_api");
     unmount(vanished.host, vanished.root);
   });
 
@@ -311,13 +417,15 @@ describe("ProviderPane", () => {
   });
 
   it("formats null windows as unavailable", () => {
-    expect(formatQuotaWindow({ limit: null, used: 1, remaining: null, resets_at: null })).toBe("Unavailable");
+    expect(formatQuotaWindow({ limit: null, used: 1, remaining: null, resets_at: null })).toBe("Nedostupné");
   });
   it("requests all fixed provider probes and stays disabled while pending", async () => {
     let resolveRefresh: ((result: ProbeRefreshResult) => void) | undefined;
     const onRefresh = vi.fn(() => new Promise<ProbeRefreshResult>((resolve) => { resolveRefresh = resolve; }));
     const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
-    const button = [...host.querySelectorAll("button")].find((item) => item.textContent === "Refresh provider status") as HTMLButtonElement;
+    const button = host.querySelector(".provider-refresh button") as HTMLButtonElement;
+
+    expect(button.textContent).toBe("Obnovit stav poskytovatelů");
 
     act(() => button.click());
 
@@ -330,28 +438,48 @@ describe("ProviderPane", () => {
     });
 
     expect(button.disabled).toBe(false);
-    expect(host.textContent).toContain("Some provider status refresh requests were accepted.");
+    expect(host.textContent).toContain("Některé požadavky na obnovení stavu poskytovatelů byly přijaty.");
+    act(() => root.unmount()); host.remove();
+  });
+  it("uses localized full-refresh copy when every provider is accepted", async () => {
+    const onRefresh = vi.fn().mockResolvedValue({ accepted: ["codex_cli", "claude_cli", "agy_cli"], rejected: [], expires_at: "2026-07-11T12:10:00.000Z" } satisfies ProbeRefreshResult);
+    const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
+    const button = host.querySelector(".provider-refresh button") as HTMLButtonElement;
+
+    await act(async () => { button.click(); await Promise.resolve(); });
+
+    expect(host.textContent).toContain("Obnovení stavu poskytovatelů bylo vyžádáno.");
     act(() => root.unmount()); host.remove();
   });
   it("uses neutral fixed copy when cooldown rejects every provider", async () => {
     const onRefresh = vi.fn().mockResolvedValue({ accepted: [], rejected: ["codex_cli", "claude_cli", "agy_cli"], expires_at: "2026-07-11T12:10:00.000Z" });
     const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
-    const button = [...host.querySelectorAll("button")].find((item) => item.textContent === "Refresh provider status") as HTMLButtonElement;
+    const button = host.querySelector(".provider-refresh button") as HTMLButtonElement;
 
     await act(async () => { button.click(); await Promise.resolve(); });
 
-    expect(host.textContent).toContain("Provider status refresh request was not accepted.");
-    expect(host.textContent).not.toContain("not configured");
+    expect(host.textContent).toContain("Požadavek na obnovení stavu poskytovatelů nebyl přijat.");
+    expect(host.textContent).not.toContain("není nakonfigurován");
+    act(() => root.unmount()); host.remove();
+  });
+  it("uses localized no-results copy when refresh returns no provider decisions", async () => {
+    const onRefresh = vi.fn().mockResolvedValue({ accepted: [], rejected: [], expires_at: "2026-07-11T12:10:00.000Z" } satisfies ProbeRefreshResult);
+    const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
+    const button = host.querySelector(".provider-refresh button") as HTMLButtonElement;
+
+    await act(async () => { button.click(); await Promise.resolve(); });
+
+    expect(host.textContent).toContain("Obnovení stavu poskytovatelů nevrátilo žádné výsledky.");
     act(() => root.unmount()); host.remove();
   });
   it("renders a fixed refresh failure without exposing rejected details", async () => {
     const onRefresh = vi.fn().mockRejectedValue(new Error("secret provider stderr"));
     const { host, root } = mount(<ProviderPane quotas={[quota]} onRefreshProviderStatus={onRefresh} />);
-    const button = [...host.querySelectorAll("button")].find((item) => item.textContent === "Refresh provider status") as HTMLButtonElement;
+    const button = host.querySelector(".provider-refresh button") as HTMLButtonElement;
 
     await act(async () => { button.click(); await Promise.resolve(); });
 
-    expect(host.textContent).toContain("Provider status refresh failed.");
+    expect(host.textContent).toContain("Obnovení stavu poskytovatelů selhalo.");
     expect(host.textContent).not.toContain("secret provider stderr");
     act(() => root.unmount()); host.remove();
   });

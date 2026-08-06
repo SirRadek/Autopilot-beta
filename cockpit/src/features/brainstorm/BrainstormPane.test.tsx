@@ -62,6 +62,120 @@ function fillFullPlan(host: HTMLElement) {
 }
 
 describe("BrainstormPane", () => {
+  it("treats missing top-level server collections as empty", () => {
+    const { host, root } = mount({
+      projects: undefined as never,
+      quotas: undefined as never,
+      brainstorms: undefined as never,
+      runs: undefined as never,
+    });
+
+    expect((host.querySelector('[aria-label="Brainstorm projekt"]') as HTMLSelectElement).options).toHaveLength(0);
+    expect(host.querySelectorAll(".brainstorm-route-card")).toHaveLength(0);
+    expect(host.textContent).toContain("Nedostatek ověřených poskytovatelů pro brainstorm");
+
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("treats incomplete provider collections as having no eligible models", () => {
+    const partialQuota = { provider: "codex_cli", freshness: "fresh", health: "healthy" } as ProviderQuota;
+    const partialModels = { models: [{ model_id: "incomplete-model" }] } as unknown as ProviderModels;
+    const { host, root } = mount({ quotas: [partialQuota], models: partialModels });
+
+    expect([...((host.querySelector('[aria-label="Model codex_cli"]') as HTMLSelectElement).options)].map((option) => option.value)).toEqual([""]);
+    expect(host.textContent).toContain("Nedostatek ověřených poskytovatelů pro brainstorm");
+
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("omits incomplete detail collections from a partial brainstorm record", () => {
+    const partialRecord = {
+      brainstorm_id: "bs-partial",
+      project_id: "autopilot-beta",
+      status: "completed",
+      final_artifact: null,
+      consolidation_run_id: null,
+      arbitration_run_id: null,
+    } as BrainstormRecord;
+    const { host, root } = mount({ brainstorms: [partialRecord], runs: [{} as RunRecord] });
+
+    expect(host.querySelector('[aria-label="Brainstorm bs-partial"]')).not.toBeNull();
+    expect(host.textContent).toContain("bs-partial");
+    expect(host.querySelector('[aria-label="Konflikty"]')).toBeNull();
+
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("fails closed when a prepared brainstorm omits its token envelope", async () => {
+    const incompleteDraft = { ...draftRecord, token_envelope: undefined } as unknown as BrainstormRecord;
+    const onCreate = vi.fn().mockResolvedValue(incompleteDraft);
+    const { host, root } = mount({ onCreate });
+    fillFullPlan(host);
+
+    await act(async () => button(host, "Připravit brainstorm").click());
+
+    expect(host.textContent).toContain("Uložený tokenový rozsah není dostupný.");
+    expect(host.querySelector('[aria-label="Potvrzuji maximální tokenový rozsah"]')).toBeNull();
+    expect(button(host, "Spustit fan-out")).toBeUndefined();
+
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("offers a healthy live-snapshot model even when the catalog aggregate is unavailable", () => {
+    const liveModels: ProviderModels = {
+      ...models,
+      models: [{
+        ...models.models[0]!,
+        configured: true,
+        observed: true,
+        available: false,
+        health: ["healthy", "unavailable"],
+        source: "mixed",
+        provider_routes: [{ provider: "codex_cli", configured: true, observed: true, available: true, health: ["healthy"], source: "mixed", discovery: "usage_probe", reasoning_efforts: ["low", "medium"] }]
+      }]
+    };
+    const { host, root } = mount({ quotas: [quotaFor("codex_cli")], models: liveModels });
+
+    expect([...((host.querySelector('[aria-label="Model codex_cli"]') as HTMLSelectElement).options)].map((option) => option.value)).toEqual(["", "model-x"]);
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("does not offer a configured static-only model without positive live-snapshot evidence", () => {
+    const staticModels: ProviderModels = {
+      freshness: "unavailable",
+      fetched_at: null,
+      next_poll_at: null,
+      models: [{
+        model_id: "static-only",
+        providers: ["codex_cli"],
+        configured: true,
+        observed: false,
+        available: false,
+        health: ["unavailable"],
+        source: "static_fallback",
+        reasoning_efforts: ["low", "medium"],
+        provider_routes: [{ provider: "codex_cli", configured: true, observed: false, available: false, health: ["unavailable"], source: "static_fallback", discovery: "static", reasoning_efforts: ["low", "medium"] }]
+      }]
+    };
+    const liveQuota = { ...quotaFor("codex_cli"), models: [] };
+    const { host, root } = mount({ quotas: [liveQuota], models: staticModels });
+
+    expect([...((host.querySelector('[aria-label="Model codex_cli"]') as HTMLSelectElement).options)].map((option) => option.value)).toEqual([""]);
+    act(() => root.unmount()); host.remove();
+  });
+
+  it.each([
+    ["stale", { freshness: "stale" as const, health: "healthy" }],
+    ["unhealthy", { freshness: "fresh" as const, health: "unavailable" }],
+  ])("does not offer live models when the provider snapshot is %s", (_label, state) => {
+    const unavailableQuota: ProviderQuota = { ...quotaFor("codex_cli"), ...state };
+    const { host, root } = mount({ quotas: [unavailableQuota] });
+
+    expect(host.querySelector('[aria-label="Route codex_cli"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Model codex_cli"]')).toBeNull();
+    act(() => root.unmount()); host.remove();
+  });
+
   it("renders the heading and a route card per eligible provider with explicit selectors", () => {
     const { host, root } = mount();
     expect(host.querySelector("h2")?.textContent).toBe("Brainstorm");

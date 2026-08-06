@@ -1,6 +1,7 @@
 import React, { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { StatusBadge, type StatusBadgeStatus } from "../components/StatusBadge";
+import { ErrorBoundary } from "./ErrorBoundary";
 import type { CockpitEnvironment } from "./environment";
 import "./tokens.css";
 import "./app.css";
@@ -71,7 +72,7 @@ export function AppShell({ environment, onEnvironmentChange, onLogout, selectedP
       <main className="cockpit-main">
         <div className="cockpit-topbar">
           <div className="selection-context" aria-label="Selected context">
-            <span>{selectedProject?.name ?? "No project selected"}</span>
+            <span>{selectedProject?.name ?? "Není vybrán žádný projekt"}</span>
             {selectedSession ? <><span aria-hidden="true">/</span><span>{selectedSession.name}</span><StatusBadge status={selectedSession.status} /></> : null}
           </div>
           <nav className="cockpit-environments" aria-label="Prostředí Cockpitu" role="tablist">
@@ -80,7 +81,7 @@ export function AppShell({ environment, onEnvironmentChange, onLogout, selectedP
           {onLogout ? <button className="cockpit-logout" type="button" onClick={onLogout}>Odhlásit</button> : null}
         </div>
         <div className="cockpit-views">
-          {views.map((view) => <section key={view.id} className="cockpit-view" id={id(`view-panel-${view.id}`)} role="tabpanel" aria-labelledby={id(`tab-${view.id}`)} hidden={currentView !== view.id}>{slots[view.id]}</section>)}
+          {views.map((view) => <section key={view.id} className="cockpit-view" id={id(`view-panel-${view.id}`)} role="tabpanel" aria-labelledby={id(`tab-${view.id}`)} hidden={currentView !== view.id}><ErrorBoundary>{slots[view.id]}</ErrorBoundary></section>)}
         </div>
       </main>
     </div>

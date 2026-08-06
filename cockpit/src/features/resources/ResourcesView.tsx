@@ -25,7 +25,7 @@ export function ResourcesView({ providersPane, workersPane, sessionsPane, projec
         {workersPane}
       </section>
       <section className="cockpit-card resources-section" aria-labelledby={id("sessions")}>
-        <h3 id={id("sessions")}>Sessions</h3>
+        <h3 id={id("sessions")}>Relace</h3>
         {sessionsPane}
       </section>
       <section className="cockpit-card resources-section" aria-labelledby={id("projects")}>
@@ -37,11 +37,11 @@ export function ResourcesView({ providersPane, workersPane, sessionsPane, projec
         {diagnosticsPane ?? <p className="planned-note">Bez dat o incidentech.</p>}
       </section>
       <section className="cockpit-card resources-section planned" aria-labelledby={id("routing")}>
-        <h3 id={id("routing")}>Rozdělení práce <span className="planned-badge">Planned</span></h3>
+        <h3 id={id("routing")}>Rozdělení práce <span className="planned-badge">Plánováno</span></h3>
         <p className="planned-note">Vyžaduje kapacitní routing na straně serveru.</p>
       </section>
       <section className="cockpit-card resources-section planned" aria-labelledby={id("mcp")}>
-        <h3 id={id("mcp")}>MCP servery (cross) <span className="planned-badge">Planned</span></h3>
+        <h3 id={id("mcp")}>MCP servery (napříč) <span className="planned-badge">Plánováno</span></h3>
         <p className="planned-note">Kanonická MCP konfigurace syncovaná do CLI — připravováno.</p>
       </section>
     </div>

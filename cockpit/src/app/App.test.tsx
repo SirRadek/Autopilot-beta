@@ -92,7 +92,8 @@ describe("AuthenticatedCockpit provider budget", () => {
   it("switches the viewed provider budget when a provider tab is clicked", async () => {
     const { host, root } = await mount(fakeClient());
     const pane = budgetPane(host);
-    expect(activeProvider(pane)).toBe("agy_cli");
+    // the default selection skips providers without usable data (agy_cli has no quota snapshot here)
+    expect(activeProvider(pane)).toBe("claude_cli");
     act(() => providerTab(pane, "codex_cli").click());
     expect(activeProvider(budgetPane(host))).toBe("codex_cli");
     act(() => root.unmount()); host.remove();

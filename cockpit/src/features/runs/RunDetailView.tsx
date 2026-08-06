@@ -1,7 +1,7 @@
 import React, { useId, useState } from "react";
 import type { RunRecord, RunStatus } from "../../types/controlPlane";
 import { StatusBadge, type StatusBadgeStatus } from "../../components/StatusBadge";
-import { CANCELLABLE_STATUSES } from "../command/CommandCenter";
+import { CANCELLABLE_STATUSES, RUN_STATUS_LABELS } from "../command/CommandCenter";
 import { DesignPane, extractFigmaUrl } from "./DesignPane";
 
 const MAX_TITLE_CHARS = 80;
@@ -43,12 +43,12 @@ export function RunDetailView({ run, runInspector, promotionPane, onCancelRun }:
       <header className="cockpit-card run-status-header" aria-label="Stav běhu">
         <div className="run-status-heading">
           <div className="run-status-title">
-            <p className="run-status-id">{run.current.run_id} · revize {run.current.revision} (immutable)</p>
+            <p className="run-status-id">{run.current.run_id} · revize {run.current.revision} (neměnná)</p>
             <h2>{runTitle(run)}</h2>
           </div>
           <StatusBadge status={badgeByRunStatus[run.status]} />
           <div className="run-status-actions">
-            <button type="button" disabled title="Planned">Pauza <span className="planned-badge">Planned</span></button>
+            <button type="button" disabled title="Plánováno">Pauza <span className="planned-badge">Plánováno</span></button>
             {onCancelRun !== undefined && CANCELLABLE_STATUSES.includes(run.status) && confirmCancelId === run.current.run_id ? <div role="group" aria-label="Potvrzení zastavení běhu">
               <span>Opravdu zastavit tento běh?</span>
               <button type="button" disabled={cancelBusy} onClick={() => void cancelRun(run)}>Potvrdit zastavení</button>
@@ -62,21 +62,21 @@ export function RunDetailView({ run, runInspector, promotionPane, onCancelRun }:
         </div>
         {cancelError?.runId === run.current.run_id ? <p role="alert">Zastavení selhalo: {cancelError.message}</p> : null}
         <ul className="run-status-facts" aria-label="Fakta běhu">
-          <li className="run-fact">stav {run.status}</li>
+          <li className="run-fact">stav {RUN_STATUS_LABELS[run.status]}</li>
           <li className="run-fact">{run.current.provider} · {run.current.model ?? "auto"}</li>
           <li className="run-fact">odhad {run.current.estimated_tokens.toLocaleString()} tokenů</li>
           <li className="run-fact">profil {run.current.profile}</li>
         </ul>
       </header>
       <section className="cockpit-card run-detail-section" aria-labelledby={id("design-heading")}>
-        <h3 id={id("design-heading")}>Design</h3>
+        <h3 id={id("design-heading")}>Návrh</h3>
         <DesignPane figmaUrl={extractFigmaUrl(run.current.prompt)} />
       </section>
       <section className="cockpit-card run-detail-section" aria-labelledby={id("progress-heading")}>
         <h3 id={id("progress-heading")}>Průběh &amp; důkazy</h3>
         {runInspector}
       </section>
-    </> : <section className="cockpit-card" aria-label="Detail běhu"><p className="run-detail-empty">Vyber běh v Command Center.</p></section>}
+    </> : <section className="cockpit-card" aria-label="Detail běhu"><p className="run-detail-empty">Vyber běh v řídicím centru.</p></section>}
     <section className="cockpit-card run-detail-section" aria-labelledby={id("promotion-heading")}>
       <h3 id={id("promotion-heading")}>Propagace</h3>
       {promotionPane}

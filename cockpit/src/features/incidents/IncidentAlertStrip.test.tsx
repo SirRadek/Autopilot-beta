@@ -30,6 +30,17 @@ function mount(node: React.ReactNode) {
 }
 
 describe("IncidentAlertStrip", () => {
+  it("renders nothing when the incident collection is missing", () => {
+    const { host, root } = mount(
+      <IncidentAlertStrip incidents={undefined as never} onOpenDiagnostics={vi.fn()} />,
+    );
+
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+
+    act(() => root.unmount());
+    host.remove();
+  });
+
   it("renders nothing when every incident is acknowledged", () => {
     const acknowledged: AutopilotIncident = {
       ...incident,
@@ -137,6 +148,20 @@ describe("IncidentAlertStrip", () => {
     expect(host.querySelector('[role="alert"]')?.classList.contains("incident-alert-critical")).toBe(
       true,
     );
+
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  it("omits an unavailable summary from a partial open incident", () => {
+    const partial = { ...incident, summary: undefined } as unknown as AutopilotIncident;
+    const { host, root } = mount(
+      <IncidentAlertStrip incidents={[partial]} onOpenDiagnostics={vi.fn()} />,
+    );
+
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.querySelector(".incident-alert-summary")).toBeNull();
+    expect(host.textContent).toContain("1 otevřený incident");
 
     act(() => root.unmount());
     host.remove();

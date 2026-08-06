@@ -2,6 +2,30 @@ import type { ApprovalRecord } from "../../types/controlPlane";
 
 export type ApprovalState = ApprovalRecord["status"];
 
+const stateLabels: Readonly<Record<ApprovalState, string>> = {
+  pending: "Čeká",
+  approved: "Schváleno",
+  rejected: "Zamítnuto",
+};
+
+const riskLabels = { low: "nízké", medium: "střední", high: "vysoké" } as const;
+
+export function czechApprovalCount(n: number): string {
+  return `${n} schválení`;
+}
+
+export function czechPendingApprovalCount(n: number): string {
+  return n >= 2 && n <= 4 ? `${n} čekají` : `${n} čeká`;
+}
+
+export function approvalStateLabel(state: ApprovalState): string {
+  return stateLabels[state];
+}
+
+export function approvalRiskLabel(risk: keyof typeof riskLabels): string {
+  return riskLabels[risk];
+}
+
 const rank: Record<ApprovalState, number> = { pending: 0, approved: 1, rejected: 2 };
 
 export function sortApprovals(approvals: readonly ApprovalRecord[]): ApprovalRecord[] {

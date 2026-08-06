@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AppShell, type CockpitView } from "./AppShell";
 import type { CockpitEnvironment } from "./environment";
 
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 const environmentProps = { environment: "dev" as const, onEnvironmentChange: () => undefined };
 const viewLabels = ["Command Center", "Detail běhu", "Zdroje & zdraví", "Nový běh", "Pravidla & Skills"];
 
@@ -60,6 +62,23 @@ describe("AppShell", () => {
     expect(panel("resources")?.textContent).toBe("Resources slot");
     expect(panel("new-run")?.textContent).toBe("New run slot");
     expect(panel("rules")?.textContent).toBe("Rules slot");
+    act(() => { root.unmount(); });
+    host.remove();
+  });
+
+  it("keeps the shell and navigation present when one view throws", () => {
+    function ThrowingView() { throw new Error("view internals"); }
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host, { onCaughtError: () => undefined });
+
+    act(() => { root.render(<AppShell {...environmentProps} activeView="run" runView={<ThrowingView />} />); });
+
+    expect(host.querySelector(".cockpit-shell")).not.toBeNull();
+    expect(host.querySelector(".cockpit-nav")).not.toBeNull();
+    expect(host.querySelector("h1")?.textContent).toBe("Autopilot");
+    expect(host.querySelector('[id$="-view-panel-run"] [role="alert"]')?.textContent).toContain("Tuto část Cockpitu se nepodařilo zobrazit.");
+
     act(() => { root.unmount(); });
     host.remove();
   });
@@ -119,7 +138,7 @@ describe("AppShell", () => {
     );
     expect(html).toContain("Autopilot Beta");
     expect(html).toContain("Manager");
-    expect(html).toContain("Running");
+    expect(html).toContain("Běží");
   });
 
   it("has no automated axe accessibility violations", async () => {

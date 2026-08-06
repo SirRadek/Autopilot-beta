@@ -85,11 +85,43 @@ describe("CommandCenter", () => {
     );
 
     expect([...host.querySelectorAll(".cc-status-strip li")].map((item) => item.textContent)).toEqual([
-      "Sessions 2/8",
-      "Approvals čeká: 3",
+      "Relace 2/8",
+      "Schválení čeká: 3",
       "7 volání · 42 tokenů",
       "Obnoveno 10:15:20 UTC",
     ]);
+
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  it("omits unavailable status items when the Control Plane payload is partial", () => {
+    const { host, root } = mount(
+      <CommandCenter
+        runs={[]}
+        onSelectRun={vi.fn()}
+        status={{ telemetry: { calls: 0, total_tokens: 0 } } as ControlPlaneStatus}
+        approvalPane={null}
+      />,
+    );
+
+    expect([...host.querySelectorAll(".cc-status-strip li")].map((item) => item.textContent)).toEqual([
+      "0 volání · 0 tokenů",
+    ]);
+
+    act(() => root.render(
+      <CommandCenter
+        runs={[]}
+        onSelectRun={vi.fn()}
+        status={{
+          sessions: { active: 2 },
+          approvals: {},
+          telemetry: { calls: 7 },
+        } as ControlPlaneStatus}
+        approvalPane={null}
+      />,
+    ));
+    expect(host.querySelectorAll(".cc-status-strip li")).toHaveLength(0);
 
     act(() => root.unmount());
     host.remove();
@@ -205,22 +237,57 @@ describe("CommandCenter", () => {
       dispatch_failure: "dispatch exploded",
       cancellation_requested: true,
     });
+    const oldStaleRun = run({
+      current: draft({ run_id: "run-stale-hours" }),
+      status: "queued",
+      updated_at: new Date(injectedNow.getTime() - 2 * 60 * 60_000 - 5 * 60_000).toISOString(),
+    });
     const failedRun = run({
       current: draft({ run_id: "run-failed" }),
       status: "failed",
       terminal_reason: "y".repeat(100),
     });
     const { host, root } = mount(
-      <CommandCenter runs={[failedRun, staleRun]} now={injectedNow} onSelectRun={vi.fn()} approvalPane={null} />,
+      <CommandCenter runs={[failedRun, staleRun, oldStaleRun]} now={injectedNow} onSelectRun={vi.fn()} approvalPane={null} />,
     );
 
     const staleCard = [...host.querySelectorAll(".cc-run-card")].find((card) => card.textContent?.includes("run-stale"));
-    expect(staleCard?.textContent).toContain("stale");
+    expect(staleCard?.querySelector(".cc-run-chip-stale")?.textContent).toBe("Zastaralé 15 min");
     expect(staleCard?.textContent).toContain("dispatch selhal");
     expect(staleCard?.textContent).toContain("ruší se…");
     const failedCard = [...host.querySelectorAll(".cc-run-card")].find((card) => card.textContent?.includes("run-failed"));
     expect(failedCard?.querySelector(".cc-run-dot-failed")).not.toBeNull();
     expect(failedCard?.querySelector(".cc-run-terminal-reason")?.textContent).toBe("y".repeat(80));
+    const oldStaleCard = [...host.querySelectorAll(".cc-run-card")].find((card) => card.textContent?.includes("run-stale-hours"));
+    expect(oldStaleCard?.querySelector(".cc-run-chip-stale")?.textContent).toBe("Zastaralé 2 h");
+
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  it("localizes run statuses on pending cards and run rows", () => {
+    const statuses = [
+      ["draft", "Koncept"],
+      ["queued", "Ve frontě"],
+      ["running", "Běží"],
+      ["failed", "Selhalo"],
+      ["completed", "Dokončeno"],
+      ["cancelled", "Zrušeno"],
+    ] as const;
+    const runs = statuses.map(([statusName], index) => run({
+      current: draft({ run_id: `run-${statusName}` }),
+      status: statusName,
+      updated_at: `2026-07-11T10:00:0${index}.000Z`,
+    }));
+    const { host, root } = mount(
+      <CommandCenter runs={runs} onSelectRun={vi.fn()} approvalPane={null} />,
+    );
+
+    for (const [statusName, expected] of statuses) {
+      const card = [...host.querySelectorAll(".cc-run-card")].find((candidate) => candidate.textContent?.includes(`run-${statusName}`));
+      expect(card?.querySelector(".cc-run-status")?.textContent).toBe(expected);
+    }
+    expect([...host.querySelectorAll(".cc-pending-status")].map((item) => item.textContent)).toEqual(expect.arrayContaining(["Koncept", "Ve frontě"]));
 
     act(() => root.unmount());
     host.remove();
