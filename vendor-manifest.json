@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 154,
+  "file_count": 150,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -793,16 +793,6 @@
       "content_hash": "993698cec83f81ad3a1b94cd86737662b2561f536a73a335f96f563ea009a9ec"
     },
     {
-      "source_path": "src/data/delivery-system/executionProfile.ts",
-      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "993698cec83f81ad3a1b94cd86737662b2561f536a73a335f96f563ea009a9ec"
-    },
-    {
-      "source_path": "src/data/delivery-system/executionProfile.ts",
-      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "993698cec83f81ad3a1b94cd86737662b2561f536a73a335f96f563ea009a9ec"
-    },
-    {
       "source_path": "src/data/delivery-system/fallbackChains.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "e883f7d3cf258a15661e2e816eb81603f2c9b5d5b4a931099f65be8a53bcf682",
@@ -858,16 +848,6 @@
       "source_path": "src/data/delivery-system/providerModelCatalog.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
       "content_hash": "a57a3815af2cabc7144d0b19714ae34d76c1cec194627b6cc64cf65e366b6fe8"
-    },
-    {
-      "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
-      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "ee49f4049338b5a067f38bbb71a1ec5d9824e327673cb86d671a208b16ae9ab3"
-    },
-    {
-      "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
-      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "ee49f4049338b5a067f38bbb71a1ec5d9824e327673cb86d671a208b16ae9ab3"
     },
     {
       "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
