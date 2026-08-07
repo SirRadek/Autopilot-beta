@@ -10,6 +10,7 @@ import {
   parseClaudeUsage,
   parseCodexStatus,
   runTmuxUsageProbe,
+  type TmuxCommandResult,
   type TmuxCommandExecutor
 } from "../../src/data/delivery-system/providerUsageProbe";
 
@@ -19,6 +20,11 @@ import {
 const fixture = (name: string): string => readFileSync(fileURLToPath(new URL(`../fixtures/provider-usage/${name}`, import.meta.url)), "utf8");
 const runtimeRoots: string[] = [];
 
+function codexComposerWith(command: string): string {
+  return fixture("codex-status-0.144.5-live-preamble.txt")
+    .replace("› Find and fix a bug in @filename", `› ${command}`);
+}
+
 function temporaryRuntimeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "provider-usage-probe-"));
   runtimeRoots.push(root);
@@ -27,6 +33,29 @@ function temporaryRuntimeRoot(): string {
 
 function tmuxSubcommand(args: readonly string[]): string | undefined {
   return args[2];
+}
+
+function codexTuiResponder(finalCapture: TmuxCommandResult): (args: readonly string[]) => TmuxCommandResult | undefined {
+  let commandAccepted = false;
+  let submitted = false;
+  return (args) => {
+    const subcommand = tmuxSubcommand(args);
+    if (subcommand === "send-keys") {
+      const sendsCommand = args.includes("/status");
+      const sendsEnter = args.includes("Enter") || args.includes("C-m");
+      if (sendsCommand && !sendsEnter) commandAccepted = true;
+      if (sendsEnter && !sendsCommand && commandAccepted) submitted = true;
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (subcommand !== "capture-pane") return undefined;
+    return submitted
+      ? finalCapture
+      : {
+          stdout: commandAccepted ? codexComposerWith("/status") : fixture("codex-status-0.144.5-live-preamble.txt"),
+          stderr: "",
+          exitCode: 0
+        };
+  };
 }
 
 afterEach(() => {
@@ -60,6 +89,26 @@ describe("provider usage parsers", () => {
         { model_id: "GPT-5.3-Codex-Spark", available: true }
       ]
     });
+  });
+
+  it("keeps account and session fields out of parsed Codex usage", () => {
+    const raw = fixture("codex-status-0.144.5-live-status.txt")
+      .replace("[[account]]", "probe-owner@example.invalid")
+      .replace("[[session]]", "00000000-0000-4000-8000-000000000001");
+
+    const parsed = parseCodexStatus(raw);
+    expect(parsed).not.toBeNull();
+    const serialized = JSON.stringify(parsed);
+    expect(serialized).not.toContain("probe-owner@example.invalid");
+    expect(serialized).not.toContain("00000000-0000-4000-8000-000000000001");
+  });
+
+  it("stores only scrubbed account and session placeholders in Codex fixtures", () => {
+    const liveStatus = fixture("codex-status-0.144.5-live-status.txt");
+    expect(liveStatus).toContain("Account:                            [[account]] ([[plan]])");
+    expect(liveStatus).toContain("Session:                            [[session]]");
+    expect(liveStatus).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    expect(liveStatus).not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i);
   });
 
   it.each([
@@ -210,6 +259,7 @@ describe("tmux usage probe", () => {
     const runtimeRoot = temporaryRuntimeRoot();
     const calls: { readonly args: readonly string[]; readonly env: Readonly<Record<string, string>> }[] = [];
     let launchCwd: string | undefined;
+    const codexTui = codexTuiResponder({ stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 });
     const execute: TmuxCommandExecutor = async (_command, args, _signal, env) => {
       calls.push({ args: [...args], env: { ...env } });
       if (tmuxSubcommand(args) === "new-session") {
@@ -218,9 +268,8 @@ describe("tmux usage probe", () => {
         expect(launchCwd).toBeDefined();
         expect(readdirSync(launchCwd!)).toEqual([]);
       }
-      if (tmuxSubcommand(args) === "capture-pane") {
-        return { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 };
-      }
+      const tuiResponse = codexTui(args);
+      if (tuiResponse !== undefined) return tuiResponse;
       if (tmuxSubcommand(args) === "has-session") {
         return { stdout: "", stderr: "no server", exitCode: 1 };
       }
@@ -251,7 +300,7 @@ describe("tmux usage probe", () => {
     expect(calls.some(({ args }) => args.includes("/status"))).toBe(true);
     expect(calls.slice(-2).map(({ args }) => tmuxSubcommand(args))).toEqual(["kill-server", "has-session"]);
     const statusIndex = calls.findIndex(({ args }) => args.includes("/status"));
-    const enterSendsAfterStatus = calls.slice(statusIndex + 1).filter(({ args }) => args.includes("C-m")).length;
+    const enterSendsAfterStatus = calls.slice(statusIndex + 1).filter(({ args }) => args.includes("Enter")).length;
     expect(enterSendsAfterStatus).toBe(1);
     expect(launchCwd).toBeDefined();
     expect(relative(runtimeRoot, launchCwd!)).not.toMatch(/^\.\.(?:\/|$)/);
@@ -269,14 +318,17 @@ describe("tmux usage probe", () => {
     }
   });
 
-  it("uses writable Codex state, bypasses the real trust gate, and lets the composer settle before /status", async () => {
+  it("waits for the composer to accept /status before sending Enter as a separate keystroke", async () => {
     const runtimeRoot = temporaryRuntimeRoot();
-    let state: "trust" | "ready" | "settling" | "status" = "trust";
-    let statusTyped = false;
-    let composerObservedAt: number | undefined;
+    let state: "trust" | "ready" | "typing" | "accepted" | "submitted" | "status" = "trust";
     let launchArgs: readonly string[] = [];
+    const calls: (readonly string[])[] = [];
     let captureCalls = 0;
+    let typingCaptures = 0;
+    const privateAccount = "probe-owner@example.invalid";
+    const privateSession = "00000000-0000-4000-8000-000000000001";
     const execute: TmuxCommandExecutor = async (_command, args) => {
+      calls.push([...args]);
       const subcommand = tmuxSubcommand(args);
       if (subcommand === "new-session") {
         const executableIndex = args.indexOf("/provider-bin/codex");
@@ -285,23 +337,42 @@ describe("tmux usage probe", () => {
         const trustOverride = `projects={${JSON.stringify(workingDirectory)}={trust_level="untrusted"}}`;
         const sqliteOverride = `sqlite_home=${JSON.stringify(workingDirectory)}`;
         state = launchArgs.includes(trustOverride) && launchArgs.includes(sqliteOverride) ? "ready" : "trust";
-      } else if (subcommand === "send-keys" && args.includes("/status")) {
-        if (state === "ready" && composerObservedAt !== undefined && Date.now() - composerObservedAt >= 4) {
-          statusTyped = true;
-        }
-      } else if (subcommand === "send-keys" && args.includes("C-m")) {
-        if (statusTyped) state = "settling";
-        else if (state === "trust") state = "ready";
+      } else if (subcommand === "send-keys") {
+        const sendsCommand = args.includes("/status");
+        const sendsEnter = args.includes("Enter") || args.includes("C-m");
+        if (sendsCommand && !sendsEnter && state === "ready") state = "typing";
+        if (sendsEnter && !sendsCommand && state === "accepted") state = "submitted";
       } else if (subcommand === "capture-pane") {
         captureCalls += 1;
-        if (state === "ready" && composerObservedAt === undefined) composerObservedAt = Date.now();
-        const name = state === "trust"
-          ? "codex-status-0.144.5-live-trust-gate.txt"
-          : state === "ready" || state === "settling"
-            ? "codex-status-0.144.5-live-preamble.txt"
-            : "codex-status-0.144.5-live-status.txt";
-        if (state === "settling") state = "status";
-        return { stdout: fixture(name), stderr: "", exitCode: 0 };
+        if (state === "trust") {
+          return { stdout: fixture("codex-status-0.144.5-live-trust-gate.txt"), stderr: "", exitCode: 0 };
+        }
+        if (state === "typing") {
+          typingCaptures += 1;
+          if (typingCaptures >= 2) state = "accepted";
+          return {
+            stdout: state === "accepted" ? codexComposerWith("/status") : fixture("codex-status-0.144.5-live-preamble.txt"),
+            stderr: "",
+            exitCode: 0
+          };
+        }
+        if (state === "accepted") {
+          return { stdout: codexComposerWith("/status"), stderr: "", exitCode: 0 };
+        }
+        if (state === "submitted") {
+          state = "status";
+          return { stdout: codexComposerWith("/status"), stderr: "", exitCode: 0 };
+        }
+        if (state === "status") {
+          return {
+            stdout: fixture("codex-status-0.144.5-live-status.txt")
+              .replace("[[account]]", privateAccount)
+              .replace("[[session]]", privateSession),
+            stderr: "",
+            exitCode: 0
+          };
+        }
+        return { stdout: fixture("codex-status-0.144.5-live-preamble.txt"), stderr: "", exitCode: 0 };
       } else if (subcommand === "has-session") {
         return { stdout: "", stderr: "no server", exitCode: 1 };
       }
@@ -318,6 +389,7 @@ describe("tmux usage probe", () => {
     });
 
     expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
     expect(JSON.parse(result.stdout)).toMatchObject({
       weekly: { remaining: 42 },
       models: [
@@ -325,6 +397,8 @@ describe("tmux usage probe", () => {
         { model_id: "GPT-5.3-Codex-Spark", available: true }
       ]
     });
+    expect(result.stdout).not.toContain(privateAccount);
+    expect(result.stdout).not.toContain(privateSession);
     expect(launchArgs).toEqual([
       "/provider-bin/codex",
       "--no-alt-screen",
@@ -333,19 +407,33 @@ describe("tmux usage probe", () => {
       "-c",
       expect.stringMatching(/^sqlite_home=".*autopilot-provider-probe-.*"$/)
     ]);
-    expect(captureCalls).toBeGreaterThanOrEqual(3);
+    const inputCalls = calls.filter((args) => tmuxSubcommand(args) === "send-keys");
+    expect(inputCalls).toHaveLength(2);
+    expect(inputCalls[0]).toEqual(expect.arrayContaining(["-l", "/status"]));
+    expect(inputCalls[0]).not.toContain("Enter");
+    expect(inputCalls[0]).not.toContain("C-m");
+    expect(inputCalls[1]?.at(-1)).toBe("Enter");
+    expect(inputCalls[1]).not.toContain("/status");
+    const commandIndex = calls.findIndex((args) => args.includes("/status"));
+    const enterIndex = calls.findIndex((args) => args.at(-1) === "Enter");
+    expect(commandIndex).toBeGreaterThanOrEqual(0);
+    expect(enterIndex).toBeGreaterThan(commandIndex);
+    expect(calls.slice(commandIndex + 1, enterIndex).some((args) => tmuxSubcommand(args) === "capture-pane")).toBe(true);
+    expect(captureCalls).toBeGreaterThanOrEqual(5);
   });
 
   it("classifies an unrecognized post-launch capture failure as malformed_response", async () => {
-    let submitted = false;
+    const privateAccount = "probe-owner@example.invalid";
+    const privateSession = "00000000-0000-4000-8000-000000000001";
+    const codexTui = codexTuiResponder({
+      stdout: "",
+      stderr: `unexpected capture failure for ${privateAccount}, session ${privateSession}`,
+      exitCode: 1
+    });
     const execute: TmuxCommandExecutor = async (_command, args) => {
       const subcommand = tmuxSubcommand(args);
-      if (subcommand === "send-keys" && args.includes("C-m")) submitted = true;
-      if (subcommand === "capture-pane") {
-        return submitted
-          ? { stdout: "", stderr: "unexpected capture failure containing /private/provider/path", exitCode: 1 }
-          : { stdout: fixture("codex-status-0.144.5-live-preamble.txt"), stderr: "", exitCode: 0 };
-      }
+      const tuiResponse = codexTui(args);
+      if (tuiResponse !== undefined) return tuiResponse;
       if (subcommand === "has-session") return { stdout: "", stderr: "no server", exitCode: 1 };
       return { stdout: "", stderr: "", exitCode: 0 };
     };
@@ -360,17 +448,22 @@ describe("tmux usage probe", () => {
     });
 
     expect(result).toEqual({ stdout: "", stderr: "malformed_response", exitCode: 1 });
-    expect(JSON.stringify(result)).not.toContain("/private/provider/path");
+    expect(JSON.stringify(result)).not.toContain(privateAccount);
+    expect(JSON.stringify(result)).not.toContain(privateSession);
   });
 
   it("returns malformed_response when bounded captures never contain Codex status", async () => {
     let captureCalls = 0;
+    const codexTui = codexTuiResponder({
+      stdout: fixture("codex-status-0.144.5-live-preamble.txt"),
+      stderr: "",
+      exitCode: 0
+    });
     const execute: TmuxCommandExecutor = async (_command, args) => {
       const subcommand = tmuxSubcommand(args);
-      if (subcommand === "capture-pane") {
-        captureCalls += 1;
-        return { stdout: fixture("codex-status-0.144.5-live-preamble.txt"), stderr: "", exitCode: 0 };
-      }
+      if (subcommand === "capture-pane") captureCalls += 1;
+      const tuiResponse = codexTui(args);
+      if (tuiResponse !== undefined) return tuiResponse;
       if (subcommand === "has-session") return { stdout: "", stderr: "no server", exitCode: 1 };
       return { stdout: "", stderr: "", exitCode: 0 };
     };
@@ -389,15 +482,18 @@ describe("tmux usage probe", () => {
   });
 
   it("preserves a successful probe when tmux 3.4 reports the removed socket as absent", async () => {
-    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
-      ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
-      : tmuxSubcommand(args) === "has-session"
+    const codexTui = codexTuiResponder({ stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 });
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const tuiResponse = codexTui(args);
+      if (tuiResponse !== undefined) return tuiResponse;
+      return tmuxSubcommand(args) === "has-session"
         ? {
             stdout: "",
             stderr: `error connecting to ${args[1]} (No such file or directory)`,
             exitCode: 1
           }
         : { stdout: "", stderr: "", exitCode: 0 };
+    };
 
     const result = await runTmuxUsageProbe("codex_cli", {
       executable: "/provider-bin/codex",
@@ -420,6 +516,7 @@ describe("tmux usage probe", () => {
     const runtimeRoot = temporaryRuntimeRoot();
     const socketPaths = new Set<string>();
     let launchCwd: string | undefined;
+    const codexTui = codexTuiResponder({ stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 });
     const execute: TmuxCommandExecutor = async (_command, args) => {
       const subcommand = tmuxSubcommand(args);
       if (subcommand === "new-session") launchCwd = args[args.indexOf("-c") + 1];
@@ -445,9 +542,7 @@ describe("tmux usage probe", () => {
         };
       }
       socketPaths.add(socketPath);
-      return subcommand === "capture-pane"
-        ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
-        : { stdout: "", stderr: "", exitCode: 0 };
+      return codexTui(args) ?? { stdout: "", stderr: "", exitCode: 0 };
     };
 
     const result = await runTmuxUsageProbe("codex_cli", {
@@ -487,11 +582,14 @@ describe("tmux usage probe", () => {
     ["unavailable", "codex-status-0.144.5-unavailable.txt"],
     ["not-yet-loaded", "codex-status-0.144.5-missing.txt"]
   ])("reports the exact Codex 0.144.5 %s status as bounded provider unavailability", async (label, name) => {
-    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
-      ? { stdout: fixture(name), stderr: "", exitCode: 0 }
-      : tmuxSubcommand(args) === "has-session"
+    const codexTui = codexTuiResponder({ stdout: fixture(name), stderr: "", exitCode: 0 });
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const tuiResponse = codexTui(args);
+      if (tuiResponse !== undefined) return tuiResponse;
+      return tmuxSubcommand(args) === "has-session"
         ? { stdout: "", stderr: "no server", exitCode: 1 }
         : { stdout: "", stderr: "", exitCode: 0 };
+    };
 
     const result = await runTmuxUsageProbe("codex_cli", {
       executable: "/provider-bin/codex",
@@ -553,11 +651,10 @@ describe("tmux usage probe", () => {
 
   it("fails closed and retains the socket when isolated tmux-server termination cannot be verified", async () => {
     let workingDirectory: string | undefined;
+    const codexTui = codexTuiResponder({ stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 });
     const execute: TmuxCommandExecutor = async (_command, args) => {
       if (tmuxSubcommand(args) === "new-session") workingDirectory = args[args.indexOf("-c") + 1];
-      return tmuxSubcommand(args) === "capture-pane"
-        ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
-        : { stdout: "", stderr: "", exitCode: 0 };
+      return codexTui(args) ?? { stdout: "", stderr: "", exitCode: 0 };
     };
 
     const result = await runTmuxUsageProbe("codex_cli", {
@@ -575,13 +672,13 @@ describe("tmux usage probe", () => {
   });
 
   it("does not mistake a cleanup permission failure for verified termination", async () => {
+    const codexTui = codexTuiResponder({ stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 });
     const execute: TmuxCommandExecutor = async (_command, args) => {
       const subcommand = tmuxSubcommand(args);
-      if (subcommand === "capture-pane") return { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 };
       if (subcommand === "kill-server" || subcommand === "has-session") {
         return { stdout: "", stderr: "error connecting to /private/tmux/socket (Permission denied)", exitCode: 1 };
       }
-      return { stdout: "", stderr: "", exitCode: 0 };
+      return codexTui(args) ?? { stdout: "", stderr: "", exitCode: 0 };
     };
 
     const result = await runTmuxUsageProbe("codex_cli", {

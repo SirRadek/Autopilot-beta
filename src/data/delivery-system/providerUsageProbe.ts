@@ -34,9 +34,9 @@ export type TmuxCommandExecutor = (
 const MAX_CAPTURE_BYTES = 128 * 1024;
 const CLEANUP_TIMEOUT_MS = 1_000;
 const CODEX_READY_CAPTURE_ATTEMPTS = 25;
+const CODEX_COMMAND_CAPTURE_ATTEMPTS = 25;
 const CODEX_STATUS_CAPTURE_ATTEMPTS = 25;
 const CODEX_CAPTURE_INTERVAL_MS = 250;
-const CODEX_STARTUP_SETTLE_MS = 4_000;
 const PROBE_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"] as const;
 const CLI: Readonly<Record<UsageProbeProvider, { readonly args: readonly string[]; readonly slashCommand: "/status" | "/usage" }>> = {
   codex_cli: { args: ["--no-alt-screen"], slashCommand: "/status" },
@@ -213,9 +213,6 @@ export async function runTmuxUsageProbe(
       if (!ready) {
         result = failureResult("malformed_response");
       } else {
-        // Codex 0.144.5 can paint the composer before its input handler is ready. A slash
-        // command sent at that first frame is echoed but never opens the status panel.
-        await pause(delayMs ?? CODEX_STARTUP_SETTLE_MS, controller.signal);
         await checked(
           execute,
           withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]),
@@ -223,22 +220,37 @@ export async function runTmuxUsageProbe(
           environment,
           "malformed_response"
         );
-        await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, controller.signal);
-        await checked(
-          execute,
-          withSocket(socketPath, ["send-keys", "-t", target, "C-m"]),
-          controller.signal,
-          environment,
-          "malformed_response"
-        );
-        result = await waitForCodexStatus(
+        // Codex processes pasted text asynchronously. Wait until a later frame proves that
+        // the composer accepted the complete slash command, then submit Enter as a distinct
+        // keystroke. Sending text and Enter together can leave /status sitting unsubmitted.
+        const commandAccepted = await waitForCodexComposerCommand(
           execute,
           socketPath,
           target,
+          spec.slashCommand,
           controller.signal,
           environment,
           delayMs
         );
+        if (!commandAccepted) {
+          result = failureResult("malformed_response");
+        } else {
+          await checked(
+            execute,
+            withSocket(socketPath, ["send-keys", "-t", target, "Enter"]),
+            controller.signal,
+            environment,
+            "malformed_response"
+          );
+          result = await waitForCodexStatus(
+            execute,
+            socketPath,
+            target,
+            controller.signal,
+            environment,
+            delayMs
+          );
+        }
       }
     } else {
       await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
@@ -350,6 +362,25 @@ async function waitForCodexStatus(
   return failureResult("malformed_response");
 }
 
+async function waitForCodexComposerCommand(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  slashCommand: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<boolean> {
+  for (let attempt = 0; attempt < CODEX_COMMAND_CAPTURE_ATTEMPTS; attempt += 1) {
+    const stdout = await capturePane(execute, socketPath, target, signal, environment);
+    if (codexComposerContains(stdout, slashCommand)) return true;
+    if (attempt + 1 < CODEX_COMMAND_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return false;
+}
+
 async function capturePane(
   execute: TmuxCommandExecutor,
   socketPath: string,
@@ -372,6 +403,10 @@ function codexComposerReady(raw: string): boolean {
   if (/Do you trust the contents of this directory|Press enter to continue/i.test(text)) return false;
   if (parseCodexStatus(text) !== null || codexStatusFailure(text) !== null) return true;
   return />_\s+OpenAI Codex\s+\(v[^\r\n)]+\)/i.test(text) && /^\s*›(?:\s|$)/m.test(text);
+}
+
+function codexComposerContains(raw: string, slashCommand: string): boolean {
+  return terminalText(raw).split("\n").some((line) => line.trim() === `› ${slashCommand}`);
 }
 
 async function checked(
