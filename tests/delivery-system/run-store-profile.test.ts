@@ -27,6 +27,22 @@ describe("runStore profile", () => {
     expect(draft.promotion_packet_id).toBeNull();
   });
 
+  it("keeps delegation-capable Codex ultra behind the ordinary explicit owner approval", () => {
+    const dir = stateDir();
+    const draft = createRunDraft(dir, { ...baseInput, model: "gpt-5.6-sol", profile: "dev", requested_reasoning_effort: "ultra" }, "2026-07-21T10:00:00.000Z", fixtureRegistryOptions);
+
+    const pending = readRunStore(dir).runs.find((run) => run.current.run_id === draft.run_id);
+    expect(pending).toMatchObject({ status: "draft", approved_revision: null, approved_by: null });
+    expect(pending?.current.requested_reasoning_effort).toBe("ultra");
+
+    approveRunRevision(dir, draft.run_id, draft.revision, "owner", "2026-07-21T10:01:00.000Z");
+    expect(readRunStore(dir).runs.find((run) => run.current.run_id === draft.run_id)).toMatchObject({
+      status: "approved",
+      approved_revision: draft.revision,
+      approved_by: "owner"
+    });
+  });
+
   it("resolves a stored record with no profile field as legacy", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "runstore-"));
     const legacyDraft = { run_id: "r1", revision: 1, project_id: "p", prompt: "x", provider: "codex_cli", model: null, estimated_tokens: 8_193, input_token_bound: 1, output_token_allowance: 8_192, requested_artifacts: ["text"], prompt_review_acknowledged: true, created_at: "2026-01-01T00:00:00.000Z" };

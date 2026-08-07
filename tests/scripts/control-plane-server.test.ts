@@ -170,6 +170,19 @@ const snapshot = (provider: string, fetchedAt: string) => ({
   models: [{ model_id: "model-a", available: true, health: "healthy" as const, source: "api" as const }], health: "healthy" as const, error_code: null
 });
 
+const codexSnapshot = (fetchedAt: string) => ({
+  ...snapshot("codex_cli", fetchedAt),
+  source: "cli" as const,
+  models: [{
+    model_id: "model-a",
+    available: true,
+    health: "healthy" as const,
+    source: "cli" as const,
+    discovery: "models_cache" as const,
+    reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] as const
+  }]
+});
+
 async function governedApi() {
   const stateDir = mkdtempSync(join(tmpdir(), "control-plane-runs-"));
   const projectRoot = join(stateDir, "projects");
@@ -565,7 +578,7 @@ describe("control plane governed run API", () => {
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, {
       schema_version: "v1",
-      snapshots: [snapshot("codex_cli", new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
+      snapshots: [codexSnapshot(new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
     });
     const outputs = ["Alpha view", "Beta view", "Gamma view", JSON.stringify({ consensus: ["aligned"], conflicts: [], confidence: 0.9, final: "Winning direction" })];
     let callCount = 0;
@@ -614,7 +627,7 @@ describe("control plane governed run API", () => {
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, {
       schema_version: "v1",
-      snapshots: [snapshot("codex_cli", new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
+      snapshots: [codexSnapshot(new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
     });
     const outputs = [
       "Alpha view",
@@ -685,7 +698,7 @@ describe("control plane governed run API", () => {
     writeProjectRegistry(stateDir, { schema_version: "v1", projects: [{ schema_version: "v1", project_id: "autopilot-beta", name: "Autopilot Beta", cwd: projectCwd, enabled: true }] });
     writeProviderQuotaStore(stateDir, {
       schema_version: "v1",
-      snapshots: [snapshot("codex_cli", new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
+      snapshots: [codexSnapshot(new Date().toISOString()), snapshot("claude_cli", new Date().toISOString()), snapshot("agy_cli", new Date().toISOString())]
     });
     writeFileSync(join(stateDir, "brainstorms.json"), "{ not valid json", "utf8");
     const outputs = ["Alpha view", "Beta view", "Gamma view", JSON.stringify({ consensus: ["aligned"], conflicts: [], confidence: 0.9, final: "Winning direction" })];
@@ -1529,7 +1542,7 @@ describe("control plane provider endpoints", () => {
           health: ["unavailable"],
           discovery: "static",
           source: "static_fallback",
-          reasoning_efforts: ["low", "medium", "high", "xhigh"]
+          reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"]
         }]
       }),
       expect.objectContaining({
@@ -1595,6 +1608,37 @@ describe("control plane provider endpoints", () => {
           source: "mixed"
         })]
       })]);
+  });
+
+  it("surfaces Codex cache reasoning efforts per live model instead of using one global list", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-"));
+    provisionServiceToken(stateDir);
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [{
+        ...snapshot("codex_cli", new Date().toISOString()),
+        models: [
+          { model_id: "gpt-5.6-sol", available: true, health: "healthy", source: "cli", discovery: "models_cache", reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] },
+          { model_id: "gpt-5.6-luna", available: true, health: "healthy", source: "cli", discovery: "models_cache", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
+          { model_id: "gpt-cache-missing", available: true, health: "healthy", source: "cli", discovery: "usage_probe" }
+        ]
+      }]
+    });
+    const server = createControlPlaneServer(stateDir);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const body = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, {
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` }
+    })).json() as { models: Array<{ model_id: string; provider_routes: Array<{ provider: string; reasoning_efforts: string[] }> }> };
+    const codexEfforts = (modelId: string) => body.models.find((model) => model.model_id === modelId)
+      ?.provider_routes.find((route) => route.provider === "codex_cli")?.reasoning_efforts;
+
+    expect(codexEfforts("gpt-5.6-sol")).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+    expect(codexEfforts("gpt-5.6-luna")).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(codexEfforts("gpt-cache-missing")).toEqual([]);
   });
 
   it("preserves provider-specific availability when providers share a live model id", async () => {
@@ -1685,7 +1729,7 @@ describe("control plane provider endpoints", () => {
         observed: true,
         available: true,
         health: ["healthy"],
-        reasoning_efforts: ["low", "medium", "high", "xhigh"],
+        reasoning_efforts: [],
         provider_routes: [{
           provider: "codex_cli",
           configured: false,
@@ -1694,7 +1738,7 @@ describe("control plane provider endpoints", () => {
           health: ["healthy"],
           discovery: "usage_probe",
           source: "live_snapshot",
-          reasoning_efforts: ["low", "medium", "high", "xhigh"]
+          reasoning_efforts: []
         }]
       }),
       expect.objectContaining({

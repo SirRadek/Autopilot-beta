@@ -114,10 +114,11 @@ runtime injects their command configuration.
 `autopilot-state-maintenance.timer` runs one locked transaction that checks private permissions,
 scans bounded head/tail chunks for secret-like material, creates and validates an atomic bounded
 backup, rotates bounded JSONL files, and only then prunes retained backups. The service deliberately
-keeps the host `/tmp` visible but read-only because Codex, Claude, and AGY `/status` or `/usage`
-probes communicate with their existing tmux sessions through the per-user tmux socket. Runtime
-temporary files use the separately writable private `TMPDIR`. Other hardening remains enabled; service processes run as the
-unprivileged `radek` account without privileged Linux capabilities.
+keeps the host `/tmp` visible but read-only. Isolated Codex, Claude, and AGY `/status` or `/usage`
+probes pin their tmux socket and runtime temporary files beneath the separately writable private
+`TMPDIR`; they never rely on tmux's default `/tmp/tmux-$UID` socket location. Other hardening remains
+enabled; service processes run as the unprivileged `radek` account without privileged Linux
+capabilities.
 
 ## Governed cockpit dry run
 

@@ -12,7 +12,7 @@ export type UsageProbeProvider = "codex_cli" | "claude_cli" | "agy_cli";
 
 export interface ParsedUsage {
   readonly five_hour: { readonly limit: number | null; readonly used: number | null; readonly remaining: number | null; readonly resets_at: string | null };
-  readonly weekly: { readonly limit: number; readonly used: number; readonly remaining: number; readonly resets_at: string | null };
+  readonly weekly: { readonly limit: number | null; readonly used: number | null; readonly remaining: number | null; readonly resets_at: string | null };
   readonly models: readonly { readonly model_id: string; readonly available: boolean }[];
 }
 
@@ -40,23 +40,39 @@ const CLI: Readonly<Record<UsageProbeProvider, { readonly args: readonly string[
 
 export function parseCodexStatus(raw: string): ParsedUsage | null {
   const text = terminalText(raw);
-  const five = text.match(/5h\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left\s*\(resets\s+([^\r\n)]+)\)/i);
-  const week = text.match(/weekly\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left\s*\(resets\s+([^\r\n)]+)\)/i);
-  if (!week) return null;
+  if (codexStatusFailure(text) !== null) return null;
+  const five = text.match(/^\s*(?:[│|]\s*)?5h\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left(?:\s*\(resets\s+([^\r\n)]+)\))?/im);
+  const week = text.match(/^\s*(?:[│|]\s*)?weekly\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left(?:\s*\(resets\s+([^\r\n)]+)\))?/im);
+  const namedModels = [...text.matchAll(/^\s*(?:[│|]\s*)?([A-Za-z][A-Za-z0-9.-]*)\s+Weekly limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left(?:\s*\(resets\s+([^\r\n)]+)\))?/gim)];
+  const alternativeWindows = [...text.matchAll(/^\s*(?:[│|]\s*)?(?:(?:primary|secondary)\s+)?(?:usage|monthly(?:\s+credit)?|daily|annual)\s+limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left/gim)];
+  if (!five && !week && namedModels.length === 0 && alternativeWindows.length === 0) return null;
   const five_hour = five
-    ? percentWindow(five[1]!, five[2]!)
-    : { limit: null, used: null, remaining: null, resets_at: null };
-  const activeModel = text.match(/Model:\s*([^\r\n(]+?)\s*\(/i)?.[1];
-  const namedModels = [...text.matchAll(/^(?:\s*\S\s+)?([A-Za-z][A-Za-z0-9.-]*)(?:\r?\n\s*|\s+)Weekly limit:[^\r\n%]*?([0-9]+(?:\.[0-9]+)?)%\s+left/gim)];
-  const activeNamedRow = activeModel ? namedModels.find((match) => match[1] === activeModel) : undefined;
-  const activeWeeklyPercent = activeNamedRow ? activeNamedRow[2]! : week[1]!;
+    ? percentWindow(five[1]!, five[2] ?? null)
+    : unknownWindow();
+  const weekly = week
+    ? percentWindow(week[1]!, week[2] ?? null)
+    : unknownWindow();
+  const activeModel = text.match(/Model:\s*([^\r\n(]+?)\s*\(/i)?.[1]?.trim();
+  const activeNamedRow = activeModel
+    ? namedModels.find((match) => match[1]?.toLowerCase() === activeModel.toLowerCase())
+    : undefined;
+  const activePercents = [
+    five?.[1],
+    activeNamedRow?.[2] ?? week?.[1],
+    ...(five === null && week === null ? alternativeWindows.map((match) => match[1]) : [])
+  ].filter((value): value is string => value !== undefined);
   const seenModelIds = new Set<string>();
   const models = [
-    ...(activeModel ? [{ model_id: activeModel, available: boundedPercent(activeWeeklyPercent) > 0 }] : []),
-    ...namedModels.map((match) => ({ model_id: match[1]!, available: boundedPercent(match[2]!) > 0 }))
+    ...(activeModel && activePercents.length > 0
+      ? [{ model_id: activeModel, available: activePercents.every((percent) => boundedPercent(percent) > 0) }]
+      : []),
+    ...namedModels.map((match) => ({
+      model_id: match[1]!,
+      available: boundedPercent(match[2]!) > 0 && (five === null || boundedPercent(five[1]!) > 0)
+    }))
   ].filter((model) => isCanonicalModelId(model.model_id))
     .filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)));
-  return { five_hour, weekly: percentWindow(week[1]!, week[2]!), models };
+  return { five_hour, weekly, models };
 }
 
 export function parseAgyUsage(raw: string): ParsedUsage | null {
@@ -101,18 +117,31 @@ export function parseClaudeUsage(raw: string): ParsedUsage | null {
   if (!session || !week) return null;
   const sessionUsed = boundedPercent(session[1]!);
   const weeklyUsed = boundedPercent(week[1]!);
-  const models = [
-    text.match(/^([A-Za-z]+\s+\d+(?:\.\d+)?)\s+\([^\r\n]*context\)\s+·\s+Claude/im)?.[1],
-    text.match(/Extended:\s+([A-Za-z]+\s+\d+(?:\.\d+)?)/i)?.[1]
-  ].filter((value): value is string => value !== undefined);
-  const seenModelIds = new Set<string>();
-  const available = weeklyUsed < 100 && sessionUsed < 100;
+  const sharedAvailable = weeklyUsed < 100 && sessionUsed < 100;
+  // The screen-reader /usage screen names models in three places: the header model line
+  // ("Opus 4.8 (1M context) · Claude Max"), the extended-limit banner ("Extended: Fable 5 is
+  // included in your weekly limit"), and per-family sections ("Current week (Fable)") that
+  // carry that family's own weekly percentage on top of the all-models window.
+  const labelled = [
+    ...[
+      text.match(/^([A-Za-z]+\s+\d+(?:\.\d+)?)\s+\([^\r\n]*context\)\s+·\s+Claude/im)?.[1],
+      text.match(/Extended:\s+([A-Za-z]+\s+\d+(?:\.\d+)?)/i)?.[1]
+    ].filter((label): label is string => label !== undefined)
+      .map((label) => ({ label, available: sharedAvailable })),
+    ...[...text.matchAll(/Current week \((?!all models\))([A-Za-z][A-Za-z0-9 .-]{0,40})\)[\s\S]*?([0-9]+(?:\.[0-9]+)?)%\s+used/gi)]
+      .slice(0, 32)
+      .map((match) => ({ label: match[1]!.trim(), available: sharedAvailable && boundedPercent(match[2]!) < 100 }))
+  ];
+  const modelAvailability = new Map<string, boolean>();
+  for (const { label, available } of labelled) {
+    for (const model_id of expandQuotaLabel("claude_cli", label)) {
+      modelAvailability.set(model_id, (modelAvailability.get(model_id) ?? true) && available);
+    }
+  }
   return {
     five_hour: usedPercentWindow(sessionUsed, session[2]!),
     weekly: usedPercentWindow(weeklyUsed, week[2]!),
-    models: models.flatMap((label) => expandQuotaLabel("claude_cli", label)
-      .map((model_id) => ({ model_id, available })))
-      .filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)))
+    models: [...modelAvailability].map(([model_id, available]) => ({ model_id, available })).slice(0, 256)
   };
 }
 
@@ -133,7 +162,6 @@ export async function runTmuxUsageProbe(
   const timeoutMs = options.timeoutMs ?? 20_000;
   const sessionId = options.sessionId ?? `autopilot-quota-${randomBytes(6).toString("hex")}`;
   const delayMs = options.delayMs;
-  const socketName = `autopilot-probe-${sessionId}`;
   const environment = sanitizedProbeEnvironment(process.env);
   let workingDirectory: string;
   try {
@@ -141,6 +169,7 @@ export async function runTmuxUsageProbe(
   } catch {
     return failureResult("provider_runtime_denied");
   }
+  const socketPath = join(workingDirectory, "tmux.sock");
 
   const controller = new AbortController();
   const onExternalAbort = () => controller.abort();
@@ -153,7 +182,7 @@ export async function runTmuxUsageProbe(
   try {
     if (controller.signal.aborted) throw new Error("timeout");
     if (options.executable.length === 0) throw new Error("provider_executable_missing");
-    await checked(execute, withSocket(socketName, [
+    await checked(execute, withSocket(socketPath, [
       "new-session",
       "-d",
       "-s", sessionId,
@@ -165,16 +194,17 @@ export async function runTmuxUsageProbe(
       ...spec.args
     ]), controller.signal, environment);
     await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
-    await checked(execute, withSocket(socketName, ["send-keys", "-t", target, "-l", spec.slashCommand]), controller.signal, environment);
+    await checked(execute, withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]), controller.signal, environment);
     await pause(delayMs ?? 250, controller.signal);
-    await checked(execute, withSocket(socketName, ["send-keys", "-t", target, "C-m"]), controller.signal, environment);
+    await checked(execute, withSocket(socketPath, ["send-keys", "-t", target, "C-m"]), controller.signal, environment);
     await pause(delayMs ?? 4_000, controller.signal);
-    const captured = await checked(execute, withSocket(socketName, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target]), controller.signal, environment);
+    const captured = await checked(execute, withSocket(socketPath, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target]), controller.signal, environment);
     const stdout = Buffer.from(captured.stdout).subarray(0, MAX_CAPTURE_BYTES).toString("utf8");
     const parsed = provider === "codex_cli" ? parseCodexStatus(stdout) : provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
     if (parsed === null) {
       const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
-      result = failureResult(missing ? "missing_credential" : "malformed_response");
+      const codexFailure = provider === "codex_cli" ? codexStatusFailure(terminalText(stdout)) : null;
+      result = failureResult(missing ? "missing_credential" : codexFailure ?? "malformed_response");
     } else {
       result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
     }
@@ -184,12 +214,16 @@ export async function runTmuxUsageProbe(
 
   clearTimeout(timer);
   options.signal?.removeEventListener("abort", onExternalAbort);
-  const serverTerminated = await terminateAndVerifyServer(execute, socketName, environment);
-  let workingDirectoryRemoved = true;
-  try {
-    await rm(workingDirectory, { recursive: true, force: true });
-  } catch {
-    workingDirectoryRemoved = false;
+  const serverTerminated = await terminateAndVerifyServer(execute, socketPath, environment);
+  let workingDirectoryRemoved = false;
+  // The socket is inside this directory; keep it reachable if the server may still be alive.
+  if (serverTerminated) {
+    try {
+      await rm(workingDirectory, { recursive: true, force: true });
+      workingDirectoryRemoved = true;
+    } catch {
+      // A private runtime artifact is safer than claiming cleanup succeeded.
+    }
   }
   return serverTerminated && workingDirectoryRemoved
     ? result
@@ -225,21 +259,21 @@ function executeTmux(
 
 async function terminateAndVerifyServer(
   execute: TmuxCommandExecutor,
-  socketName: string,
+  socketPath: string,
   environment: Readonly<Record<string, string>>
 ): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CLEANUP_TIMEOUT_MS);
   try {
     try {
-      await abortable(execute("tmux", withSocket(socketName, ["kill-server"]), controller.signal, environment), controller.signal);
+      await abortable(execute("tmux", withSocket(socketPath, ["kill-server"]), controller.signal, environment), controller.signal);
     } catch {
       // Verification below is authoritative: kill-server may fail because no server remains.
     }
     if (controller.signal.aborted) return false;
     try {
       const verification = await abortable(
-        execute("tmux", withSocket(socketName, ["has-session"]), controller.signal, environment),
+        execute("tmux", withSocket(socketPath, ["has-session"]), controller.signal, environment),
         controller.signal
       );
       return !controller.signal.aborted && isExpectedAbsentServer(verification);
@@ -253,7 +287,7 @@ async function terminateAndVerifyServer(
 
 function isExpectedAbsentServer(result: TmuxCommandResult): boolean {
   if (result.exitCode === 0) return false;
-  return /^(?:(?:tmux:\s*)?no server(?: running)?(?:\s|$)|failed to connect[^\r\n]*(?:no such file|connection refused))/i.test(result.stderr);
+  return /^(?:(?:tmux:\s*)?no server(?: running)?(?:\s|$)|(?:failed to connect|error connecting to)[^\r\n]*(?:no such file|connection refused))/i.test(result.stderr);
 }
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -278,8 +312,8 @@ function sessionEnvironmentArguments(environment: Readonly<Record<string, string
   return PROBE_ENVIRONMENT_KEYS.flatMap((key) => environment[key] === undefined ? [] : ["-e", `${key}=${environment[key]}`]);
 }
 
-function withSocket(socketName: string, args: readonly string[]): string[] {
-  return ["-L", socketName, ...args];
+function withSocket(socketPath: string, args: readonly string[]): string[] {
+  return ["-S", socketPath, ...args];
 }
 
 function failureResult(errorCode: ProviderErrorCode): TmuxCommandResult {
@@ -308,6 +342,18 @@ function boundedPercent(value: string): number {
 function percentWindow(value: string, resetsAt: string | null) {
   const remaining = boundedPercent(value);
   return { limit: 100, used: 100 - remaining, remaining, resets_at: resetsAt?.trim().slice(0, 200) ?? null };
+}
+
+function unknownWindow() {
+  return { limit: null, used: null, remaining: null, resets_at: null };
+}
+
+function codexStatusFailure(text: string): ProviderErrorCode | null {
+  return /limits may be stale/i.test(text)
+    || /Limits:\s*(?:not available for this account|data not available yet)/i.test(text)
+    || /refresh requested;\s*run \/status again shortly/i.test(text)
+    ? "provider_unavailable"
+    : null;
 }
 
 function usedPercentWindow(used: number, resetsAt: string | null) {

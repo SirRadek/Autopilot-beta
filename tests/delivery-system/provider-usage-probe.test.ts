@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,8 @@ import {
   type TmuxCommandExecutor
 } from "../../src/data/delivery-system/providerUsageProbe";
 
+// The codex-status-0.144.5-* files are verbatim sanitized renderer snapshots from
+// openai/codex tag rust-v0.144.5 under codex-rs/tui/src/status/snapshots/.
 const fixture = (name: string): string => readFileSync(fileURLToPath(new URL(`../fixtures/provider-usage/${name}`, import.meta.url)), "utf8");
 const runtimeRoots: string[] = [];
 
@@ -32,12 +34,40 @@ afterEach(() => {
 });
 
 describe("provider usage parsers", () => {
-  it("parses Codex five-hour and weekly percentages with reset labels", () => {
-    expect(parseCodexStatus(fixture("codex-status.txt"))).toEqual({
-      five_hour: { limit: 100, used: 2, remaining: 98, resets_at: "11:43" },
-      weekly: { limit: 100, used: 7, remaining: 93, resets_at: "12:05 on 18 Jul" },
+  it("parses the exact Codex 0.144.5 five-hour and weekly status snapshot", () => {
+    expect(parseCodexStatus(fixture("codex-status-0.144.5-standard.txt"))).toEqual({
+      five_hour: { limit: 100, used: 45, remaining: 55, resets_at: "09:25" },
+      weekly: { limit: 100, used: 30, remaining: 70, resets_at: "09:55" },
+      models: [{ model_id: "gpt-5.1-codex", available: true }]
+    });
+  });
+
+  it("accepts the renderer's optional reset shape without inventing a reset timestamp", () => {
+    expect(parseCodexStatus("Weekly limit:     [██████████████░░░░░░] 70% left")).toEqual({
+      five_hour: { limit: null, used: null, remaining: null, resets_at: null },
+      weekly: { limit: 100, used: 30, remaining: 70, resets_at: null },
       models: []
     });
+  });
+
+  it.each([
+    ["monthly", "codex-status-0.144.5-monthly.txt"],
+    ["enterprise monthly credit", "codex-status-0.144.5-enterprise-monthly-credit.txt"],
+    ["generic", "codex-status-0.144.5-generic.txt"]
+  ])("accepts the exact Codex 0.144.5 %s status shape without mislabeling its windows", (_label, name) => {
+    expect(parseCodexStatus(fixture(name))).toEqual({
+      five_hour: { limit: null, used: null, remaining: null, resets_at: null },
+      weekly: { limit: null, used: null, remaining: null, resets_at: null },
+      models: [{ model_id: "gpt-5.1-codex-max", available: true }]
+    });
+  });
+
+  it("fails closed on the exact Codex 0.144.5 stale status shape", () => {
+    expect(parseCodexStatus(fixture("codex-status-0.144.5-stale.txt"))).toBeNull();
+  });
+
+  it("does not misclassify the exact Codex 0.144.5 unavailable status shape as usage", () => {
+    expect(parseCodexStatus(fixture("codex-status-0.144.5-unavailable.txt"))).toBeNull();
   });
 
   it("parses weekly-only Codex status without fabricating a 5h window", () => {
@@ -116,20 +146,43 @@ describe("provider usage parsers", () => {
     ]);
   });
 
-  it("normalizes authenticated Claude model labels and drops unmapped labels", () => {
+  it("normalizes authenticated Claude model labels, including the extended-limit banner model", () => {
     expect(parseClaudeUsage(fixture("claude-usage.txt"))).toEqual({
       five_hour: { limit: 100, used: 12, remaining: 88, resets_at: "11:40am (UTC)" },
       weekly: { limit: 100, used: 34, remaining: 66, resets_at: "Jul 17, 6pm (UTC)" },
       models: [
-        { model_id: "claude-opus-4-8", available: true }
+        { model_id: "claude-opus-4-8", available: true },
+        { model_id: "claude-fable-5", available: true }
       ]
     });
   });
 
   it("returns no Claude models when every extracted label is unmapped", () => {
-    const raw = fixture("claude-usage.txt").replace("Opus 4.8", "Fable 5");
+    const raw = fixture("claude-usage.txt")
+      .replaceAll("Opus 4.8", "Zephyr 9")
+      .replaceAll("Fable 5", "Zephyr 9")
+      .replaceAll("Fable", "Zephyr");
 
     expect(parseClaudeUsage(raw)?.models).toEqual([]);
+  });
+
+  it("marks a model unavailable when its per-family weekly section is exhausted", () => {
+    const raw = fixture("claude-usage.txt").replace(
+      "Current week (Fable)\n0% 0% used",
+      "Current week (Fable)\n0% 100% used"
+    );
+    expect(parseClaudeUsage(raw)?.models).toEqual([
+      { model_id: "claude-opus-4-8", available: true },
+      { model_id: "claude-fable-5", available: false }
+    ]);
+  });
+
+  it("marks every Claude model unavailable when the all-models weekly window is exhausted", () => {
+    const raw = fixture("claude-usage.txt").replace("0% 34% used", "0% 100% used");
+    expect(parseClaudeUsage(raw)?.models).toEqual([
+      { model_id: "claude-opus-4-8", available: false },
+      { model_id: "claude-fable-5", available: false }
+    ]);
   });
 
   it("does not infer Claude quota from an unauthenticated login screen", () => {
@@ -172,7 +225,7 @@ describe("tmux usage probe", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.length).toBeLessThanOrEqual(128 * 1024);
-    expect(calls.every(({ args }) => args.slice(0, 2).join("\0") === ["-L", "autopilot-probe-autopilot-quota-test"].join("\0"))).toBe(true);
+    expect(calls.every(({ args }) => args[0] === "-S" && args[1] === join(launchCwd!, "tmux.sock"))).toBe(true);
     const newSession = calls.find(({ args }) => tmuxSubcommand(args) === "new-session");
     expect(newSession?.args.slice(-2)).toEqual(["/provider-bin/codex", "--no-alt-screen"]);
     expect(newSession?.args).not.toContain("codex --no-alt-screen");
@@ -197,6 +250,83 @@ describe("tmux usage probe", () => {
     }
   });
 
+  it("preserves a successful probe when tmux 3.4 reports the removed socket as absent", async () => {
+    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
+      ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
+      : tmuxSubcommand(args) === "has-session"
+        ? {
+            stdout: "",
+            stderr: `error connecting to ${args[1]} (No such file or directory)`,
+            exitCode: 1
+          }
+        : { stdout: "", stderr: "", exitCode: 0 };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "vm-tmux-3-4",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      five_hour: { remaining: 98 },
+      weekly: { remaining: 93 }
+    });
+  });
+
+  it("creates the isolated tmux socket inside the service writable runtime directory", async () => {
+    const runtimeRoot = temporaryRuntimeRoot();
+    const socketPaths = new Set<string>();
+    let launchCwd: string | undefined;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "new-session") launchCwd = args[args.indexOf("-c") + 1];
+      const socketPath = args[1]!;
+      const relativeSocketPath = launchCwd === undefined ? ".." : relative(launchCwd, socketPath);
+      const socketIsWritable = args[0] === "-S"
+        && isAbsolute(socketPath)
+        && relativeSocketPath !== ""
+        && !relativeSocketPath.match(/^\.\.(?:\/|$)/);
+
+      if (subcommand === "has-session") {
+        return {
+          stdout: "",
+          stderr: `error connecting to ${socketPath} (No such file or directory)`,
+          exitCode: 1
+        };
+      }
+      if (!socketIsWritable) {
+        return {
+          stdout: "",
+          stderr: "error creating /tmp/tmux-1000/autopilot-probe-systemd (Read-only file system)",
+          exitCode: 1
+        };
+      }
+      socketPaths.add(socketPath);
+      return subcommand === "capture-pane"
+        ? { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "systemd-read-only-tmp",
+      delayMs: 0,
+      runtimeRoot
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(socketPaths.size).toBe(1);
+    expect([...socketPaths][0]).toMatch(/\/autopilot-provider-probe-[^/]+\/tmux\.sock$/);
+  });
+
   it("reports missing credentials for Claude login without fabricating quota", async () => {
     const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
       ? { stdout: "Choose a login method\nSign in with Claude.ai", stderr: "", exitCode: 0 }
@@ -212,6 +342,29 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
     expect(result).toMatchObject({ exitCode: 1, stderr: "missing_credential" });
+  });
+
+  it.each([
+    ["stale", "codex-status-0.144.5-stale.txt"],
+    ["unavailable", "codex-status-0.144.5-unavailable.txt"],
+    ["not-yet-loaded", "codex-status-0.144.5-missing.txt"]
+  ])("reports the exact Codex 0.144.5 %s status as bounded provider unavailability", async (label, name) => {
+    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
+      ? { stdout: fixture(name), stderr: "", exitCode: 0 }
+      : tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: `${label}-status-test`,
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "provider_unavailable", exitCode: 1 });
   });
 
   it("links an external abort to the in-flight probe and still performs verified cleanup", async () => {
@@ -260,7 +413,7 @@ describe("tmux usage probe", () => {
     expect(existsSync(workingDirectory!)).toBe(false);
   });
 
-  it("fails closed when isolated tmux-server termination cannot be verified", async () => {
+  it("fails closed and retains the socket when isolated tmux-server termination cannot be verified", async () => {
     let workingDirectory: string | undefined;
     const execute: TmuxCommandExecutor = async (_command, args) => {
       if (tmuxSubcommand(args) === "new-session") workingDirectory = args[args.indexOf("-c") + 1];
@@ -280,7 +433,7 @@ describe("tmux usage probe", () => {
 
     expect(result).toEqual({ stdout: "", stderr: "provider_runtime_denied", exitCode: 1 });
     expect(workingDirectory).toBeDefined();
-    expect(existsSync(workingDirectory!)).toBe(false);
+    expect(existsSync(workingDirectory!)).toBe(true);
   });
 
   it("does not mistake a cleanup permission failure for verified termination", async () => {
@@ -288,7 +441,7 @@ describe("tmux usage probe", () => {
       const subcommand = tmuxSubcommand(args);
       if (subcommand === "capture-pane") return { stdout: fixture("codex-status.txt"), stderr: "", exitCode: 0 };
       if (subcommand === "kill-server" || subcommand === "has-session") {
-        return { stdout: "", stderr: "permission denied: /private/tmux/socket", exitCode: 1 };
+        return { stdout: "", stderr: "error connecting to /private/tmux/socket (Permission denied)", exitCode: 1 };
       }
       return { stdout: "", stderr: "", exitCode: 0 };
     };

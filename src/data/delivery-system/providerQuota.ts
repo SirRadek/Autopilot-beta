@@ -1,5 +1,7 @@
 /** Normalized quota data used by provider polling and the control plane. */
 
+import type { RunReasoningEffort } from "./executionProfile";
+
 export type ProviderQuotaSource = "cli" | "api" | "manual-fallback";
 export type ProviderHealth = "healthy" | "degraded" | "unavailable";
 export type ProviderFreshness = "fresh" | "stale" | "unavailable";
@@ -27,6 +29,8 @@ export interface ProviderModelAvailability {
   readonly source: ProviderQuotaSource;
   /** Absent snapshots predate live model-discovery provenance. */
   readonly discovery?: ProviderModelDiscovery;
+  /** Absent snapshots predate per-model reasoning discovery. */
+  readonly reasoning_efforts?: readonly RunReasoningEffort[];
 }
 
 export interface ProviderSnapshot {

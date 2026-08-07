@@ -42,8 +42,12 @@ h1, h2 { margin: 0; } h1 { font-size: 1.5rem; } h2 { font-size: .9rem; color: va
 .status-badge { display: inline-flex; align-items: center; border-radius: 99px; padding: .2rem .55rem; font-size: .72rem; font-weight: 700; }
 .status-running, .status-completed { color: var(--good-ink); background: var(--good-soft); } .status-waiting, .status-stale { color: var(--warn-ink); background: var(--warn-soft); } .status-error, .status-blocked { color: var(--danger-ink); background: var(--danger-soft); } .status-unavailable { color: var(--text-muted); background: var(--surface-2); }
 .session-pane-header, .session-project-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.session-pane-header { margin: .5rem 0 .8rem; color: var(--text-faint); font-size: .75rem; }
+.session-pane-header { flex-wrap: wrap; margin: .5rem 0 .8rem; color: var(--text-faint); font-size: .75rem; }
 .session-pane-header button, .session-project-heading button { min-width: 1.8rem; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--surface); cursor: pointer; }
+.session-create { display: grid; flex: 1 1 20rem; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: .35rem; align-items: end; }
+.session-create label { display: grid; gap: .2rem; color: var(--text-muted); font-size: .68rem; }
+.session-create input, .session-create select { min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: .35rem; color: var(--text); background: var(--bg-0); }
+.session-create button { align-self: end; min-height: 1.8rem; }
 .session-project { margin: 0 0 1rem; } .session-project-heading h3 { max-width: 18ch; overflow: hidden; color: var(--text); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
 .session-project ul { display: grid; gap: .35rem; margin: .5rem 0 0; padding: 0; list-style: none; }
 .session-item { display: grid; grid-template-columns: 1fr auto; gap: .15rem .35rem; border: 1px solid transparent; border-radius: 8px; padding: .35rem; }

@@ -12,7 +12,21 @@ export const QUOTA_LABEL_TO_CANONICAL: Readonly<Record<
   Readonly<Record<string, readonly string[]>>
 >> = {
   claude_cli: {
-    "Opus 4.8": ["claude-opus-4-8"]
+    // Labels verified from a real `claude --ax-screen-reader` /usage capture
+    // (tests/fixtures/provider-usage/claude-usage.txt): the header model line and the
+    // "Extended: <Model> is included in your weekly limit" banner.
+    "Opus 4.8": ["claude-opus-4-8"],
+    "Fable 5": ["claude-fable-5"],
+    // Remaining current published models the installed CLI routes to (`--model` accepts the
+    // full ids; labels follow the CLI's "<Family> <version>" display convention).
+    "Opus 5": ["claude-opus-5"],
+    "Sonnet 5": ["claude-sonnet-5"],
+    "Haiku 4.5": ["claude-haiku-4-5-20251001"],
+    // Per-family weekly sections ("Current week (Fable)") use the bare family label.
+    "Fable": ["claude-fable-5"],
+    "Opus": ["claude-opus-5", "claude-opus-4-8"],
+    "Sonnet": ["claude-sonnet-5"],
+    "Haiku": ["claude-haiku-4-5-20251001"]
   },
   agy_cli: {
     "Gemini Flash": [AGY_VERIFIED_MODELS.agy_fast_default, AGY_VERIFIED_MODELS.agy_fast_quality],

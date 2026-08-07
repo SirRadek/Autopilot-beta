@@ -79,7 +79,7 @@ export function createRunOrchestrator(options: {
     const profile = input.profile ?? "dev";
     const reasoning = input.requested_reasoning_effort ?? null;
     if (options.isRouteAvailable !== undefined) return options.isRouteAvailable(input.provider, input.model, profile, reasoning);
-    if (strictRouteEligibility) return isRunRouteEligible(options.stateDir, input.provider, input.model, now());
+    if (strictRouteEligibility) return isRunRouteEligible(options.stateDir, input.provider, input.model, now(), reasoning);
     return isRunRouteEligibleForProfile(options.stateDir, input.provider, input.model, reasoning, profile, now());
   }
 

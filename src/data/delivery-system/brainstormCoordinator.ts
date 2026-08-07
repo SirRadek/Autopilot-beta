@@ -114,7 +114,7 @@ export function createBrainstormCoordinator(options: {
     if (["completed", "failed", "cancelled", "needs_arbitration", "arbitrating", "consolidating"].includes(record.status)) throw new Error("brainstorm_not_approvable");
     const routes = [...record.routes, record.synthesizer_route, ...(record.arbitration_route ? [record.arbitration_route] : [])];
     for (const route of routes) {
-      if (!isRouteEligible(options.stateDir, route.provider, route.model, now())) throw new Error("brainstorm_route_unavailable");
+      if (!isRouteEligible(options.stateDir, route.provider, route.model, now(), route.reasoning_effort)) throw new Error("brainstorm_route_unavailable");
     }
     if (record.approval_state === "none") {
       if (record.status !== "draft") throw new Error("brainstorm_not_approvable");

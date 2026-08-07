@@ -32,7 +32,15 @@ describe("provider model IDs", () => {
   it("maps only owner-approved quota labels to canonical IDs", () => {
     expect(QUOTA_LABEL_TO_CANONICAL).toEqual({
       claude_cli: {
-        "Opus 4.8": ["claude-opus-4-8"]
+        "Opus 4.8": ["claude-opus-4-8"],
+        "Fable 5": ["claude-fable-5"],
+        "Opus 5": ["claude-opus-5"],
+        "Sonnet 5": ["claude-sonnet-5"],
+        "Haiku 4.5": ["claude-haiku-4-5-20251001"],
+        "Fable": ["claude-fable-5"],
+        "Opus": ["claude-opus-5", "claude-opus-4-8"],
+        "Sonnet": ["claude-sonnet-5"],
+        "Haiku": ["claude-haiku-4-5-20251001"]
       },
       agy_cli: {
         "Gemini Flash": ["gemini-3.5-flash-medium", "gemini-3.5-flash-high"],
@@ -42,13 +50,23 @@ describe("provider model IDs", () => {
       }
     });
     expect(expandQuotaLabel("claude_cli", "Opus 4.8")).toEqual(["claude-opus-4-8"]);
+    expect(expandQuotaLabel("claude_cli", "Fable 5")).toEqual(["claude-fable-5"]);
+    expect(expandQuotaLabel("claude_cli", "Fable")).toEqual(["claude-fable-5"]);
     expect(expandQuotaLabel("agy_cli", "Gemini Flash")).toEqual([
       "gemini-3.5-flash-medium",
       "gemini-3.5-flash-high"
     ]);
-    expect(expandQuotaLabel("claude_cli", "Fable 5")).toEqual([]);
+    expect(expandQuotaLabel("claude_cli", "Zephyr 9")).toEqual([]);
+    expect(expandQuotaLabel("claude_cli", "ultracode")).toEqual([]);
     expect(expandQuotaLabel("agy_cli", "Claude Opus")).toEqual([]);
     expect(expandQuotaLabel("agy_cli", "__proto__")).toEqual([]);
+  });
+
+  it("pins claude_cli reasoning efforts to the CLI-verified --effort choices", () => {
+    // `claude --help` documents `--effort <level>` with exactly these values; `ultracode`
+    // is a CLI mode alias, not a reasoning effort, and must never appear here.
+    expect(SUPPORTED_REASONING_EFFORTS.claude_cli).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(SUPPORTED_REASONING_EFFORTS.claude_cli).not.toContain("ultracode");
   });
 });
 
@@ -56,7 +74,13 @@ describe("static provider model catalog", () => {
   it("contains exactly the owner-approved canonical seed", () => {
     expect(STATIC_PROVIDER_MODEL_CATALOG).toEqual({
       claude_cli: {
-        models: ["claude-opus-4-8"],
+        models: [
+          "claude-opus-4-8",
+          "claude-fable-5",
+          "claude-opus-5",
+          "claude-sonnet-5",
+          "claude-haiku-4-5-20251001"
+        ],
         reasoning_efforts: SUPPORTED_REASONING_EFFORTS.claude_cli
       },
       codex_cli: {

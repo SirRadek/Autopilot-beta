@@ -164,6 +164,24 @@ describe("BrainstormPane", () => {
     act(() => root.unmount()); host.remove();
   });
 
+  it("does not offer a live Codex model whose reasoning support is unproven", () => {
+    const unprovenModels: ProviderModels = {
+      ...models,
+      models: [{
+        ...models.models[0]!,
+        providers: ["codex_cli"],
+        reasoning_efforts: [],
+        provider_routes: [{ provider: "codex_cli", observed: true, available: true, reasoning_efforts: [] }]
+      }]
+    };
+    const { host, root } = mount({ quotas: [quotaFor("codex_cli")], models: unprovenModels });
+
+    expect([...((host.querySelector('[aria-label="Model codex_cli"]') as HTMLSelectElement).options)].map((option) => option.value)).toEqual([""]);
+    expect(host.textContent).not.toContain("Bez reasoning (poskytovatel nepodporuje)");
+
+    act(() => root.unmount()); host.remove();
+  });
+
   it.each([
     ["stale", { freshness: "stale" as const, health: "healthy" }],
     ["unhealthy", { freshness: "fresh" as const, health: "unavailable" }],
@@ -185,6 +203,25 @@ describe("BrainstormPane", () => {
       expect((host.querySelector(`[aria-label="Model ${provider}"]`) as HTMLSelectElement).value).toBe("");
     }
     expect((host.querySelector('[aria-label="Syntezátor"]') as HTMLSelectElement).value).toBe("");
+    act(() => root.unmount()); host.remove();
+  });
+
+  it("labels Codex ultra as automatic delegation in brainstorm route selection", () => {
+    const ultraModels: ProviderModels = {
+      ...models,
+      models: [{
+        ...models.models[0]!,
+        provider_routes: models.models[0]!.provider_routes!.map((route) => route.provider === "codex_cli"
+          ? { ...route, reasoning_efforts: ["low", "ultra"] }
+          : route)
+      }]
+    };
+    const { host, root } = mount({ models: ultraModels });
+    change(host.querySelector('[aria-label="Model codex_cli"]') as HTMLSelectElement, "model-x");
+
+    const select = host.querySelector('[aria-label="Reasoning codex_cli"]') as HTMLSelectElement;
+    expect([...select.options].find((option) => option.value === "ultra")?.textContent).toContain("automatická delegace");
+
     act(() => root.unmount()); host.remove();
   });
 

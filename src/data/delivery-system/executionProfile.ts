@@ -3,12 +3,21 @@ import type { LaneCostTier } from "./routingModes";
 
 export type RunProfile = "dev" | "prod";
 export type StoredRunProfile = RunProfile | "legacy";
-export type RunReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+export const RUN_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
+export type RunReasoningEffort = (typeof RUN_REASONING_EFFORTS)[number];
 export type VerificationMode = "diff_scoped" | "full_fail_closed";
 
 export const DEV_DEFAULT_COST_TIERS: readonly LaneCostTier[] = ["free", "mid"];
 export const SUPPORTED_REASONING_EFFORTS = {
-  codex_cli: ["low", "medium", "high", "xhigh"],
+  // Codex `ultra` may delegate to subagents inside the approved CLI process. It is
+  // deliberately an explicit, immutable route choice under the existing owner
+  // approval, token-reservation, timeout, and sandbox gates (plus the task-packet
+  // gate whenever the write-capable Codex mode is selected).
+  codex_cli: ["low", "medium", "high", "xhigh", "max", "ultra"],
+  // Verified against the installed Claude CLI: `claude --help` documents `--effort <level>`
+  // with exactly (low, medium, high, xhigh, max). The CLI also accepts `ultracode`, but that
+  // is a mode alias (starts at xhigh with ultracode orchestration on), not a reasoning effort,
+  // and must never be dispatchable through this lane's effort knob.
   claude_cli: ["low", "medium", "high", "xhigh", "max"],
   agy_cli: ["low", "medium", "high"],
   openrouter_api: [],

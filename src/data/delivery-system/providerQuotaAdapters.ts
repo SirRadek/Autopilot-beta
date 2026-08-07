@@ -141,9 +141,17 @@ async function enrichCliSnapshot(
     readonly models: readonly DiscoveredProviderModel[];
     readonly provenance: Extract<ProviderModelDiscovery, "models_cache" | "cli_list">;
   } | null> = provider === "codex_cli"
-    ? Promise.resolve()
-      .then(() => (dependencies.discoverCodexModels ?? discoverCodexModels)(dependencies.environment?.HOME ?? ""))
-      .then((models) => ({ models, provenance: "models_cache" as const }))
+    ? versionPromise
+      .then((cliVersion) => {
+        const expectedClientVersion = codexClientVersion(cliVersion);
+        const models = expectedClientVersion === null
+          ? []
+          : (dependencies.discoverCodexModels ?? discoverCodexModels)(
+            dependencies.environment?.HOME ?? "",
+            expectedClientVersion
+          );
+        return { models, provenance: "models_cache" as const };
+      })
       .catch(() => null)
     : provider === "agy_cli"
       ? Promise.resolve()
@@ -164,6 +172,11 @@ async function enrichCliSnapshot(
   };
 }
 
+function codexClientVersion(value: string | null): string | null {
+  const match = value?.match(/^codex-cli\s+([A-Za-z0-9._-]{1,50})$/);
+  return match?.[1] ?? null;
+}
+
 function mergeDiscoveredModels(
   probed: readonly ProviderModelAvailability[],
   discovered: readonly DiscoveredProviderModel[],
@@ -171,18 +184,29 @@ function mergeDiscoveredModels(
   snapshotHealth: ProviderHealth
 ): readonly ProviderModelAvailability[] {
   const models = new Map<string, ProviderModelAvailability>();
+  const seenDiscovered = new Set<string>();
   for (const model of probed) {
     models.set(model.model_id, { ...model, discovery: model.discovery ?? "usage_probe" });
   }
-  for (const { model_id } of discovered) {
-    if (models.size >= 256 || models.has(model_id) || !isCanonicalModelId(model_id)) continue;
+  for (const { model_id, reasoning_efforts } of discovered) {
+    if (!isCanonicalModelId(model_id) || seenDiscovered.has(model_id)) continue;
+    seenDiscovered.add(model_id);
+    const probedModel = models.get(model_id);
+    if (probedModel !== undefined) {
+      if (reasoning_efforts !== undefined) {
+        models.set(model_id, { ...probedModel, reasoning_efforts });
+      }
+      continue;
+    }
+    if (models.size >= 256) continue;
     const available = snapshotHealth === "healthy";
     models.set(model_id, {
       model_id,
       available,
       health: available ? "healthy" : snapshotHealth,
       source: "cli",
-      discovery
+      discovery,
+      ...(reasoning_efforts === undefined ? {} : { reasoning_efforts })
     });
   }
   return [...models.values()];
