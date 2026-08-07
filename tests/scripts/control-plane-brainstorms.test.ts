@@ -10,6 +10,7 @@ import { estimateBrainstormTokenEnvelope } from "../../src/data/delivery-system/
 import { createBrainstormCoordinator } from "../../src/data/delivery-system/brainstormCoordinator";
 import { createBrainstorm, readBrainstormStore } from "../../src/data/delivery-system/brainstormStore";
 import { readBrainstormTelemetry } from "../../src/data/delivery-system/brainstormTelemetry";
+import type { RunReasoningEffort } from "../../src/data/delivery-system/executionProfile";
 import { writeProjectRegistry } from "../../src/data/delivery-system/projectRegistry";
 import { createRunOrchestrator } from "../../src/data/delivery-system/runOrchestrator";
 import { readRunStore } from "../../src/data/delivery-system/runStore";
@@ -18,6 +19,7 @@ import { TokenGateway } from "../../src/data/delivery-system/tokenGateway";
 import { writeProviderQuotaStore } from "../../src/data/delivery-system/providerQuotaStore";
 
 const SERVICE_TOKEN = "c".repeat(64);
+const CODEX_REASONING_EFFORTS: readonly RunReasoningEffort[] = ["low", "medium", "high", "xhigh", "max", "ultra"];
 const servers: ReturnType<typeof createControlPlaneServer>[] = [];
 afterEach(() => { for (const server of servers.splice(0)) server.close(); });
 
@@ -25,7 +27,13 @@ const snapshot = (provider: string, fetchedAt: string, overrides: Partial<{ read
   provider, source: "api" as const, fetched_at: fetchedAt, observed_at: fetchedAt,
   five_hour: { limit: 100, used: 20, remaining: 80, resets_at: null },
   weekly: { limit: 1_000, used: 100, remaining: 900, resets_at: null }, api_spend: 1.25, currency: "USD",
-  models: [{ model_id: overrides.modelId ?? "model-a", available: true, health: "healthy" as const, source: "api" as const }], health: "healthy" as const, error_code: null,
+  models: [{
+    model_id: overrides.modelId ?? "model-a",
+    available: true,
+    health: "healthy" as const,
+    source: "api" as const,
+    ...(provider === "codex_cli" ? { reasoning_efforts: CODEX_REASONING_EFFORTS } : {})
+  }], health: "healthy" as const, error_code: null,
   ...overrides
 });
 
@@ -217,6 +225,29 @@ describe("control plane governed brainstorm HTTP actions", () => {
 
     expect(response.status).toBe(409);
     expect((await response.json() as { error: string }).error).toBe("unsupported_reasoning_effort");
+  });
+
+  it("rejects Codex ultra when the selected live model advertises only through max", async () => {
+    const fetchedAt = new Date().toISOString();
+    const codex = {
+      ...snapshot("codex_cli", fetchedAt, { modelId: "gpt-5.6-luna" }),
+      models: [{
+        model_id: "gpt-5.6-luna",
+        available: true,
+        health: "healthy" as const,
+        source: "api" as const,
+        reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] as const
+      }]
+    };
+    const api = await brainstormApi({ snapshots: [codex, snapshot("claude_cli", fetchedAt), snapshot("agy_cli", fetchedAt)] });
+    const routes = validDraft.routes.map((route) => route.provider === "codex_cli"
+      ? { ...route, model: "gpt-5.6-luna", requested_reasoning_effort: "ultra" }
+      : route);
+
+    const response = await api.call("POST", "/brainstorms", { ...validDraft, routes });
+
+    expect(response.status).toBe(409);
+    expect((await response.json() as { error: string }).error).toBe("brainstorm_route_unavailable");
   });
 
   it("rejects a route with a missing requested_reasoning_effort field with 400 instead of silently defaulting", async () => {

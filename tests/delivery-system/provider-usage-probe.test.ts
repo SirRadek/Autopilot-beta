@@ -13,6 +13,8 @@ import {
   type TmuxCommandExecutor
 } from "../../src/data/delivery-system/providerUsageProbe";
 
+// The codex-status-0.144.5-* files are verbatim sanitized renderer snapshots from
+// openai/codex tag rust-v0.144.5 under codex-rs/tui/src/status/snapshots/.
 const fixture = (name: string): string => readFileSync(fileURLToPath(new URL(`../fixtures/provider-usage/${name}`, import.meta.url)), "utf8");
 const runtimeRoots: string[] = [];
 
@@ -32,12 +34,40 @@ afterEach(() => {
 });
 
 describe("provider usage parsers", () => {
-  it("parses Codex five-hour and weekly percentages with reset labels", () => {
-    expect(parseCodexStatus(fixture("codex-status.txt"))).toEqual({
-      five_hour: { limit: 100, used: 2, remaining: 98, resets_at: "11:43" },
-      weekly: { limit: 100, used: 7, remaining: 93, resets_at: "12:05 on 18 Jul" },
+  it("parses the exact Codex 0.144.5 five-hour and weekly status snapshot", () => {
+    expect(parseCodexStatus(fixture("codex-status-0.144.5-standard.txt"))).toEqual({
+      five_hour: { limit: 100, used: 45, remaining: 55, resets_at: "09:25" },
+      weekly: { limit: 100, used: 30, remaining: 70, resets_at: "09:55" },
+      models: [{ model_id: "gpt-5.1-codex", available: true }]
+    });
+  });
+
+  it("accepts the renderer's optional reset shape without inventing a reset timestamp", () => {
+    expect(parseCodexStatus("Weekly limit:     [██████████████░░░░░░] 70% left")).toEqual({
+      five_hour: { limit: null, used: null, remaining: null, resets_at: null },
+      weekly: { limit: 100, used: 30, remaining: 70, resets_at: null },
       models: []
     });
+  });
+
+  it.each([
+    ["monthly", "codex-status-0.144.5-monthly.txt"],
+    ["enterprise monthly credit", "codex-status-0.144.5-enterprise-monthly-credit.txt"],
+    ["generic", "codex-status-0.144.5-generic.txt"]
+  ])("accepts the exact Codex 0.144.5 %s status shape without mislabeling its windows", (_label, name) => {
+    expect(parseCodexStatus(fixture(name))).toEqual({
+      five_hour: { limit: null, used: null, remaining: null, resets_at: null },
+      weekly: { limit: null, used: null, remaining: null, resets_at: null },
+      models: [{ model_id: "gpt-5.1-codex-max", available: true }]
+    });
+  });
+
+  it("fails closed on the exact Codex 0.144.5 stale status shape", () => {
+    expect(parseCodexStatus(fixture("codex-status-0.144.5-stale.txt"))).toBeNull();
+  });
+
+  it("does not misclassify the exact Codex 0.144.5 unavailable status shape as usage", () => {
+    expect(parseCodexStatus(fixture("codex-status-0.144.5-unavailable.txt"))).toBeNull();
   });
 
   it("parses weekly-only Codex status without fabricating a 5h window", () => {
@@ -312,6 +342,29 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
     expect(result).toMatchObject({ exitCode: 1, stderr: "missing_credential" });
+  });
+
+  it.each([
+    ["stale", "codex-status-0.144.5-stale.txt"],
+    ["unavailable", "codex-status-0.144.5-unavailable.txt"],
+    ["not-yet-loaded", "codex-status-0.144.5-missing.txt"]
+  ])("reports the exact Codex 0.144.5 %s status as bounded provider unavailability", async (label, name) => {
+    const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "capture-pane"
+      ? { stdout: fixture(name), stderr: "", exitCode: 0 }
+      : tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: `${label}-status-test`,
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "provider_unavailable", exitCode: 1 });
   });
 
   it("links an external abort to the in-flight probe and still performs verified cleanup", async () => {

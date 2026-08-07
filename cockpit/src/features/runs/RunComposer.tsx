@@ -106,7 +106,7 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
     <label>Projekt<select aria-label="Projekt" value={projectId} onChange={(event) => { setProjectId(event.target.value); invalidate(); }}>{enabledProjects.map((project) => <option key={project.project_id} value={project.project_id}>{project.name}</option>)}</select></label>
     <label>Poskytovatel<select aria-label="Poskytovatel" value={provider} onChange={(event) => { setProvider(event.target.value); setModel(""); setReasoningEffort(null); invalidate(); }}>{providers.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
     <label>Model<select aria-label="Model" value={selectedModel} onChange={(event) => { setModel(event.target.value); setReasoningEffort(null); invalidate(); }}>{availableModels.map((candidate) => <option key={candidate.model_id} value={candidate.model_id}>{candidate.model_id}</option>)}</select></label>
-    <label>Reasoning<select aria-label="Reasoning" value={selectedReasoningEffort ?? ""} onChange={(event) => { setReasoningEffort(event.target.value as RunReasoningEffort); invalidate(); }}>{reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select></label>
+    <label>Reasoning<select aria-label="Reasoning" value={selectedReasoningEffort ?? ""} onChange={(event) => { setReasoningEffort(event.target.value as RunReasoningEffort); invalidate(); }}>{reasoningEfforts.map((effort) => <option key={effort} value={effort}>{reasoningEffortLabel(provider, effort)}</option>)}</select></label>
     <p>Doporučení: žádné (shadow-only)</p>
     {!quotaFresh ? <p>Kvóta poskytovatele není aktuální – běh poběží, ale spotřeba se neověřuje.</p> : null}
     <label>Prompt<textarea aria-label="Prompt" value={prompt} onChange={(event) => { setPrompt(event.target.value); invalidate(); }} /></label>
@@ -123,4 +123,5 @@ export function RunComposer({ projects, quotas, models, onPrepare, onApprove }: 
 }
 
 function estimatePromptTokens(prompt: string): number { return prompt.trim() === "" ? 0 : new TextEncoder().encode(prompt).length; }
+function reasoningEffortLabel(provider: string, effort: RunReasoningEffort): string { return provider === "codex_cli" && effort === "ultra" ? "ultra (automatická delegace)" : effort; }
 function sameInput(draft: RunRecord["current"], input: RunDraftInput): boolean { return JSON.stringify({ project_id: draft.project_id, prompt: draft.prompt, provider: draft.provider, model: draft.model, estimated_tokens: draft.estimated_tokens, requested_artifacts: draft.requested_artifacts, requested_reasoning_effort: draft.requested_reasoning_effort ?? null, prompt_review_acknowledged: draft.prompt_review_acknowledged === true }) === JSON.stringify({ ...input, requested_reasoning_effort: input.requested_reasoning_effort ?? null, prompt_review_acknowledged: input.prompt_review_acknowledged === true }); }

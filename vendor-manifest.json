@@ -3,7 +3,7 @@
   "canonical_repo": "autopilot",
   "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
   "note": "Byte-identical vendor of pinned contracts from autopilot@canonical_sha. No shared git history; provenance + drift are held here. See plan §2.2-2.4.",
-  "file_count": 150,
+  "file_count": 154,
   "beta_authored": [
     "product-design-os/assets/3d/brand-portrait-cloud.cloud.json",
     "product-design-os/assets/3d/radeq-cat-cloud.cloud.json",
@@ -732,7 +732,7 @@
     {
       "source_path": "src/data/delivery-system/brainstormCoordinator.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "69861e70da5d78aef098b6e5abb351e5d02dd1ede1bdb1eb13781d6ba7c926a6"
+      "content_hash": "954faa4d1fa3049e45dc49fde62adcf90bf8acc1d441fd348fc5b208f5b11d69"
     },
     {
       "source_path": "src/data/delivery-system/brainstormStore.ts",
@@ -790,7 +790,17 @@
     {
       "source_path": "src/data/delivery-system/executionProfile.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "2fd30182aea5c9490b479e4910fe00ea8f7b2701fd3554219f757614f4082c30"
+      "content_hash": "993698cec83f81ad3a1b94cd86737662b2561f536a73a335f96f563ea009a9ec"
+    },
+    {
+      "source_path": "src/data/delivery-system/executionProfile.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "993698cec83f81ad3a1b94cd86737662b2561f536a73a335f96f563ea009a9ec"
+    },
+    {
+      "source_path": "src/data/delivery-system/executionProfile.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "993698cec83f81ad3a1b94cd86737662b2561f536a73a335f96f563ea009a9ec"
     },
     {
       "source_path": "src/data/delivery-system/fallbackChains.ts",
@@ -852,7 +862,17 @@
     {
       "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "c3895d92bb982e12552b3cb6ad3fe0f9a2bade80f5376812d28f6a81cc4de76a"
+      "content_hash": "ee49f4049338b5a067f38bbb71a1ec5d9824e327673cb86d671a208b16ae9ab3"
+    },
+    {
+      "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "ee49f4049338b5a067f38bbb71a1ec5d9824e327673cb86d671a208b16ae9ab3"
+    },
+    {
+      "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
+      "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
+      "content_hash": "ee49f4049338b5a067f38bbb71a1ec5d9824e327673cb86d671a208b16ae9ab3"
     },
     {
       "source_path": "src/data/delivery-system/providerModelId.ts",

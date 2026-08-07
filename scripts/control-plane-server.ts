@@ -821,7 +821,7 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
         observed: true,
         health: new Set<string>(),
         discovery: model.discovery ?? "usage_probe",
-        reasoning_efforts: supported,
+        reasoning_efforts: model.reasoning_efforts ?? (snapshot.provider === "codex_cli" ? [] : supported),
         source: "live_snapshot"
       };
       route.available ||= model.available;

@@ -112,7 +112,7 @@ function routeInput(stateDir: string, value: unknown): BrainstormRoute {
   if (supported.length === 0 ? reasoningEffort !== null : reasoningEffort === null || !supported.includes(reasoningEffort)) {
     throw new HttpError(409, "unsupported_reasoning_effort");
   }
-  checkRouteEligible(stateDir, provider, model);
+  checkRouteEligible(stateDir, provider, model, reasoningEffort);
   return {
     provider,
     model,
@@ -129,7 +129,7 @@ function brainstormCreateInput(stateDir: string, body: Record<string, unknown>, 
   if (!Array.isArray(body.routes) || body.routes.length < 3 || body.routes.length > 4) throw new HttpError(400, "invalid_brainstorm_draft");
   const routeDrafts = body.routes.map((route) => routeDraft(route));
   if (new Set(routeDrafts.map((route) => route.provider)).size !== routeDrafts.length) throw new HttpError(400, "invalid_brainstorm_draft");
-  for (const route of routeDrafts) checkRouteEligible(stateDir, route.provider, route.model);
+  for (const route of routeDrafts) checkRouteEligible(stateDir, route.provider, route.model, route.reasoning_effort);
   if (typeof body.synthesizer !== "string" || !PROVIDERS.has(body.synthesizer as RunProvider)) throw new HttpError(400, "invalid_brainstorm_draft");
   const synthesizerSource = routeDrafts.find((route) => route.provider === body.synthesizer);
   if (synthesizerSource === undefined) throw new HttpError(400, "invalid_brainstorm_draft");
@@ -137,7 +137,7 @@ function brainstormCreateInput(stateDir: string, body: Record<string, unknown>, 
   const estimatedTokens = body.estimated_tokens as number;
   if (body.arbitration_route === undefined) throw new HttpError(400, "invalid_brainstorm_draft");
   const arbitrationDraft = body.arbitration_route === null ? null : routeDraft(body.arbitration_route);
-  if (arbitrationDraft !== null) checkRouteEligible(stateDir, arbitrationDraft.provider, arbitrationDraft.model);
+  if (arbitrationDraft !== null) checkRouteEligible(stateDir, arbitrationDraft.provider, arbitrationDraft.model, arbitrationDraft.reasoning_effort);
   const allocation = canonicalAllocation(estimatedTokens, routeDrafts.length, arbitrationDraft !== null);
   const routes: BrainstormRoute[] = routeDrafts.map((route) => ({ ...route, estimated_tokens: allocation.perRoute }));
   const synthesizerRoute: BrainstormRoute = { ...synthesizerSource, estimated_tokens: allocation.synthesis };
@@ -171,8 +171,8 @@ function routeDraft(value: unknown): BrainstormRoute {
   return { provider, model: record.model as string, reasoning_effort: requested, estimated_tokens: 1 };
 }
 
-function checkRouteEligible(stateDir: string, provider: RunProvider, model: string): void {
-  if (!isRunRouteEligible(stateDir, provider, model, new Date().toISOString())) throw new HttpError(409, "brainstorm_route_unavailable");
+function checkRouteEligible(stateDir: string, provider: RunProvider, model: string, reasoning: RunReasoningEffort | null): void {
+  if (!isRunRouteEligible(stateDir, provider, model, new Date().toISOString(), reasoning)) throw new HttpError(409, "brainstorm_route_unavailable");
 }
 
 function canonicalAllocation(estimatedTokens: number, routeCount: number, hasArbitration: boolean): { readonly perRoute: number; readonly synthesis: number } {

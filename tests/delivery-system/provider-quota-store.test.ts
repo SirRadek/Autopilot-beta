@@ -191,13 +191,15 @@ describe("provider quota store", () => {
       schema_version: "v1",
       snapshots: [{
         ...minimumSnapshot(),
+        provider: "codex_cli",
         cli_version: "codex-cli 1.2.3 (stable)",
         models: [{
           model_id: "gpt-5.6-sol",
           available: true,
           health: "healthy",
           source: "cli",
-          discovery: "models_cache"
+          discovery: "models_cache",
+          reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"]
         }]
       }]
     };
@@ -205,6 +207,28 @@ describe("provider quota store", () => {
     writeProviderQuotaStore(stateDir, document);
 
     expect(readProviderQuotaStore(stateDir)).toEqual(document);
+  });
+
+  it("does not let persisted per-model metadata expand another provider's effort capabilities", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-store-provider-efforts-"));
+    const document: ProviderQuotaStoreDocument = {
+      schema_version: "v1",
+      snapshots: [{
+        ...minimumSnapshot(),
+        provider: "claude_cli",
+        models: [{
+          model_id: "claude-opus-4-8",
+          available: true,
+          health: "healthy",
+          source: "cli",
+          reasoning_efforts: ["high", "ultra"]
+        }]
+      }]
+    };
+
+    writeProviderQuotaStore(stateDir, document);
+
+    expect(readProviderQuotaStore(stateDir).snapshots[0]?.models[0]?.reasoning_efforts).toEqual(["high"]);
   });
 
   it("defaults unknown discovery and nulls an overlong CLI version without dropping the snapshot", () => {
@@ -234,6 +258,39 @@ describe("provider quota store", () => {
         health: "healthy",
         source: "cli",
         discovery: "usage_probe"
+      }]
+    }]);
+  });
+
+  it("filters malformed and unsupported Codex reasoning efforts in provider context", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-store-reasoning-default-"));
+    const path = join(stateDir, "provider-quota-snapshots.json");
+    writeFileSync(path, JSON.stringify({
+      schema_version: "v1",
+      snapshots: [{
+        ...minimumSnapshot(),
+        provider: "codex_cli",
+        models: [{
+          model_id: "gpt-5.6-sol",
+          available: true,
+          health: "healthy",
+          source: "cli",
+          discovery: "models_cache",
+          reasoning_efforts: ["low", "future-effort", "ultra", 42, "ultra"]
+        }]
+      }]
+    }), "utf8");
+
+    expect(readProviderQuotaStore(stateDir).snapshots).toEqual([{
+      ...minimumSnapshot(),
+      provider: "codex_cli",
+      models: [{
+        model_id: "gpt-5.6-sol",
+        available: true,
+        health: "healthy",
+        source: "cli",
+        discovery: "models_cache",
+        reasoning_efforts: ["low", "ultra"]
       }]
     }]);
   });

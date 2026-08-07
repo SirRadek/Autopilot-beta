@@ -88,6 +88,30 @@ describe("control plane profile scoping and promotion endpoints", () => {
     expect((response.json as { error: string }).error).toBe("unsupported_reasoning_effort");
   });
 
+  it("keeps delegation-capable Codex ultra draft-only, then binds it through the ordinary owner approval", async () => {
+    const { stateDir, request, workerDispatch } = await harness();
+    const response = await request("POST", "/runs", { ...devDraft, model: "gpt-5.6-sol", requested_reasoning_effort: "ultra" });
+
+    expect(response.status).toBe(201);
+    expect(response.json).toMatchObject({
+      status: "draft",
+      approved_revision: null,
+      approved_by: null,
+      current: { model: "gpt-5.6-sol", requested_reasoning_effort: "ultra" }
+    });
+    expect(workerDispatch).not.toHaveBeenCalled();
+
+    const run = response.json as { current: { run_id: string; revision: number } };
+    expect((await request("POST", `/runs/${run.current.run_id}/approve`, { revision: run.current.revision, operator: "owner" })).status).toBe(200);
+    await vi.waitFor(() => expect(readRunStore(stateDir).runs.find((candidate) => candidate.current.run_id === run.current.run_id)?.status).toBe("completed"));
+    expect(workerDispatch).toHaveBeenCalledTimes(1);
+    expect(workerDispatch.mock.calls[0]?.[0]).toMatchObject({
+      vendor: "codex_cli",
+      model: "gpt-5.6-sol",
+      generationSettings: { reasoning_effort: "ultra" }
+    });
+  });
+
   it("does not trust a caller-supplied non-owner promotion approver", async () => {
     const { stateDir, request } = await harness();
     const prepared = await request("POST", "/runs", devDraft);
@@ -152,16 +176,21 @@ describe("control plane profile scoping and promotion endpoints", () => {
     const { stateDir, request } = await harness();
     const now = new Date().toISOString();
     const shared = { model_id: "shared-model", available: true, health: "healthy" as const, source: "api" as const };
-    const quota = { source: "api" as const, fetched_at: now, observed_at: now, five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null }, weekly: { limit: 1_000, used: 0, remaining: 1_000, resets_at: null }, api_spend: 0, currency: "USD", models: [shared], health: "healthy" as const, error_code: null };
+    const quota = { source: "api" as const, fetched_at: now, observed_at: now, five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null }, weekly: { limit: 1_000, used: 0, remaining: 1_000, resets_at: null }, api_spend: 0, currency: "USD", health: "healthy" as const, error_code: null };
     writeProviderQuotaStore(stateDir, { schema_version: "v1", snapshots: [
-      { provider: "codex_cli", ...quota }, { provider: "openrouter_api", ...quota }
+      {
+        provider: "codex_cli",
+        ...quota,
+        models: [{ ...shared, reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] as const }]
+      },
+      { provider: "openrouter_api", ...quota, models: [shared] }
     ] });
 
     const response = await request("GET", "/providers/models", null);
     const model = (response.json as { models: Array<{ model_id: string; reasoning_efforts: string[]; provider_routes: Array<{ provider: string; reasoning_efforts: string[] }> }> }).models.find((entry) => entry.model_id === "shared-model")!;
     expect(model.reasoning_efforts).toEqual([]);
     expect(model.provider_routes.map((route) => ({ provider: route.provider, reasoning_efforts: route.reasoning_efforts }))).toEqual([
-      { provider: "codex_cli", reasoning_efforts: ["low", "medium", "high", "xhigh"] },
+      { provider: "codex_cli", reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] },
       { provider: "openrouter_api", reasoning_efforts: [] }
     ]);
   });
