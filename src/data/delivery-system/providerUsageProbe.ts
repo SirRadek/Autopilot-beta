@@ -22,6 +22,8 @@ export interface TmuxCommandResult {
   readonly exitCode: number;
 }
 
+type SpecificProviderErrorCode = Exclude<ProviderErrorCode, "provider_error">;
+
 export type TmuxCommandExecutor = (
   command: "tmux",
   args: readonly string[],
@@ -31,6 +33,10 @@ export type TmuxCommandExecutor = (
 
 const MAX_CAPTURE_BYTES = 128 * 1024;
 const CLEANUP_TIMEOUT_MS = 1_000;
+const CODEX_READY_CAPTURE_ATTEMPTS = 25;
+const CODEX_STATUS_CAPTURE_ATTEMPTS = 25;
+const CODEX_CAPTURE_INTERVAL_MS = 250;
+const CODEX_STARTUP_SETTLE_MS = 4_000;
 const PROBE_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"] as const;
 const CLI: Readonly<Record<UsageProbeProvider, { readonly args: readonly string[]; readonly slashCommand: "/status" | "/usage" }>> = {
   codex_cli: { args: ["--no-alt-screen"], slashCommand: "/status" },
@@ -179,6 +185,7 @@ export async function runTmuxUsageProbe(
   const target = `${sessionId}:0.0`;
   const spec = CLI[provider];
   let result: TmuxCommandResult;
+  let fallbackErrorCode: SpecificProviderErrorCode = "provider_unavailable";
   try {
     if (controller.signal.aborted) throw new Error("timeout");
     if (options.executable.length === 0) throw new Error("provider_executable_missing");
@@ -191,25 +198,81 @@ export async function runTmuxUsageProbe(
       ...sessionEnvironmentArguments(environment),
       "-c", workingDirectory,
       options.executable,
-      ...spec.args
-    ]), controller.signal, environment);
-    await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
-    await checked(execute, withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]), controller.signal, environment);
-    await pause(delayMs ?? 250, controller.signal);
-    await checked(execute, withSocket(socketPath, ["send-keys", "-t", target, "C-m"]), controller.signal, environment);
-    await pause(delayMs ?? 4_000, controller.signal);
-    const captured = await checked(execute, withSocket(socketPath, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target]), controller.signal, environment);
-    const stdout = Buffer.from(captured.stdout).subarray(0, MAX_CAPTURE_BYTES).toString("utf8");
-    const parsed = provider === "codex_cli" ? parseCodexStatus(stdout) : provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
-    if (parsed === null) {
-      const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
-      const codexFailure = provider === "codex_cli" ? codexStatusFailure(terminalText(stdout)) : null;
-      result = failureResult(missing ? "missing_credential" : codexFailure ?? "malformed_response");
+      ...probeCliArguments(provider, spec.args, workingDirectory)
+    ]), controller.signal, environment, "provider_unavailable");
+    fallbackErrorCode = "malformed_response";
+    if (provider === "codex_cli") {
+      const ready = await waitForCodexComposer(
+        execute,
+        socketPath,
+        target,
+        controller.signal,
+        environment,
+        delayMs
+      );
+      if (!ready) {
+        result = failureResult("malformed_response");
+      } else {
+        // Codex 0.144.5 can paint the composer before its input handler is ready. A slash
+        // command sent at that first frame is echoed but never opens the status panel.
+        await pause(delayMs ?? CODEX_STARTUP_SETTLE_MS, controller.signal);
+        await checked(
+          execute,
+          withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]),
+          controller.signal,
+          environment,
+          "malformed_response"
+        );
+        await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, controller.signal);
+        await checked(
+          execute,
+          withSocket(socketPath, ["send-keys", "-t", target, "C-m"]),
+          controller.signal,
+          environment,
+          "malformed_response"
+        );
+        result = await waitForCodexStatus(
+          execute,
+          socketPath,
+          target,
+          controller.signal,
+          environment,
+          delayMs
+        );
+      }
     } else {
-      result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
+      await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
+      await checked(
+        execute,
+        withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]),
+        controller.signal,
+        environment,
+        "malformed_response"
+      );
+      await pause(delayMs ?? 250, controller.signal);
+      await checked(
+        execute,
+        withSocket(socketPath, ["send-keys", "-t", target, "C-m"]),
+        controller.signal,
+        environment,
+        "malformed_response"
+      );
+      await pause(delayMs ?? 4_000, controller.signal);
+      const stdout = await capturePane(execute, socketPath, target, controller.signal, environment);
+      const parsed = provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
+      if (parsed === null) {
+        const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
+        result = failureResult(missing ? "missing_credential" : "malformed_response");
+      } else {
+        result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
+      }
     }
   } catch (error) {
-    result = failureResult(controller.signal.aborted ? "timeout" : normalizeProviderError(error));
+    const normalized = normalizeProviderError(error);
+    const errorCode = controller.signal.aborted
+      ? "timeout"
+      : normalized === "provider_error" ? fallbackErrorCode : normalized;
+    result = failureResult(errorCode);
   }
 
   clearTimeout(timer);
@@ -230,16 +293,101 @@ export async function runTmuxUsageProbe(
     : failureResult("provider_runtime_denied");
 }
 
+function probeCliArguments(
+  provider: UsageProbeProvider,
+  baseArguments: readonly string[],
+  workingDirectory: string
+): readonly string[] {
+  if (provider !== "codex_cli") return baseArguments;
+  // Codex otherwise blocks on a trust prompt for every fresh probe directory and tries to
+  // persist that decision under HOME. Mark only this empty, mode-0700 directory untrusted for
+  // the invocation so project-local config/hooks stay disabled and no trust state is written.
+  // Its mandatory SQLite stores also default to HOME, which is read-only in the service. Keep
+  // them beside the private socket so they remain writable and are removed with the probe.
+  const projectOverride = `projects={${JSON.stringify(workingDirectory)}={trust_level="untrusted"}}`;
+  const sqliteOverride = `sqlite_home=${JSON.stringify(workingDirectory)}`;
+  return [...baseArguments, "-c", projectOverride, "-c", sqliteOverride];
+}
+
+async function waitForCodexComposer(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<boolean> {
+  for (let attempt = 0; attempt < CODEX_READY_CAPTURE_ATTEMPTS; attempt += 1) {
+    const stdout = await capturePane(execute, socketPath, target, signal, environment);
+    if (codexComposerReady(stdout)) return true;
+    if (attempt + 1 < CODEX_READY_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return false;
+}
+
+async function waitForCodexStatus(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<TmuxCommandResult> {
+  for (let attempt = 0; attempt < CODEX_STATUS_CAPTURE_ATTEMPTS; attempt += 1) {
+    const stdout = await capturePane(execute, socketPath, target, signal, environment);
+    const parsed = parseCodexStatus(stdout);
+    if (parsed !== null) {
+      return { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
+    }
+    const failure = codexStatusFailure(terminalText(stdout));
+    if (failure !== null) return failureResult(failure);
+    if (attempt + 1 < CODEX_STATUS_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return failureResult("malformed_response");
+}
+
+async function capturePane(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>
+): Promise<string> {
+  const captured = await checked(
+    execute,
+    withSocket(socketPath, ["capture-pane", "-p", "-J", "-S", "-300", "-t", target]),
+    signal,
+    environment,
+    "malformed_response"
+  );
+  return Buffer.from(captured.stdout).subarray(0, MAX_CAPTURE_BYTES).toString("utf8");
+}
+
+function codexComposerReady(raw: string): boolean {
+  const text = terminalText(raw);
+  if (/Do you trust the contents of this directory|Press enter to continue/i.test(text)) return false;
+  if (parseCodexStatus(text) !== null || codexStatusFailure(text) !== null) return true;
+  return />_\s+OpenAI Codex\s+\(v[^\r\n)]+\)/i.test(text) && /^\s*›(?:\s|$)/m.test(text);
+}
+
 async function checked(
   execute: TmuxCommandExecutor,
   args: readonly string[],
   signal: AbortSignal,
-  environment: Readonly<Record<string, string>>
+  environment: Readonly<Record<string, string>>,
+  fallbackErrorCode: SpecificProviderErrorCode
 ): Promise<TmuxCommandResult> {
   // The signal-aware executor settles only after its tmux client has exited. Await that
   // acknowledgement before cleanup so a late new-session cannot recreate the isolated server.
   const result = await execute("tmux", args, signal, environment);
-  if (result.exitCode !== 0) throw new Error(normalizeProviderError(result.stderr || "provider_unavailable"));
+  if (result.exitCode !== 0) {
+    const normalized = normalizeProviderError(result.stderr || "provider_unavailable");
+    throw new Error(normalized === "provider_error" ? fallbackErrorCode : normalized);
+  }
   return result;
 }
 

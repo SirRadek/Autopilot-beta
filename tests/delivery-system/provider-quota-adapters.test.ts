@@ -165,7 +165,7 @@ describe("provider quota adapters", () => {
     expect(snapshot.error_code).toBe("missing_credential");
   });
 
-  it.each(["provider_executable_missing", "provider_runtime_denied"] as const)("preserves the fixed built-in probe error %s", async (errorCode) => {
+  it.each(["provider_executable_missing", "provider_runtime_denied", "malformed_response"] as const)("preserves the fixed built-in probe error %s", async (errorCode) => {
     const snapshot = await createProviderQuotaAdapters({
       runCommand: runnerFor(""),
       commands: usageCommands,

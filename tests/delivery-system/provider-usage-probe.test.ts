@@ -14,7 +14,8 @@ import {
 } from "../../src/data/delivery-system/providerUsageProbe";
 
 // The codex-status-0.144.5-* files are verbatim sanitized renderer snapshots from
-// openai/codex tag rust-v0.144.5 under codex-rs/tui/src/status/snapshots/.
+// openai/codex tag rust-v0.144.5 under codex-rs/tui/src/status/snapshots/, except
+// codex-status-0.144.5-live-* which are sanitized captures from the deployed VM TUI.
 const fixture = (name: string): string => readFileSync(fileURLToPath(new URL(`../fixtures/provider-usage/${name}`, import.meta.url)), "utf8");
 const runtimeRoots: string[] = [];
 
@@ -47,6 +48,17 @@ describe("provider usage parsers", () => {
       five_hour: { limit: null, used: null, remaining: null, resets_at: null },
       weekly: { limit: 100, used: 30, remaining: 70, resets_at: null },
       models: []
+    });
+  });
+
+  it("parses the real Codex status behind update and bubblewrap preamble", () => {
+    expect(parseCodexStatus(fixture("codex-status-0.144.5-live-status.txt"))).toEqual({
+      five_hour: { limit: null, used: null, remaining: null, resets_at: null },
+      weekly: { limit: 100, used: 58, remaining: 42, resets_at: "12:34 on 9 Aug" },
+      models: [
+        { model_id: "gpt-5.6-sol", available: true },
+        { model_id: "GPT-5.3-Codex-Spark", available: true }
+      ]
     });
   });
 
@@ -227,7 +239,14 @@ describe("tmux usage probe", () => {
     expect(result.stdout.length).toBeLessThanOrEqual(128 * 1024);
     expect(calls.every(({ args }) => args[0] === "-S" && args[1] === join(launchCwd!, "tmux.sock"))).toBe(true);
     const newSession = calls.find(({ args }) => tmuxSubcommand(args) === "new-session");
-    expect(newSession?.args.slice(-2)).toEqual(["/provider-bin/codex", "--no-alt-screen"]);
+    expect(newSession?.args.slice(-6)).toEqual([
+      "/provider-bin/codex",
+      "--no-alt-screen",
+      "-c",
+      `projects={${JSON.stringify(launchCwd!)}={trust_level="untrusted"}}`,
+      "-c",
+      `sqlite_home=${JSON.stringify(launchCwd!)}`
+    ]);
     expect(newSession?.args).not.toContain("codex --no-alt-screen");
     expect(calls.some(({ args }) => args.includes("/status"))).toBe(true);
     expect(calls.slice(-2).map(({ args }) => tmuxSubcommand(args))).toEqual(["kill-server", "has-session"]);
@@ -248,6 +267,125 @@ describe("tmux usage probe", () => {
     for (const [key, value] of Object.entries(newSession?.env ?? {})) {
       expect(newSession?.args).toContain(`${key}=${value}`);
     }
+  });
+
+  it("uses writable Codex state, bypasses the real trust gate, and lets the composer settle before /status", async () => {
+    const runtimeRoot = temporaryRuntimeRoot();
+    let state: "trust" | "ready" | "settling" | "status" = "trust";
+    let statusTyped = false;
+    let composerObservedAt: number | undefined;
+    let launchArgs: readonly string[] = [];
+    let captureCalls = 0;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "new-session") {
+        const executableIndex = args.indexOf("/provider-bin/codex");
+        launchArgs = args.slice(executableIndex);
+        const workingDirectory = args[args.indexOf("-c") + 1]!;
+        const trustOverride = `projects={${JSON.stringify(workingDirectory)}={trust_level="untrusted"}}`;
+        const sqliteOverride = `sqlite_home=${JSON.stringify(workingDirectory)}`;
+        state = launchArgs.includes(trustOverride) && launchArgs.includes(sqliteOverride) ? "ready" : "trust";
+      } else if (subcommand === "send-keys" && args.includes("/status")) {
+        if (state === "ready" && composerObservedAt !== undefined && Date.now() - composerObservedAt >= 4) {
+          statusTyped = true;
+        }
+      } else if (subcommand === "send-keys" && args.includes("C-m")) {
+        if (statusTyped) state = "settling";
+        else if (state === "trust") state = "ready";
+      } else if (subcommand === "capture-pane") {
+        captureCalls += 1;
+        if (state === "ready" && composerObservedAt === undefined) composerObservedAt = Date.now();
+        const name = state === "trust"
+          ? "codex-status-0.144.5-live-trust-gate.txt"
+          : state === "ready" || state === "settling"
+            ? "codex-status-0.144.5-live-preamble.txt"
+            : "codex-status-0.144.5-live-status.txt";
+        if (state === "settling") state = "status";
+        return { stdout: fixture(name), stderr: "", exitCode: 0 };
+      } else if (subcommand === "has-session") {
+        return { stdout: "", stderr: "no server", exitCode: 1 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "live-trust-gate",
+      delayMs: 5,
+      runtimeRoot
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      weekly: { remaining: 42 },
+      models: [
+        { model_id: "gpt-5.6-sol", available: true },
+        { model_id: "GPT-5.3-Codex-Spark", available: true }
+      ]
+    });
+    expect(launchArgs).toEqual([
+      "/provider-bin/codex",
+      "--no-alt-screen",
+      "-c",
+      expect.stringMatching(/^projects=\{".*autopilot-provider-probe-.*"=\{trust_level="untrusted"\}\}$/),
+      "-c",
+      expect.stringMatching(/^sqlite_home=".*autopilot-provider-probe-.*"$/)
+    ]);
+    expect(captureCalls).toBeGreaterThanOrEqual(3);
+  });
+
+  it("classifies an unrecognized post-launch capture failure as malformed_response", async () => {
+    let submitted = false;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "send-keys" && args.includes("C-m")) submitted = true;
+      if (subcommand === "capture-pane") {
+        return submitted
+          ? { stdout: "", stderr: "unexpected capture failure containing /private/provider/path", exitCode: 1 }
+          : { stdout: fixture("codex-status-0.144.5-live-preamble.txt"), stderr: "", exitCode: 0 };
+      }
+      if (subcommand === "has-session") return { stdout: "", stderr: "no server", exitCode: 1 };
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 100,
+      sessionId: "capture-error",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "malformed_response", exitCode: 1 });
+    expect(JSON.stringify(result)).not.toContain("/private/provider/path");
+  });
+
+  it("returns malformed_response when bounded captures never contain Codex status", async () => {
+    let captureCalls = 0;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "capture-pane") {
+        captureCalls += 1;
+        return { stdout: fixture("codex-status-0.144.5-live-preamble.txt"), stderr: "", exitCode: 0 };
+      }
+      if (subcommand === "has-session") return { stdout: "", stderr: "no server", exitCode: 1 };
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "missing-status",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "malformed_response", exitCode: 1 });
+    expect(captureCalls).toBeGreaterThan(1);
   });
 
   it("preserves a successful probe when tmux 3.4 reports the removed socket as absent", async () => {
@@ -459,7 +597,7 @@ describe("tmux usage probe", () => {
     expect(JSON.stringify(result)).not.toContain("/private/tmux/socket");
   });
 
-  it("never returns raw tmux stderr", async () => {
+  it("maps an unclassified launch failure to bounded provider unavailability without raw stderr", async () => {
     const execute: TmuxCommandExecutor = async (_command, args) => tmuxSubcommand(args) === "new-session"
       ? { stdout: "", stderr: "unexpected failure containing /private/provider/path", exitCode: 1 }
       : tmuxSubcommand(args) === "has-session"
@@ -475,7 +613,7 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "provider_error", exitCode: 1 });
+    expect(result).toEqual({ stdout: "", stderr: "provider_unavailable", exitCode: 1 });
     expect(JSON.stringify(result)).not.toContain("/private/provider/path");
   });
 });
