@@ -116,20 +116,43 @@ describe("provider usage parsers", () => {
     ]);
   });
 
-  it("normalizes authenticated Claude model labels and drops unmapped labels", () => {
+  it("normalizes authenticated Claude model labels, including the extended-limit banner model", () => {
     expect(parseClaudeUsage(fixture("claude-usage.txt"))).toEqual({
       five_hour: { limit: 100, used: 12, remaining: 88, resets_at: "11:40am (UTC)" },
       weekly: { limit: 100, used: 34, remaining: 66, resets_at: "Jul 17, 6pm (UTC)" },
       models: [
-        { model_id: "claude-opus-4-8", available: true }
+        { model_id: "claude-opus-4-8", available: true },
+        { model_id: "claude-fable-5", available: true }
       ]
     });
   });
 
   it("returns no Claude models when every extracted label is unmapped", () => {
-    const raw = fixture("claude-usage.txt").replace("Opus 4.8", "Fable 5");
+    const raw = fixture("claude-usage.txt")
+      .replaceAll("Opus 4.8", "Zephyr 9")
+      .replaceAll("Fable 5", "Zephyr 9")
+      .replaceAll("Fable", "Zephyr");
 
     expect(parseClaudeUsage(raw)?.models).toEqual([]);
+  });
+
+  it("marks a model unavailable when its per-family weekly section is exhausted", () => {
+    const raw = fixture("claude-usage.txt").replace(
+      "Current week (Fable)\n0% 0% used",
+      "Current week (Fable)\n0% 100% used"
+    );
+    expect(parseClaudeUsage(raw)?.models).toEqual([
+      { model_id: "claude-opus-4-8", available: true },
+      { model_id: "claude-fable-5", available: false }
+    ]);
+  });
+
+  it("marks every Claude model unavailable when the all-models weekly window is exhausted", () => {
+    const raw = fixture("claude-usage.txt").replace("0% 34% used", "0% 100% used");
+    expect(parseClaudeUsage(raw)?.models).toEqual([
+      { model_id: "claude-opus-4-8", available: false },
+      { model_id: "claude-fable-5", available: false }
+    ]);
   });
 
   it("does not infer Claude quota from an unauthenticated login screen", () => {

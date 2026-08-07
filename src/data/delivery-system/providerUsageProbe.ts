@@ -101,18 +101,31 @@ export function parseClaudeUsage(raw: string): ParsedUsage | null {
   if (!session || !week) return null;
   const sessionUsed = boundedPercent(session[1]!);
   const weeklyUsed = boundedPercent(week[1]!);
-  const models = [
-    text.match(/^([A-Za-z]+\s+\d+(?:\.\d+)?)\s+\([^\r\n]*context\)\s+·\s+Claude/im)?.[1],
-    text.match(/Extended:\s+([A-Za-z]+\s+\d+(?:\.\d+)?)/i)?.[1]
-  ].filter((value): value is string => value !== undefined);
-  const seenModelIds = new Set<string>();
-  const available = weeklyUsed < 100 && sessionUsed < 100;
+  const sharedAvailable = weeklyUsed < 100 && sessionUsed < 100;
+  // The screen-reader /usage screen names models in three places: the header model line
+  // ("Opus 4.8 (1M context) · Claude Max"), the extended-limit banner ("Extended: Fable 5 is
+  // included in your weekly limit"), and per-family sections ("Current week (Fable)") that
+  // carry that family's own weekly percentage on top of the all-models window.
+  const labelled = [
+    ...[
+      text.match(/^([A-Za-z]+\s+\d+(?:\.\d+)?)\s+\([^\r\n]*context\)\s+·\s+Claude/im)?.[1],
+      text.match(/Extended:\s+([A-Za-z]+\s+\d+(?:\.\d+)?)/i)?.[1]
+    ].filter((label): label is string => label !== undefined)
+      .map((label) => ({ label, available: sharedAvailable })),
+    ...[...text.matchAll(/Current week \((?!all models\))([A-Za-z][A-Za-z0-9 .-]{0,40})\)[\s\S]*?([0-9]+(?:\.[0-9]+)?)%\s+used/gi)]
+      .slice(0, 32)
+      .map((match) => ({ label: match[1]!.trim(), available: sharedAvailable && boundedPercent(match[2]!) < 100 }))
+  ];
+  const modelAvailability = new Map<string, boolean>();
+  for (const { label, available } of labelled) {
+    for (const model_id of expandQuotaLabel("claude_cli", label)) {
+      modelAvailability.set(model_id, (modelAvailability.get(model_id) ?? true) && available);
+    }
+  }
   return {
     five_hour: usedPercentWindow(sessionUsed, session[2]!),
     weekly: usedPercentWindow(weeklyUsed, week[2]!),
-    models: models.flatMap((label) => expandQuotaLabel("claude_cli", label)
-      .map((model_id) => ({ model_id, available })))
-      .filter((model) => (seenModelIds.has(model.model_id) ? false : (seenModelIds.add(model.model_id), true)))
+    models: [...modelAvailability].map(([model_id, available]) => ({ model_id, available })).slice(0, 256)
   };
 }
 

@@ -4,7 +4,13 @@ import { AGY_VERIFIED_MODELS } from "./routingModes";
 
 export const STATIC_PROVIDER_MODEL_CATALOG = {
   claude_cli: {
-    models: ["claude-opus-4-8"],
+    models: [
+      "claude-opus-4-8",
+      "claude-fable-5",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-haiku-4-5-20251001"
+    ],
     reasoning_efforts: SUPPORTED_REASONING_EFFORTS.claude_cli
   },
   codex_cli: {

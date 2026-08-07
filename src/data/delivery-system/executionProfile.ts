@@ -9,6 +9,10 @@ export type VerificationMode = "diff_scoped" | "full_fail_closed";
 export const DEV_DEFAULT_COST_TIERS: readonly LaneCostTier[] = ["free", "mid"];
 export const SUPPORTED_REASONING_EFFORTS = {
   codex_cli: ["low", "medium", "high", "xhigh"],
+  // Verified against the installed Claude CLI: `claude --help` documents `--effort <level>`
+  // with exactly (low, medium, high, xhigh, max). The CLI also accepts `ultracode`, but that
+  // is a mode alias (starts at xhigh with ultracode orchestration on), not a reasoning effort,
+  // and must never be dispatchable through this lane's effort knob.
   claude_cli: ["low", "medium", "high", "xhigh", "max"],
   agy_cli: ["low", "medium", "high"],
   openrouter_api: [],
