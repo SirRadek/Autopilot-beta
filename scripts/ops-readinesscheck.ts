@@ -8,7 +8,8 @@ const ERROR_CODES = new Set([
   "invalid_token_gateway_state", "probe_not_configured", "not_observed", "timeout",
   "admin_credentials_missing", "invalid_admin_credentials", "admin_credentials_in_managed_state", "service_token_missing",
   "invalid_service_token", "secure_cookies_required",
-  "missing_credential", "malformed_response", "provider_unavailable", "provider_error"
+  "missing_credential", "malformed_response", "provider_unavailable", "provider_error",
+  "provider_executable_missing", "provider_runtime_denied", "quota_not_applicable"
 ]);
 
 interface ComponentPair {
