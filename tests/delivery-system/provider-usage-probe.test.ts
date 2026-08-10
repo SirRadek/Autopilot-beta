@@ -422,6 +422,64 @@ describe("tmux usage probe", () => {
     expect(captureCalls).toBeGreaterThanOrEqual(5);
   });
 
+  // Measured on the VM against Codex 0.144.5: an Enter sent right after the composer echoes
+  // clears the composer but never opens the status panel. The probe must notice the empty
+  // composer and submit again rather than reporting malformed_response.
+  it("retries the whole submission when the first Enter empties the composer without rendering status", async () => {
+    const runtimeRoot = temporaryRuntimeRoot();
+    const calls: (readonly string[])[] = [];
+    let composerHoldsCommand = false;
+    let entersSent = 0;
+    let launched = false;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      calls.push([...args]);
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "new-session") {
+        launched = true;
+      } else if (subcommand === "send-keys") {
+        if (args.includes("/status")) composerHoldsCommand = true;
+        else if (args.includes("Enter")) {
+          entersSent += 1;
+          // The first submission is swallowed: the composer empties, no status panel.
+          composerHoldsCommand = false;
+        }
+      } else if (subcommand === "capture-pane") {
+        if (!launched) return { stdout: "", stderr: "", exitCode: 0 };
+        if (entersSent >= 2) {
+          return { stdout: fixture("codex-status-0.144.5-live-status.txt"), stderr: "", exitCode: 0 };
+        }
+        return {
+          stdout: composerHoldsCommand
+            ? codexComposerWith("/status")
+            : fixture("codex-status-0.144.5-live-preamble.txt"),
+          stderr: "",
+          exitCode: 0
+        };
+      } else if (subcommand === "has-session") {
+        return { stdout: "", stderr: "no server", exitCode: 1 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 5_000,
+      sessionId: "resubmit",
+      delayMs: 1,
+      runtimeRoot
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ weekly: { remaining: 42 } });
+    expect(entersSent).toBe(2);
+    // The command is retyped only after the composer emptied, so `/status/status` is impossible.
+    const typed = calls.filter((args) => tmuxSubcommand(args) === "send-keys" && args.includes("/status"));
+    expect(typed).toHaveLength(2);
+    const enters = calls.filter((args) => tmuxSubcommand(args) === "send-keys" && args.at(-1) === "Enter");
+    expect(enters).toHaveLength(2);
+  });
+
   it("classifies an unrecognized post-launch capture failure as malformed_response", async () => {
     const privateAccount = "probe-owner@example.invalid";
     const privateSession = "00000000-0000-4000-8000-000000000001";
