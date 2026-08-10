@@ -35,7 +35,11 @@ const MAX_CAPTURE_BYTES = 128 * 1024;
 const CLEANUP_TIMEOUT_MS = 1_000;
 const CODEX_READY_CAPTURE_ATTEMPTS = 25;
 const CODEX_COMMAND_CAPTURE_ATTEMPTS = 25;
-const CODEX_STATUS_CAPTURE_ATTEMPTS = 25;
+// The status panel renders ~0.3 s after an Enter that lands, so a short window per submission
+// attempt detects success quickly and hands the remaining budget to the next attempt.
+const CODEX_STATUS_CAPTURE_ATTEMPTS = 8;
+const CODEX_SUBMIT_ATTEMPTS = 4;
+const CODEX_SUBMIT_SETTLE_MS = 500;
 const CODEX_CAPTURE_INTERVAL_MS = 250;
 const PROBE_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"] as const;
 const CLI: Readonly<Record<UsageProbeProvider, { readonly args: readonly string[]; readonly slashCommand: "/status" | "/usage" }>> = {
@@ -165,7 +169,9 @@ export async function runTmuxUsageProbe(
   }
 ): Promise<TmuxCommandResult> {
   const execute = options.execute ?? executeTmux;
-  const timeoutMs = options.timeoutMs ?? 20_000;
+  // Four submission attempts plus the launch wait need more headroom than the previous 20 s,
+  // which aborted mid-retry and surfaced as malformed_response.
+  const timeoutMs = options.timeoutMs ?? 45_000;
   const sessionId = options.sessionId ?? `autopilot-quota-${randomBytes(6).toString("hex")}`;
   const delayMs = options.delayMs;
   const environment = sanitizedProbeEnvironment(process.env);
@@ -213,17 +219,7 @@ export async function runTmuxUsageProbe(
       if (!ready) {
         result = failureResult("malformed_response");
       } else {
-        await checked(
-          execute,
-          withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]),
-          controller.signal,
-          environment,
-          "malformed_response"
-        );
-        // Codex processes pasted text asynchronously. Wait until a later frame proves that
-        // the composer accepted the complete slash command, then submit Enter as a distinct
-        // keystroke. Sending text and Enter together can leave /status sitting unsubmitted.
-        const commandAccepted = await waitForCodexComposerCommand(
+        result = await submitCodexStatusCommand(
           execute,
           socketPath,
           target,
@@ -232,25 +228,6 @@ export async function runTmuxUsageProbe(
           environment,
           delayMs
         );
-        if (!commandAccepted) {
-          result = failureResult("malformed_response");
-        } else {
-          await checked(
-            execute,
-            withSocket(socketPath, ["send-keys", "-t", target, "Enter"]),
-            controller.signal,
-            environment,
-            "malformed_response"
-          );
-          result = await waitForCodexStatus(
-            execute,
-            socketPath,
-            target,
-            controller.signal,
-            environment,
-            delayMs
-          );
-        }
       }
     } else {
       await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
@@ -360,6 +337,66 @@ async function waitForCodexStatus(
     }
   }
   return failureResult("malformed_response");
+}
+
+// Measured against the installed CLI: the composer paints `› /status` within ~0.3 s of the
+// keystrokes, but Codex only starts acting on submissions a little later, so an Enter that
+// follows the echo immediately clears the composer without opening the status panel. A fixed
+// settle tuned on one machine would be a guess, so this instead retries the whole submission
+// and re-reads the pane, which converged on the first attempt in every measured run.
+async function submitCodexStatusCommand(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  slashCommand: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<TmuxCommandResult> {
+  let lastFailure: TmuxCommandResult = failureResult("malformed_response");
+  for (let attempt = 0; attempt < CODEX_SUBMIT_ATTEMPTS; attempt += 1) {
+    // Retyping over a composer that still holds the command would submit `/status/status`.
+    // Only type when the previous attempt's Enter emptied it.
+    const before = await capturePane(execute, socketPath, target, signal, environment);
+    if (!codexComposerContains(before, slashCommand)) {
+      await checked(
+        execute,
+        withSocket(socketPath, ["send-keys", "-t", target, "-l", slashCommand]),
+        signal,
+        environment,
+        "malformed_response"
+      );
+      const echoed = await waitForCodexComposerCommand(
+        execute,
+        socketPath,
+        target,
+        slashCommand,
+        signal,
+        environment,
+        delayMs
+      );
+      if (!echoed) continue;
+    }
+    await pause(delayMs ?? CODEX_SUBMIT_SETTLE_MS, signal);
+    await checked(
+      execute,
+      withSocket(socketPath, ["send-keys", "-t", target, "Enter"]),
+      signal,
+      environment,
+      "malformed_response"
+    );
+    const result = await waitForCodexStatus(
+      execute,
+      socketPath,
+      target,
+      signal,
+      environment,
+      delayMs
+    );
+    if ((result.exitCode ?? 0) === 0) return result;
+    lastFailure = result;
+  }
+  return lastFailure;
 }
 
 async function waitForCodexComposerCommand(
