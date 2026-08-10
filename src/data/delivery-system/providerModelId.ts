@@ -12,9 +12,10 @@ export const QUOTA_LABEL_TO_CANONICAL: Readonly<Record<
   Readonly<Record<string, readonly string[]>>
 >> = {
   claude_cli: {
-    // Labels verified from a real `claude --ax-screen-reader` /usage capture
-    // (tests/fixtures/provider-usage/claude-usage.txt): the header model line and the
-    // "Extended: <Model> is included in your weekly limit" banner.
+    // Labels verified from real `claude --ax-screen-reader` /usage captures
+    // (tests/fixtures/provider-usage/claude-usage-2.1.216-api-billing.txt and
+    // claude-usage-2.1.226-subscription.txt): the header model line, per-family weekly
+    // sections, and the "Extended: <Model> is included in your weekly limit" banner.
     "Opus 4.8": ["claude-opus-4-8"],
     "Fable 5": ["claude-fable-5"],
     // Remaining current published models the installed CLI routes to (`--model` accepts the

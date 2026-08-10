@@ -39,11 +39,12 @@ export type TmuxCommandExecutor = (
 
 const MAX_CAPTURE_BYTES = 128 * 1024;
 const CLEANUP_TIMEOUT_MS = 1_000;
-const CODEX_READY_CAPTURE_ATTEMPTS = 25;
-const CODEX_COMMAND_CAPTURE_ATTEMPTS = 25;
-// The status panel renders ~0.3 s after an Enter that lands, so a short window per submission
+const TUI_READY_CAPTURE_ATTEMPTS = 25;
+const TUI_COMMAND_CAPTURE_ATTEMPTS = 25;
+// The result panel renders ~0.3 s after a submission that lands, so a short window per
 // attempt detects success quickly and hands the remaining budget to the next attempt.
-const CODEX_STATUS_CAPTURE_ATTEMPTS = 8;
+const TUI_RESULT_CAPTURE_ATTEMPTS = 8;
+const TUI_CAPTURE_INTERVAL_MS = 250;
 const CODEX_SUBMIT_ATTEMPTS = 4;
 const CODEX_SUBMIT_SETTLE_MS = 500;
 // `classified` separates "the panel answered" (final, whatever it said) from "the panel never
@@ -52,7 +53,6 @@ interface CodexStatusOutcome {
   readonly result: TmuxCommandResult;
   readonly classified: boolean;
 }
-const CODEX_CAPTURE_INTERVAL_MS = 250;
 const PROBE_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"] as const;
 const CLI: Readonly<Record<UsageProbeProvider, { readonly args: readonly string[]; readonly slashCommand: "/status" | "/usage" }>> = {
   codex_cli: { args: ["--no-alt-screen"], slashCommand: "/status" },
@@ -219,6 +219,11 @@ export async function runTmuxUsageProbe(
       "-x", "160",
       "-y", "50",
       ...sessionEnvironmentArguments(environment),
+      // Claude Code's trust resolver short-circuits to "trusted" when this is set (verified by
+      // decompiling 2.1.216), so the workspace-trust prompt never renders and nothing needs to
+      // be persisted under the read-only service HOME. The probe cwd is a private empty tmpdir
+      // this process just created, so trusting it grants nothing.
+      ...(provider === "claude_cli" ? ["-e", "CLAUDE_CODE_SANDBOXED=1"] : []),
       "-c", workingDirectory,
       options.executable,
       ...probeCliArguments(provider, spec.args, workingDirectory)
@@ -235,7 +240,7 @@ export async function runTmuxUsageProbe(
         delayMs
       );
       if (!ready) {
-        result = failureResult("malformed_response", recordFailure("readiness", CODEX_READY_CAPTURE_ATTEMPTS));
+        result = failureResult("malformed_response", recordFailure("readiness", TUI_READY_CAPTURE_ATTEMPTS));
       } else {
         result = await submitCodexStatusCommand(
           execute,
@@ -248,9 +253,43 @@ export async function runTmuxUsageProbe(
           recordFailure
         );
       }
+    } else if (provider === "claude_cli") {
+      const composer = await waitForClaudeComposer(execute, socketPath, target, controller.signal, environment, delayMs);
+      if (composer !== "ready") {
+        result = failureResult(composer === "login" ? "missing_credential" : "malformed_response");
+      } else {
+        await checked(
+          execute,
+          withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]),
+          controller.signal,
+          environment,
+          "malformed_response"
+        );
+        // Like Codex, the composer ingests pasted text asynchronously: wait until a frame
+        // proves it holds /usage (the command echo or its autocomplete row), then submit
+        // Enter as a distinct keystroke.
+        const commandAccepted = await waitForClaudeComposerCommand(
+          execute,
+          socketPath,
+          target,
+          spec.slashCommand,
+          controller.signal,
+          environment,
+          delayMs
+        );
+        result = commandAccepted
+          ? (await checked(
+            execute,
+            withSocket(socketPath, ["send-keys", "-t", target, "C-m"]),
+            controller.signal,
+            environment,
+            "malformed_response"
+          ), await waitForClaudeUsage(execute, socketPath, target, controller.signal, environment, delayMs))
+          : failureResult("malformed_response");
+      }
     } else {
       recordFailure("readiness");
-      await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
+      await pause(delayMs ?? 6_000, controller.signal);
       recordFailure("echo");
       await checked(
         execute,
@@ -270,13 +309,10 @@ export async function runTmuxUsageProbe(
       );
       await pause(delayMs ?? 4_000, controller.signal);
       const stdout = await capturePane(execute, socketPath, target, controller.signal, environment);
-      const parsed = provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
-      if (parsed === null) {
-        const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
-        result = failureResult(missing ? "missing_credential" : "malformed_response", activeFailure);
-      } else {
-        result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
-      }
+      const parsed = parseAgyUsage(stdout);
+      result = parsed === null
+        ? failureResult("malformed_response", activeFailure)
+        : { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
     }
   } catch (error) {
     const normalized = normalizeProviderError(error);
@@ -328,11 +364,11 @@ async function waitForCodexComposer(
   environment: Readonly<Record<string, string>>,
   delayMs: number | undefined
 ): Promise<boolean> {
-  for (let attempt = 0; attempt < CODEX_READY_CAPTURE_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < TUI_READY_CAPTURE_ATTEMPTS; attempt += 1) {
     const stdout = await capturePane(execute, socketPath, target, signal, environment);
     if (codexComposerReady(stdout)) return true;
-    if (attempt + 1 < CODEX_READY_CAPTURE_ATTEMPTS) {
-      await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, signal);
+    if (attempt + 1 < TUI_READY_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? TUI_CAPTURE_INTERVAL_MS, signal);
     }
   }
   return false;
@@ -346,7 +382,7 @@ async function waitForCodexStatus(
   environment: Readonly<Record<string, string>>,
   delayMs: number | undefined
 ): Promise<CodexStatusOutcome> {
-  for (let attempt = 0; attempt < CODEX_STATUS_CAPTURE_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < TUI_RESULT_CAPTURE_ATTEMPTS; attempt += 1) {
     const stdout = await capturePane(execute, socketPath, target, signal, environment);
     const parsed = parseCodexStatus(stdout);
     if (parsed !== null) {
@@ -356,8 +392,8 @@ async function waitForCodexStatus(
     // submission, so it must be reported as-is instead of being retried.
     const failure = codexStatusFailure(terminalText(stdout));
     if (failure !== null) return { result: failureResult(failure), classified: true };
-    if (attempt + 1 < CODEX_STATUS_CAPTURE_ATTEMPTS) {
-      await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, signal);
+    if (attempt + 1 < TUI_RESULT_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? TUI_CAPTURE_INTERVAL_MS, signal);
     }
   }
   return { result: failureResult("malformed_response"), classified: false };
@@ -445,14 +481,116 @@ async function waitForCodexComposerCommand(
   environment: Readonly<Record<string, string>>,
   delayMs: number | undefined
 ): Promise<boolean> {
-  for (let attempt = 0; attempt < CODEX_COMMAND_CAPTURE_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < TUI_COMMAND_CAPTURE_ATTEMPTS; attempt += 1) {
     const stdout = await capturePane(execute, socketPath, target, signal, environment);
     if (codexComposerContains(stdout, slashCommand)) return true;
-    if (attempt + 1 < CODEX_COMMAND_CAPTURE_ATTEMPTS) {
-      await pause(delayMs ?? CODEX_CAPTURE_INTERVAL_MS, signal);
+    if (attempt + 1 < TUI_COMMAND_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? TUI_CAPTURE_INTERVAL_MS, signal);
     }
   }
   return false;
+}
+
+async function waitForClaudeComposer(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<"ready" | "login" | null> {
+  for (let attempt = 0; attempt < TUI_READY_CAPTURE_ATTEMPTS; attempt += 1) {
+    const text = terminalText(await capturePane(execute, socketPath, target, signal, environment));
+    if (claudeLoginScreen(text)) return "login";
+    if (claudeComposerReady(text)) return "ready";
+    if (attempt + 1 < TUI_READY_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? TUI_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return null;
+}
+
+async function waitForClaudeComposerCommand(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  slashCommand: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<boolean> {
+  for (let attempt = 0; attempt < TUI_COMMAND_CAPTURE_ATTEMPTS; attempt += 1) {
+    const text = terminalText(await capturePane(execute, socketPath, target, signal, environment));
+    if (text.includes(slashCommand)) return true;
+    if (attempt + 1 < TUI_COMMAND_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? TUI_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return false;
+}
+
+async function waitForClaudeUsage(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<TmuxCommandResult> {
+  // The screen redraws in place and fills in progressively (rate-limit sections and the
+  // "What's contributing…" block arrive after the cost block), so require the same settled
+  // outcome on two consecutive captures before trusting it.
+  let previousOutcome: string | null = null;
+  for (let attempt = 0; attempt < TUI_RESULT_CAPTURE_ATTEMPTS; attempt += 1) {
+    const text = terminalText(await capturePane(execute, socketPath, target, signal, environment));
+    if (claudeLoginScreen(text)) return failureResult("missing_credential");
+    const outcome = claudeSettledUsageOutcome(text);
+    if (outcome !== null && outcome === previousOutcome) {
+      return outcome === "quota_not_applicable"
+        ? failureResult("quota_not_applicable")
+        : { stdout: outcome, stderr: "", exitCode: 0 };
+    }
+    previousOutcome = outcome;
+    if (attempt + 1 < TUI_RESULT_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? TUI_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return failureResult("malformed_response");
+}
+
+/** Serialized ParsedUsage, "quota_not_applicable", or null while the screen is still filling in. */
+function claudeSettledUsageOutcome(text: string): string | null {
+  if (/Refreshing…|Scanning local sessions…/.test(text)) return null;
+  const parsed = parseClaudeUsage(text);
+  if (parsed !== null) return JSON.stringify(parsed);
+  return claudeQuotaNotApplicable(text) ? "quota_not_applicable" : null;
+}
+
+function claudeQuotaNotApplicable(text: string): boolean {
+  // Verified against Claude Code 2.1.216 on the VM: for an "API Usage Billing" organization
+  // /usage lands directly on the Usage tab, which renders only per-session cost/token stats
+  // because API-key sessions have no plan rate limits (the CLI's own usage snapshot carries
+  // rate_limits_available=false, rate_limits=null). The dollar figures are this probe
+  // session's own costs, not an account budget, so no quota window can honestly be derived.
+  return /API Usage Billing/i.test(text)
+    && /Settings\s+Status\s+Config\s+Usage\s+Stats/i.test(text)
+    && /Total cost:/i.test(text)
+    && !/%\s*used/i.test(text);
+}
+
+function claudeComposerReady(text: string): boolean {
+  // Banner plus an empty screen-reader composer prompt ("$"). The transient status line
+  // "Not logged in · Run /login" may still be present at this point; only the dedicated
+  // login screen counts as a credential failure.
+  return !claudeTrustPrompt(text) && /Claude Code v\d/i.test(text) && /^\$(?:\s|$)/m.test(text);
+}
+
+function claudeTrustPrompt(text: string): boolean {
+  return /Do you trust|Permission Required|Enter y\/n/i.test(text);
+}
+
+function claudeLoginScreen(text: string): boolean {
+  return /Choose a login method|Sign in with Claude|Select login method/i.test(text);
 }
 
 async function capturePane(

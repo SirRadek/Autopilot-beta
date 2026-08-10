@@ -169,6 +169,19 @@ describe("provider quota adapters", () => {
     expect(snapshot.error_code).toBe("missing_credential");
   });
 
+  it("preserves the built-in probe quota_not_applicable result for API-billing Claude accounts", async () => {
+    const snapshot = await createProviderQuotaAdapters({
+      runCommand: runnerFor(""),
+      commands: usageCommands,
+      runUsageProbe: async () => ({ stdout: "", stderr: "quota_not_applicable", exitCode: 1 })
+    }).claude_cli.fetchSnapshot({ now, signal });
+
+    expect(snapshot.health).toBe("unavailable");
+    expect(snapshot.error_code).toBe("quota_not_applicable");
+    expect(snapshot.five_hour).toEqual({ limit: null, used: null, remaining: null, resets_at: null });
+    expect(snapshot.weekly).toEqual({ limit: null, used: null, remaining: null, resets_at: null });
+  });
+
   it.each(["provider_executable_missing", "provider_runtime_denied", "malformed_response"] as const)("preserves the fixed built-in probe error %s", async (errorCode) => {
     const snapshot = await createProviderQuotaAdapters({
       runCommand: runnerFor(""),
