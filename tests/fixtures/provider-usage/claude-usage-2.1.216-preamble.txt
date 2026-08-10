@@ -1,0 +1,16 @@
+[Screen Reader Mode: on via flag]
+Claude Code v2.1.216
+Welcome back [[account_name]]!
+Opus 4.8 (1M context) · API Usage Billing · [[account]]'s Organization
+/tmp/autopilot-provider-probe-st1s7V Tips for getting started
+Run /init to create a CLAUDE.md file with instructions for Claude
+What's new
+Bug fixes and reliability improvements
+Added gateway spend-limit support to Claude Code's usage warning; the limit-reached message now names the cap, its reset time, and the operator's message
+(requires the gateway on 2.1.225)
+Added a workspace trust prompt to `claude agents` for untrusted directories, matching the behavior of `claude`
+/release-notes for more
+manual mode on
+Not logged in · Run /login
+effort: high · /effort
+$

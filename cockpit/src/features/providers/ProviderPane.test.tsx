@@ -212,6 +212,14 @@ describe("ProviderPane", () => {
     unmount(host, root);
   });
 
+  it("explains a Claude API-billing account that has no quota windows", () => {
+    const { host, root } = mount(<ProviderPane quotas={[]} readiness={readinessWith("claude_cli", "unavailable", "quota_not_applicable")} selectedProvider="claude_cli" />);
+
+    expect(host.querySelector('[data-diagnosis-code="quota_not_applicable"]')?.textContent).toBe("Účet používá dolarové API účtování bez kvótových oken (session/týden) — sonda proto nemá žádnou kvótu, kterou by mohla hlásit.");
+
+    unmount(host, root);
+  });
+
   it("renders the missing-credential diagnosis for OpenRouter", () => {
     const { host, root } = mount(<ProviderPane quotas={[]} readiness={readinessWith("openrouter_api", "unavailable", "missing_credential")} selectedProvider="openrouter_api" />);
 
