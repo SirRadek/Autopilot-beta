@@ -256,7 +256,10 @@ export async function runTmuxUsageProbe(
     } else if (provider === "claude_cli") {
       const composer = await waitForClaudeComposer(execute, socketPath, target, controller.signal, environment, delayMs);
       if (composer !== "ready") {
-        result = failureResult(composer === "login" ? "missing_credential" : "malformed_response");
+        result = failureResult(
+          composer === "login" ? "missing_credential" : "malformed_response",
+          recordFailure(composer === "login" ? "render" : "readiness", TUI_READY_CAPTURE_ATTEMPTS)
+        );
       } else {
         await checked(
           execute,
@@ -284,8 +287,8 @@ export async function runTmuxUsageProbe(
             controller.signal,
             environment,
             "malformed_response"
-          ), await waitForClaudeUsage(execute, socketPath, target, controller.signal, environment, delayMs))
-          : failureResult("malformed_response");
+          ), await waitForClaudeUsage(execute, socketPath, target, controller.signal, environment, delayMs, recordFailure))
+          : failureResult("malformed_response", recordFailure("echo", TUI_COMMAND_CAPTURE_ATTEMPTS));
       }
     } else {
       recordFailure("readiness");
@@ -535,7 +538,8 @@ async function waitForClaudeUsage(
   target: string,
   signal: AbortSignal,
   environment: Readonly<Record<string, string>>,
-  delayMs: number | undefined
+  delayMs: number | undefined,
+  recordFailure: (phase: ProviderProbeFailurePhase, attempts?: number) => ProviderProbeFailure
 ): Promise<TmuxCommandResult> {
   // The screen redraws in place and fills in progressively (rate-limit sections and the
   // "What's contributing…" block arrive after the cost block), so require the same settled
@@ -543,7 +547,7 @@ async function waitForClaudeUsage(
   let previousOutcome: string | null = null;
   for (let attempt = 0; attempt < TUI_RESULT_CAPTURE_ATTEMPTS; attempt += 1) {
     const text = terminalText(await capturePane(execute, socketPath, target, signal, environment));
-    if (claudeLoginScreen(text)) return failureResult("missing_credential");
+    if (claudeLoginScreen(text)) return failureResult("missing_credential", recordFailure("render", attempt + 1));
     const outcome = claudeSettledUsageOutcome(text);
     if (outcome !== null && outcome === previousOutcome) {
       return outcome === "quota_not_applicable"
