@@ -560,7 +560,10 @@ async function waitForClaudeUsage(
 
 /** Serialized ParsedUsage, "quota_not_applicable", or null while the screen is still filling in. */
 function claudeSettledUsageOutcome(text: string): string | null {
-  if (/Refreshing…|Scanning local sessions…/.test(text)) return null;
+  // "Loading usage data…" is the 2.1.216 subscription screen's intermediate frame (verified on
+  // the VM): cost stats are already rendered while every quota section is still absent, so
+  // judging it would misread a loading screen as a settled outcome.
+  if (/Refreshing…|Scanning local sessions…|Loading usage data…/.test(text)) return null;
   const parsed = parseClaudeUsage(text);
   if (parsed !== null) return JSON.stringify(parsed);
   return claudeQuotaNotApplicable(text) ? "quota_not_applicable" : null;

@@ -45,7 +45,7 @@
   "src/data/delivery-system/runOrchestrator.ts": "a75af60adf5c935b977fa3e96a285796bc6d4321",
   "src/data/delivery-system/runRouteEligibility.ts": "da9ea51e1efd6be3d8751f4ae3298a4a4968c7e8",
   "src/data/delivery-system/providerModelCatalog.ts": "fef175be95401013edbe168de1744be9634c63fa",
-  "src/data/delivery-system/providerModelId.ts": "3447da3a53106d5dc0ee4a76b61778904516490a",
+  "src/data/delivery-system/providerModelId.ts": "53764a68ddfc1fd4467b145a6f1e12330443b70f",
   "scripts/verify-scope.ts": "4814929b7ef0e91b3e04d4ed311fc2cfe1ee4e5b",
   "scripts/control-plane-runs.ts": "f1c71a16450932b2a2ce574798c8b5989454c47c",
   "docs/decisions/figma-write-plugin-executor-adr.md": "b892101eeff5c681a920c38f7c0a1b1eb3a0d35a",
