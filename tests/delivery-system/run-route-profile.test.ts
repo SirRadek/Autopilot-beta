@@ -100,7 +100,7 @@ describe("profile-aware run route eligibility", () => {
       .toThrow("run_route_unavailable");
   });
 
-  it("rejects a Codex effort that the selected live model does not advertise", () => {
+  it("does not unlock a cache-discovered Codex model outside the owner-approved seed", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "run-route-model-effort-"));
     const window = { limit: null, used: null, remaining: null, resets_at: null };
     writeProviderQuotaStore(stateDir, {
@@ -115,7 +115,7 @@ describe("profile-aware run route eligibility", () => {
         api_spend: null,
         currency: null,
         models: [{
-          model_id: "gpt-5.6-luna",
+          model_id: "gpt-5.7-unreleased-preview",
           available: true,
           health: "healthy",
           source: "cli",
@@ -127,9 +127,41 @@ describe("profile-aware run route eligibility", () => {
       }]
     });
 
-    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-luna", "max", "dev", now)).toBe(true);
-    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-luna", "ultra", "dev", now)).toBe(false);
-    expect(isRunRouteEligible(stateDir, "codex_cli", "gpt-5.6-luna", now, "ultra")).toBe(false);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", "max", "dev", now)).toBe(false);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", "max", "prod", now)).toBe(false);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", "ultra", "dev", now)).toBe(false);
+    expect(isRunRouteEligible(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", now, "max")).toBe(false);
+  });
+
+  it("uses cache-advertised efforts for an owner-approved Codex seed model", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "run-route-seed-model-effort-"));
+    const window = { limit: null, used: null, remaining: null, resets_at: null };
+    writeProviderQuotaStore(stateDir, {
+      schema_version: "v1",
+      snapshots: [{
+        provider: "codex_cli",
+        source: "cli",
+        fetched_at: now,
+        observed_at: now,
+        five_hour: window,
+        weekly: window,
+        api_spend: null,
+        currency: null,
+        models: [{
+          model_id: "gpt-5.6-sol",
+          available: true,
+          health: "healthy",
+          source: "cli",
+          discovery: "models_cache",
+          reasoning_efforts: ["low", "max"]
+        }],
+        health: "healthy",
+        error_code: null
+      }]
+    });
+
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-sol", "max", "dev", now)).toBe(true);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-sol", "ultra", "dev", now)).toBe(false);
   });
 
   it.each([

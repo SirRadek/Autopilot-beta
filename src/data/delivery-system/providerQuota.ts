@@ -39,6 +39,11 @@ export interface ProviderModelAvailability {
   readonly reasoning_efforts?: readonly RunReasoningEffort[];
 }
 
+export interface ProviderModelCatalogSnapshot {
+  readonly discovery: Extract<ProviderModelDiscovery, "models_cache">;
+  readonly fetched_at: string;
+}
+
 export interface ProviderSnapshot {
   readonly provider: string;
   readonly source: ProviderQuotaSource;
@@ -51,6 +56,8 @@ export interface ProviderSnapshot {
   readonly models: readonly ProviderModelAvailability[];
   /** Absent snapshots predate CLI version capture. */
   readonly cli_version?: string | null;
+  /** Immutable source timestamp for live model-catalog freshness reporting. */
+  readonly model_catalog?: ProviderModelCatalogSnapshot;
   readonly health: ProviderHealth;
   readonly error_code: ProviderErrorCode | null;
   /** Bounded TUI-probe diagnostics. Raw terminal output and identifiers are never stored. */

@@ -11,6 +11,7 @@ export function isRunRouteEligible(
   reasoning?: RunReasoningEffort | null
 ): boolean {
   const snapshots = readProviderQuotaStore(stateDir).snapshots;
+  if (!isOwnerApprovedCodexModel(snapshots, provider, model)) return false;
   if (reasoning !== undefined && !supportsReasoning(snapshots, provider, model, reasoning)) return false;
   const snapshot = snapshots.find((candidate) => candidate.provider === provider);
   return snapshot !== undefined && freshnessForSnapshot(snapshot, now) === "fresh" && snapshot.health !== "unavailable" &&
@@ -26,10 +27,26 @@ export function isRunRouteEligibleForProfile(
   now: string
 ): boolean {
   const snapshots = readProviderQuotaStore(stateDir).snapshots;
+  if (!isOwnerApprovedCodexModel(snapshots, provider, model)) return false;
   if (!supportsReasoning(snapshots, provider, model, reasoning)) return false;
   if (profile === "prod") return isRunRouteEligible(stateDir, provider, model, now, reasoning);
   if (isRunRouteEligible(stateDir, provider, model, now, reasoning)) return true;
   return model !== null && isKnownProviderModel(snapshots, provider as keyof typeof SUPPORTED_REASONING_EFFORTS, model);
+}
+
+function isOwnerApprovedCodexModel(
+  snapshots: ProviderQuotaStoreDocument["snapshots"],
+  provider: string,
+  model: string | null
+): boolean {
+  if (
+    provider !== "codex_cli"
+    || model === null
+    || (STATIC_PROVIDER_MODEL_CATALOG.codex_cli.models as readonly string[]).includes(model)
+  ) return true;
+  return snapshots.find((snapshot) => snapshot.provider === provider)
+    ?.models.find((candidate) => candidate.model_id === model)
+    ?.discovery !== "models_cache";
 }
 
 function supportsReasoning(

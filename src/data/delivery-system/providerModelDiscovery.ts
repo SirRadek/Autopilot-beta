@@ -8,7 +8,7 @@ import { expandQuotaLabel, isCanonicalModelId } from "./providerModelId";
 const COMMAND_TIMEOUT_MS = 5_000;
 const MAX_DISCOVERY_BYTES = 1024 * 1024;
 const MAX_DISCOVERED_MODELS = 256;
-const CODEX_MODEL_CACHE_TTL_MS = 300_000;
+export const CODEX_MODEL_CACHE_TTL_MS = 300_000;
 const COMMAND_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"] as const;
 
 // The Codex cache shape was verified against CLI 0.144.5 and its ModelInfo source.
@@ -17,6 +17,19 @@ const COMMAND_ENVIRONMENT_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TE
 export interface DiscoveredProviderModel {
   readonly model_id: string;
   readonly reasoning_efforts?: readonly RunReasoningEffort[];
+}
+
+export interface DiscoveredCodexModelCatalog {
+  readonly models: readonly DiscoveredProviderModel[];
+  readonly fetched_at: string;
+  readonly freshness: "fresh" | "stale";
+  readonly age_ms: number;
+}
+
+export interface CodexModelCacheAge {
+  readonly fetched_at: string;
+  readonly freshness: "fresh" | "stale";
+  readonly age_ms: number;
 }
 
 export async function captureCliVersion(
@@ -49,26 +62,25 @@ export function discoverCodexModels(
   homeDir: string,
   expectedClientVersion: string,
   now = new Date()
-): readonly DiscoveredProviderModel[] {
+): DiscoveredCodexModelCatalog | null {
   try {
-    if (homeDir.length === 0 || expectedClientVersion.length === 0 || !Number.isFinite(now.getTime())) return [];
+    if (homeDir.length === 0 || expectedClientVersion.length === 0 || !Number.isFinite(now.getTime())) return null;
     const path = join(homeDir, ".codex", "models_cache.json");
     const metadata = statSync(path);
-    if (!metadata.isFile() || metadata.size > MAX_DISCOVERY_BYTES) return [];
+    if (!metadata.isFile() || metadata.size > MAX_DISCOVERY_BYTES) return null;
     const contents = readFileSync(path, "utf8");
-    if (Buffer.byteLength(contents, "utf8") > MAX_DISCOVERY_BYTES) return [];
+    if (Buffer.byteLength(contents, "utf8") > MAX_DISCOVERY_BYTES) return null;
     const parsed = asRecord(JSON.parse(contents));
-    if (parsed === null || !Array.isArray(parsed.models)) return [];
-    if (parsed.client_version !== expectedClientVersion || typeof parsed.fetched_at !== "string") return [];
-    const fetchedAt = Date.parse(parsed.fetched_at.replace(/(\.\d{3})\d+(?=Z$)/, "$1"));
-    const age = now.getTime() - fetchedAt;
-    if (!Number.isFinite(fetchedAt) || age < 0 || age > CODEX_MODEL_CACHE_TTL_MS) return [];
+    if (parsed === null || !Array.isArray(parsed.models)) return null;
+    if (parsed.client_version !== expectedClientVersion || typeof parsed.fetched_at !== "string") return null;
+    const cacheAge = codexModelCacheAge(parsed.fetched_at, now);
+    if (cacheAge === null) return null;
 
     // This mirrors Codex model/list's default picker view. Hidden internal rows are
     // not proof of an owner-selectable dispatch route and remain excluded. The
     // quota probe is a ChatGPT-account surface, so picker-visible ChatGPT-only rows
     // (`supported_in_api: false`) remain valid for this CLI lane.
-    return uniqueModels(parsed.models.flatMap((value) => {
+    const models = uniqueModels(parsed.models.flatMap((value) => {
       const row = asRecord(value);
       if (row === null || row.visibility !== "list") return [];
       const modelId = row.slug;
@@ -78,9 +90,23 @@ export function discoverCodexModels(
         reasoning_efforts: codexReasoningEfforts(row.supported_reasoning_levels)
       }];
     }));
+    return { ...cacheAge, models };
   } catch {
-    return [];
+    return null;
   }
+}
+
+export function codexModelCacheAge(fetchedAt: string, now = new Date()): CodexModelCacheAge | null {
+  const normalized = fetchedAt.replace(/(\.\d{3})\d+(?=Z$)/, "$1");
+  const fetchedAtMs = Date.parse(normalized);
+  const nowMs = now.getTime();
+  const age = nowMs - fetchedAtMs;
+  if (!Number.isFinite(fetchedAtMs) || !Number.isFinite(nowMs) || age < 0) return null;
+  return {
+    fetched_at: new Date(fetchedAtMs).toISOString(),
+    freshness: age <= CODEX_MODEL_CACHE_TTL_MS ? "fresh" : "stale",
+    age_ms: age
+  };
 }
 
 function codexReasoningEfforts(value: unknown): readonly RunReasoningEffort[] {
