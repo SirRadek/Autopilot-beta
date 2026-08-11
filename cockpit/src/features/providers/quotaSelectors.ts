@@ -10,6 +10,7 @@ const DIAGNOSIS_MESSAGES: Readonly<Record<string, string>> = {
   timeout: "Sonda poskytovatele vypršela (timeout).",
   malformed_response: "Sonda poskytovatele vrátila neplatnou odpověď.",
   provider_unavailable: "Poskytovatel je aktuálně nedostupný.",
+  quota_not_applicable: "Účet používá dolarové API účtování bez kvótových oken (session/týden) — sonda proto nemá žádnou kvótu, kterou by mohla hlásit.",
   provider_error: "Sonda poskytovatele selhala (provider_error)."
 };
 

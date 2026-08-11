@@ -3,7 +3,7 @@
   "source": "scripts/smoke-cockpit-run.ts",
   "output": "ops/cockpit-proxy/autopilot-cockpit-recovery-smoke.mjs",
   "source_sha256": "e1175d30335a7414c09ca23cabad137b345d027d340f1b2c322cf5ab58504ee2",
-  "output_sha256": "8fb1f4564505e8fbea139d456492081a63c7839e30139d53b6d8c7165806b896",
+  "output_sha256": "962c4fa22c3406bf99cdbaad3eefbb4e304269926c8f198802da3ca912dbdf53",
   "esbuild_version": "0.28.1",
   "flags": [
     "--bundle",

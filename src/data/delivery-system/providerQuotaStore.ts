@@ -9,6 +9,7 @@ import {
   type ProviderSnapshot,
   type ProviderErrorCode,
   type ProviderHealth,
+  type ProviderModelCatalogSnapshot,
   type ProviderModelDiscovery,
   type ProviderQuotaSource
 } from "./providerQuota";
@@ -39,7 +40,7 @@ const MAX_PROVIDER_QUOTA_STORE_BYTES = 2 * 1024 * 1024;
 const SOURCES: readonly ProviderQuotaSource[] = ["cli", "api", "manual-fallback"];
 const HEALTH: readonly ProviderHealth[] = ["healthy", "degraded", "unavailable"];
 const DISCOVERIES: readonly ProviderModelDiscovery[] = ["usage_probe", "models_cache", "cli_list", "static"];
-const ERRORS: readonly (ProviderErrorCode | null)[] = ["timeout", "missing_credential", "malformed_response", "provider_executable_missing", "provider_runtime_denied", "provider_unavailable", "provider_error", null];
+const ERRORS: readonly (ProviderErrorCode | null)[] = ["timeout", "missing_credential", "malformed_response", "provider_executable_missing", "provider_runtime_denied", "provider_unavailable", "quota_not_applicable", "provider_error", null];
 
 export function readProviderQuotaStore(stateDir: string): ProviderQuotaStoreDocument {
   const path = join(stateDir, PROVIDER_QUOTA_SNAPSHOTS_FILE);
@@ -122,6 +123,7 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
   if (five === null || weekly === null) return null;
   const cliVersion = row.cli_version === undefined ? undefined : sanitizeCliVersion(row.cli_version);
   const probeFailure = row.error_code === null ? null : normalizeProviderProbeFailure(row.probe_failure);
+  const modelCatalog = sanitizeModelCatalog(row.model_catalog);
   return {
     provider,
     source: row.source as ProviderQuotaSource,
@@ -133,10 +135,24 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
     currency: row.currency as string | null,
     models,
     ...(cliVersion === undefined ? {} : { cli_version: cliVersion }),
+    ...(modelCatalog === undefined ? {} : { model_catalog: modelCatalog }),
     health: row.health as ProviderHealth,
     error_code: row.error_code as ProviderErrorCode | null,
     ...(probeFailure === null ? {} : { probe_failure: probeFailure })
   };
+}
+
+function sanitizeModelCatalog(value: unknown): ProviderModelCatalogSnapshot | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  if (
+    row.discovery !== "models_cache"
+    || typeof row.fetched_at !== "string"
+    || row.fetched_at.length === 0
+    || row.fetched_at.length > MAX_FIELD_LENGTH
+    || !Number.isFinite(Date.parse(row.fetched_at))
+  ) return undefined;
+  return { discovery: "models_cache", fetched_at: row.fetched_at };
 }
 
 function sanitizeReasoningEfforts(value: unknown, provider: string): readonly RunReasoningEffort[] | undefined {

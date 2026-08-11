@@ -13,6 +13,8 @@ export type ProviderErrorCode =
   | "provider_executable_missing"
   | "provider_runtime_denied"
   | "provider_unavailable"
+  /** The account has no quota windows at all (e.g. Claude API usage billing); nothing to report. */
+  | "quota_not_applicable"
   | "provider_error";
 export type ProviderProbeFailurePhase = "launch" | "readiness" | "echo" | "render" | "cleanup";
 
@@ -39,6 +41,11 @@ export interface ProviderModelAvailability {
   readonly reasoning_efforts?: readonly RunReasoningEffort[];
 }
 
+export interface ProviderModelCatalogSnapshot {
+  readonly discovery: Extract<ProviderModelDiscovery, "models_cache">;
+  readonly fetched_at: string;
+}
+
 export interface ProviderSnapshot {
   readonly provider: string;
   readonly source: ProviderQuotaSource;
@@ -51,6 +58,8 @@ export interface ProviderSnapshot {
   readonly models: readonly ProviderModelAvailability[];
   /** Absent snapshots predate CLI version capture. */
   readonly cli_version?: string | null;
+  /** Immutable source timestamp for live model-catalog freshness reporting. */
+  readonly model_catalog?: ProviderModelCatalogSnapshot;
   readonly health: ProviderHealth;
   readonly error_code: ProviderErrorCode | null;
   /** Bounded TUI-probe diagnostics. Raw terminal output and identifiers are never stored. */
@@ -116,6 +125,9 @@ export function normalizeProviderError(error: unknown): ProviderErrorCode {
   }
   if (message.includes("provider_unavailable") || message.includes("unsupported")) {
     return "provider_unavailable";
+  }
+  if (message.includes("quota_not_applicable")) {
+    return "quota_not_applicable";
   }
   if (message.includes("timeout") || message.includes("timed out") || message.includes("abort")) {
     return "timeout";

@@ -847,17 +847,19 @@
     {
       "source_path": "src/data/delivery-system/providerModelCatalog.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "a57a3815af2cabc7144d0b19714ae34d76c1cec194627b6cc64cf65e366b6fe8"
+      "content_hash": "369f792cba538e14f2a1d1d55b43204726ee5b36dbf677c4d7545c94d7c6e3d0"
     },
     {
       "source_path": "src/data/delivery-system/providerModelDiscovery.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "0627305548a9c32e5eb2b840aafa43f031226f4588d21d57e01fc25be9264207"
+      "content_hash": "ee49f4049338b5a067f38bbb71a1ec5d9824e327673cb86d671a208b16ae9ab3",
+      "patched_by": "codex-model-cache-freshness"
     },
     {
       "source_path": "src/data/delivery-system/providerModelId.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "12fe9cbe61426007b527d9e0a9cd78f613f1b7ff050b53d7940e73510747eaca"
+      "content_hash": "12fe9cbe61426007b527d9e0a9cd78f613f1b7ff050b53d7940e73510747eaca",
+      "patched_by": "lane-claude-usage-probe"
     },
     {
       "source_path": "src/data/delivery-system/routingModes.ts",

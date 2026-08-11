@@ -76,6 +76,37 @@ function codexTuiResponder(finalCapture: TmuxCommandResult): (args: readonly str
   };
 }
 
+// Mirrors the real 2.1.216 screen-reader TUI observed on the VM: banner with a transient
+// "Not logged in · Run /login" status line, in-place redraw, /usage echoed into the composer
+// before the dialog renders. Optional partialCaptures are served (in order) for the first
+// post-submit captures to exercise the progressive-render settling logic.
+function claudeTuiResponder(
+  finalCapture: TmuxCommandResult,
+  options?: { readonly partialCaptures?: readonly string[] }
+): (args: readonly string[]) => TmuxCommandResult | undefined {
+  let commandAccepted = false;
+  let submitted = false;
+  let resultCaptures = 0;
+  const preamble = fixture("claude-usage-2.1.216-preamble.txt");
+  return (args) => {
+    const subcommand = tmuxSubcommand(args);
+    if (subcommand === "send-keys") {
+      const sendsCommand = args.includes("/usage");
+      const sendsEnter = args.includes("Enter") || args.includes("C-m");
+      if (sendsCommand && !sendsEnter) commandAccepted = true;
+      if (sendsEnter && !sendsCommand && commandAccepted) submitted = true;
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (subcommand !== "capture-pane") return undefined;
+    if (!submitted) {
+      return { stdout: commandAccepted ? preamble.replace("$", "$  /usage") : preamble, stderr: "", exitCode: 0 };
+    }
+    const partial = options?.partialCaptures?.[resultCaptures];
+    resultCaptures += 1;
+    return partial !== undefined ? { stdout: partial, stderr: "", exitCode: 0 } : finalCapture;
+  };
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
   for (const root of runtimeRoots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -249,47 +280,75 @@ describe("provider usage parsers", () => {
     ]);
   });
 
-  it("normalizes authenticated Claude model labels, including the extended-limit banner model", () => {
-    expect(parseClaudeUsage(fixture("claude-usage.txt"))).toEqual({
-      five_hour: { limit: 100, used: 12, remaining: 88, resets_at: "11:40am (UTC)" },
-      weekly: { limit: 100, used: 34, remaining: 66, resets_at: "Jul 17, 6pm (UTC)" },
+  it("parses the real Claude 2.1.226 subscription /usage screen, header and per-family labels included", () => {
+    expect(parseClaudeUsage(fixture("claude-usage-2.1.226-subscription.txt"))).toEqual({
+      five_hour: { limit: 100, used: 49, remaining: 51, resets_at: "7:40pm (Europe/Prague)" },
+      weekly: { limit: 100, used: 15, remaining: 85, resets_at: "Aug 14, 8pm (Europe/Prague)" },
       models: [
-        { model_id: "claude-opus-4-8", available: true },
+        { model_id: "claude-opus-5", available: true },
         { model_id: "claude-fable-5", available: true }
       ]
     });
   });
 
+  it("parses the real Claude 2.1.216 subscription /usage screen without mistaking the weekly-limits promo for quota", () => {
+    const parsed = parseClaudeUsage(fixture("claude-usage-2.1.216-subscription.txt"));
+    expect(parsed).toEqual({
+      five_hour: { limit: 100, used: 5, remaining: 95, resets_at: "12:59pm (UTC)" },
+      weekly: { limit: 100, used: 18, remaining: 82, resets_at: "Aug 14, 6pm (UTC)" },
+      models: [
+        { model_id: "claude-opus-4-8", available: true },
+        { model_id: "claude-fable-5", available: true }
+      ]
+    });
+    // The screen advertises "+50% weekly limits promo" one line above the Fable section; no
+    // window may absorb that 50 as a usage figure.
+    expect(JSON.stringify(parsed)).not.toContain("50");
+  });
+
   it("returns no Claude models when every extracted label is unmapped", () => {
-    const raw = fixture("claude-usage.txt")
-      .replaceAll("Opus 4.8", "Zephyr 9")
-      .replaceAll("Fable 5", "Zephyr 9")
+    const raw = fixture("claude-usage-2.1.226-subscription.txt")
+      .replaceAll("Opus 5", "Zephyr 9")
       .replaceAll("Fable", "Zephyr");
 
     expect(parseClaudeUsage(raw)?.models).toEqual([]);
   });
 
   it("marks a model unavailable when its per-family weekly section is exhausted", () => {
-    const raw = fixture("claude-usage.txt").replace(
-      "Current week (Fable)\n0% 0% used",
-      "Current week (Fable)\n0% 100% used"
+    const raw = fixture("claude-usage-2.1.226-subscription.txt").replace(
+      "Current week (Fable)\n27% 27% used",
+      "Current week (Fable)\n100% 100% used"
     );
     expect(parseClaudeUsage(raw)?.models).toEqual([
-      { model_id: "claude-opus-4-8", available: true },
+      { model_id: "claude-opus-5", available: true },
       { model_id: "claude-fable-5", available: false }
     ]);
   });
 
   it("marks every Claude model unavailable when the all-models weekly window is exhausted", () => {
-    const raw = fixture("claude-usage.txt").replace("0% 34% used", "0% 100% used");
+    const raw = fixture("claude-usage-2.1.226-subscription.txt").replace("15% 15% used", "100% 100% used");
     expect(parseClaudeUsage(raw)?.models).toEqual([
-      { model_id: "claude-opus-4-8", available: false },
+      { model_id: "claude-opus-5", available: false },
       { model_id: "claude-fable-5", available: false }
     ]);
   });
 
   it("does not infer Claude quota from an unauthenticated login screen", () => {
     expect(parseClaudeUsage("Choose a login method\nSign in with Claude.ai")).toBeNull();
+  });
+
+  it("does not invent quota windows from the real 2.1.216 API-billing /usage screen", () => {
+    expect(parseClaudeUsage(fixture("claude-usage-2.1.216-api-billing.txt"))).toBeNull();
+  });
+
+  it("keeps account placeholders scrubbed in the real Claude fixtures", () => {
+    for (const name of ["claude-usage-2.1.216-api-billing.txt", "claude-usage-2.1.216-preamble.txt", "claude-usage-2.1.216-subscription.txt", "claude-usage-2.1.226-subscription.txt"]) {
+      const capture = fixture(name);
+      expect(capture).toContain("[[account_name]]");
+      expect(capture).toContain("[[account]]'s Organization");
+      expect(capture).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      expect(capture).not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i);
+    }
   });
 });
 
@@ -749,6 +808,120 @@ describe("tmux usage probe", () => {
       stderr: "missing_credential",
       probe_failure: { phase: "render" }
     });
+  });
+
+  it("waits for the Claude composer, submits /usage separately, and reports only the settled subscription screen", async () => {
+    const privateName = "Probe Owner";
+    const privateOrg = "acct-owner@example.invalid";
+    const settled = fixture("claude-usage-2.1.226-subscription.txt")
+      .replace("[[account_name]]", privateName)
+      .replace("[[account]]", privateOrg);
+    // The real 2.1.226 run rendered this intermediate state first: session still at 48%,
+    // no per-family section yet, and the refresh markers still on screen.
+    const partial = settled
+      .replace("49% 49% used", "48% 48% used")
+      .replace(/Current week \(Fable\)[\s\S]*$/u, "Scanning local sessions…\nRefreshing…\nEsc to cancel\n");
+    const responder = claudeTuiResponder({ stdout: settled, stderr: "", exitCode: 0 }, { partialCaptures: [partial] });
+    let launchArgs: readonly string[] = [];
+    const calls: (readonly string[])[] = [];
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      calls.push([...args]);
+      if (tmuxSubcommand(args) === "new-session") {
+        launchArgs = [...args];
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      return responder(args) ?? (tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 });
+    };
+
+    const result = await runTmuxUsageProbe("claude_cli", {
+      executable: "/provider-bin/claude",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "claude-subscription",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      five_hour: { limit: 100, used: 49, remaining: 51, resets_at: "7:40pm (Europe/Prague)" },
+      weekly: { limit: 100, used: 15, remaining: 85, resets_at: "Aug 14, 8pm (Europe/Prague)" },
+      models: [
+        { model_id: "claude-opus-5", available: true },
+        { model_id: "claude-fable-5", available: true }
+      ]
+    });
+    expect(result.stdout).not.toContain(privateName);
+    expect(result.stdout).not.toContain(privateOrg);
+    expect(launchArgs).toContain("--ax-screen-reader");
+    expect(launchArgs).toContain("CLAUDE_CODE_SANDBOXED=1");
+    const inputCalls = calls.filter((args) => tmuxSubcommand(args) === "send-keys");
+    expect(inputCalls).toHaveLength(2);
+    expect(inputCalls[0]).toEqual(expect.arrayContaining(["-l", "/usage"]));
+    expect(inputCalls[0]).not.toContain("C-m");
+    expect(inputCalls[1]?.at(-1)).toBe("C-m");
+    expect(inputCalls[1]).not.toContain("/usage");
+  });
+
+  it("holds the 2.1.216 subscription probe through the Loading usage data frame and reports only the settled quota", async () => {
+    const privateName = "Probe Owner";
+    const privateOrg = "acct-owner@example.invalid";
+    const settled = fixture("claude-usage-2.1.216-subscription.txt")
+      .replace("[[account_name]]", privateName)
+      .replace("[[account]]", privateOrg);
+    // The real 2.1.216 VM run rendered this intermediate frame first: the cost block already
+    // on screen, every quota section still replaced by the loading marker. Repeating it twice
+    // proves a stable loading screen never settles as quota_not_applicable.
+    const loading = settled.replace(/Current session[\s\S]*$/u, "Loading usage data…\nEsc to cancel\n");
+    const responder = claudeTuiResponder({ stdout: settled, stderr: "", exitCode: 0 }, { partialCaptures: [loading, loading] });
+    const execute: TmuxCommandExecutor = async (_command, args) =>
+      responder(args) ?? (tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 });
+
+    const result = await runTmuxUsageProbe("claude_cli", {
+      executable: "/provider-bin/claude",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "claude-subscription-216",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      five_hour: { limit: 100, used: 5, remaining: 95, resets_at: "12:59pm (UTC)" },
+      weekly: { limit: 100, used: 18, remaining: 82, resets_at: "Aug 14, 6pm (UTC)" },
+      models: [
+        { model_id: "claude-opus-4-8", available: true },
+        { model_id: "claude-fable-5", available: true }
+      ]
+    });
+    expect(result.stdout).not.toContain(privateName);
+    expect(result.stdout).not.toContain(privateOrg);
+  });
+
+  it("fails closed with quota_not_applicable on the real 2.1.216 API-billing screen instead of inventing quota from dollar figures", async () => {
+    const responder = claudeTuiResponder({ stdout: fixture("claude-usage-2.1.216-api-billing.txt"), stderr: "", exitCode: 0 });
+    const execute: TmuxCommandExecutor = async (_command, args) =>
+      responder(args) ?? (tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 });
+
+    const result = await runTmuxUsageProbe("claude_cli", {
+      executable: "/provider-bin/claude",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "claude-api-billing",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({ stdout: "", stderr: "quota_not_applicable", exitCode: 1 });
   });
 
   it.each([
