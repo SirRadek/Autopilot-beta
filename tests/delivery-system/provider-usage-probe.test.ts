@@ -249,6 +249,21 @@ describe("provider usage parsers", () => {
     });
   });
 
+  it("parses the real Claude 2.1.216 subscription /usage screen without mistaking the weekly-limits promo for quota", () => {
+    const parsed = parseClaudeUsage(fixture("claude-usage-2.1.216-subscription.txt"));
+    expect(parsed).toEqual({
+      five_hour: { limit: 100, used: 5, remaining: 95, resets_at: "12:59pm (UTC)" },
+      weekly: { limit: 100, used: 18, remaining: 82, resets_at: "Aug 14, 6pm (UTC)" },
+      models: [
+        { model_id: "claude-opus-4-8", available: true },
+        { model_id: "claude-fable-5", available: true }
+      ]
+    });
+    // The screen advertises "+50% weekly limits promo" one line above the Fable section; no
+    // window may absorb that 50 as a usage figure.
+    expect(JSON.stringify(parsed)).not.toContain("50");
+  });
+
   it("returns no Claude models when every extracted label is unmapped", () => {
     const raw = fixture("claude-usage-2.1.226-subscription.txt")
       .replaceAll("Opus 5", "Zephyr 9")
@@ -285,7 +300,7 @@ describe("provider usage parsers", () => {
   });
 
   it("keeps account placeholders scrubbed in the real Claude fixtures", () => {
-    for (const name of ["claude-usage-2.1.216-api-billing.txt", "claude-usage-2.1.216-preamble.txt", "claude-usage-2.1.226-subscription.txt"]) {
+    for (const name of ["claude-usage-2.1.216-api-billing.txt", "claude-usage-2.1.216-preamble.txt", "claude-usage-2.1.216-subscription.txt", "claude-usage-2.1.226-subscription.txt"]) {
       const capture = fixture(name);
       expect(capture).toContain("[[account_name]]");
       expect(capture).toContain("[[account]]'s Organization");
@@ -733,6 +748,45 @@ describe("tmux usage probe", () => {
     expect(inputCalls[0]).not.toContain("C-m");
     expect(inputCalls[1]?.at(-1)).toBe("C-m");
     expect(inputCalls[1]).not.toContain("/usage");
+  });
+
+  it("holds the 2.1.216 subscription probe through the Loading usage data frame and reports only the settled quota", async () => {
+    const privateName = "Probe Owner";
+    const privateOrg = "acct-owner@example.invalid";
+    const settled = fixture("claude-usage-2.1.216-subscription.txt")
+      .replace("[[account_name]]", privateName)
+      .replace("[[account]]", privateOrg);
+    // The real 2.1.216 VM run rendered this intermediate frame first: the cost block already
+    // on screen, every quota section still replaced by the loading marker. Repeating it twice
+    // proves a stable loading screen never settles as quota_not_applicable.
+    const loading = settled.replace(/Current session[\s\S]*$/u, "Loading usage data…\nEsc to cancel\n");
+    const responder = claudeTuiResponder({ stdout: settled, stderr: "", exitCode: 0 }, { partialCaptures: [loading, loading] });
+    const execute: TmuxCommandExecutor = async (_command, args) =>
+      responder(args) ?? (tmuxSubcommand(args) === "has-session"
+        ? { stdout: "", stderr: "no server", exitCode: 1 }
+        : { stdout: "", stderr: "", exitCode: 0 });
+
+    const result = await runTmuxUsageProbe("claude_cli", {
+      executable: "/provider-bin/claude",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "claude-subscription-216",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      five_hour: { limit: 100, used: 5, remaining: 95, resets_at: "12:59pm (UTC)" },
+      weekly: { limit: 100, used: 18, remaining: 82, resets_at: "Aug 14, 6pm (UTC)" },
+      models: [
+        { model_id: "claude-opus-4-8", available: true },
+        { model_id: "claude-fable-5", available: true }
+      ]
+    });
+    expect(result.stdout).not.toContain(privateName);
+    expect(result.stdout).not.toContain(privateOrg);
   });
 
   it("fails closed with quota_not_applicable on the real 2.1.216 API-billing screen instead of inventing quota from dollar figures", async () => {
