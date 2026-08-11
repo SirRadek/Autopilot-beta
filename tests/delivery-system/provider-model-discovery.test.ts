@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -17,6 +18,10 @@ const now = "2026-08-05T12:00:00.000Z";
 const signal = new AbortController().signal;
 const codexCacheNow = new Date("2026-08-06T10:04:00.000Z");
 const codexCacheVersion = "0.144.5";
+const fixture = (name: string): string => readFileSync(
+  fileURLToPath(new URL(`../fixtures/provider-usage/${name}`, import.meta.url)),
+  "utf8"
+);
 
 function usagePayload(models: readonly Record<string, unknown>[], status?: "unavailable"): string {
   return JSON.stringify({
@@ -70,6 +75,16 @@ describe("provider model discovery", () => {
       ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "TMPDIR"].includes(key)
     )).toBe(true);
     expect(invocations[0]?.environment).not.toHaveProperty("P9_UNSAFE_PROVIDER_SECRET");
+  });
+
+  it("captures the exact numeric version emitted by agy 1.1.5", async () => {
+    const version = await captureCliVersion(
+      "/provider-bin/agy",
+      async () => ({ stdout: "1.1.5\n", exitCode: 0 }),
+      signal
+    );
+
+    expect(version).toBe("1.1.5");
   });
 
   it.each([
@@ -201,29 +216,43 @@ describe("provider model discovery", () => {
     expect(discoverCodexModels(homeDir, codexCacheVersion, codexCacheNow)).toBeNull();
   });
 
-  it("parses canonical agy model IDs and expands known display labels", async () => {
+  it.each([
+    ["VM 1.1.5 one-ID-per-line output", "agy-models-1.1.5.txt"],
+    ["local 1.1.12 tab-separated output", "agy-models-1.1.12.txt"]
+  ])("parses the real agy %s with per-model effort constraints", async (_label, fixtureName) => {
     const models = await discoverAgyModels("/provider-bin/agy", async ({ command, args }) => {
       expect(command).toBe("/provider-bin/agy");
       expect(args).toEqual(["models"]);
-      return {
-        stdout: [
-          "gemini-3.1-pro-high",
-          "Gemini Flash",
-          "not a canonical id",
-          "-provider-option",
-          "gemini-3.1-pro-high",
-          "1) claude-4.6-sonnet"
-        ].join("\n"),
-        exitCode: 0
-      };
+      return { stdout: fixture(fixtureName), exitCode: 0 };
     }, signal);
 
     expect(models).toEqual([
-      { model_id: "gemini-3.1-pro-high" },
-      { model_id: "gemini-3.5-flash-medium" },
-      { model_id: "gemini-3.5-flash-high" },
-      { model_id: "claude-4.6-sonnet" }
+      { model_id: "gemini-3.6-flash-high", reasoning_efforts: ["high"] },
+      { model_id: "gemini-3.6-flash-medium", reasoning_efforts: ["medium"] },
+      { model_id: "gemini-3.6-flash-low", reasoning_efforts: ["low"] },
+      { model_id: "gemini-3.5-flash-high", reasoning_efforts: ["high"] },
+      { model_id: "gemini-3.5-flash-medium", reasoning_efforts: ["medium"] },
+      { model_id: "gemini-3.5-flash-low", reasoning_efforts: ["low"] },
+      { model_id: "gemini-3.1-pro-high", reasoning_efforts: ["high"] },
+      { model_id: "gemini-3.1-pro-low", reasoning_efforts: ["low"] },
+      { model_id: "claude-sonnet-4-6", reasoning_efforts: [] },
+      { model_id: "claude-opus-4-6-thinking", reasoning_efforts: [] },
+      { model_id: "gpt-oss-120b-medium", reasoning_efforts: ["medium"] }
     ]);
+  });
+
+  it("fails closed on model-list decoration not present in either verified agy format", async () => {
+    const models = await discoverAgyModels("/provider-bin/agy", async () => ({
+      stdout: [
+        "1) gemini-3.6-flash-high",
+        "Gemini Flash",
+        "gemini-3.6-flash-high  Gemini 3.6 Flash (High)",
+        "gemini-3.6-flash-high\tGemini 3.6 Flash (High)\textra"
+      ].join("\n"),
+      exitCode: 0
+    }), signal);
+
+    expect(models).toEqual([]);
   });
 
   it("returns no agy models when the model-list command fails", async () => {
@@ -294,7 +323,10 @@ describe("provider model discovery", () => {
       },
       runUsageProbe: async () => ({ stdout: usagePayload([]), exitCode: 0 }),
       captureCliVersion: async () => "agy 1.2.3",
-      discoverAgyModels: async () => [{ model_id: "gemini-3.1-pro-high" }]
+      discoverAgyModels: async () => [{
+        model_id: "gemini-3.1-pro-high",
+        reasoning_efforts: ["high"]
+      }]
     }).agy_cli.fetchSnapshot({ now, signal });
 
     expect(snapshot.cli_version).toBe("agy 1.2.3");
@@ -303,7 +335,8 @@ describe("provider model discovery", () => {
       available: true,
       health: "healthy",
       source: "cli",
-      discovery: "cli_list"
+      discovery: "cli_list",
+      reasoning_efforts: ["high"]
     }]);
   });
 
