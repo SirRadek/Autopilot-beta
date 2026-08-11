@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,10 +25,25 @@ function codexComposerWith(command: string): string {
     .replace("› Find and fix a bug in @filename", `› ${command}`);
 }
 
+function agyComposerWith(command: string): string {
+  return fixture("agy-preamble-1.1.5.txt").replace(/^>\s*$/m, `> ${command}`);
+}
+
 function temporaryRuntimeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "provider-usage-probe-"));
   runtimeRoots.push(root);
   return root;
+}
+
+function createAgySourceHome(runtimeRoot: string): string {
+  const home = join(runtimeRoot, "agy-source-home");
+  const cliState = join(home, ".gemini", "antigravity-cli");
+  mkdirSync(join(cliState, "cache"), { recursive: true });
+  for (const file of ["installation_id", "antigravity-oauth-token", "settings.json", "last_check.timestamp"]) {
+    writeFileSync(join(cliState, file), `fixture-${file}\n`, { encoding: "utf8", mode: 0o600 });
+  }
+  writeFileSync(join(cliState, "cache", "onboarding.json"), "{}\n", { encoding: "utf8", mode: 0o600 });
+  return home;
 }
 
 function tmuxSubcommand(args: readonly string[]): string | undefined {
@@ -171,18 +186,38 @@ describe("provider usage parsers", () => {
     });
   });
 
-  it("exposes the conservative minimum AGY group balance and expands group labels to canonical models", () => {
+  it("parses the real agy 1.1.5 subscription screen and exposes the conservative group minimum", () => {
     expect(parseAgyUsage(fixture("agy-usage.txt"))).toEqual({
-      five_hour: { limit: 100, used: 0, remaining: 100, resets_at: null },
-      weekly: { limit: 100, used: 0, remaining: 100, resets_at: null },
+      five_hour: { limit: 100, used: 2.24, remaining: 97.76, resets_at: "in 4h 40m" },
+      weekly: { limit: 100, used: 0.41, remaining: 99.59, resets_at: "in 150h 13m" },
       models: [
-        { model_id: "gemini-3.5-flash-medium", available: true },
+        { model_id: "gemini-3.6-flash-high", available: true },
+        { model_id: "gemini-3.6-flash-medium", available: true },
+        { model_id: "gemini-3.6-flash-low", available: true },
         { model_id: "gemini-3.5-flash-high", available: true },
+        { model_id: "gemini-3.5-flash-medium", available: true },
+        { model_id: "gemini-3.5-flash-low", available: true },
         { model_id: "gemini-3.1-pro-high", available: true },
-        { model_id: "claude-4.6-sonnet", available: true },
-        { model_id: "gpt-oss-120b", available: true }
+        { model_id: "gemini-3.1-pro-low", available: true },
+        { model_id: "claude-opus-4-6-thinking", available: true },
+        { model_id: "claude-sonnet-4-6", available: true },
+        { model_id: "gpt-oss-120b-medium", available: true }
       ]
     });
+  });
+
+  it("keeps scrubbed agy account and session identifiers out of parsed usage", () => {
+    const captured = fixture("agy-usage.txt");
+    expect(captured).toContain("[[account]]");
+    expect(captured).toContain("[[session]]");
+    expect(captured).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    const parsed = parseAgyUsage(captured
+      .replaceAll("[[account]]", "probe-owner@example.invalid")
+      .replaceAll("[[session]]", "00000000-0000-4000-8000-000000000001"));
+
+    const serialized = JSON.stringify(parsed);
+    expect(serialized).not.toContain("probe-owner@example.invalid");
+    expect(serialized).not.toContain("00000000-0000-4000-8000-000000000001");
   });
 
   it("deduplicates repeated AGY group labels and preserves negative availability", () => {
@@ -202,8 +237,12 @@ describe("provider usage parsers", () => {
     ].join("\n");
 
     expect(parseAgyUsage(raw)?.models).toEqual([
+      { model_id: "gemini-3.6-flash-high", available: false },
+      { model_id: "gemini-3.6-flash-medium", available: false },
+      { model_id: "gemini-3.6-flash-low", available: false },
+      { model_id: "gemini-3.5-flash-high", available: false },
       { model_id: "gemini-3.5-flash-medium", available: false },
-      { model_id: "gemini-3.5-flash-high", available: false }
+      { model_id: "gemini-3.5-flash-low", available: false }
     ]);
   });
 
@@ -661,9 +700,110 @@ describe("tmux usage probe", () => {
     expect(result).toEqual({ stdout: "", stderr: "provider_unavailable", exitCode: 1 });
   });
 
+  it("uses a private writable HOME, confirms the real agy trust gate, and retries a swallowed /usage submission", async () => {
+    const runtimeRoot = temporaryRuntimeRoot();
+    const sourceHome = createAgySourceHome(runtimeRoot);
+    vi.stubEnv("HOME", sourceHome);
+    const calls: (readonly string[])[] = [];
+    const privateAccount = "probe-owner@example.invalid";
+    const privateSession = "00000000-0000-4000-8000-000000000001";
+    let launchHome: string | undefined;
+    let launchCwd: string | undefined;
+    let launchArgs: readonly string[] = [];
+    let trusted = false;
+    let composerHoldsCommand = false;
+    let captureCalls = 0;
+    let submissions = 0;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      calls.push([...args]);
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "new-session") {
+        launchCwd = args[args.indexOf("-c") + 1];
+        launchHome = args.find((value) => value.startsWith("HOME="))?.slice("HOME=".length);
+        launchArgs = args.slice(args.indexOf("/provider-bin/agy"));
+        expect(launchCwd).toBeDefined();
+        expect(launchHome).toBeDefined();
+        expect(readdirSync(launchCwd!)).toEqual([]);
+        expect(existsSync(join(launchHome!, ".gemini", "antigravity-cli", "installation_id"))).toBe(true);
+        expect(existsSync(join(launchHome!, ".gemini", "antigravity-cli", "antigravity-oauth-token"))).toBe(true);
+      } else if (subcommand === "send-keys") {
+        if (args.includes("/usage")) {
+          composerHoldsCommand = true;
+        } else if (args.at(-1) === "Enter") {
+          if (!trusted) {
+            trusted = true;
+          } else if (composerHoldsCommand) {
+            submissions += 1;
+            // The first Enter is swallowed exactly as observed with an early TUI submission.
+            composerHoldsCommand = false;
+          }
+        }
+      } else if (subcommand === "capture-pane") {
+        captureCalls += 1;
+        if (!trusted && captureCalls === 1) {
+          return { stdout: "You are not signed in\nSigning in...", stderr: "", exitCode: 0 };
+        }
+        if (!trusted) {
+          return { stdout: fixture("agy-trust-1.1.5.txt"), stderr: "", exitCode: 0 };
+        }
+        if (submissions >= 2) {
+          return {
+            stdout: fixture("agy-usage.txt")
+              .replaceAll("[[account]]", privateAccount)
+              .replaceAll("[[session]]", privateSession),
+            stderr: "",
+            exitCode: 0
+          };
+        }
+        return {
+          stdout: composerHoldsCommand
+            ? agyComposerWith("/usage")
+            : fixture("agy-preamble-1.1.5.txt"),
+          stderr: "",
+          exitCode: 0
+        };
+      } else if (subcommand === "has-session") {
+        return { stdout: "", stderr: "no server", exitCode: 1 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("agy_cli", {
+      executable: "/provider-bin/agy",
+      execute,
+      timeoutMs: 2_000,
+      sessionId: "agy-live-flow",
+      delayMs: 1,
+      runtimeRoot
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      five_hour: { remaining: 97.76, resets_at: "in 4h 40m" },
+      weekly: { remaining: 99.59, resets_at: "in 150h 13m" }
+    });
+    expect(result.stdout).not.toContain(privateAccount);
+    expect(result.stdout).not.toContain(privateSession);
+    expect(launchArgs).toEqual([
+      "/provider-bin/agy",
+      "--log-file",
+      expect.stringMatching(/\/autopilot-provider-probe-[^/]+\/agy\.log$/)
+    ]);
+    expect(submissions).toBe(2);
+    expect(calls.filter((args) => tmuxSubcommand(args) === "send-keys" && args.includes("/usage")))
+      .toHaveLength(2);
+    expect(calls.filter((args) => tmuxSubcommand(args) === "send-keys" && args.at(-1) === "Enter"))
+      .toHaveLength(3);
+    expect(existsSync(sourceHome)).toBe(true);
+    expect(existsSync(launchHome!)).toBe(false);
+    expect(existsSync(launchCwd!)).toBe(false);
+  });
+
   it("links an external abort to the in-flight probe and still performs verified cleanup", async () => {
     const external = new AbortController();
     const runtimeRoot = temporaryRuntimeRoot();
+    vi.stubEnv("HOME", createAgySourceHome(runtimeRoot));
     const subcommands: string[] = [];
     let workingDirectory: string | undefined;
     let launchSignal: AbortSignal | undefined;

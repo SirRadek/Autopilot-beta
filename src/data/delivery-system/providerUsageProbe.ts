@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -33,6 +33,34 @@ export type TmuxCommandExecutor = (
 
 const MAX_CAPTURE_BYTES = 128 * 1024;
 const CLEANUP_TIMEOUT_MS = 1_000;
+const AGY_PRIVATE_STATE_FILES = [
+  ["installation_id"],
+  ["antigravity-oauth-token"],
+  ["settings.json"],
+  ["last_check.timestamp"],
+  ["cache", "onboarding.json"]
+] as const;
+const AGY_QUOTA_LABEL_TO_MODELS: Readonly<Record<string, readonly string[]>> = {
+  "Gemini Flash": [
+    "gemini-3.6-flash-high",
+    "gemini-3.6-flash-medium",
+    "gemini-3.6-flash-low",
+    "gemini-3.5-flash-high",
+    "gemini-3.5-flash-medium",
+    "gemini-3.5-flash-low"
+  ],
+  "Gemini Pro": ["gemini-3.1-pro-high", "gemini-3.1-pro-low"],
+  "Claude Opus": ["claude-opus-4-6-thinking"],
+  "Claude Sonnet": ["claude-sonnet-4-6"],
+  "GPT-OSS": ["gpt-oss-120b-medium"]
+};
+const AGY_TRUST_CAPTURE_ATTEMPTS = 25;
+const AGY_READY_CAPTURE_ATTEMPTS = 25;
+const AGY_COMMAND_CAPTURE_ATTEMPTS = 25;
+const AGY_USAGE_CAPTURE_ATTEMPTS = 17;
+const AGY_SUBMIT_ATTEMPTS = 4;
+const AGY_SUBMIT_SETTLE_MS = 500;
+const AGY_CAPTURE_INTERVAL_MS = 250;
 const CODEX_READY_CAPTURE_ATTEMPTS = 25;
 const CODEX_COMMAND_CAPTURE_ATTEMPTS = 25;
 // The status panel renders ~0.3 s after an Enter that lands, so a short window per submission
@@ -101,29 +129,52 @@ export function parseAgyUsage(raw: string): ParsedUsage | null {
     const section = text.slice(start, next < 0 ? undefined : next);
     const models = section.match(/Models within this group:\s*([^\r\n]+)/i)?.[1]
       ?.split(",").map((model) => model.trim()).filter(Boolean) ?? [];
-    const weekly = section.match(/Weekly Limit[\s\S]*?([0-9]+(?:\.[0-9]+)?)%/i)?.[1];
-    const five = section.match(/Five Hour Limit[\s\S]*?([0-9]+(?:\.[0-9]+)?)%/i)?.[1];
-    if (weekly === undefined || five === undefined || models.length === 0) return [];
-    return [{ models, weekly: boundedPercent(weekly), five: boundedPercent(five) }];
+    const weekly = parseAgyRemainingWindow(section, "Weekly");
+    const five = parseAgyRemainingWindow(section, "Five Hour");
+    if (weekly === null || five === null || models.length === 0) return [];
+    return [{ models, weekly, five }];
   });
   if (groups.length !== headings.length) return null;
-  const weekly = Math.min(...groups.map((group) => group.weekly));
-  const five = Math.min(...groups.map((group) => group.five));
+  const weekly = groups.reduce((minimum, group) =>
+    group.weekly.remaining < minimum.remaining ? group.weekly : minimum, groups[0]!.weekly);
+  const five = groups.reduce((minimum, group) =>
+    group.five.remaining < minimum.remaining ? group.five : minimum, groups[0]!.five);
   const modelAvailability = new Map<string, boolean>();
   for (const group of groups) {
-    const available = group.weekly > 0 && group.five > 0;
+    const available = group.weekly.remaining > 0 && group.five.remaining > 0;
     for (const label of group.models) {
-      for (const modelId of expandQuotaLabel("agy_cli", label)) {
+      for (const modelId of expandAgyQuotaLabel(label)) {
         modelAvailability.set(modelId, (modelAvailability.get(modelId) ?? true) && available);
       }
     }
   }
   return {
-    five_hour: percentWindow(String(five), null),
-    weekly: percentWindow(String(weekly), null),
+    five_hour: percentWindow(String(five.remaining), five.resetsAt),
+    weekly: percentWindow(String(weekly.remaining), weekly.resetsAt),
     models: [...modelAvailability].map(([model_id, available]) => ({ model_id, available }))
       .slice(0, 256)
   };
+}
+
+function parseAgyRemainingWindow(
+  section: string,
+  label: "Weekly" | "Five Hour"
+): { readonly remaining: number; readonly resetsAt: string | null } | null {
+  const heading = new RegExp(`${label} Limit(?: Remaining)?`, "i").exec(section);
+  if (heading === null) return null;
+  const afterHeading = section.slice(heading.index + heading[0].length);
+  const nextHeading = afterHeading.search(/(?:Weekly|Five Hour) Limit(?: Remaining)?/i);
+  const windowText = afterHeading.slice(0, nextHeading < 0 ? undefined : nextHeading);
+  const remaining = windowText.match(/([0-9]+(?:\.[0-9]+)?)%/)?.[1];
+  if (remaining === undefined) return null;
+  const resetsAt = windowText.match(/Refreshes\s+([^\r\n]+)/i)?.[1]?.trim().slice(0, 200) ?? null;
+  return { remaining: boundedPercent(remaining), resetsAt };
+}
+
+function expandAgyQuotaLabel(label: string): readonly string[] {
+  return Object.hasOwn(AGY_QUOTA_LABEL_TO_MODELS, label)
+    ? AGY_QUOTA_LABEL_TO_MODELS[label] ?? []
+    : [];
 }
 
 export function parseClaudeUsage(raw: string): ParsedUsage | null {
@@ -181,13 +232,27 @@ export async function runTmuxUsageProbe(
   const sessionId = options.sessionId ?? `autopilot-quota-${randomBytes(6).toString("hex")}`;
   const delayMs = options.delayMs;
   const environment = sanitizedProbeEnvironment(process.env);
-  let workingDirectory: string;
+  let runtimeDirectory: string;
   try {
-    workingDirectory = await mkdtemp(join(options.runtimeRoot ?? tmpdir(), "autopilot-provider-probe-"));
+    runtimeDirectory = await mkdtemp(join(options.runtimeRoot ?? tmpdir(), "autopilot-provider-probe-"));
   } catch {
     return failureResult("provider_runtime_denied");
   }
-  const socketPath = join(workingDirectory, "tmux.sock");
+  let workingDirectory = runtimeDirectory;
+  let sessionEnvironment = environment;
+  try {
+    if (provider === "agy_cli") {
+      workingDirectory = join(runtimeDirectory, "work");
+      const privateHome = join(runtimeDirectory, "home");
+      await mkdir(workingDirectory, { mode: 0o700 });
+      await createPrivateAgyHome(environment.HOME, privateHome);
+      sessionEnvironment = { ...environment, HOME: privateHome };
+    }
+  } catch {
+    await rm(runtimeDirectory, { recursive: true, force: true }).catch(() => undefined);
+    return failureResult("provider_runtime_denied");
+  }
+  const socketPath = join(runtimeDirectory, "tmux.sock");
 
   const controller = new AbortController();
   const onExternalAbort = () => controller.abort();
@@ -207,11 +272,11 @@ export async function runTmuxUsageProbe(
       "-s", sessionId,
       "-x", "160",
       "-y", "50",
-      ...sessionEnvironmentArguments(environment),
+      ...sessionEnvironmentArguments(sessionEnvironment),
       "-c", workingDirectory,
       options.executable,
-      ...probeCliArguments(provider, spec.args, workingDirectory)
-    ]), controller.signal, environment, "provider_unavailable");
+      ...probeCliArguments(provider, spec.args, workingDirectory, runtimeDirectory)
+    ]), controller.signal, sessionEnvironment, "provider_unavailable");
     fallbackErrorCode = "malformed_response";
     if (provider === "codex_cli") {
       const ready = await waitForCodexComposer(
@@ -219,7 +284,7 @@ export async function runTmuxUsageProbe(
         socketPath,
         target,
         controller.signal,
-        environment,
+        sessionEnvironment,
         delayMs
       );
       if (!ready) {
@@ -231,17 +296,45 @@ export async function runTmuxUsageProbe(
           target,
           spec.slashCommand,
           controller.signal,
-          environment,
+          sessionEnvironment,
           delayMs
         );
       }
+    } else if (provider === "agy_cli") {
+      const trusted = await confirmAgyTrust(
+        execute,
+        socketPath,
+        target,
+        controller.signal,
+        sessionEnvironment,
+        delayMs
+      );
+      const ready = trusted && await waitForAgyComposer(
+        execute,
+        socketPath,
+        target,
+        controller.signal,
+        sessionEnvironment,
+        delayMs
+      );
+      result = ready
+        ? await submitAgyUsageCommand(
+          execute,
+          socketPath,
+          target,
+          spec.slashCommand,
+          controller.signal,
+          sessionEnvironment,
+          delayMs
+        )
+        : failureResult("malformed_response");
     } else {
-      await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
+      await pause(delayMs ?? 4_000, controller.signal);
       await checked(
         execute,
         withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]),
         controller.signal,
-        environment,
+        sessionEnvironment,
         "malformed_response"
       );
       await pause(delayMs ?? 250, controller.signal);
@@ -249,14 +342,14 @@ export async function runTmuxUsageProbe(
         execute,
         withSocket(socketPath, ["send-keys", "-t", target, "C-m"]),
         controller.signal,
-        environment,
+        sessionEnvironment,
         "malformed_response"
       );
       await pause(delayMs ?? 4_000, controller.signal);
-      const stdout = await capturePane(execute, socketPath, target, controller.signal, environment);
-      const parsed = provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
+      const stdout = await capturePane(execute, socketPath, target, controller.signal, sessionEnvironment);
+      const parsed = parseClaudeUsage(stdout);
       if (parsed === null) {
-        const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
+        const missing = /login|sign in|authentication/i.test(stdout);
         result = failureResult(missing ? "missing_credential" : "malformed_response");
       } else {
         result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
@@ -272,27 +365,53 @@ export async function runTmuxUsageProbe(
 
   clearTimeout(timer);
   options.signal?.removeEventListener("abort", onExternalAbort);
-  const serverTerminated = await terminateAndVerifyServer(execute, socketPath, environment);
-  let workingDirectoryRemoved = false;
+  const serverTerminated = await terminateAndVerifyServer(execute, socketPath, sessionEnvironment);
+  let runtimeDirectoryRemoved = false;
   // The socket is inside this directory; keep it reachable if the server may still be alive.
   if (serverTerminated) {
     try {
-      await rm(workingDirectory, { recursive: true, force: true });
-      workingDirectoryRemoved = true;
+      await rm(runtimeDirectory, { recursive: true, force: true });
+      runtimeDirectoryRemoved = true;
     } catch {
       // A private runtime artifact is safer than claiming cleanup succeeded.
     }
   }
-  return serverTerminated && workingDirectoryRemoved
+  return serverTerminated && runtimeDirectoryRemoved
     ? result
     : failureResult("provider_runtime_denied");
+}
+
+async function createPrivateAgyHome(sourceHome: string | undefined, privateHome: string): Promise<void> {
+  if (sourceHome === undefined || sourceHome.length === 0) throw new Error("provider_runtime_denied");
+  const sourceState = join(sourceHome, ".gemini", "antigravity-cli");
+  const privateGemini = join(privateHome, ".gemini");
+  const privateState = join(privateGemini, "antigravity-cli");
+  const privateCache = join(privateState, "cache");
+  await mkdir(privateCache, { recursive: true, mode: 0o700 });
+  for (const directory of [privateHome, privateGemini, privateState, privateCache]) {
+    await chmod(directory, 0o700);
+  }
+  for (const pathParts of AGY_PRIVATE_STATE_FILES) {
+    const source = join(sourceState, ...pathParts);
+    const metadata = await lstat(source);
+    if (!metadata.isFile() || metadata.size > 4 * 1024 * 1024) {
+      throw new Error("provider_runtime_denied");
+    }
+    const destination = join(privateState, ...pathParts);
+    await copyFile(source, destination);
+    await chmod(destination, 0o600);
+  }
 }
 
 function probeCliArguments(
   provider: UsageProbeProvider,
   baseArguments: readonly string[],
-  workingDirectory: string
+  workingDirectory: string,
+  runtimeDirectory: string
 ): readonly string[] {
+  if (provider === "agy_cli") {
+    return [...baseArguments, "--log-file", join(runtimeDirectory, "agy.log")];
+  }
   if (provider !== "codex_cli") return baseArguments;
   // Codex otherwise blocks on a trust prompt for every fresh probe directory and tries to
   // persist that decision under HOME. Mark only this empty, mode-0700 directory untrusted for
@@ -302,6 +421,147 @@ function probeCliArguments(
   const projectOverride = `projects={${JSON.stringify(workingDirectory)}={trust_level="untrusted"}}`;
   const sqliteOverride = `sqlite_home=${JSON.stringify(workingDirectory)}`;
   return [...baseArguments, "-c", projectOverride, "-c", sqliteOverride];
+}
+
+async function confirmAgyTrust(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<boolean> {
+  for (let attempt = 0; attempt < AGY_TRUST_CAPTURE_ATTEMPTS; attempt += 1) {
+    const stdout = await capturePane(execute, socketPath, target, signal, environment);
+    if (agyTrustGateReady(stdout)) {
+      await checked(
+        execute,
+        withSocket(socketPath, ["send-keys", "-t", target, "Enter"]),
+        signal,
+        environment,
+        "malformed_response"
+      );
+      return true;
+    }
+    if (attempt + 1 < AGY_TRUST_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? AGY_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return false;
+}
+
+async function waitForAgyComposer(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<boolean> {
+  for (let attempt = 0; attempt < AGY_READY_CAPTURE_ATTEMPTS; attempt += 1) {
+    const stdout = await capturePane(execute, socketPath, target, signal, environment);
+    if (agyComposerReady(stdout)) return true;
+    if (attempt + 1 < AGY_READY_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? AGY_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return false;
+}
+
+async function submitAgyUsageCommand(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  slashCommand: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<TmuxCommandResult> {
+  let lastFailure = failureResult("malformed_response");
+  for (let attempt = 0; attempt < AGY_SUBMIT_ATTEMPTS; attempt += 1) {
+    const before = await capturePane(execute, socketPath, target, signal, environment);
+    const alreadyParsed = parseAgyUsage(before);
+    if (alreadyParsed !== null) {
+      return { stdout: JSON.stringify(alreadyParsed), stderr: "", exitCode: 0 };
+    }
+    if (!agyComposerContains(before, slashCommand)) {
+      await checked(
+        execute,
+        withSocket(socketPath, ["send-keys", "-t", target, "-l", slashCommand]),
+        signal,
+        environment,
+        "malformed_response"
+      );
+      const echoed = await waitForAgyComposerCommand(
+        execute,
+        socketPath,
+        target,
+        slashCommand,
+        signal,
+        environment,
+        delayMs
+      );
+      if (!echoed) continue;
+    }
+    await pause(delayMs ?? AGY_SUBMIT_SETTLE_MS, signal);
+    await checked(
+      execute,
+      withSocket(socketPath, ["send-keys", "-t", target, "Enter"]),
+      signal,
+      environment,
+      "malformed_response"
+    );
+    lastFailure = await waitForAgyUsage(
+      execute,
+      socketPath,
+      target,
+      signal,
+      environment,
+      delayMs
+    );
+    if (lastFailure.exitCode === 0) return lastFailure;
+  }
+  return lastFailure;
+}
+
+async function waitForAgyComposerCommand(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  slashCommand: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<boolean> {
+  for (let attempt = 0; attempt < AGY_COMMAND_CAPTURE_ATTEMPTS; attempt += 1) {
+    const stdout = await capturePane(execute, socketPath, target, signal, environment);
+    if (agyComposerContains(stdout, slashCommand)) return true;
+    if (attempt + 1 < AGY_COMMAND_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? AGY_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return false;
+}
+
+async function waitForAgyUsage(
+  execute: TmuxCommandExecutor,
+  socketPath: string,
+  target: string,
+  signal: AbortSignal,
+  environment: Readonly<Record<string, string>>,
+  delayMs: number | undefined
+): Promise<TmuxCommandResult> {
+  for (let attempt = 0; attempt < AGY_USAGE_CAPTURE_ATTEMPTS; attempt += 1) {
+    const stdout = await capturePane(execute, socketPath, target, signal, environment);
+    const parsed = parseAgyUsage(stdout);
+    if (parsed !== null) {
+      return { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
+    }
+    if (attempt + 1 < AGY_USAGE_CAPTURE_ATTEMPTS) {
+      await pause(delayMs ?? AGY_CAPTURE_INTERVAL_MS, signal);
+    }
+  }
+  return failureResult("malformed_response");
 }
 
 async function waitForCodexComposer(
@@ -445,6 +705,23 @@ async function capturePane(
   return Buffer.from(captured.stdout).subarray(0, MAX_CAPTURE_BYTES).toString("utf8");
 }
 
+function agyTrustGateReady(raw: string): boolean {
+  const text = terminalText(raw);
+  return /Do you trust the contents of this project\?/i.test(text)
+    && /^\s*>\s*Yes, I trust this folder\s*$/im.test(text);
+}
+
+function agyComposerReady(raw: string): boolean {
+  const text = terminalText(raw);
+  if (agyTrustGateReady(text)) return false;
+  return parseAgyUsage(text) !== null
+    || (/Antigravity CLI\s+[0-9]+(?:\.[0-9]+)*/i.test(text) && /^\s*>\s*$/m.test(text));
+}
+
+function agyComposerContains(raw: string, slashCommand: string): boolean {
+  return terminalText(raw).split("\n").some((line) => line.trim() === `> ${slashCommand}`);
+}
+
 function codexComposerReady(raw: string): boolean {
   const text = terminalText(raw);
   if (/Do you trust the contents of this directory|Press enter to continue/i.test(text)) return false;
@@ -571,7 +848,8 @@ function boundedPercent(value: string): number {
 
 function percentWindow(value: string, resetsAt: string | null) {
   const remaining = boundedPercent(value);
-  return { limit: 100, used: 100 - remaining, remaining, resets_at: resetsAt?.trim().slice(0, 200) ?? null };
+  const used = Math.round((100 - remaining) * 100) / 100;
+  return { limit: 100, used, remaining, resets_at: resetsAt?.trim().slice(0, 200) ?? null };
 }
 
 function unknownWindow() {
