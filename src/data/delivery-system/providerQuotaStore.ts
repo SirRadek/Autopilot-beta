@@ -4,6 +4,7 @@ import { RUN_REASONING_EFFORTS, SUPPORTED_REASONING_EFFORTS, type RunReasoningEf
 import { readManagedStateTextFile } from "./managedStateFile";
 import { isCanonicalModelId } from "./providerModelId";
 import {
+  normalizeProviderProbeFailure,
   normalizeQuotaWindow,
   type ProviderSnapshot,
   type ProviderErrorCode,
@@ -120,6 +121,7 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
   const weekly = window(row.weekly);
   if (five === null || weekly === null) return null;
   const cliVersion = row.cli_version === undefined ? undefined : sanitizeCliVersion(row.cli_version);
+  const probeFailure = row.error_code === null ? null : normalizeProviderProbeFailure(row.probe_failure);
   return {
     provider,
     source: row.source as ProviderQuotaSource,
@@ -132,7 +134,8 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
     models,
     ...(cliVersion === undefined ? {} : { cli_version: cliVersion }),
     health: row.health as ProviderHealth,
-    error_code: row.error_code as ProviderErrorCode | null
+    error_code: row.error_code as ProviderErrorCode | null,
+    ...(probeFailure === null ? {} : { probe_failure: probeFailure })
   };
 }
 

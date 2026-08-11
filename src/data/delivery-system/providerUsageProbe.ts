@@ -4,7 +4,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { normalizeProviderError, type ProviderErrorCode } from "./providerQuota";
+import {
+  normalizeProviderError,
+  type ProviderErrorCode,
+  type ProviderProbeFailure,
+  type ProviderProbeFailurePhase
+} from "./providerQuota";
 import { resolveProviderCliRuntime } from "./providerCliRuntime";
 import { expandQuotaLabel, isCanonicalModelId } from "./providerModelId";
 
@@ -20,6 +25,7 @@ export interface TmuxCommandResult {
   readonly stdout: string;
   readonly stderr: string;
   readonly exitCode: number;
+  readonly probe_failure?: ProviderProbeFailure;
 }
 
 type SpecificProviderErrorCode = Exclude<ProviderErrorCode, "provider_error">;
@@ -185,7 +191,7 @@ export async function runTmuxUsageProbe(
   try {
     workingDirectory = await mkdtemp(join(options.runtimeRoot ?? tmpdir(), "autopilot-provider-probe-"));
   } catch {
-    return failureResult("provider_runtime_denied");
+    return failureResult("provider_runtime_denied", { phase: "launch" });
   }
   const socketPath = join(workingDirectory, "tmux.sock");
 
@@ -198,6 +204,11 @@ export async function runTmuxUsageProbe(
   const spec = CLI[provider];
   let result: TmuxCommandResult;
   let fallbackErrorCode: SpecificProviderErrorCode = "provider_unavailable";
+  let activeFailure: ProviderProbeFailure = { phase: "launch" };
+  const recordFailure = (phase: ProviderProbeFailurePhase, attempts?: number): ProviderProbeFailure => {
+    activeFailure = { phase, ...(attempts === undefined ? {} : { attempts }) };
+    return activeFailure;
+  };
   try {
     if (controller.signal.aborted) throw new Error("timeout");
     if (options.executable.length === 0) throw new Error("provider_executable_missing");
@@ -214,6 +225,7 @@ export async function runTmuxUsageProbe(
     ]), controller.signal, environment, "provider_unavailable");
     fallbackErrorCode = "malformed_response";
     if (provider === "codex_cli") {
+      recordFailure("readiness");
       const ready = await waitForCodexComposer(
         execute,
         socketPath,
@@ -223,7 +235,7 @@ export async function runTmuxUsageProbe(
         delayMs
       );
       if (!ready) {
-        result = failureResult("malformed_response");
+        result = failureResult("malformed_response", recordFailure("readiness", CODEX_READY_CAPTURE_ATTEMPTS));
       } else {
         result = await submitCodexStatusCommand(
           execute,
@@ -232,11 +244,14 @@ export async function runTmuxUsageProbe(
           spec.slashCommand,
           controller.signal,
           environment,
-          delayMs
+          delayMs,
+          recordFailure
         );
       }
     } else {
+      recordFailure("readiness");
       await pause(delayMs ?? (provider === "agy_cli" ? 6_000 : 4_000), controller.signal);
+      recordFailure("echo");
       await checked(
         execute,
         withSocket(socketPath, ["send-keys", "-t", target, "-l", spec.slashCommand]),
@@ -245,6 +260,7 @@ export async function runTmuxUsageProbe(
         "malformed_response"
       );
       await pause(delayMs ?? 250, controller.signal);
+      recordFailure("render");
       await checked(
         execute,
         withSocket(socketPath, ["send-keys", "-t", target, "C-m"]),
@@ -257,7 +273,7 @@ export async function runTmuxUsageProbe(
       const parsed = provider === "agy_cli" ? parseAgyUsage(stdout) : parseClaudeUsage(stdout);
       if (parsed === null) {
         const missing = provider === "claude_cli" && /login|sign in|authentication/i.test(stdout);
-        result = failureResult(missing ? "missing_credential" : "malformed_response");
+        result = failureResult(missing ? "missing_credential" : "malformed_response", activeFailure);
       } else {
         result = { stdout: JSON.stringify(parsed), stderr: "", exitCode: 0 };
       }
@@ -267,7 +283,7 @@ export async function runTmuxUsageProbe(
     const errorCode = controller.signal.aborted
       ? "timeout"
       : normalized === "provider_error" ? fallbackErrorCode : normalized;
-    result = failureResult(errorCode);
+    result = failureResult(errorCode, activeFailure);
   }
 
   clearTimeout(timer);
@@ -285,7 +301,7 @@ export async function runTmuxUsageProbe(
   }
   return serverTerminated && workingDirectoryRemoved
     ? result
-    : failureResult("provider_runtime_denied");
+    : failureResult("provider_runtime_denied", { phase: "cleanup" });
 }
 
 function probeCliArguments(
@@ -359,10 +375,13 @@ async function submitCodexStatusCommand(
   slashCommand: string,
   signal: AbortSignal,
   environment: Readonly<Record<string, string>>,
-  delayMs: number | undefined
+  delayMs: number | undefined,
+  recordFailure: (phase: ProviderProbeFailurePhase, attempts?: number) => ProviderProbeFailure
 ): Promise<TmuxCommandResult> {
-  let lastFailure: TmuxCommandResult = failureResult("malformed_response");
+  let lastFailure: TmuxCommandResult = failureResult("malformed_response", { phase: "echo", attempts: 1 });
   for (let attempt = 0; attempt < CODEX_SUBMIT_ATTEMPTS; attempt += 1) {
+    const attempts = attempt + 1;
+    const echoFailure = recordFailure("echo", attempts);
     // Retyping over a composer that still holds the command would submit `/status/status`.
     // Only type when the previous attempt's Enter emptied it.
     const before = await capturePane(execute, socketPath, target, signal, environment);
@@ -383,8 +402,12 @@ async function submitCodexStatusCommand(
         environment,
         delayMs
       );
-      if (!echoed) continue;
+      if (!echoed) {
+        lastFailure = failureResult("malformed_response", echoFailure);
+        continue;
+      }
     }
+    const renderFailure = recordFailure("render", attempts);
     await pause(delayMs ?? CODEX_SUBMIT_SETTLE_MS, signal);
     await checked(
       execute,
@@ -403,8 +426,12 @@ async function submitCodexStatusCommand(
     );
     // Retry only when the panel never rendered. A classified outcome — parsed usage, or a
     // panel that states usage is unavailable — is final and must not be resubmitted.
-    if (outcome.classified) return outcome.result;
-    lastFailure = outcome.result;
+    if (outcome.classified) {
+      return outcome.result.exitCode === 0
+        ? outcome.result
+        : { ...outcome.result, probe_failure: renderFailure };
+    }
+    lastFailure = failureResult("malformed_response", renderFailure);
   }
   return lastFailure;
 }
@@ -546,8 +573,13 @@ function withSocket(socketPath: string, args: readonly string[]): string[] {
   return ["-S", socketPath, ...args];
 }
 
-function failureResult(errorCode: ProviderErrorCode): TmuxCommandResult {
-  return { stdout: "", stderr: errorCode, exitCode: 1 };
+function failureResult(errorCode: ProviderErrorCode, probeFailure?: ProviderProbeFailure): TmuxCommandResult {
+  return {
+    stdout: "",
+    stderr: errorCode,
+    exitCode: 1,
+    ...(probeFailure === undefined ? {} : { probe_failure: probeFailure })
+  };
 }
 
 function pause(milliseconds: number, signal: AbortSignal): Promise<void> {

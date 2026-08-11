@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createProviderQuotaAdapters, type ProviderCommandRunner } from "../../src/data/delivery-system/providerQuotaAdapters";
+import {
+  createProviderQuotaAdapters,
+  type ProviderCommandResult,
+  type ProviderCommandRunner
+} from "../../src/data/delivery-system/providerQuotaAdapters";
 
 const now = "2026-07-11T12:00:00.000Z";
 const signal = new AbortController().signal;
@@ -175,6 +179,60 @@ describe("provider quota adapters", () => {
     expect(snapshot.health).toBe("unavailable");
     expect(snapshot.error_code).toBe(errorCode);
     expect(JSON.stringify(snapshot)).not.toContain("/provider-bin/agy");
+  });
+
+  it("propagates only the allowlisted probe failure phase and attempts", async () => {
+    const privateAccount = "probe-owner@example.invalid";
+    const privateSession = "00000000-0000-4000-8000-000000000001";
+    const privateStderr = `raw failure for ${privateAccount}, session ${privateSession}`;
+    const snapshot = await createProviderQuotaAdapters({
+      runCommand: runnerFor(""),
+      commands: usageCommands,
+      runUsageProbe: async () => ({
+        stdout: "",
+        stderr: privateStderr,
+        exitCode: 1,
+        probe_failure: {
+          phase: "render",
+          attempts: 4,
+          stderr: privateStderr,
+          account: privateAccount,
+          session: privateSession
+        }
+      } as unknown as ProviderCommandResult)
+    }).codex_cli.fetchSnapshot({ now, signal });
+
+    expect(snapshot.probe_failure).toEqual({ phase: "render", attempts: 4 });
+    expect(snapshot.error_code).toBe("provider_error");
+    expect(JSON.stringify(snapshot)).not.toContain(privateStderr);
+    expect(JSON.stringify(snapshot)).not.toContain(privateAccount);
+    expect(JSON.stringify(snapshot)).not.toContain(privateSession);
+  });
+
+  it("waits for bounded probe cleanup and preserves its phase after the adapter timeout", async () => {
+    let cleanupSettled = false;
+    const snapshotPromise = createProviderQuotaAdapters({
+      runCommand: runnerFor(""),
+      commands: usageCommands,
+      timeoutMs: 1,
+      runUsageProbe: async (_provider, _executable, probeSignal) => await new Promise<ProviderCommandResult>((resolve) => {
+        probeSignal.addEventListener("abort", () => {
+          cleanupSettled = true;
+          resolve({
+            stdout: "",
+            stderr: "timeout",
+            exitCode: 1,
+            probe_failure: { phase: "readiness", attempts: 25 }
+          });
+        }, { once: true });
+      })
+    }).codex_cli.fetchSnapshot({ now, signal });
+
+    const snapshot = await snapshotPromise;
+
+    expect(cleanupSettled).toBe(true);
+    expect(snapshot.error_code).toBe("timeout");
+    expect(snapshot.probe_failure).toEqual({ phase: "readiness", attempts: 25 });
   });
 
   it("forwards caller abort to a built-in probe without leaking its stderr", async () => {

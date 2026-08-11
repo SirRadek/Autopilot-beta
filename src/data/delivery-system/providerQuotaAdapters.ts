@@ -4,10 +4,12 @@ import {
 } from "../../../scripts/openrouter-health";
 import {
   normalizeProviderError,
+  normalizeProviderProbeFailure,
   normalizeQuotaWindow,
   type ProviderHealth,
   type ProviderModelDiscovery,
   type ProviderModelAvailability,
+  type ProviderProbeFailure,
   type ProviderQuotaAdapter,
   type ProviderSnapshot
 } from "./providerQuota";
@@ -25,6 +27,7 @@ export interface ProviderCommandResult {
   readonly stdout: string;
   readonly stderr?: string;
   readonly exitCode?: number | null;
+  readonly probe_failure?: ProviderProbeFailure;
 }
 
 export type ProviderCommandRunner = (input: {
@@ -59,6 +62,8 @@ export interface ProviderQuotaAdapterDependencies {
   readonly discoverAgyModels?: typeof discoverAgyModels;
 }
 
+const PROBE_TIMEOUT_SETTLE_MS = 1_500;
+
 export function createProviderQuotaAdapters(
   dependencies: ProviderQuotaAdapterDependencies
 ): Readonly<Record<"codex_cli" | "claude_cli" | "agy_cli" | "openrouter_api", ProviderQuotaAdapter>> {
@@ -83,7 +88,7 @@ function createCliAdapter(
           return errorSnapshot(provider, "cli", now, "provider_unavailable");
         }
         if ("kind" in spec && spec.kind === "unavailable") {
-          return errorSnapshot(provider, "cli", now, spec.error_code);
+          return errorSnapshot(provider, "cli", now, spec.error_code, { phase: "launch" });
         }
         const controller = new AbortController();
         const onAbort = () => controller.abort();
@@ -93,15 +98,32 @@ function createCliAdapter(
           const execution = "kind" in spec
             ? (dependencies.runUsageProbe ?? runUsageProbe)(provider, spec.executable, controller.signal)
             : dependencies.runCommand({ command: spec.command, args: spec.args, signal: controller.signal });
-          const result = await withTimeout(
-            execution,
-            dependencies.timeoutMs ?? ("kind" in spec ? 25_000 : 10_000),
-            controller
-          );
+          const outcome = "kind" in spec
+            ? await withProbeTimeout(execution, dependencies.timeoutMs ?? 25_000, controller)
+            : {
+                result: await withTimeout(execution, dependencies.timeoutMs ?? 10_000, controller),
+                timedOut: false
+              };
+          const result = outcome.result;
+          if (outcome.timedOut) {
+            return errorSnapshot(
+              provider,
+              "cli",
+              now,
+              "timeout",
+              normalizeProviderProbeFailure(result.probe_failure) ?? undefined
+            );
+          }
           if ((result.exitCode ?? 0) !== 0) {
             const stderr = result.stderr ?? "";
             if ("kind" in spec) {
-              return errorSnapshot(provider, "cli", now, normalizeProviderError(stderr || "provider_unavailable"));
+              return errorSnapshot(
+                provider,
+                "cli",
+                now,
+                normalizeProviderError(stderr || "provider_unavailable"),
+                normalizeProviderProbeFailure(result.probe_failure) ?? undefined
+              );
             }
             throw new Error(/login|auth|credential|api[ _-]?key|token/i.test(stderr) ? "missing_credential" : stderr || "provider_unavailable");
           }
@@ -372,7 +394,13 @@ function boundedString(value: unknown): string | null {
   return typeof value === "string" && value.length <= 200 ? value : null;
 }
 
-function errorSnapshot(provider: string, source: "cli" | "api", now: string, errorCode: ProviderSnapshot["error_code"]): ProviderSnapshot {
+function errorSnapshot(
+  provider: string,
+  source: "cli" | "api",
+  now: string,
+  errorCode: ProviderSnapshot["error_code"],
+  probeFailure?: ProviderProbeFailure
+): ProviderSnapshot {
   return {
     provider,
     source,
@@ -384,7 +412,8 @@ function errorSnapshot(provider: string, source: "cli" | "api", now: string, err
     currency: null,
     models: [],
     health: "unavailable",
-    error_code: errorCode
+    error_code: errorCode,
+    ...(probeFailure === undefined ? {} : { probe_failure: probeFailure })
   };
 }
 
@@ -401,6 +430,48 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, controller
       clearTimeout(timer);
       controller.signal.removeEventListener("abort", abort);
     });
+  });
+}
+
+/**
+ * A tmux probe owns verified teardown. After its deadline aborts the command, give that bounded
+ * teardown enough time to return the allowlisted phase instead of racing ahead with an anonymous
+ * timeout snapshot. A probe that ignores abort is still cut off after the short settle window.
+ */
+async function withProbeTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  controller: AbortController
+): Promise<{ readonly result: T; readonly timedOut: boolean }> {
+  if (controller.signal.aborted) throw new Error("aborted");
+  return await new Promise((resolve, reject) => {
+    let timedOut = false;
+    let settled = false;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (settleTimer !== undefined) clearTimeout(settleTimer);
+      controller.signal.removeEventListener("abort", abort);
+      callback();
+    };
+    const abort = () => {
+      if (!timedOut) finish(() => reject(new Error("aborted")));
+    };
+    controller.signal.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      settleTimer = setTimeout(
+        () => finish(() => reject(new Error("timeout"))),
+        PROBE_TIMEOUT_SETTLE_MS
+      );
+    }, timeoutMs);
+    promise.then(
+      (result) => finish(() => resolve({ result, timedOut })),
+      (error) => finish(() => reject(timedOut ? new Error("timeout") : error))
+    );
   });
 }
 
