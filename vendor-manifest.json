@@ -847,7 +847,7 @@
     {
       "source_path": "src/data/delivery-system/providerModelCatalog.ts",
       "canonical_sha": "599785fb710cc01100ae1d5028af433e8fcfabbd",
-      "content_hash": "a57a3815af2cabc7144d0b19714ae34d76c1cec194627b6cc64cf65e366b6fe8"
+      "content_hash": "369f792cba538e14f2a1d1d55b43204726ee5b36dbf677c4d7545c94d7c6e3d0"
     },
     {
       "source_path": "src/data/delivery-system/providerModelDiscovery.ts",

@@ -14,7 +14,24 @@ export const STATIC_PROVIDER_MODEL_CATALOG = {
     reasoning_efforts: SUPPORTED_REASONING_EFFORTS.claude_cli
   },
   codex_cli: {
-    models: ["gpt-5.6-sol"],
+    // Owner-approved dispatch routes. These are the picker-visible rows
+    // (`visibility: "list"`) of the installed CLI's models_cache.json for 0.144.5,
+    // so each one is a route the CLI itself offers. Reasoning support is per model
+    // and comes from the cache — only gpt-5.6-sol and gpt-5.6-terra advertise `ultra`.
+    models: [
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      // Daybreak Blue tier: frontier models with safeguards adjusted for authorised
+      // defensive security work (vulnerability discovery, secure code review, malware
+      // analysis, incident response). The account's access is gated by OpenAI identity
+      // verification and legal attestation, so it is a route this owner genuinely holds.
+      "gpt-daybreak-blue-latest",
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.3-codex-spark"
+    ],
     reasoning_efforts: SUPPORTED_REASONING_EFFORTS.codex_cli
   },
   agy_cli: {

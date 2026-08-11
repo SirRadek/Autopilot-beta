@@ -115,7 +115,7 @@ describe("profile-aware run route eligibility", () => {
         api_spend: null,
         currency: null,
         models: [{
-          model_id: "gpt-5.6-luna",
+          model_id: "gpt-5.7-unreleased-preview",
           available: true,
           health: "healthy",
           source: "cli",
@@ -127,10 +127,10 @@ describe("profile-aware run route eligibility", () => {
       }]
     });
 
-    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-luna", "max", "dev", now)).toBe(false);
-    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-luna", "max", "prod", now)).toBe(false);
-    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.6-luna", "ultra", "dev", now)).toBe(false);
-    expect(isRunRouteEligible(stateDir, "codex_cli", "gpt-5.6-luna", now, "max")).toBe(false);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", "max", "dev", now)).toBe(false);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", "max", "prod", now)).toBe(false);
+    expect(isRunRouteEligibleForProfile(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", "ultra", "dev", now)).toBe(false);
+    expect(isRunRouteEligible(stateDir, "codex_cli", "gpt-5.7-unreleased-preview", now, "max")).toBe(false);
   });
 
   it("uses cache-advertised efforts for an owner-approved Codex seed model", () => {

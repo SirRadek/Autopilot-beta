@@ -44,7 +44,7 @@
   "src/data/delivery-system/promotionPacket.ts": "224ab5a3eb990fc1219064f9377d17c774bdea8d",
   "src/data/delivery-system/runOrchestrator.ts": "a75af60adf5c935b977fa3e96a285796bc6d4321",
   "src/data/delivery-system/runRouteEligibility.ts": "da9ea51e1efd6be3d8751f4ae3298a4a4968c7e8",
-  "src/data/delivery-system/providerModelCatalog.ts": "1b0c27fa2f54bd75ba63bbb4e047dffb38aaa0f3",
+  "src/data/delivery-system/providerModelCatalog.ts": "fef175be95401013edbe168de1744be9634c63fa",
   "src/data/delivery-system/providerModelId.ts": "e3671177b48b48088c5cf615704e014e537ddde9",
   "scripts/verify-scope.ts": "4814929b7ef0e91b3e04d4ed311fc2cfe1ee4e5b",
   "scripts/control-plane-runs.ts": "f1c71a16450932b2a2ce574798c8b5989454c47c",

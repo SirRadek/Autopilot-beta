@@ -84,7 +84,16 @@ describe("static provider model catalog", () => {
         reasoning_efforts: SUPPORTED_REASONING_EFFORTS.claude_cli
       },
       codex_cli: {
-        models: ["gpt-5.6-sol"],
+        models: [
+          "gpt-5.6-sol",
+          "gpt-5.6-terra",
+          "gpt-5.6-luna",
+          "gpt-daybreak-blue-latest",
+          "gpt-5.5",
+          "gpt-5.4",
+          "gpt-5.4-mini",
+          "gpt-5.3-codex-spark"
+        ],
         reasoning_efforts: SUPPORTED_REASONING_EFFORTS.codex_cli
       },
       agy_cli: {
