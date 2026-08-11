@@ -37,6 +37,7 @@ import { WORKER_LOCK_TTL_MINUTES } from "../src/data/delivery-system/sessionStat
 import { dispatchHandoff, type DispatchResult, type GovernedHandoff } from "../src/governed-core/dispatch";
 import { SUPPORTED_REASONING_EFFORTS, type RunReasoningEffort } from "../src/data/delivery-system/executionProfile";
 import { STATIC_PROVIDER_MODEL_CATALOG } from "../src/data/delivery-system/providerModelCatalog";
+import { codexModelCacheAge } from "../src/data/delivery-system/providerModelDiscovery";
 import type { RunProvider } from "../src/data/delivery-system/runStore";
 import {
   adminCredentialsPathIsOutsideState,
@@ -796,7 +797,13 @@ function providerQuota(directory: string, provider: string): QuotaView | { error
   return snapshot === undefined ? { error: "provider_not_found" } : quotaView(snapshot);
 }
 
-function providerModels(directory: string): { freshness: string; fetched_at: string | null; next_poll_at: string | null; models: readonly Record<string, unknown>[] } {
+function providerModels(directory: string): {
+  freshness: string;
+  fetched_at: string | null;
+  next_poll_at: string | null;
+  catalogs: readonly Record<string, unknown>[];
+  models: readonly Record<string, unknown>[];
+} {
   const snapshots = readProviderQuotaStore(directory).snapshots;
   const now = new Date().toISOString();
   type Route = {
@@ -855,10 +862,21 @@ function providerModels(directory: string): { freshness: string; fetched_at: str
   const freshness = views.length === 0 || views.some((view) => view.freshness === "unavailable") ? "unavailable" : views.some((view) => view.freshness === "stale") ? "stale" : "fresh";
   const fetchedAt = views.map((view) => view.fetched_at).sort().at(-1) ?? null;
   const nextPollAt = views.map((view) => view.next_poll_at).filter((value): value is string => value !== null).sort().at(0) ?? null;
+  const catalogs = snapshots.flatMap((snapshot) => {
+    if (snapshot.model_catalog === undefined) return [];
+    const age = codexModelCacheAge(snapshot.model_catalog.fetched_at, new Date(now));
+    if (age === null) return [];
+    return [{
+      provider: snapshot.provider,
+      discovery: snapshot.model_catalog.discovery,
+      ...age
+    }];
+  }).sort((left, right) => left.provider.localeCompare(right.provider));
   return {
     freshness,
     fetched_at: fetchedAt,
     next_poll_at: nextPollAt,
+    catalogs,
     models: [...byModel.entries()].map(([modelId, byProvider]) => {
       const providers = [...byProvider.keys()].sort();
       const routes = providers.map((provider) => {

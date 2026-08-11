@@ -140,17 +140,28 @@ async function enrichCliSnapshot(
   const discoveryPromise: Promise<{
     readonly models: readonly DiscoveredProviderModel[];
     readonly provenance: Extract<ProviderModelDiscovery, "models_cache" | "cli_list">;
+    readonly modelCatalog?: ProviderSnapshot["model_catalog"];
   } | null> = provider === "codex_cli"
     ? versionPromise
       .then((cliVersion) => {
         const expectedClientVersion = codexClientVersion(cliVersion);
-        const models = expectedClientVersion === null
-          ? []
+        const catalog = expectedClientVersion === null
+          ? null
           : (dependencies.discoverCodexModels ?? discoverCodexModels)(
             dependencies.environment?.HOME ?? "",
-            expectedClientVersion
+            expectedClientVersion,
+            new Date(snapshot.observed_at)
           );
-        return { models, provenance: "models_cache" as const };
+        return {
+          models: catalog?.models ?? [],
+          provenance: "models_cache" as const,
+          ...(catalog === null ? {} : {
+            modelCatalog: {
+              discovery: "models_cache" as const,
+              fetched_at: catalog.fetched_at
+            }
+          })
+        };
       })
       .catch(() => null)
     : provider === "agy_cli"
@@ -163,6 +174,7 @@ async function enrichCliSnapshot(
   return {
     ...snapshot,
     cli_version: cliVersion,
+    ...(discovered?.modelCatalog === undefined ? {} : { model_catalog: discovered.modelCatalog }),
     models: mergeDiscoveredModels(
       snapshot.models,
       discovered?.models ?? [],

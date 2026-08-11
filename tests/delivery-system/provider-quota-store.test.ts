@@ -193,6 +193,10 @@ describe("provider quota store", () => {
         ...minimumSnapshot(),
         provider: "codex_cli",
         cli_version: "codex-cli 1.2.3 (stable)",
+        model_catalog: {
+          discovery: "models_cache",
+          fetched_at: "2026-08-03T09:58:59.000Z"
+        },
         models: [{
           model_id: "gpt-5.6-sol",
           available: true,

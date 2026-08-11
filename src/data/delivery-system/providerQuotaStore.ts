@@ -8,6 +8,7 @@ import {
   type ProviderSnapshot,
   type ProviderErrorCode,
   type ProviderHealth,
+  type ProviderModelCatalogSnapshot,
   type ProviderModelDiscovery,
   type ProviderQuotaSource
 } from "./providerQuota";
@@ -120,6 +121,7 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
   const weekly = window(row.weekly);
   if (five === null || weekly === null) return null;
   const cliVersion = row.cli_version === undefined ? undefined : sanitizeCliVersion(row.cli_version);
+  const modelCatalog = sanitizeModelCatalog(row.model_catalog);
   return {
     provider,
     source: row.source as ProviderQuotaSource,
@@ -131,9 +133,23 @@ export function sanitizeProviderSnapshot(value: unknown): ProviderSnapshot | nul
     currency: row.currency as string | null,
     models,
     ...(cliVersion === undefined ? {} : { cli_version: cliVersion }),
+    ...(modelCatalog === undefined ? {} : { model_catalog: modelCatalog }),
     health: row.health as ProviderHealth,
     error_code: row.error_code as ProviderErrorCode | null
   };
+}
+
+function sanitizeModelCatalog(value: unknown): ProviderModelCatalogSnapshot | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  if (
+    row.discovery !== "models_cache"
+    || typeof row.fetched_at !== "string"
+    || row.fetched_at.length === 0
+    || row.fetched_at.length > MAX_FIELD_LENGTH
+    || !Number.isFinite(Date.parse(row.fetched_at))
+  ) return undefined;
+  return { discovery: "models_cache", fetched_at: row.fetched_at };
 }
 
 function sanitizeReasoningEfforts(value: unknown, provider: string): readonly RunReasoningEffort[] | undefined {

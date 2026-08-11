@@ -178,7 +178,7 @@ const codexSnapshot = (fetchedAt: string) => ({
     available: true,
     health: "healthy" as const,
     source: "cli" as const,
-    discovery: "models_cache" as const,
+    discovery: "usage_probe" as const,
     reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] as const
   }]
 });
@@ -1617,6 +1617,10 @@ describe("control plane provider endpoints", () => {
       schema_version: "v1",
       snapshots: [{
         ...snapshot("codex_cli", new Date().toISOString()),
+        model_catalog: {
+          discovery: "models_cache",
+          fetched_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString()
+        },
         models: [
           { model_id: "gpt-5.6-sol", available: true, health: "healthy", source: "cli", discovery: "models_cache", reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"] },
           { model_id: "gpt-5.6-luna", available: true, health: "healthy", source: "cli", discovery: "models_cache", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
@@ -1632,10 +1636,28 @@ describe("control plane provider endpoints", () => {
 
     const body = await (await fetch(`http://127.0.0.1:${address.port}/providers/models`, {
       headers: { authorization: `Bearer ${SERVICE_TOKEN}` }
-    })).json() as { models: Array<{ model_id: string; provider_routes: Array<{ provider: string; reasoning_efforts: string[] }> }> };
+    })).json() as {
+      catalogs: Array<{
+        provider: string;
+        discovery: string;
+        fetched_at: string;
+        freshness: string;
+        age_ms: number;
+      }>;
+      models: Array<{ model_id: string; provider_routes: Array<{ provider: string; reasoning_efforts: string[] }> }>;
+    };
     const codexEfforts = (modelId: string) => body.models.find((model) => model.model_id === modelId)
       ?.provider_routes.find((route) => route.provider === "codex_cli")?.reasoning_efforts;
 
+    expect(body.catalogs).toEqual([{
+      provider: "codex_cli",
+      discovery: "models_cache",
+      fetched_at: expect.any(String),
+      freshness: "stale",
+      age_ms: expect.any(Number)
+    }]);
+    expect(body.catalogs[0]!.age_ms).toBeGreaterThanOrEqual(3 * 24 * 60 * 60 * 1_000);
+    expect(body.catalogs[0]!.age_ms).toBeLessThan(3 * 24 * 60 * 60 * 1_000 + 5_000);
     expect(codexEfforts("gpt-5.6-sol")).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
     expect(codexEfforts("gpt-5.6-luna")).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect(codexEfforts("gpt-cache-missing")).toEqual([]);
