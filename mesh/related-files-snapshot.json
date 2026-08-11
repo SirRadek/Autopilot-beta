@@ -111,7 +111,7 @@
   "src/data/delivery-system/sessionState.ts": "0f30e345dfd1a92a86408e90bc4eed62f4d56d51",
   "src/data/delivery-system/stateMaintenanceLock.ts": "bbf2e0dab921eb39a7c99614616ac2b835c78db4",
   "src/data/delivery-system/projectRegistry.ts": "d1048a8331660cb3b5f3b06e3bfe97242c9ea9ce",
-  "src/data/delivery-system/providerQuotaStore.ts": "e2f1a4d1e4d69d782129c2ff4ce5ddadd175c6c3",
+  "src/data/delivery-system/providerQuotaStore.ts": "9b11a1a0d2c14f1bda154568f2557f3eab3f4061",
   "src/data/delivery-system/readiness.ts": "d88023451c1bbdb5768e5cbfc8c60697a1ab3847",
   "src/data/delivery-system/runStore.ts": "a68cb46aec12a3648e7e2746d32305102f249db6",
   "src/data/delivery-system/supervisorQueue.ts": "6bd6d7215fcea317ae9af31dbe6e746ee14baef3",

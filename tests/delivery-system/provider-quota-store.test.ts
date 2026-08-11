@@ -314,6 +314,38 @@ describe("provider quota store", () => {
     expect(readProviderQuotaStore(stateDir)).toEqual(document);
   });
 
+  it("round-trips only allowlisted probe failure diagnostics", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "quota-store-probe-failure-"));
+    const path = join(stateDir, "provider-quota-snapshots.json");
+    const privateAccount = "probe-owner@example.invalid";
+    const privateSession = "00000000-0000-4000-8000-000000000001";
+    const privateStderr = `raw failure for ${privateAccount}, session ${privateSession}`;
+    writeFileSync(path, JSON.stringify({
+      schema_version: "v1",
+      snapshots: [{
+        ...minimumSnapshot(),
+        health: "unavailable",
+        error_code: "malformed_response",
+        probe_failure: {
+          phase: "render",
+          attempts: 4,
+          stderr: privateStderr,
+          account: privateAccount,
+          session: privateSession
+        }
+      }]
+    }), "utf8");
+
+    const document = readProviderQuotaStore(stateDir);
+    expect(document.snapshots[0]?.probe_failure).toEqual({ phase: "render", attempts: 4 });
+    expect(JSON.stringify(document)).not.toContain(privateStderr);
+    expect(JSON.stringify(document)).not.toContain(privateAccount);
+    expect(JSON.stringify(document)).not.toContain(privateSession);
+
+    writeProviderQuotaStore(stateDir, document);
+    expect(readProviderQuotaStore(stateDir)).toEqual(document);
+  });
+
   it("bounds event fields and never persists raw response text", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "quota-store-"));
     const event: ProviderQuotaEvent = {

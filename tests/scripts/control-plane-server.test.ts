@@ -1752,4 +1752,46 @@ describe("control plane provider endpoints", () => {
     ]));
     expect(health.providers[0]?.freshness).toBe("fresh");
   });
+
+  it("exposes only allowlisted probe failure diagnostics from the managed store", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "control-plane-provider-probe-failure-"));
+    provisionServiceToken(stateDir);
+    const privateAccount = "probe-owner@example.invalid";
+    const privateSession = "00000000-0000-4000-8000-000000000001";
+    const privateStderr = `raw failure for ${privateAccount}, session ${privateSession}`;
+    const unsafeDocument = {
+      schema_version: "v1",
+      snapshots: [{
+        ...snapshot("codex_cli", new Date().toISOString()),
+        health: "unavailable",
+        error_code: "malformed_response",
+        probe_failure: {
+          phase: "render",
+          attempts: 4,
+          stderr: privateStderr,
+          account: privateAccount,
+          session: privateSession
+        }
+      }]
+    } as unknown as ProviderQuotaStoreDocument;
+    writeProviderQuotaStore(stateDir, unsafeDocument);
+    const server = createControlPlaneServer(stateDir);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("missing address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/providers/health`, {
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` }
+    });
+    const body = await response.json() as {
+      providers: Array<{ probe_failure: { phase: string; attempts?: number } | null }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.providers[0]?.probe_failure).toEqual({ phase: "render", attempts: 4 });
+    expect(JSON.stringify(body)).not.toContain(privateStderr);
+    expect(JSON.stringify(body)).not.toContain(privateAccount);
+    expect(JSON.stringify(body)).not.toContain(privateSession);
+  });
 });

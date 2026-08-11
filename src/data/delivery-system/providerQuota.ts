@@ -14,6 +14,12 @@ export type ProviderErrorCode =
   | "provider_runtime_denied"
   | "provider_unavailable"
   | "provider_error";
+export type ProviderProbeFailurePhase = "launch" | "readiness" | "echo" | "render" | "cleanup";
+
+export interface ProviderProbeFailure {
+  readonly phase: ProviderProbeFailurePhase;
+  readonly attempts?: number;
+}
 
 export interface ProviderQuotaWindow {
   readonly limit: number | null;
@@ -47,6 +53,8 @@ export interface ProviderSnapshot {
   readonly cli_version?: string | null;
   readonly health: ProviderHealth;
   readonly error_code: ProviderErrorCode | null;
+  /** Bounded TUI-probe diagnostics. Raw terminal output and identifiers are never stored. */
+  readonly probe_failure?: ProviderProbeFailure;
 }
 
 export interface ProviderQuotaAdapter {
@@ -125,4 +133,26 @@ export function normalizeProviderError(error: unknown): ProviderErrorCode {
     }
   }
   return "provider_error";
+}
+
+const PROVIDER_PROBE_FAILURE_PHASES: readonly ProviderProbeFailurePhase[] = [
+  "launch",
+  "readiness",
+  "echo",
+  "render",
+  "cleanup"
+];
+
+/** Keeps only the fixed probe phase and a bounded positive attempt count. */
+export function normalizeProviderProbeFailure(value: unknown): ProviderProbeFailure | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (!PROVIDER_PROBE_FAILURE_PHASES.includes(row.phase as ProviderProbeFailurePhase)) return null;
+  const attempts = row.attempts;
+  return {
+    phase: row.phase as ProviderProbeFailurePhase,
+    ...(Number.isSafeInteger(attempts) && (attempts as number) > 0 && (attempts as number) <= 10_000
+      ? { attempts: attempts as number }
+      : {})
+  };
 }

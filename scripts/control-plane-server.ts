@@ -905,6 +905,7 @@ function providerHealth(
       next_poll_at: quotaView(snapshot, now).next_poll_at,
       cli_version: snapshot.cli_version ?? null,
       error_code: snapshot.error_code,
+      probe_failure: snapshot.probe_failure ?? null,
       lease: probeLeases?.state(snapshot.provider) ?? { leased: false, expires_at: null }
     }))
   };

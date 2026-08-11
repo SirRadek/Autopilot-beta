@@ -43,7 +43,10 @@ function codexTuiResponder(finalCapture: TmuxCommandResult): (args: readonly str
     if (subcommand === "send-keys") {
       const sendsCommand = args.includes("/status");
       const sendsEnter = args.includes("Enter") || args.includes("C-m");
-      if (sendsCommand && !sendsEnter) commandAccepted = true;
+      if (sendsCommand && !sendsEnter) {
+        commandAccepted = true;
+        submitted = false;
+      }
       if (sendsEnter && !sendsCommand && commandAccepted) submitted = true;
       return { stdout: "", stderr: "", exitCode: 0 };
     }
@@ -505,9 +508,74 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "malformed_response", exitCode: 1 });
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "malformed_response",
+      exitCode: 1,
+      probe_failure: { phase: "render", attempts: 1 }
+    });
     expect(JSON.stringify(result)).not.toContain(privateAccount);
     expect(JSON.stringify(result)).not.toContain(privateSession);
+  });
+
+  it("reports readiness when bounded captures never reach the Codex composer", async () => {
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "capture-pane") {
+        return { stdout: fixture("codex-status-0.144.5-live-trust-gate.txt"), stderr: "", exitCode: 0 };
+      }
+      if (subcommand === "has-session") return { stdout: "", stderr: "no server", exitCode: 1 };
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "missing-composer",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "malformed_response",
+      exitCode: 1,
+      probe_failure: { phase: "readiness", attempts: 25 }
+    });
+  });
+
+  it("reports echo when Codex never reflects the slash command in its composer", async () => {
+    let launched = false;
+    const execute: TmuxCommandExecutor = async (_command, args) => {
+      const subcommand = tmuxSubcommand(args);
+      if (subcommand === "new-session") launched = true;
+      if (subcommand === "capture-pane") {
+        return {
+          stdout: launched ? fixture("codex-status-0.144.5-live-preamble.txt") : "",
+          stderr: "",
+          exitCode: 0
+        };
+      }
+      if (subcommand === "has-session") return { stdout: "", stderr: "no server", exitCode: 1 };
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runTmuxUsageProbe("codex_cli", {
+      executable: "/provider-bin/codex",
+      execute,
+      timeoutMs: 1_000,
+      sessionId: "missing-echo",
+      delayMs: 0,
+      runtimeRoot: temporaryRuntimeRoot()
+    });
+
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "malformed_response",
+      exitCode: 1,
+      probe_failure: { phase: "echo", attempts: 4 }
+    });
   });
 
   it("returns malformed_response when bounded captures never contain Codex status", async () => {
@@ -535,7 +603,12 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "malformed_response", exitCode: 1 });
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "malformed_response",
+      exitCode: 1,
+      probe_failure: { phase: "render", attempts: 4 }
+    });
     expect(captureCalls).toBeGreaterThan(1);
   });
 
@@ -632,7 +705,11 @@ describe("tmux usage probe", () => {
       delayMs: 0,
       runtimeRoot: temporaryRuntimeRoot()
     });
-    expect(result).toMatchObject({ exitCode: 1, stderr: "missing_credential" });
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stderr: "missing_credential",
+      probe_failure: { phase: "render" }
+    });
   });
 
   it.each([
@@ -658,7 +735,12 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "provider_unavailable", exitCode: 1 });
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "provider_unavailable",
+      exitCode: 1,
+      probe_failure: { phase: "render", attempts: 1 }
+    });
   });
 
   it("links an external abort to the in-flight probe and still performs verified cleanup", async () => {
@@ -699,7 +781,12 @@ describe("tmux usage probe", () => {
       runtimeRoot
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "timeout", exitCode: 1 });
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "timeout",
+      exitCode: 1,
+      probe_failure: { phase: "launch" }
+    });
     expect(launchSignal?.aborted).toBe(true);
     expect(cleanupStartedBeforeLaunchSettled).toBe(false);
     expect(subcommands.slice(-2)).toEqual(["kill-server", "has-session"]);
@@ -724,7 +811,12 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "provider_runtime_denied", exitCode: 1 });
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "provider_runtime_denied",
+      exitCode: 1,
+      probe_failure: { phase: "cleanup" }
+    });
     expect(workingDirectory).toBeDefined();
     expect(existsSync(workingDirectory!)).toBe(true);
   });
@@ -748,7 +840,12 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "provider_runtime_denied", exitCode: 1 });
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "provider_runtime_denied",
+      exitCode: 1,
+      probe_failure: { phase: "cleanup" }
+    });
     expect(JSON.stringify(result)).not.toContain("/private/tmux/socket");
   });
 
@@ -768,7 +865,12 @@ describe("tmux usage probe", () => {
       runtimeRoot: temporaryRuntimeRoot()
     });
 
-    expect(result).toEqual({ stdout: "", stderr: "provider_unavailable", exitCode: 1 });
+    expect(result).toEqual({
+      stdout: "",
+      stderr: "provider_unavailable",
+      exitCode: 1,
+      probe_failure: { phase: "launch" }
+    });
     expect(JSON.stringify(result)).not.toContain("/private/provider/path");
   });
 });
