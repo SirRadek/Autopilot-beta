@@ -57,6 +57,11 @@ describe("provider quota domain", () => {
       .toBe("provider_executable_missing");
   });
 
+  it("preserves the quota_not_applicable code raised for accounts without quota windows", () => {
+    expect(normalizeProviderError(new Error("quota_not_applicable"))).toBe("quota_not_applicable");
+    expect(normalizeProviderError("quota_not_applicable")).toBe("quota_not_applicable");
+  });
+
   it("normalizes runtime permission failures to provider_runtime_denied", () => {
     expect(normalizeProviderError(Object.assign(new Error("spawn codex failed"), { code: "EACCES" })))
       .toBe("provider_runtime_denied");
