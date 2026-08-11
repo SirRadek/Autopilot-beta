@@ -1,0 +1,11 @@
+Accessing workspace:
+  [[home]]/.local/state/.autopilot-runtime-tmp/autopilot-agy-home-[[session]]/work
+
+Do you trust the contents of this project?
+
+  Files in this folder may be executed by Antigravity CLI.
+
+> Yes, I trust this folder
+  No, exit
+
+  ↑/↓ Navigate · enter Confirm
