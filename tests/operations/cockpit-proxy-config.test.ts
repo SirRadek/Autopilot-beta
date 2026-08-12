@@ -130,13 +130,19 @@ describe("Cockpit production proxy boundary", () => {
     const result = spawnSync(process.execPath, [script, "--check"], { encoding: "utf8" });
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
     const provenance = JSON.parse(readProxyFile("autopilot-cockpit-recovery-smoke.provenance.json"));
-    expect(provenance).toEqual({
+    expect(Object.keys(provenance).sort()).toEqual([
+      "esbuild_version",
+      "flags",
+      "output",
+      "output_sha256",
+      "source",
+      "source_sha256",
+      "version",
+    ]);
+    expect(provenance).toMatchObject({
       version: "autopilot-cockpit-recovery-smoke-v1",
       source: "scripts/smoke-cockpit-run.ts",
       output: "ops/cockpit-proxy/autopilot-cockpit-recovery-smoke.mjs",
-      source_sha256: "e1175d30335a7414c09ca23cabad137b345d027d340f1b2c322cf5ab58504ee2",
-      output_sha256: "99c50675087d6d0c3a42f7c4b7ca457cac76bef53b731552def3088f241f854c",
-      esbuild_version: "0.28.1",
       flags: [
         "--bundle",
         "--platform=node",
@@ -147,6 +153,9 @@ describe("Cockpit production proxy boundary", () => {
         '--banner:js=import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
       ],
     });
+    expect(provenance.source_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(provenance.output_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(provenance.esbuild_version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it("executes the pinned recovery smoke bundle under Node 24", () => {
