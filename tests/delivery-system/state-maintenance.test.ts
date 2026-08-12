@@ -14,7 +14,7 @@ import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createStateBackup, validateStateBackup } from "../../src/data/delivery-system/stateBackup";
-import { performStateMaintenance } from "../../src/data/delivery-system/stateMaintenance";
+import { performStateMaintenance, scanOperationalSecrets } from "../../src/data/delivery-system/stateMaintenance";
 import { withStateMaintenanceLock } from "../../src/data/delivery-system/stateMaintenanceLock";
 import { restoreStateBackup } from "../../src/data/delivery-system/stateRecovery";
 import { authStateRoot } from "../../src/data/delivery-system/authSessionRegistry";
@@ -64,6 +64,31 @@ describe("state maintenance transaction", () => {
     expect(result.rotated).toEqual([]);
     expect(readFileSync(logPath, "utf8")).toBe(beforeLog);
     expect(readdirSync(fixture_.backupDirectory)).toEqual(["existing.apbackup.json"]);
+  });
+
+  it("finds an environment backup while skipping canonical state snapshots", () => {
+    const fixture_ = fixture();
+    mkdirSync(fixture_.backupDirectory);
+    const marker = `${["CONTROL", "PLANE", "TOKEN"].join("_")}=${["fixture", "only", "value"].join("-")}`;
+    writeFileSync(
+      join(fixture_.backupDirectory, "control-plane.env.20260812T120000Z.bak"),
+      `${marker}\n`,
+      { mode: 0o600 }
+    );
+    writeFileSync(
+      join(fixture_.backupDirectory, "autopilot-state-2026-08-12T12-00-00-000Z.apbackup.json"),
+      `${marker}\n`,
+      { mode: 0o600 }
+    );
+
+    const findings = scanOperationalSecrets(fixture_.stateDirectory);
+    const result = performStateMaintenance({ ...fixture_, mode: "dry_run" });
+
+    expect(findings).toEqual([{
+      file: "backups/control-plane.env.20260812T120000Z.bak",
+      rule: "environment_credential"
+    }]);
+    expect(result).toMatchObject({ ok: false, findings: ["secret:environment_credential"] });
   });
 
   it("creates and validates a backup before rotating and pruning", () => {

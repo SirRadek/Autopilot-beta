@@ -174,6 +174,31 @@ describe("systemd unit writable boundaries", () => {
     }
   });
 
+  it("documents regenerating the protected environment without plaintext backup copies", () => {
+    const providerInstall = readFileSync(
+      join(process.cwd(), "docs", "operations", "provider-cli-install.md"),
+      "utf8"
+    );
+
+    expect(providerInstall).not.toMatch(/cp\s+-p[\s\S]*control-plane\.env[\s\S]*\.bak/);
+    expect(providerInstall).toMatch(/regenerat/i);
+  });
+
+  it("documents the retired control-plane token consistently", () => {
+    const cockpitAuth = readFileSync(join(process.cwd(), "docs", "operations", "cockpit-production-auth.md"), "utf8");
+    const overview = readFileSync(join(process.cwd(), "docs", "architecture", "system-overview.md"), "utf8");
+    const installGuide = readFileSync(join(process.cwd(), "docs", "operations", "install-ubuntu-vm.md"), "utf8");
+    const readme = readSystemdFile("README.md");
+
+    for (const narrative of [cockpitAuth, overview]) {
+      expect(narrative).toMatch(/`CONTROL_PLANE_TOKEN`[^.]*retired/is);
+      expect(narrative).not.toMatch(/`CONTROL_PLANE_TOKEN`[^.]*remain(?:s)? accepted/is);
+    }
+    for (const procedure of [installGuide, readme]) {
+      expect(procedure).not.toContain("printf 'CONTROL_PLANE_TOKEN=%s");
+    }
+  });
+
   it("documents one authoritative custom-root assignment and matching writable path", () => {
     const readme = readSystemdFile("README.md");
 

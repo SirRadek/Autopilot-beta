@@ -12,12 +12,13 @@ import {
   writeFileSync
 } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { join, relative, resolve, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 
 import { recordOperationalIncident, ingestOperationalIncidentSpool } from "./operationalIncidents";
 import {
   createStateBackup,
-  pruneStateBackups,
+  isStateBackupFileName,
+  pruneOperationalBackups,
   quarantineStateBackup,
   validateStateBackup
 } from "./stateBackup";
@@ -32,7 +33,7 @@ export interface PermissionFinding {
 
 export interface SecretFinding {
   readonly file: string;
-  readonly rule: "bearer_token" | "api_key" | "private_key";
+  readonly rule: "bearer_token" | "api_key" | "private_key" | "environment_credential";
 }
 
 export interface StateMaintenanceResult {
@@ -78,7 +79,7 @@ export function performStateMaintenance(options: StateMaintenanceOptions): State
       }
 
       const rotated = rotateStateLogs(options.stateDirectory);
-      pruneStateBackups(options.backupDirectory);
+      pruneOperationalBackups(options.backupDirectory);
       return { ok: true, mode: "apply", findings: [], backup, rotated, incident_id: null };
     });
   } catch (error) {
@@ -142,16 +143,19 @@ export function rotateStateLogs(
 }
 
 export function scanOperationalSecrets(
-  stateDirectory: string,
-  options: { readonly excludedDirectories?: readonly string[] } = {}
+  stateDirectory: string
 ): readonly SecretFinding[] {
   const rules = [
     { rule: "private_key" as const, pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
     { rule: "bearer_token" as const, pattern: /(?:authorization["']?\s*[:=]\s*["']?|\b)bearer\s+[A-Za-z0-9._~+\/-]{8,}/i },
-    { rule: "api_key" as const, pattern: /\b(?:sk|or|ghp|github_pat|xoxb)-[A-Za-z0-9_-]{8,}\b/ }
+    { rule: "api_key" as const, pattern: /\b(?:sk|or|ghp|github_pat|xoxb)-[A-Za-z0-9_-]{8,}\b/ },
+    {
+      rule: "environment_credential" as const,
+      pattern: /^(?:[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)=[^\s#]{8,}$/m
+    }
   ];
   const findings: SecretFinding[] = [];
-  for (const path of regularFiles(stateDirectory, options.excludedDirectories ?? [])) {
+  for (const path of regularFiles(stateDirectory)) {
     const size = statSync(path).size;
     const content = size <= SECRET_SCAN_MAX_BYTES
       ? readFileSync(path, "utf8")
@@ -172,7 +176,7 @@ export function verifyOperationalPermissions(stateDirectory: string, environment
 function preflightFindings(options: StateMaintenanceOptions): string[] {
   const permissions = verifyOperationalPermissions(options.stateDirectory, options.environmentFile)
     .map((finding) => finding.code);
-  const secrets = scanOperationalSecrets(options.stateDirectory, { excludedDirectories: [options.backupDirectory] })
+  const secrets = scanOperationalSecrets(options.stateDirectory)
     .map((finding) => `secret:${finding.rule}`);
   return [...new Set([...permissions, ...secrets])].sort();
 }
@@ -191,22 +195,21 @@ function maintenanceErrorCode(error: unknown): string {
   ]).has(code) ? code : "maintenance_failed";
 }
 
-function regularFiles(root: string, excludedDirectories: readonly string[]): string[] {
-  const exclusions = new Set(excludedDirectories.map((directory) => resolve(directory)));
+function regularFiles(root: string): string[] {
   const output: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
-        if (exclusions.has(resolve(path))
-          || entry.name === ".state-maintenance.lock"
+        if (entry.name === ".state-maintenance.lock"
           || entry.name.endsWith("-incident-spool")) continue;
         visit(path);
       } else if (entry.isFile()
         && !entry.name.endsWith(".tmp")
         && !entry.name.includes(".tmp-")
-        && !entry.name.includes(".quarantine")) {
+        && !entry.name.includes(".quarantine")
+        && !isStateBackupFileName(entry.name)) {
         output.push(path);
       }
     }

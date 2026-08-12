@@ -24,10 +24,21 @@ unprivileged user namespaces; each process still drops to `User=radek` and `Grou
 ```bash
 mkdir -p ~/.config/autopilot ~/.local/state/autopilot/backups ~/projects
 chmod 700 ~/.config/autopilot ~/.local/state/autopilot ~/.local/state/autopilot/backups ~/projects
-printf 'CONTROL_PLANE_TOKEN=%s\n' "$(openssl rand -hex 32)" > ~/.config/autopilot/control-plane.env
-printf 'CONTROL_PLANE_SECURE_COOKIES=false\n' >> ~/.config/autopilot/control-plane.env
-printf 'CONTROL_PLANE_USAGE_PROBES=\n' >> ~/.config/autopilot/control-plane.env
+umask 077
+printf 'CONTROL_PLANE_SECURE_COOKIES=false\n' > ~/.config/autopilot/control-plane.env
 chmod 600 ~/.config/autopilot/control-plane.env
+sudo install -d -o root -g root -m 0755 /etc/autopilot
+sudo install -o root -g root -m 0644 \
+  ops/config/control-plane-probes.env.example \
+  /etc/autopilot/control-plane-probes.env
+```
+
+Provision the admin credentials and issue the service bearer offline with the canonical
+[configuration procedure](../../docs/operations/configuration.md). Keep the one-time bearer in the
+owner-controlled secret store, not in the environment file. The retired `CONTROL_PLANE_TOKEN` is
+neither generated nor read by the server. Then install and start the units:
+
+```bash
 systemctl --user disable --now autopilot-control-plane.service \
   autopilot-control-plane-health.timer autopilot-state-maintenance.timer 2>/dev/null || true
 sudo cp ops/systemd/*.service ops/systemd/*.timer /etc/systemd/system/
@@ -47,7 +58,7 @@ proxy. Any other non-empty value is invalid and prevents startup.
 names are `codex`, `claude`, and `agy`; unknown names are ignored and the value never accepts a
 command, path, or arguments. Keep it empty until the corresponding trusted tmux sessions are
 available. `ops/config/control-plane.env.example` intentionally contains neither
-`CONTROL_PLANE_TOKEN` nor `OPENROUTER_API_KEY`; provision secrets outside the repository.
+credentials nor `OPENROUTER_API_KEY`; provision secrets outside the repository.
 
 The control plane defaults `AUTOPILOT_PROJECTS_DIR` to `/home/radek/projects`. Root-managed units use
 explicit `/home/radek` paths because `%h` resolves to the system manager's home (`/root`), not the

@@ -23,6 +23,8 @@ const BACKUP_VERSION = 1;
 const DEFAULT_MAX_FILE_BYTES = 4 * 1024 * 1024;
 const DEFAULT_MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_FILES = 2_000;
+const DEFAULT_KEEP_STATE_BACKUPS = 7;
+const DEFAULT_KEEP_ENVIRONMENT_BACKUPS = 0;
 
 interface BackupEntry {
   readonly path: string;
@@ -62,6 +64,11 @@ export interface CreateStateBackupOptions {
   readonly retention?: "apply" | "defer";
 }
 
+export interface PruneOperationalBackupsOptions {
+  readonly keep_state_backups?: number;
+  readonly keep_environment_backups?: number;
+}
+
 export function createStateBackup(
   stateDirectory: string,
   backupDirectory: string,
@@ -77,7 +84,9 @@ export function createStateBackup(
       throw new Error("backup_validation_failed");
     }
     if ((options.retention ?? "apply") === "apply") {
-      pruneStateBackups(backupDirectory, options.keep_backups ?? 7);
+      pruneOperationalBackups(backupDirectory, {
+        keep_state_backups: options.keep_backups ?? DEFAULT_KEEP_STATE_BACKUPS
+      });
     }
     return result;
   });
@@ -176,16 +185,29 @@ export function validateStateBackup(path: string): BackupValidation {
   return { valid: errors.length === 0, file_count: seen.size, total_bytes: totalBytes, errors };
 }
 
-export function pruneStateBackups(backupDirectory: string, keepBackups = 7): readonly string[] {
-  const keep = Math.max(1, keepBackups);
-  const backups = readdirSync(backupDirectory)
-    .filter((name) => name.startsWith("autopilot-state-") && name.endsWith(".apbackup.json"))
-    .sort()
-    .reverse();
-  const removed = backups.slice(keep);
+export function pruneOperationalBackups(
+  backupDirectory: string,
+  options: PruneOperationalBackupsOptions = {}
+): readonly string[] {
+  const entries = readdirSync(backupDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name);
+  const stateBackups = entries.filter(isStateBackupFileName).sort().reverse();
+  const environmentBackups = entries.filter(isEnvironmentBackupFileName).sort().reverse();
+  const keepState = Math.max(1, options.keep_state_backups ?? DEFAULT_KEEP_STATE_BACKUPS);
+  const keepEnvironment = Math.max(0, options.keep_environment_backups ?? DEFAULT_KEEP_ENVIRONMENT_BACKUPS);
+  const removed = [...stateBackups.slice(keepState), ...environmentBackups.slice(keepEnvironment)].sort();
   for (const stale of removed) unlinkSync(join(backupDirectory, stale));
   if (removed.length > 0) fsyncDirectory(backupDirectory);
   return removed;
+}
+
+export function isStateBackupFileName(name: string): boolean {
+  return name.startsWith("autopilot-state-") && name.endsWith(".apbackup.json");
+}
+
+function isEnvironmentBackupFileName(name: string): boolean {
+  return /^control-plane\.env\.\d{8}T\d{6}Z\.bak$/.test(name);
 }
 
 export function quarantineStateBackup(path: string): string {

@@ -55,11 +55,14 @@ npm run ops:maintenance -- ~/.local/state/autopilot \
 
 This is dry-run by default. `--apply` holds one lease across permission/secret checks, incident-spool
 ingestion, backup creation, immediate archive validation, JSONL rotation, and retention pruning.
-Rotation never runs after a failed lock, backup, or validation.
+The secret scan skips only canonical `autopilot-state-*.apbackup.json` snapshots; it scans every
+other regular file in the backup directory, including legacy environment copies. Rotation never
+runs after a failed lock, backup, or validation.
 
 Backup safety defaults cap an individual file at 4 MiB, the total payload at 32 MiB, and file count at
-2,000. Seven recent backups are retained by default. Oversize state fails closed rather than being
-silently omitted.
+2,000. Operational retention keeps seven recent state snapshots and zero legacy environment copies
+by default because the protected environment is regenerated rather than restored. Oversize state
+fails closed rather than being silently omitted.
 
 ## Create and validate
 

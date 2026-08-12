@@ -1,5 +1,11 @@
 # VM Provider CLI Activation Implementation Plan
 
+> **Historical record — do not execute.** This plan predates retirement of
+> `CONTROL_PLANE_TOKEN` and the prohibition on plaintext environment backups. Use the current
+> [provider installation](../../operations/provider-cli-install.md),
+> [activation](../../operations/provider-cli-activation-checklist.md), and
+> [authentication](../../operations/configuration.md) procedures instead.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This plan is operations/activation work, not a source-code feature: tasks execute on the production VM `192.168.122.99`, not in this repository checkout.
 
 **Goal:** Activate the three subscription provider CLIs (`codex`, `claude`, `agy`) natively inside the production VM, one owner-approved install checkpoint, incremental one-at-a-time probe enablement, no host SSH gateway, no credential copying, no silent routing/model/reasoning change.

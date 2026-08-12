@@ -1,5 +1,9 @@
 # Windows Project Import (Staged, Non-Destructive) Plan
 
+> **Historical record — do not execute.** This plan predates retirement of
+> `CONTROL_PLANE_TOKEN`. Use the current [authentication](../../operations/configuration.md) and
+> [service](../../operations/service-runbook.md) procedures instead.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This plan is operations + one small TDD helper script; treat rsync/ssh steps as ordinary checklist steps and the registry-mutation script as a normal TDD task.
 
 **Goal:** Non-destructively copy the 18 top-level projects (excluding any `autopilot`/`autopilot-beta` directory) from the read-only source `/media/radek/B2768BFD768BC119/Programování/Projects` into the VM at `radek@192.168.122.99:/home/radek/projects`, then register each imported project in the managed `projects.json` registry via the repository's `projectRegistry` module — without touching token/routing config, without overwriting any existing VM destination, and with fail-closed secret exclusion.
