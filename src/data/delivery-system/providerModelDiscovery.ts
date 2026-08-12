@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { RUN_REASONING_EFFORTS, type RunReasoningEffort } from "./executionProfile";
 import type { ProviderCommandResult, ProviderCommandRunner } from "./providerQuotaAdapters";
-import { expandQuotaLabel, isCanonicalModelId } from "./providerModelId";
+import { isCanonicalModelId } from "./providerModelId";
 
 const COMMAND_TIMEOUT_MS = 5_000;
 const MAX_DISCOVERY_BYTES = 1024 * 1024;
@@ -135,15 +135,29 @@ export async function discoverAgyModels(
       || Buffer.byteLength(result.stdout, "utf8") > MAX_DISCOVERY_BYTES
     ) return [];
 
-    // Until VM verification, fail closed on decorated or unrecognized lines.
-    const models = result.stdout.split(/\r?\n/).slice(0, 1_024).flatMap((line) => {
-      const candidate = line.trim().replace(/^(?:[-*•]\s+|\d+[.)]\s+)/, "").trim();
-      const expanded = expandQuotaLabel("agy_cli", candidate);
-      if (expanded.length > 0) {
-        return expanded.filter(isCanonicalModelId).map((model_id) => ({ model_id }));
-      }
-      return isCanonicalModelId(candidate) ? [{ model_id: candidate }] : [];
-    });
+    const lines = result.stdout.split(/\r?\n/);
+    if (lines.at(-1) === "") lines.pop();
+    if (lines.length === 0 || lines.length > 1_024) return [];
+
+    // Verified against agy 1.1.5 on the service VM (one canonical id per line) and
+    // agy 1.1.12 locally (canonical id, one tab, display label). Treat the command as
+    // a single typed payload: one unrecognized/decorated line invalidates all of it.
+    const models: DiscoveredProviderModel[] = [];
+    for (const line of lines) {
+      const tabSeparated = line.match(/^([^\t\r\n]+)\t([^\t\r\n]+)$/);
+      const modelId = tabSeparated?.[1] ?? line;
+      if (
+        line.length === 0
+        || modelId !== modelId.trim()
+        || !isCanonicalModelId(modelId)
+        || (line.includes("\t") && tabSeparated === null)
+      ) return [];
+      const effort = modelId.match(/-(low|medium|high)$/)?.[1] as RunReasoningEffort | undefined;
+      models.push({
+        model_id: modelId,
+        reasoning_efforts: effort === undefined ? [] : [effort]
+      });
+    }
     return uniqueModels(models);
   } catch {
     return [];
