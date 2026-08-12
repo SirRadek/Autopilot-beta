@@ -104,9 +104,11 @@ both required; either one alone is insufficient.
 The environment file and provider credentials stay outside managed state. The
 auth state root is explicitly excluded from backup file selection, archive
 validation, and restore, preventing old sessions or service digests from being
-resurrected. Maintenance skips canonical state snapshots but scans other regular
-files in the backup directory for secret-like material and refuses unsafe
-rotation. Backups are local and unencrypted; see
+resurrected. Maintenance skips only version-header state snapshots directly in
+the configured backup directory; disguised, nested, and quarantined files remain
+in the secret scan. Exact legacy environment-copy names are retired before the
+apply-mode scan, while state snapshot retention stays behind new-archive
+validation. Backups are local and unencrypted; see
 [State and recovery](../operations/state-and-recovery.md).
 
 ### MCP and skills

@@ -53,11 +53,20 @@ npm run ops:maintenance -- ~/.local/state/autopilot \
   ~/.local/state/autopilot/backups ~/.config/autopilot/control-plane.env
 ```
 
-This is dry-run by default. `--apply` holds one lease across permission/secret checks, incident-spool
-ingestion, backup creation, immediate archive validation, JSONL rotation, and retention pruning.
-The secret scan skips only canonical `autopilot-state-*.apbackup.json` snapshots; it scans every
-other regular file in the backup directory, including legacy environment copies. Rotation never
-runs after a failed lock, backup, or validation.
+This is dry-run by default. A dry-run reports recognized plaintext environment copies as secret
+findings and never deletes them. `--apply` holds one lease, checks permissions, removes only exact
+`control-plane.env.YYYYMMDDTHHMMSSZ.bak` legacy copies, then runs the secret scan. It continues with
+incident-spool ingestion, backup creation, immediate archive validation, JSONL rotation, and state
+snapshot retention. Removing a legacy copy does not rotate its credential; the owner must still
+rotate it.
+
+The pre-scan legacy cleanup is separate from recovery retention: environment copies are forbidden,
+non-restorable plaintext rather than state archives. State snapshots are still pruned only after a
+new snapshot validates. The secret scan skips a snapshot-named file only when it is directly in the
+configured backup directory and starts with the version-1 archive header. Same-named files elsewhere,
+headerless files, and quarantine files are scanned. Quarantines are retained as failure
+evidence rather than deleted automatically, so a secret-bearing quarantine stops maintenance until
+the owner reviews and removes it. Rotation never runs after a failed lock, backup, or validation.
 
 Backup safety defaults cap an individual file at 4 MiB, the total payload at 32 MiB, and file count at
 2,000. Operational retention keeps seven recent state snapshots and zero legacy environment copies

@@ -66,29 +66,87 @@ describe("state maintenance transaction", () => {
     expect(readdirSync(fixture_.backupDirectory)).toEqual(["existing.apbackup.json"]);
   });
 
-  it("finds an environment backup while skipping canonical state snapshots", () => {
+  it("retires recognized environment backups before apply preflight", () => {
     const fixture_ = fixture();
     mkdirSync(fixture_.backupDirectory);
     const marker = `${["CONTROL", "PLANE", "TOKEN"].join("_")}=${["fixture", "only", "value"].join("-")}`;
+    const legacyBackup = join(fixture_.backupDirectory, "control-plane.env.20260812T120000Z.bak");
+    const unrecognizedBackup = join(fixture_.backupDirectory, "control-plane.env.manual.bak");
+    writeFileSync(legacyBackup, `${marker}\n`, { mode: 0o600 });
+    writeFileSync(unrecognizedBackup, "review manually\n", { mode: 0o600 });
+    writeFileSync(join(fixture_.stateDirectory, "sessions.json"), "safe", { mode: 0o600 });
+
+    const dryRun = performStateMaintenance({ ...fixture_, mode: "dry_run" });
+    expect(dryRun).toMatchObject({ ok: false, findings: ["secret:environment_credential"] });
+    expect(existsSync(legacyBackup)).toBe(true);
+
+    const result = performStateMaintenance({ ...fixture_, mode: "apply" });
+
+    expect(result).toMatchObject({ ok: true, mode: "apply", findings: [], incident_id: null });
+    expect(existsSync(legacyBackup)).toBe(false);
+    expect(existsSync(unrecognizedBackup)).toBe(true);
+    expect(result.backup?.valid).toBe(true);
+    expect(validateStateBackup(result.backup!.path).valid).toBe(true);
+  });
+
+  it("does not retire legacy environment backups before permission preflight passes", () => {
+    const fixture_ = fixture();
+    mkdirSync(fixture_.backupDirectory);
+    const legacyBackup = join(fixture_.backupDirectory, "control-plane.env.20260812T120000Z.bak");
+    writeFileSync(legacyBackup, "review only\n", { mode: 0o600 });
+    chmodSync(fixture_.stateDirectory, 0o755);
+
+    const result = performStateMaintenance({ ...fixture_, mode: "apply" });
+
+    expect(result).toMatchObject({ ok: false, findings: ["state_dir_permissions"], backup: null });
+    expect(existsSync(legacyBackup)).toBe(true);
+  });
+
+  it("scans disguised snapshots and quarantines while skipping a canonical backup header", () => {
+    const fixture_ = fixture();
+    writeFileSync(join(fixture_.stateDirectory, "sessions.json"), "safe", { mode: 0o600 });
+    createStateBackup(fixture_.stateDirectory, fixture_.backupDirectory, { keep_backups: 20 });
+    const marker = `${["CONTROL", "PLANE", "TOKEN"].join("_")}=${["fixture", "only", "value"].join("-")}`;
+    const nestedBackupDirectory = join(fixture_.backupDirectory, "nested");
+    mkdirSync(nestedBackupDirectory);
     writeFileSync(
-      join(fixture_.backupDirectory, "control-plane.env.20260812T120000Z.bak"),
+      join(fixture_.backupDirectory, "autopilot-state-disguised.apbackup.json"),
       `${marker}\n`,
       { mode: 0o600 }
     );
     writeFileSync(
-      join(fixture_.backupDirectory, "autopilot-state-2026-08-12T12-00-00-000Z.apbackup.json"),
+      join(nestedBackupDirectory, "autopilot-state-disguised.apbackup.json"),
+      `${marker}\n`,
+      { mode: 0o600 }
+    );
+    writeFileSync(
+      join(fixture_.backupDirectory, "autopilot-state-broken.apbackup.json.quarantine"),
       `${marker}\n`,
       { mode: 0o600 }
     );
 
     const findings = scanOperationalSecrets(fixture_.stateDirectory);
-    const result = performStateMaintenance({ ...fixture_, mode: "dry_run" });
 
-    expect(findings).toEqual([{
-      file: "backups/control-plane.env.20260812T120000Z.bak",
-      rule: "environment_credential"
-    }]);
-    expect(result).toMatchObject({ ok: false, findings: ["secret:environment_credential"] });
+    expect(findings).toEqual([
+      { file: "backups/autopilot-state-broken.apbackup.json.quarantine", rule: "environment_credential" },
+      { file: "backups/autopilot-state-disguised.apbackup.json", rule: "environment_credential" },
+      { file: "backups/nested/autopilot-state-disguised.apbackup.json", rule: "environment_credential" }
+    ]);
+  });
+
+  it.each([
+    ["bare token name", `${["TOK", "EN"].join("")}=${["fixture", "value", "123"].join("-")}\n`],
+    ["bare secret name", `${["SEC", "RET"].join("")}=${["fixture", "value", "123"].join("-")}\n`],
+    ["bare password name", `${["PASS", "WORD"].join("")}=${["fixture", "value", "123"].join("-")}\n`],
+    ["exported service token", `export ${["SERVICE", "TOKEN"].join("_")}=${["fixture", "value", "123"].join("-")}\n`],
+    ["CRLF assignment", `${["SERVICE", "SECRET"].join("_")}=${["fixture", "value", "123"].join("-")}\r\n`]
+  ])("detects environment credentials with %s", (_description, assignment) => {
+    const fixture_ = fixture();
+    writeFileSync(join(fixture_.stateDirectory, "credential.txt"), assignment, { mode: 0o600 });
+
+    expect(scanOperationalSecrets(fixture_.stateDirectory)).toEqual([
+      { file: "credential.txt", rule: "environment_credential" }
+    ]);
   });
 
   it("creates and validates a backup before rotating and pruning", () => {

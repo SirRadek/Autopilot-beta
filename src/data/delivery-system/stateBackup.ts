@@ -189,14 +189,29 @@ export function pruneOperationalBackups(
   backupDirectory: string,
   options: PruneOperationalBackupsOptions = {}
 ): readonly string[] {
-  const entries = readdirSync(backupDirectory, { withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => entry.name);
+  const entries = regularOperationalBackupNames(backupDirectory);
   const stateBackups = entries.filter(isStateBackupFileName).sort().reverse();
   const environmentBackups = entries.filter(isEnvironmentBackupFileName).sort().reverse();
   const keepState = Math.max(1, options.keep_state_backups ?? DEFAULT_KEEP_STATE_BACKUPS);
   const keepEnvironment = Math.max(0, options.keep_environment_backups ?? DEFAULT_KEEP_ENVIRONMENT_BACKUPS);
   const removed = [...stateBackups.slice(keepState), ...environmentBackups.slice(keepEnvironment)].sort();
+  for (const stale of removed) unlinkSync(join(backupDirectory, stale));
+  if (removed.length > 0) fsyncDirectory(backupDirectory);
+  return removed;
+}
+
+export function pruneLegacyEnvironmentBackups(
+  backupDirectory: string,
+  keepBackups = DEFAULT_KEEP_ENVIRONMENT_BACKUPS
+): readonly string[] {
+  if (!existsSync(backupDirectory)) return [];
+  const keep = Math.max(0, keepBackups);
+  const removed = regularOperationalBackupNames(backupDirectory)
+    .filter(isEnvironmentBackupFileName)
+    .sort()
+    .reverse()
+    .slice(keep)
+    .sort();
   for (const stale of removed) unlinkSync(join(backupDirectory, stale));
   if (removed.length > 0) fsyncDirectory(backupDirectory);
   return removed;
@@ -208,6 +223,12 @@ export function isStateBackupFileName(name: string): boolean {
 
 function isEnvironmentBackupFileName(name: string): boolean {
   return /^control-plane\.env\.\d{8}T\d{6}Z\.bak$/.test(name);
+}
+
+function regularOperationalBackupNames(backupDirectory: string): string[] {
+  return readdirSync(backupDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name);
 }
 
 export function quarantineStateBackup(path: string): string {

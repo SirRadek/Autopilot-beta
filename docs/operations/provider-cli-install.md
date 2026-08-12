@@ -93,4 +93,7 @@ Also record the actual pre-change state and targets of
 first install.
 
 After deployment, the owner must inspect existing backups on the VM, remove stale plaintext
-copies, and rotate the service token.
+copies that do not match the bounded `control-plane.env.YYYYMMDDTHHMMSSZ.bak` legacy pattern, inspect
+quarantined archives, and rotate the service token. Apply-mode state maintenance removes exact
+pattern-matched legacy copies automatically before its secret scan; that deletion does not revoke
+or rotate any credential.

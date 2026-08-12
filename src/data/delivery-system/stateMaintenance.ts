@@ -12,12 +12,13 @@ import {
   writeFileSync
 } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { recordOperationalIncident, ingestOperationalIncidentSpool } from "./operationalIncidents";
 import {
   createStateBackup,
   isStateBackupFileName,
+  pruneLegacyEnvironmentBackups,
   pruneOperationalBackups,
   quarantineStateBackup,
   validateStateBackup
@@ -61,9 +62,29 @@ export function performStateMaintenance(options: StateMaintenanceOptions): State
   let backup: StateMaintenanceResult["backup"] = null;
   try {
     return withStateMaintenanceLock(options.stateDirectory, () => {
-      const findings = preflightFindings(options);
-      if (findings.length > 0) {
-        return { ok: false, mode: "apply", findings, backup: null, rotated: [], incident_id: null };
+      const permissionFindings = permissionFindingCodes(options);
+      if (permissionFindings.length > 0) {
+        return {
+          ok: false,
+          mode: "apply",
+          findings: permissionFindings,
+          backup: null,
+          rotated: [],
+          incident_id: null
+        };
+      }
+
+      pruneLegacyEnvironmentBackups(options.backupDirectory);
+      const secretFindings = secretFindingCodes(options);
+      if (secretFindings.length > 0) {
+        return {
+          ok: false,
+          mode: "apply",
+          findings: secretFindings,
+          backup: null,
+          rotated: [],
+          incident_id: null
+        };
       }
 
       ingestOperationalIncidentSpool(options.stateDirectory);
@@ -143,7 +164,8 @@ export function rotateStateLogs(
 }
 
 export function scanOperationalSecrets(
-  stateDirectory: string
+  stateDirectory: string,
+  backupDirectory = join(stateDirectory, "backups")
 ): readonly SecretFinding[] {
   const rules = [
     { rule: "private_key" as const, pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
@@ -151,11 +173,11 @@ export function scanOperationalSecrets(
     { rule: "api_key" as const, pattern: /\b(?:sk|or|ghp|github_pat|xoxb)-[A-Za-z0-9_-]{8,}\b/ },
     {
       rule: "environment_credential" as const,
-      pattern: /^(?:[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)=[^\s#]{8,}$/m
+      pattern: /^(?:export\s+)?[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*=[^\s#]{8,}\r?$/m
     }
   ];
   const findings: SecretFinding[] = [];
-  for (const path of regularFiles(stateDirectory)) {
+  for (const path of regularFiles(stateDirectory, backupDirectory)) {
     const size = statSync(path).size;
     const content = size <= SECRET_SCAN_MAX_BYTES
       ? readFileSync(path, "utf8")
@@ -174,11 +196,17 @@ export function verifyOperationalPermissions(stateDirectory: string, environment
 }
 
 function preflightFindings(options: StateMaintenanceOptions): string[] {
-  const permissions = verifyOperationalPermissions(options.stateDirectory, options.environmentFile)
+  return [...new Set([...permissionFindingCodes(options), ...secretFindingCodes(options)])].sort();
+}
+
+function permissionFindingCodes(options: StateMaintenanceOptions): string[] {
+  return verifyOperationalPermissions(options.stateDirectory, options.environmentFile)
     .map((finding) => finding.code);
-  const secrets = scanOperationalSecrets(options.stateDirectory)
+}
+
+function secretFindingCodes(options: StateMaintenanceOptions): string[] {
+  return scanOperationalSecrets(options.stateDirectory, options.backupDirectory)
     .map((finding) => `secret:${finding.rule}`);
-  return [...new Set([...permissions, ...secrets])].sort();
 }
 
 function maintenanceErrorCode(error: unknown): string {
@@ -195,7 +223,7 @@ function maintenanceErrorCode(error: unknown): string {
   ]).has(code) ? code : "maintenance_failed";
 }
 
-function regularFiles(root: string): string[] {
+function regularFiles(root: string, backupDirectory: string): string[] {
   const output: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -208,14 +236,23 @@ function regularFiles(root: string): string[] {
       } else if (entry.isFile()
         && !entry.name.endsWith(".tmp")
         && !entry.name.includes(".tmp-")
-        && !entry.name.includes(".quarantine")
-        && !isStateBackupFileName(entry.name)) {
+        && !isCanonicalStateBackupForSecretScan(path, entry.name, backupDirectory)) {
         output.push(path);
       }
     }
   };
   visit(root);
   return output.sort();
+}
+
+function isCanonicalStateBackupForSecretScan(
+  path: string,
+  name: string,
+  backupDirectory: string
+): boolean {
+  if (!isStateBackupFileName(name) || dirname(resolve(path)) !== resolve(backupDirectory)) return false;
+  const header = Buffer.from('{"version":1', "utf8");
+  return readRange(path, 0, header.length).equals(header);
 }
 
 function portableRelative(root: string, path: string): string {

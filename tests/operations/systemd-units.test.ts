@@ -4,9 +4,17 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const systemdDir = join(process.cwd(), "ops", "systemd");
+const operationsDocsDir = join(process.cwd(), "docs", "operations");
 
 function readSystemdFile(name: string): string {
   return readFileSync(join(systemdDir, name), "utf8");
+}
+
+function regularFilesRecursively(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? regularFilesRecursively(path) : entry.isFile() ? [path] : [];
+  }).sort();
 }
 
 function activeServiceDirectives(source: string): Map<string, string[]> {
@@ -180,7 +188,9 @@ describe("systemd unit writable boundaries", () => {
       "utf8"
     );
 
-    expect(providerInstall).not.toMatch(/cp\s+-p[\s\S]*control-plane\.env[\s\S]*\.bak/);
+    for (const path of regularFilesRecursively(operationsDocsDir)) {
+      expect(readFileSync(path, "utf8"), path).not.toMatch(/cp\s+-p[\s\S]*control-plane\.env[\s\S]*\.bak/);
+    }
     expect(providerInstall).toMatch(/regenerat/i);
   });
 
