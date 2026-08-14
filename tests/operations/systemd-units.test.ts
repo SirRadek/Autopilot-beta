@@ -4,9 +4,17 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const systemdDir = join(process.cwd(), "ops", "systemd");
+const operationsDocsDir = join(process.cwd(), "docs", "operations");
 
 function readSystemdFile(name: string): string {
   return readFileSync(join(systemdDir, name), "utf8");
+}
+
+function regularFilesRecursively(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? regularFilesRecursively(path) : entry.isFile() ? [path] : [];
+  }).sort();
 }
 
 function activeServiceDirectives(source: string): Map<string, string[]> {
@@ -171,6 +179,33 @@ describe("systemd unit writable boundaries", () => {
       expect(instructions).toContain("sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf");
       expect(instructions.indexOf("sudo systemd-tmpfiles --create /etc/tmpfiles.d/autopilot.conf"))
         .toBeLessThan(instructions.indexOf("sudo systemctl enable --now autopilot-control-plane.service"));
+    }
+  });
+
+  it("documents regenerating the protected environment without plaintext backup copies", () => {
+    const providerInstall = readFileSync(
+      join(process.cwd(), "docs", "operations", "provider-cli-install.md"),
+      "utf8"
+    );
+
+    for (const path of regularFilesRecursively(operationsDocsDir)) {
+      expect(readFileSync(path, "utf8"), path).not.toMatch(/cp\s+-p[\s\S]*control-plane\.env[\s\S]*\.bak/);
+    }
+    expect(providerInstall).toMatch(/regenerat/i);
+  });
+
+  it("documents the retired control-plane token consistently", () => {
+    const cockpitAuth = readFileSync(join(process.cwd(), "docs", "operations", "cockpit-production-auth.md"), "utf8");
+    const overview = readFileSync(join(process.cwd(), "docs", "architecture", "system-overview.md"), "utf8");
+    const installGuide = readFileSync(join(process.cwd(), "docs", "operations", "install-ubuntu-vm.md"), "utf8");
+    const readme = readSystemdFile("README.md");
+
+    for (const narrative of [cockpitAuth, overview]) {
+      expect(narrative).toMatch(/`CONTROL_PLANE_TOKEN`[^.]*retired/is);
+      expect(narrative).not.toMatch(/`CONTROL_PLANE_TOKEN`[^.]*remain(?:s)? accepted/is);
+    }
+    for (const procedure of [installGuide, readme]) {
+      expect(procedure).not.toContain("printf 'CONTROL_PLANE_TOKEN=%s");
     }
   });
 

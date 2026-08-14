@@ -70,12 +70,10 @@ is still supplied to sanitized provider child environments, but it is not execut
 authority. User-local CLI copies must not appear in service configuration or commissioning
 commands.
 
-Back up the protected environment file before changing these runtime values:
-
-```bash
-cp -p ~/.config/autopilot/control-plane.env \
-  ~/.local/state/autopilot/backups/control-plane.env.$(date -u +%Y%m%dT%H%M%SZ).bak
-```
+Do not copy the protected environment file before changing these runtime values. It is
+regenerated from the reviewed nonsecret configuration and the owner-controlled credential
+sources; confirm those sources are available, then make the bounded edit. A plaintext copy
+would preserve retired credentials outside their rotation lifecycle.
 
 Probe enablement does not belong in that protected file. The required, root-owned
 `/etc/autopilot/control-plane-probes.env` contains only `CONTROL_PLANE_USAGE_PROBES`; start
@@ -93,3 +91,9 @@ Do not recopy the blank example over an already commissioned allowlist; later ch
 Also record the actual pre-change state and targets of
 `/opt/autopilot-providers/bin/{codex,claude,agy}` as the symlink rollback baseline before the
 first install.
+
+After deployment, the owner must inspect existing backups on the VM, remove stale plaintext
+copies that do not match the bounded `control-plane.env.YYYYMMDDTHHMMSSZ.bak` legacy pattern, inspect
+quarantined archives, and rotate the service token. Apply-mode state maintenance removes exact
+pattern-matched legacy copies automatically before its secret scan; that deletion does not revoke
+or rotate any credential.

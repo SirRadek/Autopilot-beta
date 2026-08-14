@@ -62,11 +62,19 @@ environment and systemd writable-path configuration; see [Configuration](configu
 ```bash
 mkdir -p ~/.config/autopilot ~/.local/state/autopilot/backups
 chmod 700 ~/.config/autopilot ~/.local/state/autopilot/backups
-printf 'CONTROL_PLANE_TOKEN=%s\n' "$(openssl rand -hex 32)" > ~/.config/autopilot/control-plane.env
-printf 'CONTROL_PLANE_SECURE_COOKIES=false\n' >> ~/.config/autopilot/control-plane.env
-printf 'CONTROL_PLANE_USAGE_PROBES=\n' >> ~/.config/autopilot/control-plane.env
+umask 077
+printf 'CONTROL_PLANE_SECURE_COOKIES=false\n' > ~/.config/autopilot/control-plane.env
 chmod 600 ~/.config/autopilot/control-plane.env
+sudo install -d -o root -g root -m 0755 /etc/autopilot
+sudo install -o root -g root -m 0644 \
+  ops/config/control-plane-probes.env.example \
+  /etc/autopilot/control-plane-probes.env
 ```
+
+Before starting the service, provision the admin credentials and issue the service bearer offline
+as documented in [Configuration](configuration.md). Store the one-time bearer in the owner-controlled
+secret store, not in the environment file. The retired `CONTROL_PLANE_TOKEN` is neither generated nor
+read by the server.
 
 Provision `OPENROUTER_API_KEY` through the same protected service environment only when the owner has
 approved API-credit use. Never commit or echo it. The example environment intentionally omits tokens.
