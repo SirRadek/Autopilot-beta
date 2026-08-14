@@ -51,8 +51,8 @@ npm run control-plane:issue-service-token -- /home/radek/.local/state/autopilot
 The command prints `SERVICE_TOKEN=<hex>` exactly once; capture the plaintext in
 the root-held service secret. Only its SHA-256 digest is stored by Autopilot. Machine and
 commissioning API calls authenticate with `Authorization: Bearer $SERVICE_TOKEN`; the retired
-`CONTROL_PLANE_TOKEN` is not an operational bearer. Never expose either credential as a
-`VITE_*` variable.
+`CONTROL_PLANE_TOKEN` is not an operational bearer. Never expose the service bearer as a `VITE_*`
+variable.
 
 ### `CONTROL_PLANE_SECURE_COOKIES`
 

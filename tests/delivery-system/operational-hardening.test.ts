@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   restoreStateBackup,
   createStateBackup,
+  pruneOperationalBackups,
   rotateStateLogs,
   scanOperationalSecrets,
   validateStateBackup,
@@ -45,6 +46,23 @@ describe("operational hardening", () => {
     }
 
     expect(readdirSync(backups).filter((name) => name.endsWith(".apbackup.json"))).toHaveLength(3);
+  });
+
+  it("retains seven state snapshots and no environment backups by default", () => {
+    const root = fixture();
+    const backups = join(root, "backups");
+    mkdirSync(backups);
+    for (let index = 0; index < 8; index += 1) {
+      writeFileSync(join(backups, `autopilot-state-${index}.apbackup.json`), "state");
+    }
+    writeFileSync(join(backups, "control-plane.env.20260811T120000Z.bak"), "retired");
+    writeFileSync(join(backups, "control-plane.env.20260812T120000Z.bak"), "retired");
+
+    const removed = pruneOperationalBackups(backups);
+
+    expect(readdirSync(backups).filter((name) => name.endsWith(".apbackup.json"))).toHaveLength(7);
+    expect(readdirSync(backups).filter((name) => name.startsWith("control-plane.env."))).toEqual([]);
+    expect(removed).toHaveLength(3);
   });
 
   it("refuses a backup whose payload no longer matches its manifest", () => {

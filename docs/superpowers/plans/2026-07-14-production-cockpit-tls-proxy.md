@@ -1,5 +1,9 @@
 # Production Cockpit TLS Proxy Implementation Plan
 
+> **Historical record — do not execute.** This plan predates retirement of
+> `CONTROL_PLANE_TOKEN`. Use the current [authentication](../../operations/configuration.md) and
+> [service](../../operations/service-runbook.md) procedures instead.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Serve the Autopilot Cockpit at trusted `https://autopilot.local` for the Victus host only, while keeping the Control Plane loopback-only and preserving deterministic rollback.

@@ -12,9 +12,8 @@ written to Vite assets, `localStorage`, telemetry, or managed-state backups.
 `POST /auth/logout` removes the durable session.
 
 Service callers use the separately issued `SERVICE_TOKEN` bearer; the backend
-persists only its SHA-256 digest. During this additive compatibility phase,
-`CONTROL_PLANE_TOKEN`, legacy `{token}` browser login, and
-`Authorization: Bearer $CONTROL_PLANE_TOKEN` remain accepted.
+persists only its SHA-256 digest. `CONTROL_PLANE_TOKEN` is retired; legacy
+`{token}` browser login and its bearer authentication path are not accepted.
 
 Set `CONTROL_PLANE_SECURE_COOKIES=true` for a TLS deployment. Loopback HTTP
 uses the explicit `false` value so the browser can receive the cookie. These
@@ -28,8 +27,8 @@ checked. Bearer-authenticated service calls are exempt.
 Deploy the cockpit behind a same-origin reverse proxy. The proxy should serve
 the static Vite build and forward `/auth/*`, `/status`, `/sessions`,
 `/approvals`, `/workers`, and `/providers/*` to the loopback Control Plane. Do
-not put `CONTROL_PLANE_TOKEN` in `VITE_CONTROL_PLANE_TOKEN` for a shared or
-production build; Vite embeds every `VITE_*` value in JavaScript assets.
+not put the service bearer in any `VITE_*` variable for a shared or production
+build; Vite embeds every such value in JavaScript assets.
 
 Minimum proxy requirements:
 
