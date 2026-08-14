@@ -7,7 +7,9 @@ import {
   SupervisorQueue,
   validateSupervisorState
 } from "../../src/data/delivery-system/supervisorQueue";
-import type { GovernedHandoff } from "../../src/governed-core/dispatch";
+import type { DispatchResult, GovernedHandoff } from "../../src/governed-core/dispatch";
+
+type SuccessfulDispatchResult = Extract<DispatchResult, { refused: false }>;
 
 function handoff(id: string): GovernedHandoff {
   return {
@@ -25,6 +27,29 @@ function handoff(id: string): GovernedHandoff {
 
 function queue() {
   return new SupervisorQueue({ stateDir: mkdtempSync(join(tmpdir(), "supervisor-")), baseRetryDelayMs: 100, maxRetryDelayMs: 500 });
+}
+
+function successfulDispatchResult(
+  packet: GovernedHandoff,
+  overrides: Partial<SuccessfulDispatchResult> = {}
+): SuccessfulDispatchResult {
+  return {
+    workerRunId: "run",
+    handoffId: packet.handoffId,
+    vendor: packet.vendor,
+    model: null,
+    exitCode: 0,
+    rawOutput: "ok",
+    parsedJson: null,
+    durationSeconds: 0,
+    lockStatus: "acquired_supervisor_spawn",
+    workerOutputPath: null,
+    errorReason: null,
+    refused: false,
+    tier_id: null,
+    provenance_verified: true,
+    ...overrides
+  };
 }
 
 function persistedTaskState(): { readonly stateDir: string; readonly path: string } {
@@ -196,14 +221,143 @@ describe("SupervisorQueue", () => {
     const stateDir = mkdtempSync(join(tmpdir(), "supervisor-dispatch-"));
     const q = new SupervisorQueue({ stateDir });
     q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
-    const result = await q.runOnce("/tmp/state", async (packet) => ({
-      ...({ workerRunId: "run", handoffId: packet.handoffId, vendor: packet.vendor, model: null, exitCode: 0, rawOutput: "ok", parsedJson: null, durationSeconds: 0, lockStatus: "acquired_supervisor_spawn", workerOutputPath: null, errorReason: null } as const),
-      refused: false as const,
-      tier_id: null,
-      provenance_verified: true as const
-    }), "2026-07-12T00:00:01.000Z");
+    const result = await q.runOnce("/tmp/state", async (packet) => successfulDispatchResult(packet), "2026-07-12T00:00:01.000Z");
     expect(result?.task.status).toBe("completed");
     expect(result?.result.refused).toBe(false);
+    expectRoundTrip(stateDir, q);
+  });
+
+  it("requeues a non-refused worker result with a non-zero exit code", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-worker-exit-"));
+    const q = new SupervisorQueue({ stateDir, baseRetryDelayMs: 100, maxRetryDelayMs: 500 });
+    const reason = "non_zero_exit: worker exited with code 1";
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
+    const beforeDispatch = Date.now();
+
+    const result = await q.runOnce("/tmp/state", async (packet) => successfulDispatchResult(packet, {
+      exitCode: 1,
+      errorReason: reason
+    }), "2026-07-12T00:00:01.000Z");
+
+    expect(result?.result.refused).toBe(false);
+    expect(result?.task.status).toBe("queued");
+    expect(result?.task.last_error).toBe(reason);
+    expect(Date.parse(result!.task.next_attempt_at)).toBeGreaterThan(beforeDispatch);
+    expect(result?.task.attempt_delta_hash).toBe("7a628ab9f1f9596b42a26fceb99785b2c01f3260ca415fd078f6783970b97c50");
+    expectRoundTrip(stateDir, q);
+  });
+
+  it.each([
+    {
+      name: "an error reason at exit zero",
+      overrides: { errorReason: "token_settlement_failed" },
+      reason: "token_settlement_failed"
+    },
+    {
+      name: "a failed worker lock",
+      overrides: { lockStatus: "failed", errorReason: null },
+      reason: "worker_lock_failed"
+    },
+    {
+      name: "an already-locked worker",
+      overrides: { exitCode: -1, lockStatus: "already_locked", errorReason: "worker_busy: another worker holds the lock" },
+      reason: "worker_busy: another worker holds the lock"
+    },
+    {
+      name: "the OpenRouter missing-key result",
+      overrides: {
+        exitCode: -1,
+        rawOutput: "",
+        errorReason: "MISSING: openrouter_api_key_missing",
+        missing: { status: "MISSING", provider: "openrouter", reason: "openrouter_api_key_missing" }
+      },
+      reason: "MISSING: openrouter_api_key_missing"
+    },
+    {
+      name: "a defensive missing marker without an error reason",
+      overrides: {
+        errorReason: null,
+        missing: { status: "MISSING", provider: "openrouter", reason: "openrouter_api_key_missing" }
+      },
+      reason: "openrouter_api_key_missing"
+    }
+  ] as const)("requeues a non-refused worker result with $name", async ({ overrides, reason }) => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-worker-failure-"));
+    const q = new SupervisorQueue({ stateDir, baseRetryDelayMs: 100, maxRetryDelayMs: 500 });
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
+
+    const result = await q.runOnce("/tmp/state", async (packet) => successfulDispatchResult(packet, overrides), "2026-07-12T00:00:01.000Z");
+
+    expect(result?.task.status).toBe("queued");
+    expect(result?.task.last_error).toBe(reason);
+    expectRoundTrip(stateDir, q);
+  });
+
+  it("terminally fails after a worker exhausts the task attempt budget", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-worker-terminal-"));
+    const q = new SupervisorQueue({ stateDir, baseRetryDelayMs: 0, maxRetryDelayMs: 0 });
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), maxAttempts: 2, now: "2026-07-12T00:00:00.000Z" });
+    const dispatch = async (packet: GovernedHandoff) => successfulDispatchResult(packet, {
+      exitCode: 1,
+      errorReason: "worker_failed"
+    });
+
+    const first = await q.runOnce("/tmp/state", dispatch, "2026-07-12T00:00:01.000Z");
+    const second = await q.runOnce("/tmp/state", dispatch, "2099-07-12T00:00:02.000Z");
+
+    expect(first?.task.status).toBe("queued");
+    expect(second?.task.status).toBe("failed");
+    expect(second?.task.last_error).toBe("worker_failed");
+    expectRoundTrip(stateDir, q);
+  });
+
+  it("accepts the legacy runtime fixture shape with no parsed JSON or optional failure fields", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-runtime-fixture-"));
+    const q = new SupervisorQueue({ stateDir });
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
+
+    const result = await q.runOnce("/tmp/state", async () => ({
+      refused: false,
+      workerRunId: "run",
+      rawOutput: "ok",
+      exitCode: 0,
+      parsedJson: null
+    } as unknown as SuccessfulDispatchResult), "2026-07-12T00:00:01.000Z");
+
+    expect(result?.task.status).toBe("completed");
+    expectRoundTrip(stateDir, q);
+  });
+
+  it("keeps the refusal retry convention", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-refusal-"));
+    const q = new SupervisorQueue({ stateDir });
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
+
+    const result = await q.runOnce("/tmp/state", async () => ({
+      refused: true,
+      reason: "token_budget_exhausted",
+      tier_id: null,
+      provenance_verified: true
+    }), "2026-07-12T00:00:01.000Z");
+
+    expect(result?.task.status).toBe("queued");
+    expect(result?.task.last_error).toBe("token_budget_exhausted");
+    expect(result?.task.attempt_delta_hash).toBe("2103b3fbb55b6ab811a6ed2274ca436f33d158f5b03e03caae059dfb2882bffb");
+    expectRoundTrip(stateDir, q);
+  });
+
+  it("keeps the dispatch-exception retry convention and propagates the error", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "supervisor-dispatch-exception-"));
+    const q = new SupervisorQueue({ stateDir });
+    q.enqueue({ taskId: "a", handoff: handoff("hp-a"), now: "2026-07-12T00:00:00.000Z" });
+
+    await expect(q.runOnce("/tmp/state", async () => {
+      throw new Error("dispatch exploded");
+    }, "2026-07-12T00:00:01.000Z")).rejects.toThrow("dispatch exploded");
+
+    expect(q.snapshot()[0]?.status).toBe("queued");
+    expect(q.snapshot()[0]?.last_error).toBe("dispatch exploded");
+    expect(q.snapshot()[0]?.attempt_delta_hash).toBe("a2eb46971cd392079475e0fbb3641928da791052a13c9464c30d00604bb80327");
     expectRoundTrip(stateDir, q);
   });
 

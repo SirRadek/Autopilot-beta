@@ -70,6 +70,15 @@ const MAX_DEPENDENCIES = 32;
 const MAX_ERROR_CHARS = 512;
 const MAX_SUPERVISOR_STATE_BYTES = 4 * 1024 * 1024;
 
+/** Normalizes worker failure signals before a non-refused dispatch result advances the queue. */
+export function failedDispatchReason(result: Extract<DispatchResult, { refused: false }>): string | null {
+  if (result.errorReason != null) return result.errorReason;
+  if ((result.exitCode ?? 0) !== 0) return `worker_exit_${result.exitCode}`;
+  if (result.missing !== undefined) return result.missing.reason;
+  if (result.lockStatus === "failed") return "worker_lock_failed";
+  return null;
+}
+
 export function validateSupervisorState(
   stateDir: string,
   options: Pick<SupervisorQueueOptions, "fileName" | "maxTasks" | "maxPromptChars"> = {}
@@ -248,7 +257,15 @@ export class SupervisorQueue {
           attemptDelta: `retry_after_refusal:${result.reason}`
         });
       }
-      else this.complete(taskId);
+      else {
+        const failure = failedDispatchReason(result);
+        if (failure !== null) {
+          this.fail(taskId, failure, new Date().toISOString(), {
+            attemptDelta: `retry_after_worker_failure:${failure}`
+          });
+        }
+        else this.complete(taskId);
+      }
       return result;
     } catch (error) {
       this.fail(
@@ -261,7 +278,10 @@ export class SupervisorQueue {
     }
   }
 
-  /** Claims at most one ready handoff and sends it through the existing governed dispatcher. */
+  /**
+   * Claims at most one ready handoff and sends it through the existing governed dispatcher.
+   * Read task.status for the queue outcome; result.refused only describes dispatcher refusal.
+   */
   async runOnce(stateDir: string, dispatch: (handoff: GovernedHandoff, stateDir: string) => Promise<DispatchResult>, now = new Date().toISOString()): Promise<{ readonly task: SupervisorTask; readonly result: DispatchResult } | null> {
     const task = this.claim(now);
     if (task === null) return null;
